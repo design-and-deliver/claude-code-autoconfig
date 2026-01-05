@@ -1,0 +1,1600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude Code Autoconfig — Walkthrough</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0D0D0D;
+            --bg-secondary: #1A1A1A;
+            --bg-elevated: #252525;
+            --text-primary: #FFFFFF;
+            --text-secondary: #8FBBCF;
+            --text-dim: #6B7280;
+            --accent-orange: #FF9933;
+            --accent-blue: #5C9ECE;
+            --accent-cyan: #22D3EE;
+            --accent-green: #6ABF69;
+            --accent-yellow: #E5C07B;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Progress bar */
+        .progress-container {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 40px;
+        }
+
+        .progress-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #4a4a4a;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .progress-dot:hover {
+            background: #6a6a6a;
+            transform: scale(1.2);
+        }
+
+        .progress-dot.active {
+            background: var(--accent-green);
+            box-shadow: 0 0 15px rgba(106, 191, 105, 0.4);
+        }
+
+        /* Slides */
+        .slides-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .slide {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateX(100px);
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .slide.active {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(0);
+            pointer-events: auto;
+        }
+
+        .slide.exit {
+            opacity: 0;
+            transform: translateX(-100px);
+        }
+
+        .slide-number {
+            font-size: 14px;
+            color: var(--accent-orange);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 12px;
+        }
+
+        .slide h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            color: var(--text-primary);
+        }
+
+        .slide h2 {
+            font-size: 1.3rem;
+            font-weight: 400;
+            color: var(--text-secondary);
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+
+        .slide-content {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        /* Code blocks */
+        .code-block {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-elevated);
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            overflow-x: auto;
+        }
+
+        .code-block .comment {
+            color: var(--text-dim);
+        }
+
+        .code-block .keyword {
+            color: var(--accent-orange);
+        }
+
+        .code-block .string {
+            color: var(--accent-green);
+        }
+
+        .code-block .property {
+            color: var(--accent-blue);
+        }
+
+        .code-block .folder {
+            color: var(--accent-cyan);
+        }
+
+        .code-block .file {
+            color: var(--accent-orange);
+        }
+
+        /* Info cards */
+        .info-card {
+            background: rgba(212, 165, 116, 0.1);
+            border-left: 4px solid var(--accent-orange);
+            border-radius: 0 8px 8px 0;
+            padding: 16px 20px;
+            margin: 20px 0;
+        }
+
+        .info-card.warning {
+            background: rgba(229, 192, 123, 0.1);
+            border-left-color: var(--accent-yellow);
+        }
+
+        .info-card h4 {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+            color: var(--accent-orange);
+        }
+
+        .info-card.warning h4 {
+            color: var(--accent-yellow);
+        }
+
+        /* Feature list */
+        .feature-list {
+            list-style: none;
+            margin: 20px 0;
+        }
+
+        .feature-list li {
+            padding: 14px 0;
+            padding-left: 28px;
+            position: relative;
+            border-bottom: 1px solid var(--bg-elevated);
+            display: flex;
+            align-items: center;
+        }
+
+        .feature-list li:last-child {
+            border-bottom: none;
+        }
+
+        .feature-list li::before {
+            content: "●";
+            position: absolute;
+            left: 0;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+
+        .feature-list li.blue-bullet::before {
+            color: var(--accent-blue);
+        }
+
+        .feature-list .file-name {
+            color: var(--accent-orange);
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 14px;
+        }
+
+        /* Welcome content */
+        .welcome-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .welcome-text {
+            font-size: 24px;
+            color: var(--text-primary);
+            margin-bottom: 30px;
+        }
+
+        .welcome-action {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-elevated);
+            border-radius: 12px;
+            padding: 24px 32px;
+            max-width: 500px;
+        }
+
+        .welcome-action p {
+            font-size: 16px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin: 0;
+        }
+
+        .welcome-action code {
+            background: var(--bg-elevated);
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 15px;
+            color: var(--accent-cyan);
+        }
+
+        /* TOC list */
+        .tip-banner {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            background: rgba(255, 153, 51, 0.1);
+            border: 1px solid rgba(255, 153, 51, 0.3);
+            border-radius: 8px;
+        }
+
+        .tip-icon {
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .tip-text {
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .tip-text code {
+            background: var(--bg-elevated);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 13px;
+            color: var(--accent-cyan);
+        }
+
+        .toc-list {
+            list-style: none;
+            margin: 10px 0;
+            padding: 0;
+        }
+
+        .toc-list li {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 20px;
+            margin: 8px 0;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .toc-list li:hover {
+            background: var(--bg-elevated);
+            transform: translateX(8px);
+        }
+
+        .toc-number {
+            color: var(--accent-orange);
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 14px;
+            font-weight: 600;
+            min-width: 28px;
+        }
+
+        .toc-title {
+            color: var(--text-primary);
+            font-weight: 600;
+            font-size: 16px;
+            min-width: 140px;
+        }
+
+        .toc-desc {
+            color: var(--text-dim);
+            font-size: 14px;
+        }
+
+        /* Tree view */
+        .tree-view {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-elevated);
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            overflow-x: auto;
+            white-space: pre;
+        }
+
+        .tree-view .folder {
+            color: var(--accent-cyan);
+        }
+
+        .tree-view .file {
+            color: var(--accent-orange);
+        }
+
+        .tree-view .comment {
+            color: var(--text-dim);
+        }
+
+        /* Split-pane tree panel */
+        .tree-panel {
+            display: flex;
+            gap: 0;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            overflow: hidden;
+            height: 340px;
+            position: relative;
+        }
+
+        .tree-side {
+            padding: 16px;
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 13px;
+            line-height: 1.4;
+            border-right: 1px solid var(--bg-elevated);
+            overflow-y: auto;
+            flex-shrink: 0;
+            height: 100%;
+        }
+
+        .tree-item {
+            padding: 4px 8px;
+            margin: 1px 0;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.15s ease;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .tree-item.hidden {
+            display: none;
+        }
+
+        .tree-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .tree-item.active {
+            background: rgba(45, 105, 175, 0.5);
+        }
+
+        .tree-item.active:hover {
+            background: rgba(45, 105, 175, 0.5);
+        }
+
+        .tree-chevron {
+            width: 16px;
+            font-size: 14px;
+            color: var(--text-primary);
+            text-align: center;
+            flex-shrink: 0;
+            transition: transform 0.15s ease;
+            user-select: none;
+            transform: rotate(90deg);
+        }
+
+        .tree-item.collapsed .tree-chevron {
+            transform: rotate(0deg);
+        }
+
+        .tree-spacer {
+            width: 16px;
+            flex-shrink: 0;
+        }
+
+        .tree-folder-icon,
+        .tree-file-icon {
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .tree-item .folder {
+            color: var(--text-primary);
+        }
+
+        .tree-item .file {
+            color: var(--text-secondary);
+        }
+
+        .tree-item.indent-1 { padding-left: 24px; }
+        .tree-item.indent-2 { padding-left: 44px; }
+        .tree-item.indent-3 { padding-left: 64px; }
+        .tree-item.indent-4 { padding-left: 84px; }
+
+        .tree-indent {
+            color: var(--text-dim);
+        }
+
+        .info-side {
+            flex: 1;
+            min-width: 200px;
+            overflow-y: auto;
+        }
+
+        .info-panel {
+            padding: 20px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .info-panel-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--accent-orange);
+            margin-bottom: 12px;
+        }
+
+        .info-panel-desc {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            letter-spacing: 0.02em;
+        }
+
+        .info-panel-trigger {
+            margin-top: 16px;
+            padding: 8px 12px;
+            background: var(--bg-elevated);
+            border-radius: 4px;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 13px;
+            color: var(--accent-cyan);
+        }
+
+        /* Navigation */
+        .nav-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 40px;
+            padding-top: 20px;
+        }
+
+        .nav-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 14px 28px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .nav-btn.prev {
+            background: var(--bg-elevated);
+            color: var(--text-secondary);
+        }
+
+        .nav-btn.prev:hover:not(:disabled) {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+
+        .nav-btn.next {
+            background: var(--accent-orange);
+            color: var(--bg-primary);
+        }
+
+        .nav-btn.next:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(212, 165, 116, 0.3);
+        }
+
+        .nav-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .nav-hint {
+            color: var(--text-dim);
+            font-size: 14px;
+        }
+
+        .nav-hint kbd {
+            background: var(--bg-elevated);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-family: inherit;
+            margin: 0 2px;
+        }
+
+        /* Table */
+        .table-container {
+            overflow-x: auto;
+            margin: 20px 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--bg-elevated);
+        }
+
+        th {
+            color: var(--accent-blue);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        td {
+            font-size: 14px;
+        }
+
+        td code {
+            background: var(--bg-secondary);
+            color: var(--accent-orange);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 13px;
+        }
+
+        /* Animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .slide.active .slide-number { animation: fadeIn 0.4s ease both; }
+        .slide.active h1 { animation: fadeIn 0.4s ease 0.1s both; }
+        .slide.active h2 { animation: none; }
+        .slide.active .slide-content > ul,
+        .slide.active .slide-content > div { animation: fadeIn 0.5s ease 0.3s both; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        /* Typewriter effect */
+        .typewriter {
+            border-right: 2px solid var(--bg-primary);
+            animation: none !important;
+        }
+
+        .typewriter.typing {
+            animation: blink-caret 0.75s step-end infinite !important;
+        }
+
+        .typewriter.done {
+            border-right: none !important;
+            animation: none !important;
+        }
+
+        @keyframes blink-caret {
+            from, to { border-color: var(--bg-primary); }
+            50% { border-color: transparent; }
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--bg-elevated);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-dim);
+        }
+
+        /* Logo */
+        .logo {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+
+        /* Final slide special */
+        .final-links {
+            display: flex;
+            gap: 16px;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+
+        .final-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 24px;
+            background: var(--bg-elevated);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+
+        .final-link:hover {
+            background: var(--bg-secondary);
+            color: var(--accent-orange);
+            transform: translateY(-2px);
+        }
+
+        /* File Preview Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            padding: 40px;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .modal-overlay.visible {
+            display: flex;
+            opacity: 1;
+        }
+
+        .modal-content {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-elevated);
+            border-radius: 12px;
+            max-width: 800px;
+            width: 100%;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            transform: scale(0.95);
+            transition: transform 0.2s ease;
+        }
+
+        .modal-overlay.visible .modal-content {
+            transform: scale(1);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--bg-elevated);
+        }
+
+        .modal-title {
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 14px;
+            color: var(--accent-orange);
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+            transition: color 0.2s ease;
+        }
+
+        .modal-close:hover {
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .modal-body pre {
+            margin: 0;
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            color: var(--text-secondary);
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .modal-body .comment { color: var(--text-dim); }
+        .modal-body .keyword { color: var(--accent-orange); }
+        .modal-body .string { color: var(--accent-green); }
+        .modal-body .property { color: var(--accent-blue); }
+
+        .modal-empty {
+            color: var(--text-dim);
+            font-style: italic;
+            text-align: center;
+            padding: 40px;
+        }
+    </style>
+</head>
+<body>
+    <!-- File Preview Modal -->
+    <div class="modal-overlay" id="fileModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="modal-title" id="modalTitle">filename.md</span>
+                <button class="modal-close" id="modalClose">&times;</button>
+            </div>
+            <div class="modal-body">
+                <pre id="modalCode"></pre>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="progress-container" id="progress"></div>
+        
+        <div class="slides-container">
+            <!-- Slide 0: Welcome -->
+            <div class="slide active" data-slide="0">
+                <div class="slide-number">Guide</div>
+                <h1>Claude Code Autoconfig</h1>
+                <h2 class="typewriter" data-text="Everything you need to configure Claude Code properly."></h2>
+                <div class="slide-content">
+                    <div class="welcome-content">
+                        <p class="welcome-text">Welcome to Claude Code Autoconfig!</p>
+                        <div class="welcome-action">
+                            <p>Run <code>/autoconfig</code> in your Claude Code terminal to have Claude Code analyze your project and autoconfig your autoconfig.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Slide 1: What Got Installed -->
+            <div class="slide" data-slide="1">
+                <div class="slide-number">01 / Overview</div>
+                <h1>What Got Installed</h1>
+                <h2 class="typewriter" data-text="Hover over any file to learn what it does."></h2>
+                <div class="slide-content">
+                    <div class="tree-panel">
+                        <div class="tree-side">
+                            <div class="tree-item folder-row" data-info="root" data-folder="root">
+                                <span class="tree-chevron">›</span>
+                                <span class="tree-folder-icon">📁</span>
+                                <span class="folder">your-project</span>
+                            </div>
+                            <div class="tree-item indent-1 folder-row collapsed" data-info="claude-dir" data-folder="claude-dir" data-parent="root">
+                                <span class="tree-chevron">›</span>
+                                <span class="tree-folder-icon">📁</span>
+                                <span class="folder">.claude</span>
+                            </div>
+                            <div class="tree-item indent-2 folder-row hidden collapsed" data-info="commands" data-folder="commands" data-parent="claude-dir">
+                                <span class="tree-chevron">›</span>
+                                <span class="tree-folder-icon">📁</span>
+                                <span class="folder">commands</span>
+                            </div>
+                            <div class="tree-item indent-3 hidden" data-info="autoconfig" data-parent="commands">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">autoconfig.md</span>
+                            </div>
+                            <div class="tree-item indent-3 hidden" data-info="commit-and-push" data-parent="commands">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">commit-and-push.md</span>
+                            </div>
+                            <div class="tree-item indent-3 hidden" data-info="guide-cmd" data-parent="commands">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">guide.md</span>
+                            </div>
+                            <div class="tree-item indent-3 hidden" data-info="test" data-parent="commands">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">test.md</span>
+                            </div>
+                            <div class="tree-item indent-2 folder-row hidden collapsed" data-info="guide" data-folder="guide-folder" data-parent="claude-dir">
+                                <span class="tree-chevron">›</span>
+                                <span class="tree-folder-icon">📁</span>
+                                <span class="folder">guide</span>
+                            </div>
+                            <div class="tree-item indent-3 hidden" data-info="guide" data-parent="guide-folder">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">🌐</span>
+                                <span class="file">autoconfig.guide.html</span>
+                            </div>
+                            <div class="tree-item indent-2 hidden" data-info="rules" data-parent="claude-dir">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-folder-icon">📁</span>
+                                <span class="folder">rules</span>
+                            </div>
+                            <div class="tree-item indent-2 hidden" data-info="settings" data-parent="claude-dir">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">⚙️</span>
+                                <span class="file">settings.json</span>
+                            </div>
+                            <div class="tree-item indent-1" data-info="claude-md" data-parent="root">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">CLAUDE.md</span>
+                            </div>
+                        </div>
+                        <div class="info-side">
+                            <div class="info-panel" id="infoPanel">
+                                <div class="info-panel-title">Select a file</div>
+                                <div class="info-panel-desc">Hover over any item in the tree to see what it does.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Slide 2: Finale -->
+            <div class="slide" data-slide="2">
+                <div class="slide-number">02 / You're Ready</div>
+                <h1>That's It</h1>
+                <h2 class="typewriter" data-text="You've got the autoconfig. Now go build something."></h2>
+                <div class="slide-content">
+                    <div class="final-links">
+                        <a href="https://github.com/anthropics/claude-code-getting-started" class="final-link" target="_blank">
+                            ⭐ Star on GitHub
+                        </a>
+                        <a href="https://docs.anthropic.com/en/docs/claude-code/overview" class="final-link" target="_blank">
+                            📚 Claude Code Docs
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="nav-container">
+            <button class="nav-btn prev" id="prevBtn">
+                Back
+            </button>
+            <button class="nav-btn next" id="nextBtn">
+                Next
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const slides = document.querySelectorAll('.slide');
+        const progressContainer = document.getElementById('progress');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        let currentSlide = 0;
+
+        // Create progress dots
+        slides.forEach((_, i) => {
+            const dot = document.createElement('div');
+            dot.className = 'progress-dot' + (i === 0 ? ' active' : '');
+            dot.addEventListener('click', () => goToSlide(i));
+            progressContainer.appendChild(dot);
+        });
+
+        function updateProgress() {
+            document.querySelectorAll('.progress-dot').forEach((dot, i) => {
+                dot.classList.remove('active');
+                if (i === currentSlide) dot.classList.add('active');
+            });
+        }
+
+        function goToSlide(index) {
+            if (index < 0 || index >= slides.length) return;
+            
+            const direction = index > currentSlide ? 1 : -1;
+            
+            slides[currentSlide].classList.remove('active');
+            if (direction > 0) {
+                slides[currentSlide].classList.add('exit');
+            }
+            
+            currentSlide = index;
+            
+            slides.forEach(s => s.classList.remove('exit'));
+            slides[currentSlide].classList.add('active');
+            
+            updateProgress();
+            updateButtons();
+            checkTypewriter();
+            
+            // Select CLAUDE.md by default when entering slide 1
+            if (currentSlide === 1) {
+                setTimeout(() => selectTreeItemByKey('claude-md'), 100);
+            }
+        }
+
+        function updateButtons() {
+            // Hide back button on first slide, show on others
+            prevBtn.style.visibility = currentSlide === 0 ? 'hidden' : 'visible';
+            
+            if (currentSlide === slides.length - 1) {
+                nextBtn.textContent = 'Done';
+            } else {
+                nextBtn.textContent = 'Next';
+            }
+        }
+
+        prevBtn.addEventListener('click', () => {
+            if (currentSlide > 0) {
+                goToSlide(currentSlide - 1);
+            }
+        });
+        
+        nextBtn.addEventListener('click', () => {
+            if (currentSlide < slides.length - 1) {
+                goToSlide(currentSlide + 1);
+            } else {
+                window.close();
+            }
+        });
+
+        // Keyboard navigation for slides
+        document.addEventListener('keydown', (e) => {
+            // On slide 1, arrow keys control tree - use spacebar for next slide
+            if (currentSlide === 1) {
+                if (e.key === ' ') {
+                    e.preventDefault();
+                    if (currentSlide < slides.length - 1) {
+                        goToSlide(currentSlide + 1);
+                    }
+                }
+                return; // Let tree keyboard handler deal with arrows
+            }
+            
+            // Space bar for next slide (but not on slide 1 with tree)
+            if (e.key === ' ' && currentSlide !== 1) {
+                e.preventDefault();
+                if (currentSlide < slides.length - 1) {
+                    goToSlide(currentSlide + 1);
+                }
+            }
+        });
+
+        updateButtons();
+        
+        // Auto-focus for keyboard navigation
+        document.body.setAttribute('tabindex', '0');
+        document.body.focus();
+
+        // Detect project name from file path
+        function getProjectName() {
+            try {
+                const path = window.location.pathname;
+                const parts = path.split('/').filter(p => p && !p.includes(':'));
+                const claudeIndex = parts.indexOf('.claude');
+                if (claudeIndex > 0) {
+                    return parts[claudeIndex - 1];
+                }
+                if (parts.length >= 3) {
+                    return parts[parts.length - 3];
+                }
+            } catch (e) {}
+            return 'your-project';
+        }
+
+        const projectName = getProjectName();
+        
+        // Update tree root with actual project name
+        const rootItem = document.querySelector('[data-info="root"]');
+        if (rootItem) {
+            rootItem.querySelector('.folder').textContent = projectName + '/';
+        }
+
+        // Calculate tree side width dynamically
+        function setTreeWidth() {
+            const treeSide = document.querySelector('.tree-side');
+            const treeItems = document.querySelectorAll('.tree-item');
+            if (!treeSide || !treeItems.length) return;
+            
+            const hiddenItems = [];
+            treeItems.forEach(item => {
+                if (item.classList.contains('hidden')) {
+                    hiddenItems.push(item);
+                    item.style.visibility = 'hidden';
+                    item.style.position = 'absolute';
+                    item.classList.remove('hidden');
+                }
+            });
+            
+            let maxWidth = 0;
+            treeItems.forEach(item => {
+                const width = item.scrollWidth;
+                if (width > maxWidth) maxWidth = width;
+            });
+            
+            hiddenItems.forEach(item => {
+                item.classList.add('hidden');
+                item.style.visibility = '';
+                item.style.position = '';
+            });
+            
+            treeSide.style.width = (maxWidth + 32) + 'px';
+            treeSide.style.padding = '16px 8px';
+        }
+        
+        if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(setTreeWidth);
+        } else {
+            setTimeout(setTreeWidth, 100);
+        }
+
+        // Typewriter effect
+        function typeWriter(element) {
+            const text = element.dataset.text;
+            if (!text) return;
+            
+            element.textContent = '';
+            element.classList.add('typing');
+            element.classList.remove('done');
+            
+            let i = 0;
+            const speed = 30;
+            
+            function type() {
+                if (i < text.length) {
+                    element.textContent += text.charAt(i);
+                    i++;
+                    setTimeout(type, speed);
+                } else {
+                    element.classList.remove('typing');
+                    element.classList.add('done');
+                }
+            }
+            
+            setTimeout(type, 300);
+        }
+
+        function checkTypewriter() {
+            const activeSlide = slides[currentSlide];
+            const typewriterEl = activeSlide.querySelector('.typewriter');
+            if (typewriterEl) {
+                typeWriter(typewriterEl);
+            }
+        }
+        
+        setTimeout(checkTypewriter, 100);
+
+        // Tree panel info data
+        const treeInfo = {
+            'root': {
+                title: projectName,
+                desc: 'The autoconfig adds CLAUDE.md at your project root and configuration files inside a .claude/ directory. Nothing else is touched.'
+            },
+            'claude-md': {
+                title: 'CLAUDE.md',
+                desc: 'The entry point. Claude reads this every session — project overview, tech stack, key entry points, how to build/test/run.',
+                trigger: 'Claude Code loads this automatically at the start of every session'
+            },
+            'claude-dir': {
+                title: '.claude/ Directory',
+                desc: 'Commands, rules, settings, and this guide. Keeps configuration organized as your project grows.'
+            },
+            'settings': {
+                title: 'settings.json',
+                desc: 'Permissions and security. Controls which commands Claude can run and which files it can access.',
+                trigger: 'Claude Code loads this automatically at the start of every session'
+            },
+            'commands': {
+                title: 'commands/',
+                desc: 'On-demand workflows you trigger with <code>/name</code>. Each .md file in this folder becomes a <a href="https://code.claude.com/docs/en/slash-commands" target="_blank" style="color: var(--accent-cyan);">slash command</a>.'
+            },
+            'autoconfig': {
+                title: 'autoconfig.md',
+                desc: 'Analyzes your project and populates the config with real values — CLAUDE.md, settings.json, and more.',
+                trigger: '/autoconfig'
+            },
+            'test': {
+                title: 'test.md',
+                desc: 'Runs your project\'s tests. A starter example — customize it for your stack.',
+                trigger: '/test'
+            },
+            'guide-cmd': {
+                title: 'guide.md',
+                desc: 'Opens this interactive guide in your browser.',
+                trigger: '/guide'
+            },
+            'commit-and-push': {
+                title: 'commit-and-push.md',
+                desc: 'Stage, commit, and push in one step. Generates the commit message from your diff.',
+                trigger: '/commit-and-push'
+            },
+            'rules': {
+                title: 'rules/',
+                desc: 'Defines how Claude should handle different parts of your codebase — coding standards, patterns, conventions.<br><br><strong>Want optimized rules for your project?</strong><br>Reach out: <a href="mailto:info@adac1001.com" style="color: var(--accent-cyan);">info@adac1001.com</a>'
+            },
+            'guide': {
+                title: 'guide/autoconfig.guide.html',
+                desc: 'This interactive guide. Open it anytime to review the autoconfig structure and what each file does.',
+                trigger: '/guide'
+            }
+        };
+
+        // Tree panel hover handling
+        const infoPanel = document.getElementById('infoPanel');
+        const treeItems = document.querySelectorAll('.tree-item');
+
+        let selectedInfoKey = 'claude-md'; // Default selection
+        
+        function showInfo(key) {
+            const info = treeInfo[key];
+            if (info) {
+                let html = `<div class="info-panel-title">${info.title}</div>`;
+                html += `<div class="info-panel-desc">${info.desc}</div>`;
+                if (info.trigger) {
+                    html += `<div class="info-panel-trigger">${info.trigger}</div>`;
+                }
+                infoPanel.innerHTML = html;
+            }
+        }
+
+        treeItems.forEach((item, idx) => {
+            // Hover updates info panel only (preview)
+            item.addEventListener('mouseenter', () => {
+                const key = item.dataset.info;
+                showInfo(key);
+            });
+            
+            // Mouseleave restores selected item's info
+            item.addEventListener('mouseleave', () => {
+                showInfo(selectedInfoKey);
+            });
+            
+            // Click sets active selection
+            item.addEventListener('click', (e) => {
+                // Don't select if clicking on a folder chevron (let toggle handle it)
+                if (e.target.classList.contains('tree-chevron')) return;
+                
+                treeItems.forEach(i => i.classList.remove('active'));
+                item.classList.add('active');
+                
+                // Update selected info key
+                selectedInfoKey = item.dataset.info;
+                showInfo(selectedInfoKey);
+                
+                // Sync selectedTreeIndex with visible items
+                const visibleItems = Array.from(document.querySelectorAll('.tree-item:not(.hidden)'));
+                selectedTreeIndex = visibleItems.indexOf(item);
+            });
+        });
+
+        // Folder collapse/expand handling
+        function toggleFolder(folderId, collapsed) {
+            const children = document.querySelectorAll(`[data-parent="${folderId}"]`);
+            children.forEach(child => {
+                if (collapsed) {
+                    child.classList.add('hidden');
+                } else {
+                    child.classList.remove('hidden');
+                    if (child.dataset.folder && !child.classList.contains('collapsed')) {
+                        toggleFolder(child.dataset.folder, false);
+                    }
+                }
+                if (collapsed && child.dataset.folder) {
+                    toggleFolder(child.dataset.folder, true);
+                }
+            });
+        }
+
+        document.querySelectorAll('.folder-row').forEach(folder => {
+            folder.addEventListener('click', (e) => {
+                const folderId = folder.dataset.folder;
+                const isCollapsed = folder.classList.toggle('collapsed');
+                toggleFolder(folderId, isCollapsed);
+            });
+        });
+
+        // Tree keyboard navigation
+        let selectedTreeIndex = -1;
+        
+        function getVisibleTreeItems() {
+            return Array.from(document.querySelectorAll('.tree-item:not(.hidden)'));
+        }
+        
+        function selectTreeItemByKey(key) {
+            const item = document.querySelector(`.tree-item[data-info="${key}"]`);
+            if (!item) return;
+            
+            treeItems.forEach(i => i.classList.remove('active'));
+            item.classList.add('active');
+            
+            selectedInfoKey = key;
+            showInfo(selectedInfoKey);
+            
+            // Update selectedTreeIndex
+            const visibleItems = getVisibleTreeItems();
+            selectedTreeIndex = visibleItems.indexOf(item);
+        }
+        
+        function selectTreeItem(index) {
+            const items = getVisibleTreeItems();
+            if (index < 0 || index >= items.length) return;
+            
+            treeItems.forEach(i => i.classList.remove('active'));
+            
+            selectedTreeIndex = index;
+            const item = items[index];
+            item.classList.add('active');
+            
+            item.scrollIntoView({ block: 'nearest' });
+            
+            selectedInfoKey = item.dataset.info;
+            showInfo(selectedInfoKey);
+        }
+        
+        document.addEventListener('keydown', (e) => {
+            if (currentSlide !== 1) return;
+            
+            const items = getVisibleTreeItems();
+            if (items.length === 0) return;
+            
+            if (selectedTreeIndex === -1) {
+                selectTreeItem(0);
+                if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                }
+                return;
+            }
+            
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (selectedTreeIndex < items.length - 1) {
+                    selectTreeItem(selectedTreeIndex + 1);
+                }
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (selectedTreeIndex > 0) {
+                    selectTreeItem(selectedTreeIndex - 1);
+                }
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                const item = items[selectedTreeIndex];
+                if (item && item.classList.contains('folder-row')) {
+                    if (item.classList.contains('collapsed')) {
+                        item.classList.remove('collapsed');
+                        toggleFolder(item.dataset.folder, false);
+                    }
+                }
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                const item = items[selectedTreeIndex];
+                if (item && item.classList.contains('folder-row')) {
+                    if (!item.classList.contains('collapsed')) {
+                        item.classList.add('collapsed');
+                        toggleFolder(item.dataset.folder, true);
+                    }
+                }
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                const item = items[selectedTreeIndex];
+                if (item && item.classList.contains('folder-row')) {
+                    const isCollapsed = item.classList.toggle('collapsed');
+                    toggleFolder(item.dataset.folder, isCollapsed);
+                }
+            }
+        });
+
+        // File Preview Modal
+        const fileContents = {
+            'claude-md': {
+                filename: 'CLAUDE.md',
+                content: `# Project Name
+
+> Run \`/autoconfig\` to fill this in based on your project.`
+            },
+            'settings': {
+                filename: 'settings.json',
+                content: `{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev)",
+      "Bash(npm run build)",
+      "Bash(npm run lint)",
+      "Bash(npm run lint:fix)",
+      "Bash(npm run typecheck)",
+      "Bash(npm run test)",
+      "Bash(npm run test:*)",
+      "Bash(npm run validate)",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git pull)",
+      "Bash(git checkout:*)",
+      "Bash(git branch:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Read(./**/credentials.*)",
+      "Read(./**/*.pem)",
+      "Read(./**/*.key)",
+      "Bash(rm -rf *)",
+      "Bash(curl:*)",
+      "Bash(wget:*)"
+    ]
+  }
+}`
+            },
+            'autoconfig': {
+                filename: 'autoconfig.md',
+                content: `# Autoconfig
+
+Analyze this project and configure Claude Code with real context.
+
+## Step 1: Scan the Project
+
+Look for these indicators to understand the project:
+
+**Package/Config Files:**
+- \`package.json\` → Node.js, npm scripts, dependencies
+- \`requirements.txt\` / \`pyproject.toml\` / \`setup.py\` → Python
+- \`Cargo.toml\` → Rust
+- \`go.mod\` → Go
+- \`Gemfile\` → Ruby
+- \`pom.xml\` / \`build.gradle\` → Java
+- \`*.csproj\` / \`*.sln\` → .NET
+- \`composer.json\` → PHP
+
+**Framework Indicators:**
+- \`next.config.*\` / \`app/\` directory → Next.js
+- \`vite.config.*\` → Vite
+- \`angular.json\` → Angular
+- \`svelte.config.*\` → Svelte
+- \`remix.config.*\` → Remix
+- \`nuxt.config.*\` → Nuxt
+- \`django\` in imports → Django
+- \`flask\` in imports → Flask
+- \`fastapi\` in imports → FastAPI
+- \`express\` in dependencies → Express
+- \`rails\` / \`Gemfile\` with rails → Rails
+- \`laravel\` → Laravel
+
+**Testing Frameworks:**
+- \`jest.config.*\` / \`@jest\` in deps → Jest
+- \`vitest.config.*\` → Vitest
+- \`pytest.ini\` / \`conftest.py\` → Pytest
+- \`*_test.go\` files → Go testing
+- \`*_spec.rb\` files → RSpec
+- \`cypress/\` or \`playwright/\` → E2E testing
+
+**Infrastructure:**
+- \`Dockerfile\` / \`docker-compose.*\` → Docker
+- \`*.tf\` files → Terraform
+- \`k8s/\` or \`kubernetes/\` → Kubernetes
+- \`.github/workflows/\` → GitHub Actions
+- \`serverless.yml\` → Serverless Framework
+
+## Step 2: Populate CLAUDE.md
+
+Fill in with real values:
+- **Project name**: from package.json name, directory name, or README
+- **Purpose**: from README, package.json description, or infer from code
+- **Tech stack**: languages, frameworks, databases, key libraries detected
+- **Entry points**: main files, API routes, CLI commands
+- **Commands**: actual scripts from package.json, Makefile, etc.
+- **Architecture**: monolith, microservices, monorepo, serverless, etc.
+
+## Step 3: Create Rules Directory
+
+Create an empty \`.claude/rules/\` directory. Do not create any subdirectories or rule files.
+
+Rules are path-scoped context files that load automatically when Claude works on matching files. Effective rules require deep understanding of your codebase patterns, team conventions, and quality goals — they should be crafted intentionally, not auto-generated.
+
+## Step 4: Configure Settings
+
+Update \`.claude/settings.json\` using the official schema.
+
+### Deny Patterns (files Claude shouldn't read/write)
+
+Use \`Read()\` for blocking reads, \`Edit()\` for blocking writes.
+
+### Allow Patterns (auto-approve without prompting)
+
+Use \`Bash()\` patterns with prefix matching.
+
+**Keep it minimal** — only include patterns that actually exist in this project.
+
+## Guidelines
+
+- Replace ALL placeholder content with real values from THIS project
+- Delete files/sections that don't apply — no empty stubs
+- Keep everything concise — quick reference, not documentation
+- When uncertain, scan actual source files to understand patterns
+- Preserve autoconfig structure, fill with real content`
+            },
+            'commit-and-push': {
+                filename: 'commit-and-push.md',
+                content: `# Commit and Push
+
+Stage all changes, create a commit with a good message, and push to the current branch.
+
+## Steps
+
+1. Stage all changes (\`git add -A\`)
+2. Generate a conventional commit message based on the diff
+3. Commit the changes
+4. Push to the current branch
+
+## Commit Message Format
+
+Use conventional commits: \`type(scope): description\`
+
+Types: feat, fix, docs, style, refactor, test, chore
+
+Keep the subject line under 50 chars. Add body if the change needs explanation.`
+            },
+            'guide-cmd': {
+                filename: 'guide.md',
+                content: `# Autoconfig Guide
+
+Open the interactive guide to learn about Claude Code Autoconfig.
+
+\`\`\`bash
+# macOS
+open .claude/guide/autoconfig.guide.html
+
+# Linux
+xdg-open .claude/guide/autoconfig.guide.html
+
+# Windows
+start .claude/guide/autoconfig.guide.html
+\`\`\`
+
+The guide covers:
+1. Project structure overview
+2. CLAUDE.md — the entry point
+3. settings.json — permissions & security
+4. Slash commands — on-demand workflows
+5. Rules — path-scoped context
+
+**Tip:** You can also just open \`.claude/guide/autoconfig.guide.html\` directly in your browser.`
+            },
+            'test': {
+                filename: 'test.md',
+                content: `# Run Tests
+
+Run tests for this project.
+
+**Scope:** $ARGUMENTS
+
+If no scope provided, run the full test suite. Otherwise run tests matching the scope (file, directory, or pattern).
+
+Detect the test command from project config (package.json scripts, pytest, go test, etc.) and execute it.`
+            },
+            'rules': {
+                filename: 'rules/',
+                content: null,
+                empty: true,
+                emptyMessage: 'This directory is empty.\n\nAdd .md files here to define rules for specific paths in your codebase.'
+            },
+            'guide': {
+                filename: 'autoconfig.guide.html',
+                content: null,
+                empty: true,
+                emptyMessage: "You're looking at it! 👀"
+            }
+        };
+
+        const modal = document.getElementById('fileModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalCode = document.getElementById('modalCode');
+        const modalClose = document.getElementById('modalClose');
+
+        function openModal(key) {
+            const file = fileContents[key];
+            if (!file) return;
+
+            modalTitle.textContent = file.filename;
+            
+            if (file.empty) {
+                modalCode.innerHTML = `<span class="modal-empty">${file.emptyMessage}</span>`;
+            } else {
+                modalCode.textContent = file.content;
+            }
+
+            modal.classList.add('visible');
+        }
+
+        function closeModal() {
+            modal.classList.remove('visible');
+        }
+
+        modalClose.addEventListener('click', closeModal);
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && modal.classList.contains('visible')) {
+                closeModal();
+            }
+        });
+
+        // Double-click to open file preview
+        treeItems.forEach(item => {
+            item.addEventListener('dblclick', (e) => {
+                const key = item.dataset.info;
+                // Don't open modal for folders (except rules which is empty) or root
+                if (key === 'root' || key === 'claude-dir' || key === 'commands') return;
+                if (fileContents[key]) {
+                    openModal(key);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
