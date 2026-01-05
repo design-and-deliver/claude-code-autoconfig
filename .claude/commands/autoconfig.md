@@ -47,13 +47,25 @@ Look for these indicators to understand the project:
 
 ## Step 2: Populate CLAUDE.md
 
-Fill in with real values:
-- **Project name**: from package.json name, directory name, or README
-- **Purpose**: from README, package.json description, or infer from code
-- **Tech stack**: languages, frameworks, databases, key libraries detected
-- **Entry points**: main files, API routes, CLI commands
-- **Commands**: actual scripts from package.json, Makefile, etc.
-- **Architecture**: monolith, microservices, monorepo, serverless, etc.
+Focus on what Claude Code actually needs to work effectively. Claude can explore the codebase itself — don't document what it can discover.
+
+**Always include:**
+- **Project name + one-liner**: What is this thing?
+- **Tech stack**: Runtime, framework, database, key services (so Claude uses correct patterns)
+- **Commands**: How to run, test, build, deploy — Claude needs these to execute tasks
+- **Non-obvious conventions**: Multi-schema databases, monorepo structure, unusual patterns Claude wouldn't infer
+
+**Include if relevant:**
+- **Deployment flow**: If non-standard or involves multiple steps
+- **Key architectural decisions**: Only if Claude would make wrong assumptions without them
+
+**Skip these — Claude can discover them:**
+- Detailed project structure trees (Claude can run `ls` or `tree`)
+- Exhaustive route/endpoint lists (Claude can grep)
+- File-by-file descriptions (Claude can read files)
+- Database model lists (Claude can read schema files)
+
+**Keep it tight.** A 30-line CLAUDE.md that hits the essentials beats a 200-line doc Claude has to parse every session.
 
 ## Step 3: Create Rules Directory
 
@@ -74,88 +86,35 @@ Use `Read()` for blocking reads, `Edit()` for blocking writes:
 Read(./.env)
 Read(./.env.*)
 Read(./secrets/**)
-Read(./**/*.pem)
-Read(./**/*.key)
-Read(./**/*.crt)
+Edit(./.env)
+Edit(./.env.*)
 ```
 
-**Detect and deny build outputs:**
-| If exists | Add to deny |
-|-----------|-------------|
-| `dist/` | `Read(./dist/**)` |
-| `build/` | `Read(./build/**)` |
-| `.next/` | `Read(./.next/**)` |
-| `out/` | `Read(./out/**)` |
-| `target/` (Rust/Java) | `Read(./target/**)` |
-| `bin/`, `obj/` (.NET) | `Read(./bin/**)`, `Read(./obj/**)` |
-
-**Detect and deny dependencies:**
-| If exists | Add to deny |
-|-----------|-------------|
-| `node_modules/` | `Read(./node_modules/**)` |
-| `venv/` | `Read(./venv/**)` |
-| `.venv/` | `Read(./.venv/**)` |
-| `vendor/` (Go/PHP) | `Read(./vendor/**)` |
+**Often deny (generated/vendor):**
+```
+Edit(./node_modules/**)
+Edit(./dist/**)
+Edit(./.git/**)
+```
 
 ### Allow Patterns (auto-approve without prompting)
 
 Use `Bash()` patterns with prefix matching:
 
-**Detect from package.json scripts:**
-- `Bash(npm test:*)` — test commands
-- `Bash(npm run lint:*)` — lint commands
-- `Bash(npm run build:*)` — build commands
-
-**Detect from Python projects:**
-- `Bash(pytest:*)`, `Bash(python -m pytest:*)`
-- `Bash(ruff:*)`, `Bash(mypy:*)`
-
-**Detect from other ecosystems:**
-- Go: `Bash(go test:*)`, `Bash(go build:*)`
-- Rust: `Bash(cargo test:*)`, `Bash(cargo build:*)`, `Bash(cargo clippy:*)`
-- Ruby: `Bash(bundle exec rspec:*)`, `Bash(bundle exec rubocop:*)`
-
-**Always safe to allow:**
-- `Bash(git status:*)`, `Bash(git diff:*)`, `Bash(git log:*)`
-- `Bash(ls:*)`, `Bash(cat:*)`, `Bash(head:*)`, `Bash(tail:*)`
-
-### Final settings.json structure
-
-```json
-{
-  "permissions": {
-    "allow": [
-      "Bash(npm test:*)",
-      "Bash(npm run lint:*)",
-      "Bash(git status:*)",
-      "Bash(git diff:*)",
-      "Bash(git log:*)"
-    ],
-    "deny": [
-      "Read(./.env)",
-      "Read(./.env.*)",
-      "Read(./secrets/**)",
-      "Read(./**/*.pem)",
-      "Read(./**/*.key)",
-      "Read(./node_modules/**)",
-      "Read(./dist/**)"
-    ]
-  },
-  "env": {
-    "NODE_ENV": "development"
-  }
-}
+```
+Bash(npm run test:*)
+Bash(npm run lint:*)
+Bash(npm run build)
 ```
 
-### Optional: Environment Variables
+### Environment Variables
 
-Add project-specific env vars that should be set for every session:
+Set session-level env vars:
 
 ```json
 {
   "env": {
-    "NODE_ENV": "development",
-    "DEBUG": "true"
+    "NODE_ENV": "development"
   }
 }
 ```
@@ -165,13 +124,6 @@ Add project-specific env vars that should be set for every session:
 ## Guidelines
 
 - Replace ALL placeholder content with real values from THIS project
-- Delete files/sections that don't apply — no empty stubs
-- Keep everything concise — quick reference, not documentation
-- When uncertain, scan actual source files to understand patterns
-- Preserve autoconfig structure, fill with real content
-
-## After Completion
-
-Once autoconfig is complete, prompt the user:
-
-**Run `/guide` for an interactive walkthrough of your new Claude Code project setup.**
+- Delete sections that don't apply — no empty stubs
+- Optimize for Claude's efficiency, not human documentation
+- When uncertain, leave it out — Claude can ask or explore

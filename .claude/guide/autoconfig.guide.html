@@ -1115,7 +1115,7 @@
         
         setTimeout(checkTypewriter, 100);
 
-        // Tree panel info data
+        // Tree panel info data - UPDATED
         const treeInfo = {
             'root': {
                 title: projectName,
@@ -1123,7 +1123,7 @@
             },
             'claude-md': {
                 title: 'CLAUDE.md',
-                desc: 'The entry point. Claude reads this every session — project overview, tech stack, key entry points, how to build/test/run.',
+                desc: 'The entry point. Claude reads this every session. Include project name, tech stack, and commands to run things. Skip detailed structure — Claude can explore the codebase itself.',
                 trigger: 'Claude Code loads this automatically at the start of every session'
             },
             'claude-dir': {
@@ -1141,31 +1141,31 @@
             },
             'autoconfig': {
                 title: 'autoconfig.md',
-                desc: 'Analyzes your project and populates the config with real values — CLAUDE.md, settings.json, and more.',
+                desc: 'The command you just ran. Analyzes your project and populates CLAUDE.md with real context. Re-run anytime your stack changes.',
                 trigger: '/autoconfig'
-            },
-            'test': {
-                title: 'test.md',
-                desc: 'Runs your project\'s tests. A starter example — customize it for your stack.',
-                trigger: '/test'
             },
             'guide-cmd': {
                 title: 'guide.md',
                 desc: 'Opens this interactive guide in your browser.',
                 trigger: '/guide'
             },
+            'test': {
+                title: 'test.md',
+                desc: 'Runs your test suite. Auto-detects Jest, Vitest, Pytest, Go, RSpec, or falls back to npm test.',
+                trigger: '/test'
+            },
             'commit-and-push': {
                 title: 'commit-and-push.md',
-                desc: 'Stage, commit, and push in one step. Generates the commit message from your diff.',
+                desc: 'Stages all changes, generates a conventional commit message from the diff, commits, and pushes. One command, full workflow.',
                 trigger: '/commit-and-push'
             },
             'rules': {
                 title: 'rules/',
-                desc: 'Defines how Claude should handle different parts of your codebase — coding standards, patterns, conventions.<br><br><strong>Want optimized rules for your project?</strong><br>Reach out: <a href="mailto:info@adac1001.com" style="color: var(--accent-cyan);">info@adac1001.com</a>'
+                desc: 'Path-scoped context that loads when Claude works on matching files. Intentionally empty — effective rules require understanding your specific patterns and conventions.<br><br><strong>Want optimized rules for your project?</strong><br>Reach out: <a href="mailto:info@adac1001.com" style="color: var(--accent-cyan);">info@adac1001.com</a>'
             },
             'guide': {
                 title: 'guide/autoconfig.guide.html',
-                desc: 'This interactive guide. Open it anytime to review the autoconfig structure and what each file does.',
+                desc: 'This interactive guide. Open it anytime to review what each file does.',
                 trigger: '/guide'
             }
         };
@@ -1429,13 +1429,24 @@ Look for these indicators to understand the project:
 
 ## Step 2: Populate CLAUDE.md
 
-Fill in with real values:
-- **Project name**: from package.json name, directory name, or README
-- **Purpose**: from README, package.json description, or infer from code
-- **Tech stack**: languages, frameworks, databases, key libraries detected
-- **Entry points**: main files, API routes, CLI commands
-- **Commands**: actual scripts from package.json, Makefile, etc.
-- **Architecture**: monolith, microservices, monorepo, serverless, etc.
+Focus on what Claude Code actually needs to work effectively. Claude can explore the codebase itself — don't document what it can discover.
+
+**Always include:**
+- **Project name + one-liner**: What is this thing?
+- **Tech stack**: Runtime, framework, database, key services (so Claude uses correct patterns)
+- **Commands**: How to run, test, build, deploy — Claude needs these to execute tasks
+- **Non-obvious conventions**: Multi-schema databases, monorepo structure, unusual patterns Claude wouldn't infer
+
+**Include if relevant:**
+- **Deployment flow**: If non-standard or involves multiple steps
+
+**Skip these — Claude can discover them:**
+- Detailed project structure trees (Claude can run \`ls\` or \`tree\`)
+- Exhaustive route/endpoint lists (Claude can grep)
+- File-by-file descriptions (Claude can read files)
+- Database model lists (Claude can read schema files)
+
+**Keep it tight.** A 30-line CLAUDE.md that hits the essentials beats a 200-line doc Claude has to parse every session.
 
 ## Step 3: Create Rules Directory
 
@@ -1449,21 +1460,54 @@ Update \`.claude/settings.json\` using the official schema.
 
 ### Deny Patterns (files Claude shouldn't read/write)
 
-Use \`Read()\` for blocking reads, \`Edit()\` for blocking writes.
+Use \`Read()\` for blocking reads, \`Edit()\` for blocking writes:
+
+**Always deny (security):**
+\`\`\`
+Read(./.env)
+Read(./.env.*)
+Read(./secrets/**)
+Edit(./.env)
+Edit(./.env.*)
+\`\`\`
+
+**Often deny (generated/vendor):**
+\`\`\`
+Edit(./node_modules/**)
+Edit(./dist/**)
+Edit(./.git/**)
+\`\`\`
 
 ### Allow Patterns (auto-approve without prompting)
 
-Use \`Bash()\` patterns with prefix matching.
+Use \`Bash()\` patterns with prefix matching:
+
+\`\`\`
+Bash(npm run test:*)
+Bash(npm run lint:*)
+Bash(npm run build)
+\`\`\`
+
+### Environment Variables
+
+Set session-level env vars:
+
+\`\`\`json
+{
+  "env": {
+    "NODE_ENV": "development"
+  }
+}
+\`\`\`
 
 **Keep it minimal** — only include patterns that actually exist in this project.
 
 ## Guidelines
 
 - Replace ALL placeholder content with real values from THIS project
-- Delete files/sections that don't apply — no empty stubs
-- Keep everything concise — quick reference, not documentation
-- When uncertain, scan actual source files to understand patterns
-- Preserve autoconfig structure, fill with real content`
+- Delete sections that don't apply — no empty stubs
+- Optimize for Claude's efficiency, not human documentation
+- When uncertain, leave it out — Claude can ask or explore`
             },
             'commit-and-push': {
                 filename: 'commit-and-push.md',

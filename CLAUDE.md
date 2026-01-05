@@ -1,3 +1,3 @@
 # Project Name
 
-> Run `/autoconfig` to fill this in based on your project.
+> Run `/autoconfig` to populate this based on your project.
