@@ -42,7 +42,7 @@ Write-Host ""
 Write-Host "✨ Claude Code Autoconfig installed!" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor White
-Write-Host "  1. Open Claude Code in this project"
+Write-Host "  1. Open Claude Code in this project" -ForegroundColor DarkYellow
 Write-Host "  2. Run /autoconfig to configure for your project"
 Write-Host "  3. Run /guide to open the interactive guide"
 Write-Host ""
