@@ -807,26 +807,11 @@
         <div class="progress-container" id="progress"></div>
         
         <div class="slides-container">
-            <!-- Slide 0: Welcome -->
+            <!-- Slide 0: What Got Installed -->
             <div class="slide active" data-slide="0">
-                <div class="slide-number">Guide</div>
-                <h1>Claude Code Autoconfig</h1>
-                <h2 class="typewriter" data-text="Everything you need to configure Claude Code properly."></h2>
-                <div class="slide-content">
-                    <div class="welcome-content">
-                        <p class="welcome-text">Welcome to Claude Code Autoconfig!</p>
-                        <div class="welcome-action">
-                            <p>Run <code>/autoconfig</code> in your Claude Code terminal to have Claude Code analyze your project and autoconfig your autoconfig.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Slide 1: What Got Installed -->
-            <div class="slide" data-slide="1">
                 <div class="slide-number">01 / Overview</div>
-                <h1>What Got Installed</h1>
-                <h2 class="typewriter" data-text="Hover over any file to learn what it does."></h2>
+                <h1>✨ Autoconfig Complete</h1>
+                <h2 class="typewriter" data-text="Here's what got installed. Hover over any file or folder to learn what it does."></h2>
                 <div class="slide-content">
                     <div class="tree-panel">
                         <div class="tree-side">
@@ -901,14 +886,14 @@
                 </div>
             </div>
 
-            <!-- Slide 2: Finale -->
-            <div class="slide" data-slide="2">
+            <!-- Slide 1: Finale -->
+            <div class="slide" data-slide="1">
                 <div class="slide-number">02 / You're Ready</div>
                 <h1>That's It</h1>
                 <h2 class="typewriter" data-text="You've got the autoconfig. Now go build something."></h2>
                 <div class="slide-content">
                     <div class="final-links">
-                        <a href="https://github.com/anthropics/claude-code-getting-started" class="final-link" target="_blank">
+                        <a href="https://github.com/design-and-deliver/claude-code-autoconfig" class="final-link" target="_blank">
                             ⭐ Star on GitHub
                         </a>
                         <a href="https://docs.anthropic.com/en/docs/claude-code/overview" class="final-link" target="_blank">
@@ -970,8 +955,8 @@
             updateButtons();
             checkTypewriter();
             
-            // Select CLAUDE.md by default when entering slide 1
-            if (currentSlide === 1) {
+            // Select CLAUDE.md by default when entering slide 0 (tree view)
+            if (currentSlide === 0) {
                 setTimeout(() => selectTreeItemByKey('claude-md'), 100);
             }
         }
@@ -1000,11 +985,14 @@
                 window.close();
             }
         });
+        
+        // Select CLAUDE.md on initial page load
+        setTimeout(() => selectTreeItemByKey('claude-md'), 300);
 
         // Keyboard navigation for slides
         document.addEventListener('keydown', (e) => {
-            // On slide 1, arrow keys control tree - use spacebar for next slide
-            if (currentSlide === 1) {
+            // On slide 0, arrow keys control tree - use spacebar for next slide
+            if (currentSlide === 0) {
                 if (e.key === ' ') {
                     e.preventDefault();
                     if (currentSlide < slides.length - 1) {
@@ -1014,8 +1002,8 @@
                 return; // Let tree keyboard handler deal with arrows
             }
             
-            // Space bar for next slide (but not on slide 1 with tree)
-            if (e.key === ' ' && currentSlide !== 1) {
+            // Space bar for next slide (but not on slide 0 with tree)
+            if (e.key === ' ' && currentSlide !== 0) {
                 e.preventDefault();
                 if (currentSlide < slides.length - 1) {
                     goToSlide(currentSlide + 1);
