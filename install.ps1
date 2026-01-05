@@ -1,9 +1,9 @@
 # Claude Code Autoconfig - Install Script (PowerShell)
-# https://github.com/YOURUSERNAME/claude-code-autoconfig
+# https://github.com/design-and-deliver/claude-code-autoconfig
 
 $ErrorActionPreference = "Stop"
 
-$RepoBase = "https://raw.githubusercontent.com/YOURUSERNAME/claude-code-autoconfig/main"
+$RepoBase = "https://raw.githubusercontent.com/design-and-deliver/claude-code-autoconfig/main"
 
 Write-Host "🚀 Installing Claude Code Autoconfig..." -ForegroundColor Cyan
 
@@ -45,4 +45,4 @@ Write-Host "Next steps:" -ForegroundColor White
 Write-Host "  1. Run /autoconfig to configure for your project"
 Write-Host "  2. Run /guide to open the interactive guide"
 Write-Host ""
-Write-Host "Repo: https://github.com/YOURUSERNAME/claude-code-autoconfig" -ForegroundColor Gray
+Write-Host "Repo: https://github.com/design-and-deliver/claude-code-autoconfig" -ForegroundColor Gray

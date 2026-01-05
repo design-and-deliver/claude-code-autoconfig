@@ -1,10 +1,10 @@
 #!/bin/bash
 # Claude Code Autoconfig - Install Script
-# https://github.com/YOURUSERNAME/claude-code-autoconfig
+# https://github.com/design-and-deliver/claude-code-autoconfig
 
 set -e
 
-REPO_BASE="https://raw.githubusercontent.com/YOURUSERNAME/claude-code-autoconfig/main"
+REPO_BASE="https://raw.githubusercontent.com/design-and-deliver/claude-code-autoconfig/main"
 
 echo "🚀 Installing Claude Code Autoconfig..."
 
@@ -46,4 +46,4 @@ echo "Next steps:"
 echo "  1. Run /autoconfig to configure for your project"
 echo "  2. Run /guide to open the interactive guide"
 echo ""
-echo "Repo: https://github.com/YOURUSERNAME/claude-code-autoconfig"
+echo "Repo: https://github.com/design-and-deliver/claude-code-autoconfig"

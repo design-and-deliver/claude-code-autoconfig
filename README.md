@@ -8,12 +8,12 @@ Intelligent, self-configuring setup for Claude Code. One command and it analyzes
 
 macOS / Linux / WSL:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YOURUSERNAME/claude-code-autoconfig/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/design-and-deliver/claude-code-autoconfig/main/install.sh | bash
 ```
 
 Windows (PowerShell):
 ```powershell
-irm https://raw.githubusercontent.com/YOURUSERNAME/claude-code-autoconfig/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/design-and-deliver/claude-code-autoconfig/main/install.ps1 | iex
 ```
 
 ## After Install
