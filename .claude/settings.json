@@ -25,7 +25,7 @@
       "Read(./**/credentials.*)",
       "Read(./**/*.pem)",
       "Read(./**/*.key)",
-      "Bash(rm -rf *)",
+      "Bash(rm -rf:*)",
       "Bash(curl:*)",
       "Bash(wget:*)"
     ]
