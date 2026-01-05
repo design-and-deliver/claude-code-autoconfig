@@ -127,3 +127,9 @@ Set session-level env vars:
 - Delete sections that don't apply — no empty stubs
 - Optimize for Claude's efficiency, not human documentation
 - When uncertain, leave it out — Claude can ask or explore
+
+## After Completion
+
+Once autoconfig is complete, prompt the user:
+
+**Run `/guide` for an interactive walkthrough of your new Claude Code project setup.**
