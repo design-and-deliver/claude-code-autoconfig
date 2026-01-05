@@ -10,7 +10,6 @@ REPO_BASE="https://raw.githubusercontent.com/design-and-deliver/claude-code-auto
 ORANGE='\033[0;33m'
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
-GRAY='\033[0;90m'
 NC='\033[0m' # No Color
 
 echo -e "${CYAN}🚀 Installing Claude Code Autoconfig...${NC}"
@@ -53,7 +52,5 @@ echo "Once Claude Code is open:"
 echo "  1. Run /autoconfig to configure for your project"
 echo "  2. Run /guide to open the interactive guide"
 echo ""
-echo -e "${GRAY}Repo: https://github.com/design-and-deliver/claude-code-autoconfig${NC}"
-echo ""
-read -p "Open Claude Code now? [Press Enter to continue] "
+read -p $'\033[0;33mOpen Claude Code now? [Press Enter to continue]\033[0m '
 claude
