@@ -41,9 +41,11 @@ Write-Host "✅ Created .claude/guide/" -ForegroundColor Green
 Write-Host ""
 Write-Host "✨ Claude Code Autoconfig installed!" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Next steps:" -ForegroundColor White
-Write-Host "  1. Open Claude Code in this project" -ForegroundColor DarkYellow
-Write-Host "  2. Run /autoconfig to configure for your project"
-Write-Host "  3. Run /guide to open the interactive guide"
+Write-Host "Once Claude Code is open:" -ForegroundColor White
+Write-Host "  1. Run /autoconfig to configure for your project"
+Write-Host "  2. Run /guide to open the interactive guide"
 Write-Host ""
 Write-Host "Repo: https://github.com/design-and-deliver/claude-code-autoconfig" -ForegroundColor Gray
+Write-Host ""
+Read-Host "Open Claude Code now? [Press Enter to continue]"
+claude
