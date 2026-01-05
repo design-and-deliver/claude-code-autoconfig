@@ -169,3 +169,9 @@ Add project-specific env vars that should be set for every session:
 - Keep everything concise — quick reference, not documentation
 - When uncertain, scan actual source files to understand patterns
 - Preserve autoconfig structure, fill with real content
+
+## After Completion
+
+Once autoconfig is complete, prompt the user:
+
+**Run `/guide` for an interactive walkthrough of your new Claude Code project setup.**
