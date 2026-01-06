@@ -835,6 +835,11 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">autoconfig.md</span>
                             </div>
+                            <div class="tree-item indent-3 hidden" data-info="autoconfig-refresh" data-parent="commands">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">autoconfig-refresh.md</span>
+                            </div>
                             <div class="tree-item indent-3 hidden" data-info="commit-and-push" data-parent="commands">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
@@ -850,6 +855,21 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">test.md</span>
                             </div>
+                            <div class="tree-item indent-2 folder-row hidden collapsed" data-info="agents" data-folder="agents" data-parent="claude-dir">
+                                <span class="tree-chevron">›</span>
+                                <span class="tree-folder-icon">📁</span>
+                                <span class="folder">agents</span>
+                            </div>
+                            <div class="tree-item indent-3 hidden" data-info="guide-refresh" data-parent="agents">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">guide-refresh.md</span>
+                            </div>
+                            <div class="tree-item indent-2 hidden" data-info="feedback" data-parent="claude-dir">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-folder-icon">📁</span>
+                                <span class="folder">feedback</span>
+                            </div>
                             <div class="tree-item indent-2 folder-row hidden collapsed" data-info="guide" data-folder="guide-folder" data-parent="claude-dir">
                                 <span class="tree-chevron">›</span>
                                 <span class="tree-folder-icon">📁</span>
@@ -859,6 +879,21 @@
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">🌐</span>
                                 <span class="file">autoconfig.guide.html</span>
+                            </div>
+                            <div class="tree-item indent-2 folder-row hidden collapsed" data-info="retro" data-folder="retro" data-parent="claude-dir">
+                                <span class="tree-chevron">›</span>
+                                <span class="tree-folder-icon">📁</span>
+                                <span class="folder">retro</span>
+                            </div>
+                            <div class="tree-item indent-3 hidden" data-info="retro-template" data-parent="retro">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">_TEMPLATE.md</span>
+                            </div>
+                            <div class="tree-item indent-3 folder-row hidden collapsed" data-info="retro-done" data-folder="retro-done" data-parent="retro">
+                                <span class="tree-chevron">›</span>
+                                <span class="tree-folder-icon">📁</span>
+                                <span class="folder">done</span>
                             </div>
                             <div class="tree-item indent-2 hidden" data-info="rules" data-parent="claude-dir">
                                 <span class="tree-spacer"></span>
@@ -1132,17 +1167,34 @@
             },
             'settings': {
                 title: 'settings.json',
-                desc: 'Permissions and security. Controls which commands Claude can run and which files it can access.',
+                desc: 'Permissions, security, and hooks. Controls which commands Claude can run, which files it can access, and includes a PostToolUse hook that auto-refreshes the guide when .claude/ files change.',
                 trigger: 'Claude Code loads this automatically at the start of every session'
             },
             'commands': {
                 title: 'commands/',
                 desc: 'On-demand workflows you trigger with <code>/name</code>. Each .md file in this folder becomes a <a href="https://code.claude.com/docs/en/slash-commands" target="_blank" style="color: var(--accent-cyan);">slash command</a>.'
             },
+            'agents': {
+                title: 'agents/',
+                desc: 'Subagents that run in the background. Includes guide-refresh which auto-syncs this guide when .claude/ files change.<br><br><div style="background: var(--bg-elevated); border: 1px solid var(--accent-cyan); border-radius: 8px; padding: 16px; margin-top: 8px;"><strong style="color: var(--accent-orange);">Want optimized subagents for your project?</strong><br>Reach out: <a href="mailto:info@adac1001.com" style="color: var(--accent-cyan);">info@adac1001.com</a></div>'
+            },
+            'guide-refresh': {
+                title: 'guide-refresh.md',
+                desc: 'Background worker that syncs the guide when .claude/ files change. Triggered automatically via PostToolUse hook.'
+            },
+            'feedback': {
+                title: 'feedback/',
+                desc: 'Team-maintained corrections and guidance for Claude. Add notes here when Claude does something wrong — it learns for next time. This directory persists across <code>/autoconfig</code> runs.'
+            },
             'autoconfig': {
                 title: 'autoconfig.md',
                 desc: 'The command you just ran. Analyzes your project and populates CLAUDE.md with real context. Re-run anytime your stack changes.',
                 trigger: '/autoconfig'
+            },
+            'autoconfig-refresh': {
+                title: 'autoconfig-refresh.md',
+                desc: 'Incrementally updates CLAUDE.md and the guide when .claude/ files change. Runs automatically via PostToolUse hook — no manual trigger needed.',
+                trigger: '/autoconfig-refresh'
             },
             'guide-cmd': {
                 title: 'guide.md',
@@ -1159,9 +1211,21 @@
                 desc: 'Stages all changes, generates a conventional commit message from the diff, commits, and pushes. One command, full workflow.',
                 trigger: '/commit-and-push'
             },
+            'retro': {
+                title: 'retro/',
+                desc: 'Tech debt and improvement opportunities surfaced by Claude during development. Each file is a fully-scoped story ready to execute.'
+            },
+            'retro-template': {
+                title: '_TEMPLATE.md',
+                desc: 'Story template for retro items. Copy this when creating new stories. Includes problem, acceptance criteria, approach, priority, and effort fields.'
+            },
+            'retro-done': {
+                title: 'done/',
+                desc: 'Completed retro items moved here for historical reference.'
+            },
             'rules': {
                 title: 'rules/',
-                desc: 'Path-scoped context that loads when Claude works on matching files. Intentionally empty — optimized rules require understanding your team\'s needs and defining the best patterns and practices to guide future development.<br><br><div style="background: var(--bg-elevated); border: 1px solid var(--accent-cyan); border-radius: 8px; padding: 16px; margin-top: 8px;"><strong style="color: var(--accent-orange);">Want optimized rules for your project?</strong><br>Reach out: <a href="mailto:info@adac1001.com" style="color: var(--accent-cyan);">info@adac1001.com</a></div>'
+                desc: 'Path-scoped context that loads when Claude works on matching files. Optimized rules are based on your project\'s needs, patterns and practices.<br><br><div style="background: var(--bg-elevated); border: 1px solid var(--accent-cyan); border-radius: 8px; padding: 16px; margin-top: 8px;"><strong style="color: var(--accent-orange);">Want optimized rules for your project?</strong><br>Reach out: <a href="mailto:info@adac1001.com" style="color: var(--accent-cyan);">info@adac1001.com</a></div>'
             },
             'guide': {
                 title: 'guide/autoconfig.guide.html',
@@ -1347,34 +1411,32 @@
                 content: `{
   "permissions": {
     "allow": [
+      "Read(./**)",
+      "Edit(./**)",
+      "Write(./**)",
       "Bash(npm run dev)",
       "Bash(npm run build)",
-      "Bash(npm run lint)",
-      "Bash(npm run lint:fix)",
-      "Bash(npm run typecheck)",
       "Bash(npm run test)",
-      "Bash(npm run test:*)",
-      "Bash(npm run validate)",
       "Bash(git status)",
       "Bash(git diff:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)",
-      "Bash(git pull)",
-      "Bash(git checkout:*)",
-      "Bash(git branch:*)"
+      "Bash(git push:*)"
     ],
     "deny": [
       "Read(./.env)",
       "Read(./.env.*)",
-      "Read(./secrets/**)",
-      "Read(./**/credentials.*)",
-      "Read(./**/*.pem)",
-      "Read(./**/*.key)",
-      "Bash(rm -rf *)",
-      "Bash(curl:*)",
-      "Bash(wget:*)"
+      "Read(./secrets/**)"
     ]
+  },
+  "hooks": {
+    "PostToolUse": [{
+      "matcher": "Edit|Write",
+      "hooks": [{
+        "type": "command",
+        "command": "// Auto-refresh guide when .claude/ changes"
+      }]
+    }]
   }
 }`
             },

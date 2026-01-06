@@ -1,3 +1,5 @@
+<!-- @description The command you just ran. Analyzes your project and populates CLAUDE.md with real context. Re-run anytime your stack changes. -->
+
 # Autoconfig
 
 Analyze this project and configure Claude Code with real context.
@@ -66,6 +68,17 @@ Focus on what Claude Code actually needs to work effectively. Claude can explore
 - Database model lists (Claude can read schema files)
 
 **Keep it tight.** A 30-line CLAUDE.md that hits the essentials beats a 200-line doc Claude has to parse every session.
+
+**Always end with:**
+```markdown
+## Retro
+After completing tasks, if you encountered friction, tech debt, or improvement opportunities worth revisiting, create a story file in `.claude/retro/`. Use your judgment on what's worth capturing — not everything needs a retro item.
+
+## Team Feedback
+See `.claude/feedback/` for corrections and guidance from the team.
+```
+
+These pointers persist across autoconfig runs and direct Claude to team-maintained content.
 
 ## Step 3: Create Rules Directory
 

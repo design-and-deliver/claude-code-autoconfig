@@ -1,6 +1,9 @@
 {
   "permissions": {
     "allow": [
+      "Read(./**)",
+      "Edit(./**)",
+      "Write(./**)",
       "Bash(npm run dev)",
       "Bash(npm run build)",
       "Bash(npm run lint)",
@@ -28,6 +31,19 @@
       "Bash(rm -rf:*)",
       "Bash(curl:*)",
       "Bash(wget:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"$CLAUDE_TOOL_INPUT\" | grep -q \"\\.claude/\" && claude -p \"Run the guide-refresh agent: .claude/agents/guide-refresh.md\" --background || true"
+          }
+        ]
+      }
     ]
   }
 }

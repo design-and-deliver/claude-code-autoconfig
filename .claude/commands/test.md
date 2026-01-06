@@ -1,3 +1,5 @@
+<!-- @description Runs your test suite. Auto-detects Jest, Vitest, Pytest, Go, RSpec, or falls back to npm test. -->
+
 # Run Tests
 
 Run tests for this project.

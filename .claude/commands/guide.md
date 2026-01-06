@@ -1,3 +1,5 @@
+<!-- @description Opens the interactive guide in your browser. -->
+
 # Autoconfig Guide
 
 Open the interactive guide to learn about Claude Code Autoconfig.

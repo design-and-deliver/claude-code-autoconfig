@@ -1,3 +1,5 @@
+<!-- @description Stages all changes, generates a conventional commit message from the diff, commits, and pushes. One command, full workflow. -->
+
 # Commit and Push
 
 Stage all changes, create a commit with a good message, and push to the current branch.
