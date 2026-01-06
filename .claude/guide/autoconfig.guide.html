@@ -1123,8 +1123,8 @@
             },
             'claude-md': {
                 title: 'CLAUDE.md',
-                desc: 'The entry point. Claude reads this every session. Include project name, tech stack, and commands to run things. Skip detailed structure — Claude can explore the codebase itself.',
-                trigger: 'Claude Code loads this automatically at the start of every session'
+                desc: 'The entry point — Claude reads this at the start of every session. Autoconfig already populated it with your project name, tech stack, and key commands. Keep it concise; Claude can explore the codebase itself.',
+                trigger: 'Loaded automatically at session start'
             },
             'claude-dir': {
                 title: '.claude/ Directory',
@@ -1340,7 +1340,7 @@
                 filename: 'CLAUDE.md',
                 content: `# Project Name
 
-> Run \`/autoconfig\` to fill this in based on your project.`
+> Run \`/autoconfig\` to populate this based on your project.`
             },
             'settings': {
                 filename: 'settings.json',

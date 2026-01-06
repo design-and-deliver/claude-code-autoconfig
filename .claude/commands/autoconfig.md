@@ -128,6 +128,17 @@ Set session-level env vars:
 - Optimize for Claude's efficiency, not human documentation
 - When uncertain, leave it out — Claude can ask or explore
 
+## Step 5: Update the Guide
+
+After populating CLAUDE.md, update the guide's file preview to show the actual content:
+
+1. Open `.claude/guide/autoconfig.guide.html`
+2. Find the `fileContents` JavaScript object (search for `'claude-md':`)
+3. Replace the `content` value with the actual CLAUDE.md content you just generated
+4. Use template literal syntax and escape any backticks in the content
+
+This ensures double-clicking CLAUDE.md in the guide shows the real generated content.
+
 ## After Completion
 
 Once autoconfig is complete, prompt the user:
