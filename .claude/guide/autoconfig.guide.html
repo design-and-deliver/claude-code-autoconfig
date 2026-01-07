@@ -1741,6 +1741,16 @@ Use \`test_\` prefix for test databases, not \`dev_\`.`
             if (e.key === 'Escape' && modal.classList.contains('visible')) {
                 closeModal();
             }
+            // Enter key opens preview for selected item
+            if (e.key === 'Enter' && !modal.classList.contains('visible')) {
+                const selected = document.querySelector('.tree-item.selected');
+                if (selected) {
+                    const key = selected.dataset.info;
+                    if (key !== 'root' && key !== 'claude-dir' && key !== 'commands' && fileContents[key]) {
+                        openModal(key);
+                    }
+                }
+            }
         });
 
         // Double-click to open file preview
