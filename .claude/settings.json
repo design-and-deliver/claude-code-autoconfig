@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "printf '\\033]0;claude\\007' 2>/dev/null || true"
+            "command": "printf '\\033]0;claude\\007' || true"
           }
         ]
       }

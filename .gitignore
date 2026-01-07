@@ -1,0 +1,5 @@
+# Local settings (not committed)
+.claude/settings.local.json
+
+# Windows null device workaround
+nul
