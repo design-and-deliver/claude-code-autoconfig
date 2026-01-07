@@ -4,7 +4,16 @@
 
 Analyze this project and configure Claude Code with real context.
 
-## Step 1: Scan the Project
+## Step 1: Detect Environment
+
+**Operating System:**
+Check the platform and note it for command syntax:
+- Windows → use `del`, `rmdir`, backslashes, `.cmd`/`.ps1` scripts
+- macOS/Linux → use `rm`, `mkdir -p`, forward slashes, `.sh` scripts
+
+Include this in CLAUDE.md so all commands use the correct syntax.
+
+## Step 2: Scan the Project
 
 Look for these indicators to understand the project:
 
@@ -47,7 +56,7 @@ Look for these indicators to understand the project:
 - `.github/workflows/` → GitHub Actions
 - `serverless.yml` → Serverless Framework
 
-## Step 2: Populate CLAUDE.md
+## Step 3: Populate CLAUDE.md
 
 Focus on what Claude Code actually needs to work effectively. Claude can explore the codebase itself — don't document what it can discover.
 
@@ -80,13 +89,13 @@ See `.claude/feedback/` for corrections and guidance from the team.
 
 These pointers persist across autoconfig runs and direct Claude to team-maintained content.
 
-## Step 3: Create Rules Directory
+## Step 4: Create Rules Directory
 
 Create an empty `.claude/rules/` directory. Do not create any subdirectories or rule files.
 
 Rules are path-scoped context files that load automatically when Claude works on matching files. Effective rules require deep understanding of your codebase patterns, team conventions, and quality goals — they should be crafted intentionally, not auto-generated.
 
-## Step 4: Configure Settings
+## Step 5: Configure Settings
 
 Update `.claude/settings.json` using the official schema.
 
@@ -141,7 +150,7 @@ Set session-level env vars:
 - Optimize for Claude's efficiency, not human documentation
 - When uncertain, leave it out — Claude can ask or explore
 
-## Step 5: Update the Guide
+## Step 6: Update the Guide
 
 After populating CLAUDE.md, update the guide's file preview to show the actual content:
 

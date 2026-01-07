@@ -4,10 +4,10 @@
 
 Tech debt and improvement opportunities surfaced by Claude during development.
 
-Each file is a fully-scoped story ready to execute. To work through items:
+Claude creates items here via the `create-retro-item` agent when it spots issues worth tracking. Each file is a fully-scoped story ready to execute.
+
+To work through items:
 
 - `ls .claude/retro/` to see the backlog
 - "Hey Claude, pick something from .claude/retro/ and fix it"
-- Delete the file or move to `.claude/retro/done/` when complete
-
-Stories are prioritized by impact (Low, Medium, High, Critical) and sized by effort (S, M, L, XL).
+- Delete the file when complete

@@ -865,10 +865,20 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">guide-refresh.md</span>
                             </div>
-                            <div class="tree-item indent-2 hidden" data-info="feedback" data-parent="claude-dir">
+                            <div class="tree-item indent-3 hidden" data-info="create-retro-item" data-parent="agents">
                                 <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">create-retro-item.md</span>
+                            </div>
+                            <div class="tree-item indent-2 folder-row hidden collapsed" data-info="feedback" data-folder="feedback" data-parent="claude-dir">
+                                <span class="tree-chevron">›</span>
                                 <span class="tree-folder-icon">📁</span>
                                 <span class="folder">feedback</span>
+                            </div>
+                            <div class="tree-item indent-3 hidden" data-info="feedback-template" data-parent="feedback">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">FEEDBACK.md</span>
                             </div>
                             <div class="tree-item indent-2 folder-row hidden collapsed" data-info="guide" data-folder="guide-folder" data-parent="claude-dir">
                                 <span class="tree-chevron">›</span>
@@ -880,20 +890,10 @@
                                 <span class="tree-file-icon">🌐</span>
                                 <span class="file">autoconfig.guide.html</span>
                             </div>
-                            <div class="tree-item indent-2 folder-row hidden collapsed" data-info="retro" data-folder="retro" data-parent="claude-dir">
-                                <span class="tree-chevron">›</span>
+                            <div class="tree-item indent-2 hidden" data-info="retro" data-parent="claude-dir">
+                                <span class="tree-spacer"></span>
                                 <span class="tree-folder-icon">📁</span>
                                 <span class="folder">retro</span>
-                            </div>
-                            <div class="tree-item indent-3 hidden" data-info="retro-template" data-parent="retro">
-                                <span class="tree-spacer"></span>
-                                <span class="tree-file-icon">📄</span>
-                                <span class="file">_TEMPLATE.md</span>
-                            </div>
-                            <div class="tree-item indent-3 folder-row hidden collapsed" data-info="retro-done" data-folder="retro-done" data-parent="retro">
-                                <span class="tree-chevron">›</span>
-                                <span class="tree-folder-icon">📁</span>
-                                <span class="folder">done</span>
                             </div>
                             <div class="tree-item indent-2 hidden" data-info="rules" data-parent="claude-dir">
                                 <span class="tree-spacer"></span>
@@ -1182,9 +1182,17 @@
                 title: 'guide-refresh.md',
                 desc: 'Background worker that syncs the guide when .claude/ files change. Triggered automatically via PostToolUse hook.'
             },
+            'create-retro-item': {
+                title: 'create-retro-item.md',
+                desc: 'Creates formatted retro items when tech debt or improvements are spotted. Claude calls this to log issues for later without breaking flow.'
+            },
             'feedback': {
                 title: 'feedback/',
                 desc: 'Team-maintained corrections and guidance for Claude. Add notes here when Claude does something wrong — it learns for next time. This directory persists across <code>/autoconfig</code> runs.'
+            },
+            'feedback-template': {
+                title: 'FEEDBACK.md',
+                desc: 'Starter template for team feedback. Add dated entries when Claude makes mistakes — include what went wrong and the correct approach. Claude reads this on every session.'
             },
             'autoconfig': {
                 title: 'autoconfig.md',
@@ -1213,15 +1221,7 @@
             },
             'retro': {
                 title: 'retro/',
-                desc: 'Tech debt and improvement opportunities surfaced by Claude during development. Each file is a fully-scoped story ready to execute.'
-            },
-            'retro-template': {
-                title: '_TEMPLATE.md',
-                desc: 'Story template for retro items. Copy this when creating new stories. Includes problem, acceptance criteria, approach, priority, and effort fields.'
-            },
-            'retro-done': {
-                title: 'done/',
-                desc: 'Completed retro items moved here for historical reference.'
+                desc: 'Tech debt and improvement opportunities surfaced by Claude during development. Claude creates story files here with Problem, Acceptance Criteria, Approach, Priority, Effort, and Files sections.'
             },
             'rules': {
                 title: 'rules/',
