@@ -1647,6 +1647,65 @@ Detect the test command from project config (package.json scripts, pytest, go te
                 content: null,
                 empty: true,
                 emptyMessage: "You're looking at it! 👀"
+            },
+            'create-retro-item': {
+                filename: 'create-retro-item.md',
+                content: `# Create Retro Item Agent
+
+Create a fully-scoped story file in \`.claude/retro/\` when tech debt or improvement opportunities are identified.
+
+## When to Trigger
+
+Call this agent when you notice:
+- Tech debt that should be addressed later
+- Code that works but could be improved
+- Missing tests, documentation, or error handling
+- Architectural improvements worth tracking
+
+## Input
+
+Provide these details when calling:
+- **title**: Short descriptive name (used for filename)
+- **problem**: What's wrong or what friction was encountered
+- **criteria**: Specific, testable acceptance criteria
+- **approach**: How to fix it
+- **priority**: Critical | High | Medium | Low
+- **effort**: S | M | L | XL
+- **files**: List of files involved
+
+## Behavior
+
+1. Generate filename from title: \`kebab-case.md\`
+2. Create story file in \`.claude/retro/\`
+3. Confirm creation with filename
+
+## Guidelines
+
+- **Be concise**: Keep descriptions actionable, not verbose
+- **Be specific**: Include actual file paths and line numbers when relevant
+- **Don't duplicate**: Check if similar item already exists first
+- **Don't block**: Create the item and continue with the main task`
+            },
+            'feedback-template': {
+                filename: 'FEEDBACK.md',
+                content: `# Team Feedback
+
+Add corrections and guidance here when Claude does something wrong.
+Claude reads this directory and learns for next time.
+
+## YYYY-MM-DD: Brief title
+
+Describe what Claude did wrong and what to do instead.
+Keep entries brief and actionable.
+
+Example:
+
+## 2026-01-06: Don't use deprecated API
+Claude used \`oldFunction()\` instead of \`newFunction()\`.
+Always use the v2 API for user endpoints.
+
+## 2026-01-07: Test database naming
+Use \`test_\` prefix for test databases, not \`dev_\`.`
             }
         };
 
