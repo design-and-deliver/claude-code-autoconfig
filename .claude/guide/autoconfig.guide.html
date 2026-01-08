@@ -835,11 +835,6 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">create-retro-item.md</span>
                             </div>
-                            <div class="tree-item indent-3 hidden" data-info="refresh-guide" data-parent="agents">
-                                <span class="tree-spacer"></span>
-                                <span class="tree-file-icon">📄</span>
-                                <span class="file">refresh-guide.md</span>
-                            </div>
                             <div class="tree-item indent-2 folder-row hidden collapsed" data-info="commands" data-folder="commands" data-parent="claude-dir">
                                 <span class="tree-chevron">›</span>
                                 <span class="tree-folder-icon">📁</span>
@@ -1167,7 +1162,7 @@
             },
             'settings': {
                 title: 'settings.json',
-                desc: 'Permissions, security, and hooks. Controls which commands Claude can run, which files it can access, and includes a PostToolUse hook that auto-refreshes the guide when .claude/ files change.',
+                desc: 'Permissions, security, and hooks. Controls which commands Claude can run and which files it can access.',
                 trigger: 'Claude Code loads this automatically at the start of every session'
             },
             'commands': {
@@ -1177,10 +1172,6 @@
             'agents': {
                 title: 'agents/',
                 desc: 'Subagents that run in the background.<br><br><div style="background: var(--bg-elevated); border: 1px solid var(--accent-cyan); border-radius: 8px; padding: 16px; margin-top: 8px;"><strong style="color: var(--accent-orange);">Want optimized subagents for your project?</strong><br>Reach out: <a href="mailto:info@adac1001.com" style="color: var(--accent-cyan);">info@adac1001.com</a></div>'
-            },
-            'refresh-guide': {
-                title: 'refresh-guide.md',
-                desc: 'Background worker that syncs the guide when .claude/ files change. Triggered automatically via PostToolUse hook.'
             },
             'create-retro-item': {
                 title: 'create-retro-item.md',
@@ -1206,7 +1197,7 @@
             },
             'guide-cmd': {
                 title: 'show-guide.md',
-                desc: 'Opens this interactive guide in your browser.',
+                desc: 'Opens this interactive guide in your browser. Auto-syncs any changed files before opening.',
                 trigger: '/show-guide'
             },
             'test': {
@@ -1600,29 +1591,23 @@ Keep the subject line under 50 chars. Add body if the change needs explanation.`
             },
             'guide-cmd': {
                 filename: 'show-guide.md',
-                content: `# Autoconfig Guide
+                content: `# Show Guide
 
-Open the interactive guide to learn about Claude Code Autoconfig.
+Open the interactive guide for Claude Code Autoconfig.
 
-\`\`\`bash
-# macOS
-open .claude/guide/autoconfig.guide.html
+## Step 1: Check for Changes
 
-# Linux
-xdg-open .claude/guide/autoconfig.guide.html
+Compare modification times of files in \`.claude/\` against the guide HTML.
 
-# Windows
-start .claude/guide/autoconfig.guide.html
-\`\`\`
+If any files are newer: "Syncing guide with latest changes..." → proceed to delta sync.
 
-The guide covers:
-1. Project structure overview
-2. CLAUDE.md — the entry point
-3. settings.json — permissions & security
-4. Slash commands — on-demand workflows
-5. Rules — path-scoped context
+## Step 2: Delta Sync
 
-**Tip:** You can also just open \`.claude/guide/autoconfig.guide.html\` directly in your browser.`
+For each changed file, update only that entry in the guide's fileContents.
+
+## Step 3: Open Guide
+
+Open in default browser (macOS: open, Linux: xdg-open, Windows: start).`
             },
             'test': {
                 filename: 'test.md',

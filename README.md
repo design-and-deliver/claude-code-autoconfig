@@ -28,8 +28,7 @@ your-project/
 ├── CLAUDE.md                          # Project context (auto-populated)
 └── .claude/
     ├── agents/                        # Background subagents
-    │   ├── create-retro-item.md       #   Creates retro items for tech debt
-    │   └── refresh-guide.md           #   Syncs guide when files change
+    │   └── create-retro-item.md       #   Creates retro items for tech debt
     ├── commands/                      # Slash commands (aka skills)
     │   ├── autoconfig.md              #   /autoconfig - self-configures
     │   ├── commit-and-push.md         #   /commit-and-push - git workflow
@@ -77,7 +76,6 @@ Background workers that automate workflows:
 
 | Agent | Purpose |
 |-------|---------|
-| `refresh-guide` | Syncs the guide when `.claude/` files change |
 | `create-retro-item` | Creates formatted story files when Claude spots tech debt |
 
 ### Team Feedback

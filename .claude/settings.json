@@ -45,17 +45,6 @@
           }
         ]
       }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "echo \"$CLAUDE_TOOL_INPUT\" | grep -q \"\\.claude/\" && claude -p \"Run the refresh-guide agent: .claude/agents/refresh-guide.md\" --background || true"
-          }
-        ]
-      }
     ]
   }
 }
