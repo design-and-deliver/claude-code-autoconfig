@@ -37,7 +37,7 @@ echo -e "${GREEN}✅ Created .claude/settings.json${NC}"
 # Download commands
 curl -fsSL "$REPO_BASE/.claude/commands/autoconfig.md" -o ".claude/commands/autoconfig.md"
 curl -fsSL "$REPO_BASE/.claude/commands/commit-and-push.md" -o ".claude/commands/commit-and-push.md"
-curl -fsSL "$REPO_BASE/.claude/commands/guide.md" -o ".claude/commands/guide.md"
+curl -fsSL "$REPO_BASE/.claude/commands/show-guide.md" -o ".claude/commands/show-guide.md"
 curl -fsSL "$REPO_BASE/.claude/commands/test.md" -o ".claude/commands/test.md"
 echo -e "${GREEN}✅ Created .claude/commands/${NC}"
 
@@ -50,7 +50,7 @@ echo -e "${CYAN}✨ Claude Code Autoconfig installed!${NC}"
 echo ""
 echo "Once Claude Code is open:"
 echo "  1. Run /autoconfig to configure for your project"
-echo "  2. Run /guide to open the interactive guide"
+echo "  2. Run /show-guide to open the interactive guide"
 echo ""
 read -p $'\033[0;33mOpen Claude Code now? [Press Enter to continue]\033[0m '
 claude

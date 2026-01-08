@@ -30,7 +30,7 @@ Write-Host "✅ Created .claude/settings.json" -ForegroundColor Green
 # Download commands
 Invoke-RestMethod "$RepoBase/.claude/commands/autoconfig.md" -OutFile ".claude/commands/autoconfig.md"
 Invoke-RestMethod "$RepoBase/.claude/commands/commit-and-push.md" -OutFile ".claude/commands/commit-and-push.md"
-Invoke-RestMethod "$RepoBase/.claude/commands/guide.md" -OutFile ".claude/commands/guide.md"
+Invoke-RestMethod "$RepoBase/.claude/commands/show-guide.md" -OutFile ".claude/commands/show-guide.md"
 Invoke-RestMethod "$RepoBase/.claude/commands/test.md" -OutFile ".claude/commands/test.md"
 Write-Host "✅ Created .claude/commands/" -ForegroundColor Green
 
@@ -43,7 +43,7 @@ Write-Host "✨ Claude Code Autoconfig installed!" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Once Claude Code is open:" -ForegroundColor White
 Write-Host "  1. Run /autoconfig to configure for your project"
-Write-Host "  2. Run /guide to open the interactive guide"
+Write-Host "  2. Run /show-guide to open the interactive guide"
 Write-Host ""
 Write-Host "Open Claude Code now? [Press Enter to continue]" -ForegroundColor DarkYellow -NoNewline
 Read-Host

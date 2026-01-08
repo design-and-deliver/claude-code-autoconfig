@@ -17,7 +17,7 @@ irm https://raw.githubusercontent.com/design-and-deliver/claude-code-autoconfig/
 ## After Install
 
 1. **`/autoconfig`** — Claude analyzes your project and configures itself
-2. **`/guide`** — Opens an interactive guide showing what got set up
+2. **`/show-guide`** — Opens an interactive guide showing what got set up
 
 That's it. Your Claude Code environment is configured and ready.
 
@@ -31,7 +31,7 @@ your-project/
     ├── commands/                      # Slash commands
     │   ├── autoconfig.md              #   /autoconfig - self-configures
     │   ├── autoconfig-refresh.md      #   /autoconfig-refresh - incremental sync
-    │   ├── guide.md                   #   /guide - interactive walkthrough
+    │   ├── show-guide.md              #   /show-guide - interactive walkthrough
     │   ├── test.md                    #   /test - run tests
     │   └── commit-and-push.md         #   /commit-and-push - git workflow
     ├── agents/                        # Background subagents
@@ -67,7 +67,7 @@ You get a custom-fit configuration without the manual work.
 |---------|-------------|
 | `/autoconfig` | Analyzes project and populates configuration |
 | `/autoconfig-refresh` | Incrementally syncs guide when `.claude/` files change |
-| `/guide` | Opens interactive guide in browser |
+| `/show-guide` | Opens interactive guide in browser |
 | `/test` | Runs your test suite (auto-detects framework) |
 | `/commit-and-push` | Stages, commits with good message, and pushes |
 

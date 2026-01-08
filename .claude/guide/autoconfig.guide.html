@@ -848,7 +848,7 @@
                             <div class="tree-item indent-3 hidden" data-info="guide-cmd" data-parent="commands">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
-                                <span class="file">guide.md</span>
+                                <span class="file">show-guide.md</span>
                             </div>
                             <div class="tree-item indent-3 hidden" data-info="test" data-parent="commands">
                                 <span class="tree-spacer"></span>
@@ -1205,9 +1205,9 @@
                 trigger: '/autoconfig-refresh'
             },
             'guide-cmd': {
-                title: 'guide.md',
+                title: 'show-guide.md',
                 desc: 'Opens this interactive guide in your browser.',
-                trigger: '/guide'
+                trigger: '/show-guide'
             },
             'test': {
                 title: 'test.md',
@@ -1230,7 +1230,7 @@
             'guide': {
                 title: 'guide/autoconfig.guide.html',
                 desc: 'This interactive guide. Open it anytime to review what each file does.',
-                trigger: '/guide'
+                trigger: '/show-guide'
             }
         };
 
@@ -1599,7 +1599,7 @@ Types: feat, fix, docs, style, refactor, test, chore
 Keep the subject line under 50 chars. Add body if the change needs explanation.`
             },
             'guide-cmd': {
-                filename: 'guide.md',
+                filename: 'show-guide.md',
                 content: `# Autoconfig Guide
 
 Open the interactive guide to learn about Claude Code Autoconfig.

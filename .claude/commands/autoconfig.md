@@ -165,4 +165,4 @@ This ensures double-clicking CLAUDE.md in the guide shows the real generated con
 
 Once autoconfig is complete, prompt the user:
 
-**Run `/guide` for an interactive walkthrough of your new Claude Code project setup.**
+**Run `/show-guide` for an interactive walkthrough of your new Claude Code project setup.**
