@@ -111,6 +111,17 @@ The `rules/` directory is intentionally empty. Effective rules require understan
 **Want optimized rules for your project?**
 Reach out: [info@adac1001.com](mailto:info@adac1001.com)
 
+## Permissions & Security
+
+The included `settings.json` provides sensible defaults that balance productivity with safety:
+
+- **`allow`** — Auto-approved operations (file edits, tests, git commands)
+- **`deny`** — Always blocked (secrets, destructive commands, network calls)
+
+Review and adjust these for your team's needs. Run `/permissions` in Claude Code to inspect your current configuration.
+
+See [Claude Code Security Docs](https://docs.anthropic.com/en/docs/claude-code/security) for best practices.
+
 ## Links
 
 - [Claude Code Docs](https://docs.anthropic.com/en/docs/claude-code/overview)
