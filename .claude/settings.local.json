@@ -5,7 +5,8 @@
       "Bash(cat:*)",
       "Bash(rm:*)",
       "Bash(del /q \"C:\\\\CODE\\\\claude-code-autoconfig\\\\.claude\\\\retro\\\\_TEMPLATE.md\")",
-      "Bash(git mv:*)"
+      "Bash(git mv:*)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }
