@@ -92,7 +92,7 @@ Focus on what Claude Code actually needs to work effectively. Claude can explore
 **Always end with:**
 ```markdown
 ## Retro
-After completing tasks, if you encountered friction, tech debt, or improvement opportunities worth revisiting, create a story file in `.claude/retro/`. Use your judgment on what's worth capturing — not everything needs a retro item.
+After completing tasks, if you encountered friction, tech debt, or improvement opportunities worth revisiting, use the create-retro-item agent to log it in `.claude/retro/`. Use your judgment on what's worth capturing — not everything needs a retro item.
 
 ## Team Feedback
 See `.claude/feedback/` for corrections and guidance from the team.
