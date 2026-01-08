@@ -30,6 +30,7 @@ your-project/
     ├── settings.json                  # Permissions & security
     ├── commands/                      # Slash commands
     │   ├── autoconfig.md              #   /autoconfig - self-configures
+    │   ├── autoconfig-refresh.md      #   /autoconfig-refresh - incremental sync
     │   ├── guide.md                   #   /guide - interactive walkthrough
     │   ├── test.md                    #   /test - run tests
     │   └── commit-and-push.md         #   /commit-and-push - git workflow
@@ -65,6 +66,7 @@ You get a custom-fit configuration without the manual work.
 | Command | Description |
 |---------|-------------|
 | `/autoconfig` | Analyzes project and populates configuration |
+| `/autoconfig-refresh` | Incrementally syncs guide when `.claude/` files change |
 | `/guide` | Opens interactive guide in browser |
 | `/test` | Runs your test suite (auto-detects framework) |
 | `/commit-and-push` | Stages, commits with good message, and pushes |
