@@ -35,7 +35,7 @@ your-project/
     │   ├── test.md                    #   /test - run tests
     │   └── commit-and-push.md         #   /commit-and-push - git workflow
     ├── agents/                        # Background subagents
-    │   ├── guide-refresh.md           #   Syncs guide when files change
+    │   ├── refresh-guide.md           #   Syncs guide when files change
     │   └── create-retro-item.md       #   Creates retro items for tech debt
     ├── feedback/                      # Team corrections for Claude
     │   └── FEEDBACK.md                #   Add entries when Claude errs
@@ -77,7 +77,7 @@ Background workers that automate workflows:
 
 | Agent | Purpose |
 |-------|---------|
-| `guide-refresh` | Syncs the guide when `.claude/` files change |
+| `refresh-guide` | Syncs the guide when `.claude/` files change |
 | `create-retro-item` | Creates formatted story files when Claude spots tech debt |
 
 ### Team Feedback
