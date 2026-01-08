@@ -825,6 +825,21 @@
                                 <span class="tree-folder-icon">📁</span>
                                 <span class="folder">.claude</span>
                             </div>
+                            <div class="tree-item indent-2 folder-row hidden collapsed" data-info="agents" data-folder="agents" data-parent="claude-dir">
+                                <span class="tree-chevron">›</span>
+                                <span class="tree-folder-icon">📁</span>
+                                <span class="folder">agents</span>
+                            </div>
+                            <div class="tree-item indent-3 hidden" data-info="create-retro-item" data-parent="agents">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">create-retro-item.md</span>
+                            </div>
+                            <div class="tree-item indent-3 hidden" data-info="refresh-guide" data-parent="agents">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">refresh-guide.md</span>
+                            </div>
                             <div class="tree-item indent-2 folder-row hidden collapsed" data-info="commands" data-folder="commands" data-parent="claude-dir">
                                 <span class="tree-chevron">›</span>
                                 <span class="tree-folder-icon">📁</span>
@@ -834,11 +849,6 @@
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">autoconfig.md</span>
-                            </div>
-                            <div class="tree-item indent-3 hidden" data-info="sync-claude-md" data-parent="commands">
-                                <span class="tree-spacer"></span>
-                                <span class="tree-file-icon">📄</span>
-                                <span class="file">sync-claude-md.md</span>
                             </div>
                             <div class="tree-item indent-3 hidden" data-info="commit-and-push" data-parent="commands">
                                 <span class="tree-spacer"></span>
@@ -850,25 +860,15 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">show-guide.md</span>
                             </div>
+                            <div class="tree-item indent-3 hidden" data-info="sync-claude-md" data-parent="commands">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">sync-claude-md.md</span>
+                            </div>
                             <div class="tree-item indent-3 hidden" data-info="test" data-parent="commands">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">test.md</span>
-                            </div>
-                            <div class="tree-item indent-2 folder-row hidden collapsed" data-info="agents" data-folder="agents" data-parent="claude-dir">
-                                <span class="tree-chevron">›</span>
-                                <span class="tree-folder-icon">📁</span>
-                                <span class="folder">agents</span>
-                            </div>
-                            <div class="tree-item indent-3 hidden" data-info="refresh-guide" data-parent="agents">
-                                <span class="tree-spacer"></span>
-                                <span class="tree-file-icon">📄</span>
-                                <span class="file">refresh-guide.md</span>
-                            </div>
-                            <div class="tree-item indent-3 hidden" data-info="create-retro-item" data-parent="agents">
-                                <span class="tree-spacer"></span>
-                                <span class="tree-file-icon">📄</span>
-                                <span class="file">create-retro-item.md</span>
                             </div>
                             <div class="tree-item indent-2 folder-row hidden collapsed" data-info="feedback" data-folder="feedback" data-parent="claude-dir">
                                 <span class="tree-chevron">›</span>
@@ -1172,7 +1172,7 @@
             },
             'commands': {
                 title: 'commands/',
-                desc: 'On-demand workflows you trigger with <code>/name</code>. Each .md file in this folder becomes a <a href="https://code.claude.com/docs/en/slash-commands" target="_blank" style="color: var(--accent-cyan);">slash command</a>.'
+                desc: 'On-demand workflows you trigger with <code>/name</code>. Each .md file becomes a <a href="https://docs.anthropic.com/en/docs/claude-code/slash-commands" target="_blank" style="color: var(--accent-cyan);">slash command</a> (sometimes called "skills").'
             },
             'agents': {
                 title: 'agents/',

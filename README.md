@@ -27,23 +27,23 @@ That's it. Your Claude Code environment is configured and ready.
 your-project/
 ├── CLAUDE.md                          # Project context (auto-populated)
 └── .claude/
-    ├── settings.json                  # Permissions & security
-    ├── commands/                      # Slash commands
-    │   ├── autoconfig.md              #   /autoconfig - self-configures
-    │   ├── sync-claude-md.md          #   /sync-claude-md - update CLAUDE.md
-    │   ├── show-guide.md              #   /show-guide - interactive walkthrough
-    │   ├── test.md                    #   /test - run tests
-    │   └── commit-and-push.md         #   /commit-and-push - git workflow
     ├── agents/                        # Background subagents
-    │   ├── refresh-guide.md           #   Syncs guide when files change
-    │   └── create-retro-item.md       #   Creates retro items for tech debt
+    │   ├── create-retro-item.md       #   Creates retro items for tech debt
+    │   └── refresh-guide.md           #   Syncs guide when files change
+    ├── commands/                      # Slash commands (aka skills)
+    │   ├── autoconfig.md              #   /autoconfig - self-configures
+    │   ├── commit-and-push.md         #   /commit-and-push - git workflow
+    │   ├── show-guide.md              #   /show-guide - interactive walkthrough
+    │   ├── sync-claude-md.md          #   /sync-claude-md - update CLAUDE.md
+    │   └── test.md                    #   /test - run tests
     ├── feedback/                      # Team corrections for Claude
     │   └── FEEDBACK.md                #   Add entries when Claude errs
+    ├── guide/                         # Interactive walkthrough
+    │   └── autoconfig.guide.html      #   Open with /show-guide
     ├── retro/                         # Tech debt & improvements
     │   └── README.md                  #   Stories created by Claude
     ├── rules/                         # Path-scoped context (empty)
-    └── guide/
-        └── autoconfig.guide.html      # Interactive guide
+    └── settings.json                  # Permissions & security
 ```
 
 ## How It Works
