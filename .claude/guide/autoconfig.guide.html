@@ -835,10 +835,10 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">autoconfig.md</span>
                             </div>
-                            <div class="tree-item indent-3 hidden" data-info="autoconfig-refresh" data-parent="commands">
+                            <div class="tree-item indent-3 hidden" data-info="sync-claude-md" data-parent="commands">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
-                                <span class="file">autoconfig-refresh.md</span>
+                                <span class="file">sync-claude-md.md</span>
                             </div>
                             <div class="tree-item indent-3 hidden" data-info="commit-and-push" data-parent="commands">
                                 <span class="tree-spacer"></span>
@@ -1199,10 +1199,10 @@
                 desc: 'The command you just ran. Analyzes your project and populates CLAUDE.md with real context. Re-run anytime your stack changes.',
                 trigger: '/autoconfig'
             },
-            'autoconfig-refresh': {
-                title: 'autoconfig-refresh.md',
-                desc: 'Incrementally updates the guide when .claude/ files change. Extracts @description comments and syncs treeInfo. Runs automatically via PostToolUse hook.',
-                trigger: '/autoconfig-refresh'
+            'sync-claude-md': {
+                title: 'sync-claude-md.md',
+                desc: 'Re-analyzes your project and updates CLAUDE.md to reflect current state. Run when your stack changes significantly.',
+                trigger: '/sync-claude-md'
             },
             'guide-cmd': {
                 title: 'show-guide.md',
