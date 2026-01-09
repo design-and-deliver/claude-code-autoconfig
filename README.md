@@ -27,7 +27,7 @@ That's it. Your Claude Code environment is configured and ready.
 your-project/
 ├── CLAUDE.md                          # Project context (auto-populated)
 └── .claude/
-    ├── commands/                      # Slash commands (aka skills)
+    ├── commands/                      # Slash commands
     │   ├── autoconfig.md              #   /autoconfig - self-configures
     │   ├── commit-and-push.md         #   /commit-and-push - git workflow
     │   ├── enable-retro.md            #   /enable-retro - opt-in tech debt tracking
