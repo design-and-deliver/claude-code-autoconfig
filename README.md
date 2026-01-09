@@ -39,6 +39,7 @@ your-project/
     ├── guide/                         # Interactive walkthrough
     │   └── autoconfig.guide.html      #   Open with /show-guide
     ├── rules/                         # Path-scoped context (empty)
+    ├── .mcp.json                      # MCP server configs (empty placeholder)
     └── settings.json                  # Permissions & security
 ```
 

@@ -885,6 +885,11 @@
                                 <span class="tree-folder-icon">📁</span>
                                 <span class="folder">rules</span>
                             </div>
+                            <div class="tree-item indent-2 hidden" data-info="mcp" data-parent="claude-dir">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">🔌</span>
+                                <span class="file">.mcp.json</span>
+                            </div>
                             <div class="tree-item indent-2 hidden" data-info="settings" data-parent="claude-dir">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">⚙️</span>
@@ -1155,6 +1160,10 @@
                 desc: 'Permissions, security, and hooks. Controls which commands Claude can run and which files it can access.',
                 trigger: 'Claude Code loads this automatically at the start of every session'
             },
+            'mcp': {
+                title: '.mcp.json',
+                desc: 'MCP (Model Context Protocol) server configuration. Add your MCP server configs here when you\'re ready.<br><br>See <a href="https://docs.anthropic.com/en/docs/claude-code/mcp" target="_blank" style="color: var(--accent-cyan);">MCP documentation</a> for setup instructions.'
+            },
             'commands': {
                 title: 'commands/',
                 desc: 'On-demand workflows you trigger with <code>/name</code>. Each .md file becomes a <a href="https://docs.anthropic.com/en/docs/claude-code/slash-commands" target="_blank" style="color: var(--accent-cyan);">slash command</a> (sometimes called "skills").'
@@ -1413,6 +1422,15 @@
     }]
   }
 }`
+            },
+            'mcp': {
+                filename: '.mcp.json',
+                content: `{
+  "mcpServers": {}
+}
+
+// Add your MCP server configs here when you're ready.
+// See: https://docs.anthropic.com/en/docs/claude-code/mcp`
             },
             'autoconfig': {
                 filename: 'autoconfig.md',

@@ -32,7 +32,8 @@ fi
 
 # Download .claude files
 curl -fsSL "$REPO_BASE/.claude/settings.json" -o ".claude/settings.json"
-echo -e "${GREEN}✅ Created .claude/settings.json${NC}"
+curl -fsSL "$REPO_BASE/.claude/.mcp.json" -o ".claude/.mcp.json"
+echo -e "${GREEN}✅ Created .claude/settings.json and .mcp.json${NC}"
 
 # Download commands
 curl -fsSL "$REPO_BASE/.claude/commands/autoconfig.md" -o ".claude/commands/autoconfig.md"

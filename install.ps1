@@ -25,7 +25,8 @@ if (Test-Path "CLAUDE.md") {
 
 # Download .claude files
 Invoke-RestMethod "$RepoBase/.claude/settings.json" -OutFile ".claude/settings.json"
-Write-Host "✅ Created .claude/settings.json" -ForegroundColor Green
+Invoke-RestMethod "$RepoBase/.claude/.mcp.json" -OutFile ".claude/.mcp.json"
+Write-Host "✅ Created .claude/settings.json and .mcp.json" -ForegroundColor Green
 
 # Download commands
 Invoke-RestMethod "$RepoBase/.claude/commands/autoconfig.md" -OutFile ".claude/commands/autoconfig.md"
