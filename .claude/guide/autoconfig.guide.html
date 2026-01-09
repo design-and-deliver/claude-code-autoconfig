@@ -1696,10 +1696,10 @@ Use \`test_\` prefix for test databases, not \`dev_\`.`
             }
             // Enter key opens preview for selected item
             if (e.key === 'Enter' && !modal.classList.contains('visible')) {
-                const selected = document.querySelector('.tree-item.selected');
+                const selected = document.querySelector('.tree-item.active');
                 if (selected) {
                     const key = selected.dataset.info;
-                    if (key !== 'root' && key !== 'claude-dir' && key !== 'commands' && fileContents[key]) {
+                    if (fileContents[key]) {
                         openModal(key);
                     }
                 }
