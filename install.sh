@@ -37,7 +37,9 @@ echo -e "${GREEN}✅ Created .claude/settings.json${NC}"
 # Download commands
 curl -fsSL "$REPO_BASE/.claude/commands/autoconfig.md" -o ".claude/commands/autoconfig.md"
 curl -fsSL "$REPO_BASE/.claude/commands/commit-and-push.md" -o ".claude/commands/commit-and-push.md"
+curl -fsSL "$REPO_BASE/.claude/commands/enable-retro.md" -o ".claude/commands/enable-retro.md"
 curl -fsSL "$REPO_BASE/.claude/commands/show-guide.md" -o ".claude/commands/show-guide.md"
+curl -fsSL "$REPO_BASE/.claude/commands/sync-claude-md.md" -o ".claude/commands/sync-claude-md.md"
 curl -fsSL "$REPO_BASE/.claude/commands/test.md" -o ".claude/commands/test.md"
 echo -e "${GREEN}✅ Created .claude/commands/${NC}"
 

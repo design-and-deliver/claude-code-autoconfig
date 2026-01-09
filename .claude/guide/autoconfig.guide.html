@@ -825,16 +825,6 @@
                                 <span class="tree-folder-icon">📁</span>
                                 <span class="folder">.claude</span>
                             </div>
-                            <div class="tree-item indent-2 folder-row hidden collapsed" data-info="agents" data-folder="agents" data-parent="claude-dir">
-                                <span class="tree-chevron">›</span>
-                                <span class="tree-folder-icon">📁</span>
-                                <span class="folder">agents</span>
-                            </div>
-                            <div class="tree-item indent-3 hidden" data-info="create-retro-item" data-parent="agents">
-                                <span class="tree-spacer"></span>
-                                <span class="tree-file-icon">📄</span>
-                                <span class="file">create-retro-item.md</span>
-                            </div>
                             <div class="tree-item indent-2 folder-row hidden collapsed" data-info="commands" data-folder="commands" data-parent="claude-dir">
                                 <span class="tree-chevron">›</span>
                                 <span class="tree-folder-icon">📁</span>
@@ -849,6 +839,11 @@
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">commit-and-push.md</span>
+                            </div>
+                            <div class="tree-item indent-3 hidden" data-info="enable-retro" data-parent="commands">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">enable-retro.md</span>
                             </div>
                             <div class="tree-item indent-3 hidden" data-info="guide-cmd" data-parent="commands">
                                 <span class="tree-spacer"></span>
@@ -884,11 +879,6 @@
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">🌐</span>
                                 <span class="file">autoconfig.guide.html</span>
-                            </div>
-                            <div class="tree-item indent-2 hidden" data-info="retro" data-parent="claude-dir">
-                                <span class="tree-spacer"></span>
-                                <span class="tree-folder-icon">📁</span>
-                                <span class="folder">retro</span>
                             </div>
                             <div class="tree-item indent-2 hidden" data-info="rules" data-parent="claude-dir">
                                 <span class="tree-spacer"></span>
@@ -1169,13 +1159,10 @@
                 title: 'commands/',
                 desc: 'On-demand workflows you trigger with <code>/name</code>. Each .md file becomes a <a href="https://docs.anthropic.com/en/docs/claude-code/slash-commands" target="_blank" style="color: var(--accent-cyan);">slash command</a> (sometimes called "skills").'
             },
-            'agents': {
-                title: 'agents/',
-                desc: 'Subagents that run in the background.<br><br><div style="background: var(--bg-elevated); border: 1px solid var(--accent-cyan); border-radius: 8px; padding: 16px; margin-top: 8px;"><strong style="color: var(--accent-orange);">Want optimized subagents for your project?</strong><br>Reach out: <a href="mailto:info@adac1001.com" style="color: var(--accent-cyan);">info@adac1001.com</a></div>'
-            },
-            'create-retro-item': {
-                title: 'create-retro-item.md',
-                desc: 'Creates formatted retro items when tech debt or improvements are spotted. Claude calls this to log issues for later without breaking flow.'
+            'enable-retro': {
+                title: 'enable-retro.md',
+                desc: '(Experimental) Enables tech debt tracking. Creates <code>.claude/retro/</code> directory and configures Claude to log improvement opportunities as structured story files.',
+                trigger: '/enable-retro'
             },
             'feedback': {
                 title: 'feedback/',
@@ -1209,10 +1196,6 @@
                 title: 'commit-and-push.md',
                 desc: 'Stages all changes, generates a conventional commit message from the diff, commits, and pushes. One command, full workflow.',
                 trigger: '/commit-and-push'
-            },
-            'retro': {
-                title: 'retro/',
-                desc: 'Tech debt and improvement opportunities surfaced by Claude during development. Claude creates story files here with Problem, Acceptance Criteria, Approach, Priority, Effort, and Files sections.'
             },
             'rules': {
                 title: 'rules/',
@@ -1633,43 +1616,28 @@ Detect the test command from project config (package.json scripts, pytest, go te
                 empty: true,
                 emptyMessage: "You're looking at it! 👀"
             },
-            'create-retro-item': {
-                filename: 'create-retro-item.md',
-                content: `# Create Retro Item Agent
+            'enable-retro': {
+                filename: 'enable-retro.md',
+                content: `# Enable Retro
 
-Create a fully-scoped story file in \`.claude/retro/\` when tech debt or improvement opportunities are identified.
+(Experimental) Enable tech debt tracking.
 
-## When to Trigger
+## What This Does
 
-Call this agent when you notice:
-- Tech debt that should be addressed later
-- Code that works but could be improved
-- Missing tests, documentation, or error handling
-- Architectural improvements worth tracking
+1. Creates \`.claude/retro/\` directory
+2. Creates \`.claude/agents/create-retro-item.md\` agent
+3. Adds Retro instructions to CLAUDE.md
 
-## Input
+## After Enabling
 
-Provide these details when calling:
-- **title**: Short descriptive name (used for filename)
-- **problem**: What's wrong or what friction was encountered
-- **criteria**: Specific, testable acceptance criteria
-- **approach**: How to fix it
-- **priority**: Critical | High | Medium | Low
-- **effort**: S | M | L | XL
-- **files**: List of files involved
+Claude will log tech debt and improvement opportunities as structured story files:
+- Problem description
+- Acceptance criteria
+- Suggested approach
+- Priority & effort sizing
+- Files involved
 
-## Behavior
-
-1. Generate filename from title: \`kebab-case.md\`
-2. Create story file in \`.claude/retro/\`
-3. Confirm creation with filename
-
-## Guidelines
-
-- **Be concise**: Keep descriptions actionable, not verbose
-- **Be specific**: Include actual file paths and line numbers when relevant
-- **Don't duplicate**: Check if similar item already exists first
-- **Don't block**: Create the item and continue with the main task`
+Work through items: "Fix retro #001"`
             },
             'feedback-template': {
                 filename: 'FEEDBACK.md',

@@ -27,11 +27,10 @@ That's it. Your Claude Code environment is configured and ready.
 your-project/
 ├── CLAUDE.md                          # Project context (auto-populated)
 └── .claude/
-    ├── agents/                        # Background subagents
-    │   └── create-retro-item.md       #   Creates retro items for tech debt
     ├── commands/                      # Slash commands (aka skills)
     │   ├── autoconfig.md              #   /autoconfig - self-configures
     │   ├── commit-and-push.md         #   /commit-and-push - git workflow
+    │   ├── enable-retro.md            #   /enable-retro - opt-in tech debt tracking
     │   ├── show-guide.md              #   /show-guide - interactive walkthrough
     │   ├── sync-claude-md.md          #   /sync-claude-md - update CLAUDE.md
     │   └── test.md                    #   /test - run tests
@@ -39,8 +38,6 @@ your-project/
     │   └── FEEDBACK.md                #   Add entries when Claude errs
     ├── guide/                         # Interactive walkthrough
     │   └── autoconfig.guide.html      #   Open with /show-guide
-    ├── retro/                         # Tech debt & improvements
-    │   └── README.md                  #   Stories created by Claude
     ├── rules/                         # Path-scoped context (empty)
     └── settings.json                  # Permissions & security
 ```
@@ -69,14 +66,7 @@ You get a custom-fit configuration without the manual work.
 | `/show-guide` | Opens interactive guide in browser |
 | `/test` | Runs your test suite (auto-detects framework) |
 | `/commit-and-push` | Stages, commits with good message, and pushes |
-
-### Subagents
-
-Background workers that automate workflows:
-
-| Agent | Purpose |
-|-------|---------|
-| `create-retro-item` | Creates formatted story files when Claude spots tech debt |
+| `/enable-retro` | (Experimental) Enable tech debt tracking |
 
 ### Team Feedback
 
@@ -90,17 +80,18 @@ Always use the v2 API for user endpoints.
 
 Claude reads this directory and learns for next time. Persists across `/autoconfig` runs.
 
-### Retro Items
+### Retro Items (Experimental)
 
-Tech debt and improvements surfaced during development. Claude creates story files in `.claude/retro/` with:
+Opt-in feature for tracking tech debt. Run `/enable-retro` to activate.
 
+When enabled, Claude logs improvement opportunities as structured story files in `.claude/retro/`:
 - Problem description
 - Acceptance criteria
 - Suggested approach
 - Priority & effort sizing
 - Files involved
 
-Work through items anytime: *"Hey Claude, pick something from .claude/retro/ and fix it"*
+Work through items anytime: *"Hey Claude, fix retro #001"*
 
 ### Rules
 

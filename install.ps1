@@ -30,7 +30,9 @@ Write-Host "✅ Created .claude/settings.json" -ForegroundColor Green
 # Download commands
 Invoke-RestMethod "$RepoBase/.claude/commands/autoconfig.md" -OutFile ".claude/commands/autoconfig.md"
 Invoke-RestMethod "$RepoBase/.claude/commands/commit-and-push.md" -OutFile ".claude/commands/commit-and-push.md"
+Invoke-RestMethod "$RepoBase/.claude/commands/enable-retro.md" -OutFile ".claude/commands/enable-retro.md"
 Invoke-RestMethod "$RepoBase/.claude/commands/show-guide.md" -OutFile ".claude/commands/show-guide.md"
+Invoke-RestMethod "$RepoBase/.claude/commands/sync-claude-md.md" -OutFile ".claude/commands/sync-claude-md.md"
 Invoke-RestMethod "$RepoBase/.claude/commands/test.md" -OutFile ".claude/commands/test.md"
 Write-Host "✅ Created .claude/commands/" -ForegroundColor Green
 

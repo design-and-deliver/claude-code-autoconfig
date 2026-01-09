@@ -25,10 +25,10 @@ For each file in `.claude/` that is newer than the guide HTML:
    - `commands/show-guide.md` → `guide-cmd`
    - `commands/sync-claude-md.md` → `sync-claude-md`
    - `commands/commit-and-push.md` → `commit-and-push`
+   - `commands/enable-retro.md` → `enable-retro`
    - `commands/test.md` → `test`
-   - `agents/refresh-guide.md` → `refresh-guide`
-   - `agents/create-retro-item.md` → `create-retro-item`
    - `feedback/FEEDBACK.md` → `feedback-template`
+   - `agents/create-retro-item.md` → `create-retro-item` (only if `.claude/retro/` exists)
 
 2. Read the current content of the changed file
 
