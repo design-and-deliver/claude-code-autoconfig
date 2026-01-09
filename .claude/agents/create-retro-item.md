@@ -25,8 +25,10 @@ Provide these details when calling:
 
 ## Behavior
 
-1. Generate filename from title: `kebab-case.md`
-2. Create story file in `.claude/retro/` using this format:
+1. Scan `.claude/retro/` for existing files to find the highest ID number
+2. Increment to get the next ID (zero-padded to 3 digits: 001, 002, etc.)
+3. Generate filename: `[ID]-kebab-case-title.md` (e.g., `001-add-input-validation.md`)
+4. Create story file in `.claude/retro/` using this format:
 
 ```markdown
 # [Title]
@@ -52,7 +54,7 @@ Provide these details when calling:
 - [file2]
 ```
 
-3. Confirm creation with filename
+5. Confirm creation with ID and filename (e.g., "Created retro #001: 001-add-input-validation.md")
 
 ## Guidelines
 
