@@ -5,6 +5,7 @@
       "Edit(./**)",
       "Write(./**)",
       "WebSearch",
+      "WebFetch",
       "Bash(npm run dev)",
       "Bash(npm run build)",
       "Bash(npm run lint)",
