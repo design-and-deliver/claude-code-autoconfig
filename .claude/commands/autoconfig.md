@@ -194,7 +194,5 @@ Then output a celebratory finale message:
 ```
 ---
 
-✅ Setup complete! Your Claude Code environment is ready.
-
-📖 The interactive guide is now open — it walks through everything that was configured.
+✅ Setup complete! The interactive guide is now open in your browser.
 ```
