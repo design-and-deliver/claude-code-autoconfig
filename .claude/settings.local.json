@@ -9,7 +9,9 @@
       "WebFetch(domain:github.com)",
       "Bash(npm publish:*)",
       "Bash(git ls-tree:*)",
-      "Bash(node -e:*)"
+      "Bash(node -e:*)",
+      "Bash(timeout 5 claude:*)",
+      "Bash(claude -p \"/autoconfig\")"
     ]
   }
 }

@@ -233,33 +233,33 @@ if (fs.existsSync(agentsSrc)) {
 
 console.log('\x1b[32m%s\x1b[0m', '✅ Prepared /autoconfig command');
 
-// Step 4: Show "ONE MORE STEP" message
+// Step 4: Show "READY TO CONFIGURE" message
 console.log();
 console.log('\x1b[33m╔════════════════════════════════════╗');
 console.log('║                                    ║');
-console.log('║           \x1b[1mONE MORE STEP\x1b[22m            ║');
+console.log('║         \x1b[1mREADY TO CONFIGURE\x1b[22m         ║');
 console.log('║                                    ║');
-console.log('║\x1b[0m   Run \x1b[36m/autoconfig\x1b[33m in Claude Code   \x1b[33m║');
-console.log('║\x1b[0m   to complete setup                \x1b[33m║');
+console.log('║\x1b[0m   Press ENTER to launch Claude     \x1b[33m║');
+console.log('║\x1b[0m   and auto-run \x1b[36m/autoconfig\x1b[33m         \x1b[33m║');
 console.log('║                                    ║');
 console.log('╚════════════════════════════════════╝\x1b[0m');
 console.log();
 
-// Step 5: Wait for Enter, then launch Claude Code
+// Step 5: Wait for Enter, then launch Claude Code with /autoconfig
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout
 });
 
-rl.question('\x1b[90mPress ENTER to open Claude Code...\x1b[0m', () => {
+rl.question('\x1b[90mPress ENTER to continue...\x1b[0m', () => {
   rl.close();
 
   console.log();
-  console.log('\x1b[36m%s\x1b[0m', '🚀 Launching Claude Code...');
+  console.log('\x1b[36m%s\x1b[0m', '🚀 Launching Claude Code with /autoconfig...');
   console.log();
 
-  // Spawn claude in the current directory
-  const claude = spawn('claude', [], {
+  // Spawn claude with /autoconfig as initial prompt
+  const claude = spawn('claude', ['/autoconfig'], {
     cwd: cwd,
     stdio: 'inherit',
     shell: true
