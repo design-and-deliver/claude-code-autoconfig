@@ -257,6 +257,9 @@ rl.question('\x1b[90mPress ENTER to continue...\x1b[0m', () => {
   console.log();
   console.log('\x1b[36m%s\x1b[0m', '🚀 Launching Claude Code with /autoconfig...');
   console.log();
+  console.log('\x1b[90m%s\x1b[0m', '   Heads up: Claude Code can take 30+ seconds to initialize.');
+  console.log('\x1b[90m%s\x1b[0m', '   Please be patient while it loads.');
+  console.log();
 
   // Spawn claude with /autoconfig as initial prompt
   // Use --permission-mode=acceptEdits to auto-approve file edits during setup
