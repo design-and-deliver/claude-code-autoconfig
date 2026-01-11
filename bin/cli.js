@@ -269,4 +269,17 @@ rl.question('\x1b[90mPress ENTER to open Claude Code...\x1b[0m', () => {
     console.log('\x1b[31m%s\x1b[0m', '❌ Failed to launch Claude Code');
     console.log('   Run "claude" manually, then run /autoconfig');
   });
+
+  // Cleanup when Claude exits
+  claude.on('close', () => {
+    // Remove 'nul' file if accidentally created on Windows
+    const nulFile = path.join(cwd, 'nul');
+    if (fs.existsSync(nulFile)) {
+      try {
+        fs.unlinkSync(nulFile);
+      } catch (e) {
+        // Ignore errors - file might be locked or already gone
+      }
+    }
+  });
 });

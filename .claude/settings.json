@@ -34,18 +34,5 @@
       "Bash(curl:*)",
       "Bash(wget:*)"
     ]
-  },
-  "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "printf '\\033]0;claude\\007' || true"
-          }
-        ]
-      }
-    ]
   }
 }
