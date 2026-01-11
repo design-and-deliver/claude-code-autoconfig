@@ -171,6 +171,10 @@ This ensures double-clicking CLAUDE.md in the guide shows the real generated con
 
 ## After Completion
 
-Once autoconfig is complete, prompt the user:
+Once autoconfig is complete, open the interactive guide in the user's browser:
 
-**Run `/show-guide` for an interactive walkthrough of your new Claude Code project setup.**
+- macOS: `open .claude/guide/autoconfig.guide.html`
+- Linux: `xdg-open .claude/guide/autoconfig.guide.html`
+- Windows: `start .claude/guide/autoconfig.guide.html`
+
+This shows the user what got installed and how to use it.

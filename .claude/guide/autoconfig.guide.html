@@ -825,6 +825,11 @@
                                 <span class="tree-folder-icon">📁</span>
                                 <span class="folder">.claude</span>
                             </div>
+                            <div class="tree-item indent-2 hidden" data-info="agents" data-parent="claude-dir">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-folder-icon">📁</span>
+                                <span class="folder">agents</span>
+                            </div>
                             <div class="tree-item indent-2 folder-row hidden collapsed" data-info="commands" data-folder="commands" data-parent="claude-dir">
                                 <span class="tree-chevron">›</span>
                                 <span class="tree-folder-icon">📁</span>
@@ -1163,6 +1168,10 @@
             'mcp': {
                 title: '.mcp.json',
                 desc: 'MCP (Model Context Protocol) server configuration. Add your MCP server configs here when you\'re ready.<br><br>See <a href="https://docs.anthropic.com/en/docs/claude-code/mcp" target="_blank" style="color: var(--accent-cyan);">MCP documentation</a> for setup instructions.'
+            },
+            'agents': {
+                title: 'agents/',
+                desc: 'Custom agent definitions for specialized tasks. Agents are autonomous workers that can be spawned to handle complex operations independently.'
             },
             'commands': {
                 title: 'commands/',
