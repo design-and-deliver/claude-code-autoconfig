@@ -42,7 +42,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "case \"$OSTYPE\" in msys*|cygwin*) cmd.exe /c \"title claude\" 2>/dev/null;; *) printf '\\033]0;claude\\007';; esac"
+            "command": "printf '\\033]0;claude\\007' 2>/dev/null || true"
           }
         ]
       }
