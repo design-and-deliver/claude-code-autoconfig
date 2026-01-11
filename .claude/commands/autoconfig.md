@@ -171,7 +171,19 @@ This ensures double-clicking CLAUDE.md in the guide shows the real generated con
 
 ## After Completion
 
-Once autoconfig is complete, open the interactive guide in the user's browser:
+### Windows Cleanup
+
+On Windows, a `nul` file may be accidentally created when commands redirect to null. Before finishing, check for and delete this file if it exists:
+
+```
+del nul 2>nul
+```
+
+This is safe to run even if the file doesn't exist.
+
+### Open Guide
+
+Open the interactive guide in the user's browser:
 
 - macOS: `open .claude/guide/autoconfig.guide.html`
 - Linux: `xdg-open .claude/guide/autoconfig.guide.html`
