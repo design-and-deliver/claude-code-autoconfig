@@ -235,14 +235,14 @@ console.log('\x1b[32m%s\x1b[0m', '✅ Prepared /autoconfig command');
 
 // Step 4: Show "ONE MORE STEP" message
 console.log();
-console.log('\x1b[33m╔════════════════════════════════════╗\x1b[0m');
-console.log('\x1b[33m║                                    ║\x1b[0m');
-console.log('\x1b[33m║\x1b[0m' + '        ⚠️  \x1b[1;33mONE MORE STEP\x1b[0m' + '         \x1b[33m║\x1b[0m');
-console.log('\x1b[33m║                                    ║\x1b[0m');
-console.log('\x1b[33m║\x1b[0m' + '   Run \x1b[36m/autoconfig\x1b[0m in Claude Code' + '   \x1b[33m║\x1b[0m');
-console.log('\x1b[33m║\x1b[0m' + '   to complete setup' + '                \x1b[33m║\x1b[0m');
-console.log('\x1b[33m║                                    ║\x1b[0m');
-console.log('\x1b[33m╚════════════════════════════════════╝\x1b[0m');
+console.log('\x1b[33m╔════════════════════════════════════╗');
+console.log('║                                    ║');
+console.log('║       ⚠️  \x1b[1mONE MORE STEP\x1b[22m            ║');
+console.log('║                                    ║');
+console.log('║\x1b[0m   Run \x1b[36m/autoconfig\x1b[33m in Claude Code   \x1b[33m║');
+console.log('║\x1b[0m   to complete setup                \x1b[33m║');
+console.log('║                                    ║');
+console.log('╚════════════════════════════════════╝\x1b[0m');
 console.log();
 
 // Step 5: Wait for Enter, then launch Claude Code
