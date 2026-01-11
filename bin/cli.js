@@ -262,8 +262,16 @@ rl.question('\x1b[90mPress ENTER to continue...\x1b[0m', () => {
   console.log();
 
   // Spawn claude with /autoconfig as initial prompt
-  // Use --permission-mode=bypassPermissions to skip all permission prompts during setup
-  const claude = spawn('claude', ['--permission-mode=bypassPermissions', '/autoconfig'], {
+  // Use --allowedTools to explicitly scope what autoconfig can do (transparent & defensible)
+  const allowedTools = [
+    'Read(./**)',      // Read any project file (for stack detection)
+    'Edit(./**)',      // Edit files (CLAUDE.md, settings.json, guide, etc.)
+    'Write(./**)',     // Create new files
+    'Bash(start:*)',   // Windows: open browser
+    'Bash(open:*)',    // macOS: open browser
+    'Bash(xdg-open:*)' // Linux: open browser
+  ].join(' ');
+  const claude = spawn('claude', ['--allowedTools', allowedTools, '/autoconfig'], {
     cwd: cwd,
     stdio: 'inherit',
     shell: true
