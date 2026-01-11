@@ -1,0 +1,35 @@
+{
+  "name": "claude-code-autoconfig",
+  "version": "1.0.16",
+  "description": "Intelligent, self-configuring setup for Claude Code. One command analyzes your project, configures Claude, and shows you what it did.",
+  "author": "ADAC 1001 <info@adac1001.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/design-and-deliver/claude-code-autoconfig.git"
+  },
+  "homepage": "https://github.com/design-and-deliver/claude-code-autoconfig#readme",
+  "bugs": {
+    "url": "https://github.com/design-and-deliver/claude-code-autoconfig/issues"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "anthropic",
+    "ai",
+    "autoconfig",
+    "configuration",
+    "cli"
+  ],
+  "bin": {
+    "claude-code-autoconfig": "./bin/cli.js"
+  },
+  "files": [
+    "bin",
+    ".claude",
+    "CLAUDE.md"
+  ],
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
