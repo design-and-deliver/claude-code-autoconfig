@@ -259,7 +259,8 @@ rl.question('\x1b[90mPress ENTER to continue...\x1b[0m', () => {
   console.log();
 
   // Spawn claude with /autoconfig as initial prompt
-  const claude = spawn('claude', ['/autoconfig'], {
+  // Use --permission-mode=acceptEdits to auto-approve file edits during setup
+  const claude = spawn('claude', ['--permission-mode=acceptEdits', '/autoconfig'], {
     cwd: cwd,
     stdio: 'inherit',
     shell: true
