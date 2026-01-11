@@ -830,11 +830,6 @@
                                 <span class="tree-folder-icon">📁</span>
                                 <span class="folder">agents</span>
                             </div>
-                            <div class="tree-item indent-3 hidden" data-info="agents-md" data-parent="agents">
-                                <span class="tree-spacer"></span>
-                                <span class="tree-file-icon">📄</span>
-                                <span class="file">AGENTS.md</span>
-                            </div>
                             <div class="tree-item indent-3 hidden" data-info="create-retro-item" data-parent="agents">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
@@ -1188,10 +1183,6 @@
                 title: 'agents/',
                 desc: 'Custom agent definitions for specialized tasks. Agents are autonomous workers that can be spawned to handle complex operations independently.'
             },
-            'agents-md': {
-                title: 'AGENTS.md',
-                desc: 'Documentation and overview of the agents available in this project.'
-            },
             'create-retro-item': {
                 title: 'create-retro-item.md',
                 desc: '(Experimental) Agent that creates structured retro items for tech debt tracking. Used by the /enable-retro feature.'
@@ -1467,6 +1458,74 @@
 
 // Add your MCP server configs here when you're ready.
 // See: https://docs.anthropic.com/en/docs/claude-code/mcp`
+            },
+            'create-retro-item': {
+                filename: 'create-retro-item.md',
+                content: `# Create Retro Item Agent
+
+Create a fully-scoped story file in \`.claude/retro/\` when tech debt or improvement opportunities are identified.
+
+## When to Trigger
+
+Call this agent when you notice:
+- Tech debt that should be addressed later
+- Code that works but could be improved
+- Missing tests, documentation, or error handling
+- Architectural improvements worth tracking
+
+## Input
+
+Provide these details when calling:
+- **title**: Short descriptive name (used for filename)
+- **problem**: What's wrong or what friction was encountered
+- **criteria**: Specific, testable acceptance criteria
+- **approach**: How to fix it
+- **priority**: Critical | High | Medium | Low
+- **effort**: S | M | L | XL
+- **files**: List of files involved
+
+## Behavior
+
+1. Generate filename from title: \`kebab-case.md\`
+2. Create story file in \`.claude/retro/\` using the template format
+3. Confirm creation with filename
+
+## Guidelines
+
+- **Be concise**: Keep descriptions actionable, not verbose
+- **Be specific**: Include actual file paths and line numbers when relevant
+- **Don't duplicate**: Check if similar item already exists first
+- **Don't block**: Create the item and continue with the main task`
+            },
+            'guide-refresh-agent': {
+                filename: 'guide-refresh.md',
+                content: `# Guide Refresh Agent
+
+Incrementally update the guide's treeInfo when \`.claude/\` files are added or modified.
+
+## Trigger
+
+- PostToolUse hook on Edit|Write to \`.claude/\`
+
+## Scope
+
+- Read \`.claude/**/*.md\` for \`@description\` comments
+- Update \`.claude/guide/autoconfig.guide.html\` treeInfo
+
+## Behavior
+
+1. Check which \`.claude/\` file was just modified
+2. Extract the \`<!-- @description ... -->\` comment from the top
+3. Find the corresponding entry in the guide's \`treeInfo\` object
+4. Update only that entry's \`desc\` field
+5. If file is new, add a new treeInfo entry
+6. If file was deleted, remove the treeInfo entry
+
+## Guidelines
+
+- **Be fast**: Only touch the affected entry
+- **Be minimal**: Don't reformat or reorganize unrelated code
+- **Be silent**: Run in background, no output unless error`
             },
             'autoconfig': {
                 filename: 'autoconfig.md',
