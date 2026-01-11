@@ -181,7 +181,7 @@ del nul 2>nul
 
 This is safe to run even if the file doesn't exist.
 
-### Open Guide
+### Open Guide & Finale
 
 Open the interactive guide in the user's browser:
 
@@ -189,4 +189,12 @@ Open the interactive guide in the user's browser:
 - Linux: `xdg-open .claude/guide/autoconfig.guide.html`
 - Windows: `start .claude/guide/autoconfig.guide.html`
 
-This shows the user what got installed and how to use it.
+Then output a celebratory finale message:
+
+```
+---
+
+✅ Setup complete! Your Claude Code environment is ready.
+
+📖 The interactive guide is now open — it walks through everything that was configured.
+```
