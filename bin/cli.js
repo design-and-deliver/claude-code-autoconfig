@@ -237,7 +237,7 @@ console.log('\x1b[32m%s\x1b[0m', '✅ Prepared /autoconfig command');
 console.log();
 console.log('\x1b[33m╔════════════════════════════════════╗\x1b[0m');
 console.log('\x1b[33m║                                    ║\x1b[0m');
-console.log('\x1b[33m║\x1b[0m' + '           \x1b[1;33mONE MORE STEP\x1b[0m' + '            \x1b[33m║\x1b[0m');
+console.log('\x1b[33m║\x1b[0m' + '        ⚠️  \x1b[1;33mONE MORE STEP\x1b[0m' + '         \x1b[33m║\x1b[0m');
 console.log('\x1b[33m║                                    ║\x1b[0m');
 console.log('\x1b[33m║\x1b[0m' + '   Run \x1b[36m/autoconfig\x1b[0m in Claude Code' + '   \x1b[33m║\x1b[0m');
 console.log('\x1b[33m║\x1b[0m' + '   to complete setup' + '                \x1b[33m║\x1b[0m');
