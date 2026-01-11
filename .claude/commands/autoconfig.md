@@ -189,10 +189,12 @@ Open the interactive guide in the user's browser:
 - Linux: `xdg-open .claude/guide/autoconfig.guide.html`
 - Windows: `start .claude/guide/autoconfig.guide.html`
 
-Then output a celebratory finale message:
+Then output this exact finale message (and nothing else after it):
 
 ```
 ---
 
 ✅ Setup complete! The interactive guide is now open in your browser.
 ```
+
+**IMPORTANT**: Do not add any additional text, summaries, or details after this message. The finale should be clean and punchy - end here.
