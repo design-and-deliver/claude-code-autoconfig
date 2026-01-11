@@ -120,6 +120,13 @@ Edit(./.env)
 Edit(./.env.*)
 ```
 
+**Always deny (Windows artifacts):**
+```
+Write(./nul)
+Edit(./nul)
+```
+These prevent accidental `nul` file creation from bash/Windows command translation issues.
+
 **Often deny (generated/vendor):**
 ```
 Edit(./node_modules/**)
