@@ -1,8 +1,8 @@
-<!-- @description Background worker that syncs the guide when .claude/ files change. -->
+<!-- @description Background worker that syncs the docs when .claude/ files change. -->
 
-# Guide Refresh Agent
+# Docs Refresh Agent
 
-Incrementally update the guide's treeInfo when `.claude/` files are added or modified.
+Incrementally update the docs' treeInfo when `.claude/` files are added or modified.
 
 ## Trigger
 
@@ -11,13 +11,13 @@ Incrementally update the guide's treeInfo when `.claude/` files are added or mod
 ## Scope
 
 - Read `.claude/**/*.md` for `@description` comments
-- Update `.claude/guide/autoconfig.guide.html` treeInfo
+- Update `.claude/docs/autoconfig.docs.html` treeInfo
 
 ## Behavior
 
 1. Check which `.claude/` file was just modified
 2. Extract the `<!-- @description ... -->` comment from the top
-3. Find the corresponding entry in the guide's `treeInfo` object
+3. Find the corresponding entry in the docs' `treeInfo` object
 4. Update only that entry's `desc` field
 5. If file is new, add a new treeInfo entry
 6. If file was deleted, remove the treeInfo entry

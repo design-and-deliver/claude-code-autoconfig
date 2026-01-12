@@ -835,10 +835,10 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">create-retro-item.md</span>
                             </div>
-                            <div class="tree-item indent-3 hidden" data-info="guide-refresh-agent" data-parent="agents">
+                            <div class="tree-item indent-3 hidden" data-info="docs-refresh-agent" data-parent="agents">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
-                                <span class="file">guide-refresh.md</span>
+                                <span class="file">docs-refresh.md</span>
                             </div>
                             <div class="tree-item indent-2 folder-row hidden collapsed" data-info="commands" data-folder="commands" data-parent="claude-dir">
                                 <span class="tree-chevron">›</span>
@@ -860,10 +860,10 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">enable-retro.md</span>
                             </div>
-                            <div class="tree-item indent-3 hidden" data-info="guide-cmd" data-parent="commands">
+                            <div class="tree-item indent-3 hidden" data-info="docs-cmd" data-parent="commands">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
-                                <span class="file">show-guide.md</span>
+                                <span class="file">show-docs.md</span>
                             </div>
                             <div class="tree-item indent-3 hidden" data-info="sync-claude-md" data-parent="commands">
                                 <span class="tree-spacer"></span>
@@ -885,15 +885,15 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">FEEDBACK.md</span>
                             </div>
-                            <div class="tree-item indent-2 folder-row hidden collapsed" data-info="guide" data-folder="guide-folder" data-parent="claude-dir">
+                            <div class="tree-item indent-2 folder-row hidden collapsed" data-info="docs" data-folder="docs-folder" data-parent="claude-dir">
                                 <span class="tree-chevron">›</span>
                                 <span class="tree-folder-icon">📁</span>
-                                <span class="folder">guide</span>
+                                <span class="folder">docs</span>
                             </div>
-                            <div class="tree-item indent-3 hidden" data-info="guide" data-parent="guide-folder">
+                            <div class="tree-item indent-3 hidden" data-info="docs" data-parent="docs-folder">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">🌐</span>
-                                <span class="file">autoconfig.guide.html</span>
+                                <span class="file">autoconfig.docs.html</span>
                             </div>
                             <div class="tree-item indent-2 hidden" data-info="rules" data-parent="claude-dir">
                                 <span class="tree-spacer"></span>
@@ -1168,7 +1168,7 @@
             },
             'claude-dir': {
                 title: '.claude/ Directory',
-                desc: 'Commands, rules, settings, and this guide. Keeps configuration organized as your project grows.'
+                desc: 'Commands, rules, settings, and these docs. Keeps configuration organized as your project grows.'
             },
             'settings': {
                 title: 'settings.json',
@@ -1187,9 +1187,9 @@
                 title: 'create-retro-item.md',
                 desc: '(Experimental) Agent that creates structured retro items for tech debt tracking. Used by the /enable-retro feature.'
             },
-            'guide-refresh-agent': {
-                title: 'guide-refresh.md',
-                desc: 'Agent that refreshes and updates the interactive guide after configuration changes.'
+            'docs-refresh-agent': {
+                title: 'docs-refresh.md',
+                desc: 'Agent that refreshes and updates the interactive docs after configuration changes.'
             },
             'commands': {
                 title: 'commands/',
@@ -1218,10 +1218,10 @@
                 desc: 'Re-analyzes your project and updates CLAUDE.md to reflect current state. Run when your stack changes significantly.',
                 trigger: '/sync-claude-md'
             },
-            'guide-cmd': {
-                title: 'show-guide.md',
-                desc: 'Opens this interactive guide in your browser. Auto-syncs any changed files before opening.',
-                trigger: '/show-guide'
+            'docs-cmd': {
+                title: 'show-docs.md',
+                desc: 'Opens this interactive docs in your browser. Auto-syncs any changed files before opening.',
+                trigger: '/show-docs'
             },
             'test': {
                 title: 'test.md',
@@ -1237,10 +1237,10 @@
                 title: 'rules/',
                 desc: 'Path-scoped context that loads when Claude works on matching files. Optimized rules are based on your project\'s needs, patterns and practices.<br><br><div style="background: var(--bg-elevated); border: 1px solid var(--accent-cyan); border-radius: 8px; padding: 16px; margin-top: 8px;"><strong style="color: var(--accent-orange);">Want optimized rules for your project?</strong><br>Reach out: <a href="mailto:info@adac1001.com" style="color: var(--accent-cyan);">info@adac1001.com</a></div>'
             },
-            'guide': {
-                title: 'guide/autoconfig.guide.html',
-                desc: 'This interactive guide. Open it anytime to review what each file does.',
-                trigger: '/show-guide'
+            'docs': {
+                title: 'docs/autoconfig.docs.html',
+                desc: 'This interactive docs. Open it anytime to review what each file does.',
+                trigger: '/show-docs'
             }
         };
 
@@ -1444,7 +1444,7 @@
       "matcher": "Edit|Write",
       "hooks": [{
         "type": "command",
-        "command": "// Auto-refresh guide when .claude/ changes"
+        "command": "// Auto-refresh docs when .claude/ changes"
       }]
     }]
   }
@@ -1497,11 +1497,11 @@ Provide these details when calling:
 - **Don't duplicate**: Check if similar item already exists first
 - **Don't block**: Create the item and continue with the main task`
             },
-            'guide-refresh-agent': {
-                filename: 'guide-refresh.md',
+            'docs-refresh-agent': {
+                filename: 'docs-refresh.md',
                 content: `# Guide Refresh Agent
 
-Incrementally update the guide's treeInfo when \`.claude/\` files are added or modified.
+Incrementally update the docs's treeInfo when \`.claude/\` files are added or modified.
 
 ## Trigger
 
@@ -1510,13 +1510,13 @@ Incrementally update the guide's treeInfo when \`.claude/\` files are added or m
 ## Scope
 
 - Read \`.claude/**/*.md\` for \`@description\` comments
-- Update \`.claude/guide/autoconfig.guide.html\` treeInfo
+- Update \`.claude/docs/autoconfig.docs.html\` treeInfo
 
 ## Behavior
 
 1. Check which \`.claude/\` file was just modified
 2. Extract the \`<!-- @description ... -->\` comment from the top
-3. Find the corresponding entry in the guide's \`treeInfo\` object
+3. Find the corresponding entry in the docs's \`treeInfo\` object
 4. Update only that entry's \`desc\` field
 5. If file is new, add a new treeInfo entry
 6. If file was deleted, remove the treeInfo entry
@@ -1662,7 +1662,7 @@ Set session-level env vars:
 
 Once autoconfig is complete, prompt the user:
 
-**Run \`/guide\` for an interactive walkthrough of your new Claude Code project setup.**`
+**Run \`/show-docs\` for an interactive walkthrough of your new Claude Code project setup.**`
             },
             'commit-and-push': {
                 filename: 'commit-and-push.md',
@@ -1685,21 +1685,21 @@ Types: feat, fix, docs, style, refactor, test, chore
 
 Keep the subject line under 50 chars. Add body if the change needs explanation.`
             },
-            'guide-cmd': {
-                filename: 'show-guide.md',
+            'docs-cmd': {
+                filename: 'show-docs.md',
                 content: `# Show Guide
 
-Open the interactive guide for Claude Code Autoconfig.
+Open the interactive docs for Claude Code Autoconfig.
 
 ## Step 1: Check for Changes
 
-Compare modification times of files in \`.claude/\` against the guide HTML.
+Compare modification times of files in \`.claude/\` against the docs HTML.
 
-If any files are newer: "Syncing guide with latest changes..." → proceed to delta sync.
+If any files are newer: "Syncing docs with latest changes..." → proceed to delta sync.
 
 ## Step 2: Delta Sync
 
-For each changed file, update only that entry in the guide's fileContents.
+For each changed file, update only that entry in the docs's fileContents.
 
 ## Step 3: Open Guide
 
@@ -1723,8 +1723,8 @@ Detect the test command from project config (package.json scripts, pytest, go te
                 empty: true,
                 emptyMessage: 'This directory is empty.\n\nAdd .md files here to define rules for specific paths in your codebase.'
             },
-            'guide': {
-                filename: 'autoconfig.guide.html',
+            'docs': {
+                filename: 'autoconfig.docs.html',
                 content: null,
                 empty: true,
                 emptyMessage: "You're looking at it! 👀"

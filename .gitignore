@@ -3,3 +3,6 @@
 
 # Windows null device workaround
 nul
+
+# Claude Code temp files
+tmpclaude-*

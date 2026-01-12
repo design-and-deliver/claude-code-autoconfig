@@ -17,7 +17,7 @@ echo -e "${CYAN}🚀 Installing Claude Code Autoconfig...${NC}"
 # Create directory structure
 mkdir -p .claude/commands
 mkdir -p .claude/rules
-mkdir -p .claude/guide
+mkdir -p .claude/docs
 
 echo -e "${GREEN}📁 Created .claude/ directory structure${NC}"
 
@@ -39,21 +39,21 @@ echo -e "${GREEN}✅ Created .claude/settings.json and .mcp.json${NC}"
 curl -fsSL "$REPO_BASE/.claude/commands/autoconfig.md" -o ".claude/commands/autoconfig.md"
 curl -fsSL "$REPO_BASE/.claude/commands/commit-and-push.md" -o ".claude/commands/commit-and-push.md"
 curl -fsSL "$REPO_BASE/.claude/commands/enable-retro.md" -o ".claude/commands/enable-retro.md"
-curl -fsSL "$REPO_BASE/.claude/commands/show-guide.md" -o ".claude/commands/show-guide.md"
+curl -fsSL "$REPO_BASE/.claude/commands/show-docs.md" -o ".claude/commands/show-docs.md"
 curl -fsSL "$REPO_BASE/.claude/commands/sync-claude-md.md" -o ".claude/commands/sync-claude-md.md"
 curl -fsSL "$REPO_BASE/.claude/commands/test.md" -o ".claude/commands/test.md"
 echo -e "${GREEN}✅ Created .claude/commands/${NC}"
 
-# Download guide
-curl -fsSL "$REPO_BASE/.claude/guide/autoconfig.guide.html" -o ".claude/guide/autoconfig.guide.html"
-echo -e "${GREEN}✅ Created .claude/guide/${NC}"
+# Download docs
+curl -fsSL "$REPO_BASE/.claude/docs/autoconfig.docs.html" -o ".claude/docs/autoconfig.docs.html"
+echo -e "${GREEN}✅ Created .claude/docs/${NC}"
 
 echo ""
 echo -e "${CYAN}✨ Claude Code Autoconfig installed!${NC}"
 echo ""
 echo "Once Claude Code is open:"
 echo "  1. Run /autoconfig to configure for your project"
-echo "  2. Run /show-guide to open the interactive guide"
+echo "  2. Run /show-docs to open the interactive docs"
 echo ""
 read -p $'\033[0;33mOpen Claude Code now? [Press Enter to continue]\033[0m '
 claude

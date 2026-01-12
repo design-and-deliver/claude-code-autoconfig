@@ -17,7 +17,7 @@ irm https://raw.githubusercontent.com/design-and-deliver/claude-code-autoconfig/
 ## After Install
 
 1. **`/autoconfig`** — Claude analyzes your project and configures itself
-2. **`/show-guide`** — Opens an interactive guide showing what got set up
+2. **`/show-docs`** — Opens an interactive guide showing what got set up
 
 That's it. Your Claude Code environment is configured and ready.
 
@@ -31,13 +31,13 @@ your-project/
     │   ├── autoconfig.md              #   /autoconfig - self-configures
     │   ├── commit-and-push.md         #   /commit-and-push - git workflow
     │   ├── enable-retro.md            #   /enable-retro - opt-in tech debt tracking
-    │   ├── show-guide.md              #   /show-guide - interactive walkthrough
+    │   ├── show-docs.md              #   /show-docs - interactive walkthrough
     │   ├── sync-claude-md.md          #   /sync-claude-md - update CLAUDE.md
     │   └── test.md                    #   /test - run tests
     ├── feedback/                      # Team corrections for Claude
     │   └── FEEDBACK.md                #   Add entries when Claude errs
-    ├── guide/                         # Interactive walkthrough
-    │   └── autoconfig.guide.html      #   Open with /show-guide
+    ├── docs/                          # Interactive documentation
+    │   └── autoconfig.docs.html       #   Open with /show-docs
     ├── rules/                         # Path-scoped context (empty)
     ├── .mcp.json                      # MCP server configs (empty placeholder)
     └── settings.json                  # Permissions & security
@@ -64,7 +64,7 @@ You get a custom-fit configuration without the manual work.
 |---------|-------------|
 | `/autoconfig` | Analyzes project and populates configuration |
 | `/sync-claude-md` | Re-analyzes project and updates CLAUDE.md |
-| `/show-guide` | Opens interactive guide in browser |
+| `/show-docs` | Opens interactive docs in browser |
 | `/test` | Runs your test suite (auto-detects framework) |
 | `/commit-and-push` | Stages, commits with good message, and pushes |
 | `/enable-retro` | (Experimental) Enable tech debt tracking |

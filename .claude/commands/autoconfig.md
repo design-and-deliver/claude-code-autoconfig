@@ -173,31 +173,31 @@ Set session-level env vars:
 - Optimize for Claude's efficiency, not human documentation
 - When uncertain, leave it out — Claude can ask or explore
 
-## Step 6: Update the Guide
+## Step 6: Update the Docs
 
-After populating CLAUDE.md, update the guide's file preview to show the actual content:
+After populating CLAUDE.md, update the docs file preview to show the actual content:
 
-1. Open `.claude/guide/autoconfig.guide.html`
+1. Open `.claude/docs/autoconfig.docs.html`
 2. Find the `fileContents` JavaScript object (search for `'claude-md':`)
 3. Replace the `content` value with the actual CLAUDE.md content you just generated
 4. Use template literal syntax and escape any backticks in the content
 
-This ensures double-clicking CLAUDE.md in the guide shows the real generated content.
+This ensures double-clicking CLAUDE.md in the docs shows the real generated content.
 
 ## After Completion
 
-### Open Guide & Finale
+### Open Docs & Finale
 
-Open the interactive guide in the user's browser:
+Open the interactive docs in the user's browser:
 
-- macOS: `open .claude/guide/autoconfig.guide.html`
-- Linux: `xdg-open .claude/guide/autoconfig.guide.html`
-- Windows: `start .claude/guide/autoconfig.guide.html`
+- macOS: `open .claude/docs/autoconfig.docs.html`
+- Linux: `xdg-open .claude/docs/autoconfig.docs.html`
+- Windows: `start .claude/docs/autoconfig.docs.html`
 
 Then output this finale message (just output it directly as text, no bash command needed):
 
 ---
 
-✅ Setup complete! The interactive guide is now open in your browser.
+✅ Setup complete! The interactive docs are now open in your browser.
 
 **IMPORTANT**: Do not add any additional text, summaries, or details after this message. The finale should be clean and punchy - end here.
