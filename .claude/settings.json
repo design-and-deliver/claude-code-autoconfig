@@ -27,9 +27,13 @@
       "Bash(ls:*)",
       "Bash(dir:*)",
       "Bash(mkdir:*)",
+      "Bash(mkdir -p:*)",
       "Bash(start:*)",
+      "Bash(start .claude:*)",
       "Bash(open:*)",
-      "Bash(xdg-open:*)"
+      "Bash(open .claude:*)",
+      "Bash(xdg-open:*)",
+      "Bash(xdg-open .claude:*)"
     ],
     "deny": [
       "Read(./.env)",

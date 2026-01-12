@@ -101,9 +101,13 @@ This pointer persists across autoconfig runs and directs Claude to team-maintain
 
 ## Step 4: Create Rules Directory
 
-Create an empty `.claude/rules/` directory if it doesn't exist. Do not create any subdirectories or rule files.
+Create `.claude/rules/` directory if it doesn't exist by writing a `.gitkeep` file to it:
 
-**Important**: Use Glob tool to check if directories exist (e.g., `.claude/rules/**`), not Bash commands. This avoids permission prompts during setup.
+```
+Write .claude/rules/.gitkeep with empty content
+```
+
+**Important**: Use Write tool to create the directory (by creating a placeholder file), not `mkdir` Bash commands. This avoids permission prompts during setup.
 
 Rules are path-scoped context files that load automatically when Claude works on matching files. Effective rules require deep understanding of your codebase patterns, team conventions, and quality goals — they should be crafted intentionally, not auto-generated.
 
