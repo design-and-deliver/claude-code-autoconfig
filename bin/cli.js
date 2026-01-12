@@ -8,6 +8,19 @@ const { execSync, spawn } = require('child_process');
 const cwd = process.cwd();
 const packageDir = path.dirname(__dirname);
 
+// Cleanup any stray 'nul' file immediately on startup (Windows /dev/null artifact)
+function cleanupNulFile() {
+  const nulFile = path.join(cwd, 'nul');
+  if (fs.existsSync(nulFile)) {
+    try {
+      fs.unlinkSync(nulFile);
+    } catch (e) {
+      // Ignore - file might be locked
+    }
+  }
+}
+cleanupNulFile();
+
 // Reserved Windows device names - never create files with these names
 const WINDOWS_RESERVED = ['CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'COM3', 'COM4',
   'COM5', 'COM6', 'COM7', 'COM8', 'COM9', 'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5',
@@ -283,14 +296,6 @@ rl.question('\x1b[90mPress ENTER to continue...\x1b[0m', () => {
 
   // Cleanup when Claude exits
   claude.on('close', () => {
-    // Remove 'nul' file if accidentally created on Windows
-    const nulFile = path.join(cwd, 'nul');
-    if (fs.existsSync(nulFile)) {
-      try {
-        fs.unlinkSync(nulFile);
-      } catch (e) {
-        // Ignore errors - file might be locked or already gone
-      }
-    }
+    cleanupNulFile();
   });
 });

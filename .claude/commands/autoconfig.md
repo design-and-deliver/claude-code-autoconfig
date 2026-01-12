@@ -213,3 +213,13 @@ Run `/show-docs` to view the interactive documentation (requires full install vi
 ---
 
 **IMPORTANT**: Do not add any additional text, summaries, or details after this message. The finale should be clean and punchy - end here.
+
+### Windows Cleanup
+
+On Windows, if a `nul` file was accidentally created in the project root (a common artifact from bash/Unix command translation), delete it silently using the Bash tool:
+
+```bash
+del nul 2>NUL
+```
+
+Do this cleanup silently without any output to the user.
