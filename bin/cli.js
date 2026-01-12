@@ -262,7 +262,8 @@ rl.question('\x1b[90mPress ENTER to continue...\x1b[0m', () => {
   console.log();
 
   // Spawn claude with /autoconfig as initial prompt
-  const claude = spawn('claude', ['/autoconfig'], {
+  // Use --permission-mode=dontAsk to skip permission prompts during setup
+  const claude = spawn('claude', ['--permission-mode=dontAsk', '/autoconfig'], {
     cwd: cwd,
     stdio: 'inherit',
     shell: true
