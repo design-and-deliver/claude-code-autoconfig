@@ -239,8 +239,8 @@ console.log('\x1b[33m╔══════════════════�
 console.log('║                                            ║');
 console.log('║           \x1b[1mREADY TO CONFIGURE\x1b[22m               ║');
 console.log('║                                            ║');
-console.log('║\x1b[0m   Press ENTER to launch Claude and         \x1b[33m║');
-console.log('║\x1b[0m   auto-run \x1b[36m/autoconfig\x1b[33m                      \x1b[33m║');
+console.log('║\x1b[0m   Press ENTER to launch Claude and        \x1b[33m║');
+console.log('║\x1b[0m   auto-run \x1b[36m/autoconfig\x1b[33m                     ║');
 console.log('║                                            ║');
 console.log('╚════════════════════════════════════════════╝\x1b[0m');
 console.log();
