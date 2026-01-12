@@ -273,7 +273,9 @@ rl.question('\x1b[90mPress ENTER to continue...\x1b[0m', () => {
     'Bash(open:*)',
     'Bash(xdg-open:*)'
   ].join(' ');
-  const claude = spawn('claude', ['-p', '--allowedTools', allowedTools, '/autoconfig'], {
+  // Build command with proper quoting for shell
+  const cmd = `claude -p --allowedTools "${allowedTools}" "/autoconfig"`;
+  const claude = spawn(cmd, [], {
     cwd: cwd,
     stdio: 'inherit',
     shell: true
