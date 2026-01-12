@@ -11,7 +11,9 @@
       "Bash(git ls-tree:*)",
       "Bash(node -e:*)",
       "Bash(timeout 5 claude:*)",
-      "Bash(claude -p \"/autoconfig\")"
+      "Bash(claude -p \"/autoconfig\")",
+      "Bash(node:*)",
+      "Bash(npm version:*)"
     ]
   }
 }
