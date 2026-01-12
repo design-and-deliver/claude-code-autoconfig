@@ -188,16 +188,28 @@ This ensures double-clicking CLAUDE.md in the docs shows the real generated cont
 
 ### Open Docs & Finale
 
-Open the interactive docs in the user's browser:
+**Only if `.claude/docs/autoconfig.docs.html` exists**, open it in the user's browser:
 
 - macOS: `open .claude/docs/autoconfig.docs.html`
 - Linux: `xdg-open .claude/docs/autoconfig.docs.html`
 - Windows: `start .claude/docs/autoconfig.docs.html`
 
-Then output this finale message (just output it directly as text, no bash command needed):
+If the docs file exists, output:
 
 ---
 
 ✅ Setup complete! The interactive docs are now open in your browser.
+
+---
+
+If the docs file does NOT exist (e.g., user ran `/autoconfig` without the full npx install), output:
+
+---
+
+✅ Setup complete!
+
+Run `/show-docs` to view the interactive documentation (requires full install via `npx claude-code-autoconfig`).
+
+---
 
 **IMPORTANT**: Do not add any additional text, summaries, or details after this message. The finale should be clean and punchy - end here.
