@@ -4,6 +4,8 @@
       "Read(./**)",
       "Edit(./**)",
       "Write(./**)",
+      "Glob",
+      "Grep",
       "WebSearch",
       "WebFetch",
       "Bash(npm run dev)",
@@ -21,7 +23,13 @@
       "Bash(git push:*)",
       "Bash(git pull)",
       "Bash(git checkout:*)",
-      "Bash(git branch:*)"
+      "Bash(git branch:*)",
+      "Bash(ls:*)",
+      "Bash(dir:*)",
+      "Bash(mkdir:*)",
+      "Bash(start:*)",
+      "Bash(open:*)",
+      "Bash(xdg-open:*)"
     ],
     "deny": [
       "Read(./.env)",
