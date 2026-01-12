@@ -262,18 +262,7 @@ rl.question('\x1b[90mPress ENTER to continue...\x1b[0m', () => {
   console.log();
 
   // Spawn claude with /autoconfig as initial prompt
-  // Use --allowedTools to explicitly scope what autoconfig can do (transparent & defensible)
-  const allowedTools = [
-    'Read(./**)',      // Read any project file (for stack detection)
-    'Edit(./**)',      // Edit files (CLAUDE.md, settings.json, guide, etc.)
-    'Write(./**)',     // Create new files
-    'Bash(start:*)',   // Windows: open browser
-    'Bash(open:*)',    // macOS: open browser
-    'Bash(xdg-open:*)' // Linux: open browser
-  ].join(' ');
-  // Build command string with proper quoting for shell execution
-  const cmd = `claude --allowedTools "${allowedTools}" "/autoconfig"`;
-  const claude = spawn(cmd, [], {
+  const claude = spawn('claude', ['/autoconfig'], {
     cwd: cwd,
     stdio: 'inherit',
     shell: true

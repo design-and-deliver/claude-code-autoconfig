@@ -1,6 +1,6 @@
 {
   "name": "claude-code-autoconfig",
-  "version": "1.0.47",
+  "version": "1.0.48",
   "description": "Intelligent, self-configuring setup for Claude Code. One command analyzes your project, configures Claude, and shows you what it did.",
   "author": "ADAC 1001 <info@adac1001.com>",
   "license": "MIT",
