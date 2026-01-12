@@ -261,9 +261,19 @@ rl.question('\x1b[90mPress ENTER to continue...\x1b[0m', () => {
   console.log('\x1b[90m%s\x1b[0m', '   Please be patient while it loads.');
   console.log();
 
-  // Spawn claude with /autoconfig as initial prompt
-  // Use --dangerously-skip-permissions to bypass all prompts (code is open source for inspection)
-  const claude = spawn('claude', ['--dangerously-skip-permissions', '/autoconfig'], {
+  // Spawn claude in print mode with scoped permissions for smooth setup
+  // -p (print mode) skips trust dialog, --allowedTools scopes what's permitted
+  const allowedTools = [
+    'Read(./**)',
+    'Edit(./**)',
+    'Write(./**)',
+    'Glob(./**)',
+    'Grep(./**)',
+    'Bash(start:*)',
+    'Bash(open:*)',
+    'Bash(xdg-open:*)'
+  ].join(' ');
+  const claude = spawn('claude', ['-p', '--allowedTools', allowedTools, '/autoconfig'], {
     cwd: cwd,
     stdio: 'inherit',
     shell: true
