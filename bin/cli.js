@@ -235,14 +235,17 @@ console.log('\x1b[32m%s\x1b[0m', '✅ Prepared /autoconfig command');
 
 // Step 4: Show "READY TO CONFIGURE" message
 console.log();
-console.log('\x1b[33m╔════════════════════════════════════╗');
-console.log('║                                    ║');
-console.log('║         \x1b[1mREADY TO CONFIGURE\x1b[22m         ║');
-console.log('║                                    ║');
-console.log('║\x1b[0m   Press ENTER to launch Claude     \x1b[33m║');
-console.log('║\x1b[0m   and auto-run \x1b[36m/autoconfig\x1b[33m         \x1b[33m║');
-console.log('║                                    ║');
-console.log('╚════════════════════════════════════╝\x1b[0m');
+console.log('\x1b[33m╔════════════════════════════════════════════╗');
+console.log('║                                            ║');
+console.log('║           \x1b[1mREADY TO CONFIGURE\x1b[22m               ║');
+console.log('║                                            ║');
+console.log('║\x1b[0m   Press ENTER to launch Claude and         \x1b[33m║');
+console.log('║\x1b[0m   auto-run \x1b[36m/autoconfig\x1b[33m                      \x1b[33m║');
+console.log('║                                            ║');
+console.log('║\x1b[0m   \x1b[90mFirst run: approve 2-3 file prompts\x1b[33m       ║');
+console.log('║\x1b[0m   \x1b[90mSubsequent runs: fully automated\x1b[33m          ║');
+console.log('║                                            ║');
+console.log('╚════════════════════════════════════════════╝\x1b[0m');
 console.log();
 
 // Step 5: Wait for Enter, then launch Claude Code
