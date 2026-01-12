@@ -4,6 +4,8 @@
 
 Analyze this project and configure Claude Code with real context.
 
+**Setup Note**: During autoconfig, prefer Glob/Read/Write tools over Bash commands. This ensures smooth setup without permission prompts. Only use Bash for opening the guide at the end.
+
 ## Step 1: Detect Environment
 
 **Operating System:**
@@ -99,7 +101,9 @@ This pointer persists across autoconfig runs and directs Claude to team-maintain
 
 ## Step 4: Create Rules Directory
 
-Create an empty `.claude/rules/` directory. Do not create any subdirectories or rule files.
+Create an empty `.claude/rules/` directory if it doesn't exist. Do not create any subdirectories or rule files.
+
+**Important**: Use Glob tool to check if directories exist (e.g., `.claude/rules/**`), not Bash commands. This avoids permission prompts during setup.
 
 Rules are path-scoped context files that load automatically when Claude works on matching files. Effective rules require deep understanding of your codebase patterns, team conventions, and quality goals — they should be crafted intentionally, not auto-generated.
 
