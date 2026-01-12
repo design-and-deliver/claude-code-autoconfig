@@ -13,7 +13,8 @@
       "Bash(timeout 5 claude:*)",
       "Bash(claude -p \"/autoconfig\")",
       "Bash(node:*)",
-      "Bash(npm version:*)"
+      "Bash(npm version:*)",
+      "Bash(git rm:*)"
     ]
   }
 }

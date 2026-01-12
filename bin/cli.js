@@ -239,8 +239,8 @@ console.log('\x1b[33m╔══════════════════�
 console.log('\x1b[33m║                                            ║\x1b[0m');
 console.log('\x1b[33m║\x1b[0m           \x1b[33;1mREADY TO CONFIGURE\x1b[0m               \x1b[33m║\x1b[0m');
 console.log('\x1b[33m║                                            ║\x1b[0m');
-console.log('\x1b[33m║\x1b[0m   \x1b[36mPress ENTER to launch Claude and\x1b[0m        \x1b[33m║\x1b[0m');
-console.log('\x1b[33m║\x1b[0m   \x1b[36mauto-run /autoconfig\x1b[0m                    \x1b[33m║\x1b[0m');
+console.log('\x1b[33m║\x1b[0m   \x1b[36mPress ENTER to launch Claude and\x1b[0m         \x1b[33m║\x1b[0m');
+console.log('\x1b[33m║\x1b[0m   \x1b[36mauto-run /autoconfig\x1b[0m                     \x1b[33m║\x1b[0m');
 console.log('\x1b[33m║                                            ║\x1b[0m');
 console.log('\x1b[33m╚════════════════════════════════════════════╝\x1b[0m');
 console.log();
