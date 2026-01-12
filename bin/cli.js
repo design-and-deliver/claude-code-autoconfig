@@ -233,26 +233,32 @@ if (fs.existsSync(agentsSrc)) {
 
 console.log('\x1b[32m%s\x1b[0m', '✅ Prepared /autoconfig command');
 
-// Step 4: Show "READY TO CONFIGURE" message
+// Step 4: Show install mode menu
 console.log();
 console.log('\x1b[33m╔════════════════════════════════════╗');
 console.log('║                                    ║');
 console.log('║         \x1b[1mREADY TO CONFIGURE\x1b[22m         ║');
 console.log('║                                    ║');
-console.log('║\x1b[0m   Press ENTER to launch Claude     \x1b[33m║');
-console.log('║\x1b[0m   and auto-run \x1b[36m/autoconfig\x1b[33m         \x1b[33m║');
+console.log('╠════════════════════════════════════╣');
+console.log('║\x1b[0m   Choose install mode:             \x1b[33m║');
+console.log('║                                    ║');
+console.log('║\x1b[0m   \x1b[1m1.\x1b[22m Express \x1b[90m(no prompts)\x1b[0m          \x1b[33m║');
+console.log('║\x1b[0m   \x1b[1m2.\x1b[22m Interactive \x1b[90m(confirm each)\x1b[0m    \x1b[33m║');
 console.log('║                                    ║');
 console.log('╚════════════════════════════════════╝\x1b[0m');
 console.log();
 
-// Step 5: Wait for Enter, then launch Claude Code with /autoconfig
+// Step 5: Get user choice and launch Claude Code
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout
 });
 
-rl.question('\x1b[90mPress ENTER to continue...\x1b[0m', () => {
+rl.question('\x1b[90mEnter choice (1 or 2): \x1b[0m', (answer) => {
   rl.close();
+
+  const choice = answer.trim();
+  const expressMode = choice === '1' || choice === '';  // Default to express if just Enter
 
   console.log();
   console.log('\x1b[36m%s\x1b[0m', '🚀 Launching Claude Code with /autoconfig...');
@@ -261,8 +267,11 @@ rl.question('\x1b[90mPress ENTER to continue...\x1b[0m', () => {
   console.log('\x1b[90m%s\x1b[0m', '   Please be patient while it loads.');
   console.log();
 
-  // Spawn claude with /autoconfig as initial prompt
-  const claude = spawn('claude', ['/autoconfig'], {
+  // Spawn claude with /autoconfig - express mode skips permission prompts
+  const args = expressMode
+    ? ['--dangerously-skip-permissions', '/autoconfig']
+    : ['/autoconfig'];
+  const claude = spawn('claude', args, {
     cwd: cwd,
     stdio: 'inherit',
     shell: true
