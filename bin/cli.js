@@ -263,22 +263,10 @@ rl.question('\x1b[90mPress ENTER to continue...\x1b[0m', () => {
 
   // Spawn claude in print mode with scoped permissions for smooth setup
   // -p (print mode) skips trust dialog, --allowedTools scopes what's permitted
-  const allowedTools = [
-    'Read(./**)',
-    'Edit(./**)',
-    'Write(./**)',
-    'Glob(./**)',
-    'Grep(./**)',
-    'Bash(start:*)',
-    'Bash(open:*)',
-    'Bash(xdg-open:*)'
-  ].join(' ');
-  // Build command with proper quoting for shell
-  const cmd = `claude -p --allowedTools "${allowedTools}" "/autoconfig"`;
-  const claude = spawn(cmd, [], {
+  const allowedTools = 'Read(.**) Edit(.**) Write(.**) Glob(.**) Grep(.**) Bash(start:*) Bash(open:*) Bash(xdg-open:*)';
+  const claude = spawn('claude', ['-p', '--allowedTools', allowedTools, '/autoconfig'], {
     cwd: cwd,
-    stdio: 'inherit',
-    shell: true
+    stdio: 'inherit'
   });
 
   claude.on('error', (err) => {
