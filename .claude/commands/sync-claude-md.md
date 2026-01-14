@@ -10,7 +10,11 @@ Run this when your project has changed significantly:
 - Restructured the project
 - Switched databases or services
 
-## Step 1: Re-analyze the Project
+## Step 1: Check for Captured Manual Edits
+
+Before regenerating, check `.claude/feedback/FEEDBACK.md` for any "Manual Edits (auto-captured)" sections. These are edits users made directly to CLAUDE.md that were migrated by the guard hook. Review and incorporate relevant guidance into your regeneration.
+
+## Step 2: Re-analyze the Project
 
 Scan for current project indicators:
 
@@ -26,7 +30,7 @@ Scan for current project indicators:
 **Infrastructure:**
 - Docker, Terraform, CI/CD configs
 
-## Step 2: Update CLAUDE.md
+## Step 3: Update CLAUDE.md
 
 CLAUDE.md uses markers to identify auto-generated content. Include an ISO timestamp for the guard hook:
 
@@ -36,7 +40,7 @@ CLAUDE.md uses markers to identify auto-generated content. Include an ISO timest
 <!-- END AUTO-GENERATED -->
 ```
 
-Replace `{ISO_TIMESTAMP}` with the current UTC time (e.g., `2026-01-14T16:30:45Z`).
+**IMPORTANT:** Always replace `{ISO_TIMESTAMP}` with the CURRENT UTC time when running this command. This refreshes the guard hook timestamp so it knows this is a fresh system edit.
 
 **Only regenerate content between these markers.** If content exists outside the markers (user added it despite the warning), preserve it.
 
@@ -53,7 +57,7 @@ Compare detected state with current CLAUDE.md and update:
 - The `## Retro` section pointer
 - The `## Team Feedback` section pointer
 
-## Step 3: Confirm Changes
+## Step 4: Confirm Changes
 
 Show the user what changed in CLAUDE.md before finishing.
 
