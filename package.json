@@ -1,6 +1,6 @@
 {
   "name": "claude-code-autoconfig",
-  "version": "1.0.75",
+  "version": "1.0.76",
   "description": "Intelligent, self-configuring setup for Claude Code. One command analyzes your project, configures Claude, and shows you what it did.",
   "author": "ADAC 1001 <info@adac1001.com>",
   "license": "MIT",
@@ -22,7 +22,9 @@
     "cli"
   ],
   "scripts": {
-    "test": "node test/box-alignment.test.js"
+    "test": "node test/box-alignment.test.js && node test/claude-md-guard.test.js",
+    "test:box": "node test/box-alignment.test.js",
+    "test:guard": "node test/claude-md-guard.test.js"
   },
   "bin": {
     "claude-code-autoconfig": "./bin/cli.js"

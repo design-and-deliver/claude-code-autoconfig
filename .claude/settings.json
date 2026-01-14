@@ -1,4 +1,17 @@
 {
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/claude-md-guard.js"
+          }
+        ]
+      }
+    ]
+  },
   "permissions": {
     "allow": [
       "Read(./**)",

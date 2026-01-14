@@ -203,11 +203,12 @@ cp .claude/migration/${timestamp}/settings.json .claude/settings.json
   }
 }
 
-// Step 3: Copy minimal bootstrap (commands/, docs/, agents/, feedback/)
+// Step 3: Copy minimal bootstrap (commands/, docs/, agents/, feedback/, hooks/)
 const commandsSrc = path.join(packageDir, '.claude', 'commands');
 const docsSrc = path.join(packageDir, '.claude', 'docs');
 const agentsSrc = path.join(packageDir, '.claude', 'agents');
 const feedbackSrc = path.join(packageDir, '.claude', 'feedback');
+const hooksSrc = path.join(packageDir, '.claude', 'hooks');
 
 function copyDir(src, dest) {
   fs.mkdirSync(dest, { recursive: true });
@@ -248,6 +249,11 @@ if (fs.existsSync(agentsSrc)) {
 // Copy feedback template
 if (fs.existsSync(feedbackSrc)) {
   copyDir(feedbackSrc, path.join(claudeDest, 'feedback'));
+}
+
+// Copy hooks directory (scaffolding for custom hooks)
+if (fs.existsSync(hooksSrc)) {
+  copyDir(hooksSrc, path.join(claudeDest, 'hooks'));
 }
 
 console.log('\x1b[32m%s\x1b[0m', '✅ Prepared /autoconfig command');
