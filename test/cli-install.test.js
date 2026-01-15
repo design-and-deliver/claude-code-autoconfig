@@ -82,8 +82,12 @@ test('settings.json exists in package', () => {
   assertExists(path.join(PACKAGE_CLAUDE_DIR, 'settings.json'));
 });
 
-test('claude-md-guard.js exists in hooks/', () => {
-  assertExists(path.join(PACKAGE_CLAUDE_DIR, 'hooks', 'claude-md-guard.js'));
+test('format.js exists in hooks/', () => {
+  assertExists(path.join(PACKAGE_CLAUDE_DIR, 'hooks', 'format.js'));
+});
+
+test('.gitkeep exists in hooks/', () => {
+  assertExists(path.join(PACKAGE_CLAUDE_DIR, 'hooks', '.gitkeep'));
 });
 
 console.log();
@@ -125,18 +129,6 @@ console.log();
 // -----------------------------------------------------------------------------
 
 console.log('Settings.json Content:');
-
-test('settings.json has hooks configuration', () => {
-  const settings = JSON.parse(fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'settings.json'), 'utf8'));
-  assert(settings.hooks, 'settings.json should have hooks key');
-  assert(settings.hooks.PostToolUse, 'settings.json should have PostToolUse hooks');
-});
-
-test('settings.json has guard hook wired up', () => {
-  const settings = JSON.parse(fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'settings.json'), 'utf8'));
-  const hookConfig = JSON.stringify(settings.hooks);
-  assert(hookConfig.includes('claude-md-guard.js'), 'Guard hook should be wired up in settings.json');
-});
 
 test('settings.json has permissions', () => {
   const settings = JSON.parse(fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'settings.json'), 'utf8'));

@@ -890,10 +890,10 @@
                                 <span class="tree-folder-icon">📁</span>
                                 <span class="folder">hooks</span>
                             </div>
-                            <div class="tree-item indent-3 hidden" data-info="claude-md-guard" data-parent="hooks">
+                            <div class="tree-item indent-3 hidden" data-info="format-hook" data-parent="hooks">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
-                                <span class="file">claude-md-guard.js</span>
+                                <span class="file">format.js</span>
                             </div>
                             <div class="tree-item indent-2 folder-row hidden collapsed" data-info="docs" data-folder="docs-folder" data-parent="claude-dir">
                                 <span class="tree-chevron">›</span>
@@ -1222,10 +1222,10 @@
                 title: 'hooks/',
                 desc: 'Executable scripts that run in response to Claude Code events. Unlike commands (which are prompts you invoke), hooks trigger automatically based on tool usage patterns.'
             },
-            'claude-md-guard': {
-                title: 'claude-md-guard.js',
-                desc: 'Detects unauthorized edits to CLAUDE.md and migrates changes to FEEDBACK.md. Only triggers on Claude-initiated edits outside <code>/autoconfig</code> or <code>/sync-claude-md</code>.',
-                trigger: 'PostToolUse on Write to CLAUDE.md'
+            'format-hook': {
+                title: 'format.js',
+                desc: 'Runs the project formatter after Write/Edit operations on source files. Filters by file extension and skips generated directories like node_modules.',
+                trigger: 'PostToolUse on Write|Edit (JS/TS projects only)'
             },
             'autoconfig': {
                 title: 'autoconfig.md',
@@ -1798,26 +1798,23 @@ Use \`test_\` prefix for test databases, not \`dev_\`.`
                 empty: true,
                 emptyMessage: 'Contains executable hook scripts that trigger on Claude Code events.'
             },
-            'claude-md-guard': {
-                filename: 'claude-md-guard.js',
+            'format-hook': {
+                filename: 'format.js',
                 content: `/**
- * @name CLAUDE.md Guard
- * @description Detects unauthorized edits to CLAUDE.md and migrates
- *              changes to FEEDBACK.md. Only triggers on Claude-initiated
- *              edits outside /autoconfig or /sync-claude-md.
- * @trigger PostToolUse on Write to CLAUDE.md
+ * @name Format Hook
+ * @description Runs project formatter after Write/Edit operations
+ * @trigger PostToolUse on Write|Edit
  */
 
-// Reads hook input from stdin, checks if this is a Write to CLAUDE.md
-// If the file has an AUTO-GENERATED timestamp header:
-//   - Within 3s of timestamp = system edit (allowed)
-//   - Older than 3s = user edit (migrates to FEEDBACK.md)
+// Reads hook input from stdin
+// Filters by file extension (.js, .ts, .json, .css, etc.)
+// Skips generated directories (node_modules, dist, build)
+// Runs: npm run format --silent
 
 // Key behavior:
-// - Parses timestamp from CLAUDE.md header
-// - Compares against current time
-// - Appends captured content to FEEDBACK.md
-// - Shows friendly message to user`
+// - Only triggers for source files
+// - Silently runs formatter (errors are non-fatal)
+// - Customizable - add your own file filters or formatting logic`
             }
         };
 

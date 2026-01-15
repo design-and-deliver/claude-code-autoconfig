@@ -13,16 +13,16 @@ CLI tool that auto-configures Claude Code for any project. One command analyzes 
 ## Commands
 
 ```bash
-npm test          # Run all tests (box alignment + guard hook)
+npm test          # Run all tests (box alignment + CLI install)
 npm run test:box  # Run box alignment tests only
-npm run test:guard # Run guard hook tests only
+npm run test:install # Run CLI install tests only
 ```
 
 ## Project Structure
 
 - `bin/cli.js` — Main CLI entry point, handles bootstrap and /autoconfig launch
 - `.claude/commands/` — Slash command definitions (/autoconfig, /sync-claude-md, etc.)
-- `.claude/hooks/` — Hook scripts (claude-md-guard.js)
+- `.claude/hooks/` — Hook scripts (format.js for JS/TS projects)
 - `.claude/feedback/` — Team feedback and corrections
 - `test/` — Test files
 

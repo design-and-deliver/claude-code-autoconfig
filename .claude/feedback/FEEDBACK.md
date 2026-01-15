@@ -26,7 +26,7 @@ npm test
 This runs tests which validate:
 1. All box-drawing lines have consistent visual width (accounting for ANSI escape codes)
 2. Box structure is valid (correct corner and border characters)
-3. CLAUDE.md guard hook logic works correctly
+3. CLI install files exist and are properly configured
 
 **DO NOT commit or present code changes if tests fail.** Fix the issues first.
 
