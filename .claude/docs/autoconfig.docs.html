@@ -885,6 +885,16 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">FEEDBACK.md</span>
                             </div>
+                            <div class="tree-item indent-2 folder-row hidden collapsed" data-info="hooks" data-folder="hooks" data-parent="claude-dir">
+                                <span class="tree-chevron">›</span>
+                                <span class="tree-folder-icon">📁</span>
+                                <span class="folder">hooks</span>
+                            </div>
+                            <div class="tree-item indent-3 hidden" data-info="claude-md-guard" data-parent="hooks">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">claude-md-guard.js</span>
+                            </div>
                             <div class="tree-item indent-2 folder-row hidden collapsed" data-info="docs" data-folder="docs-folder" data-parent="claude-dir">
                                 <span class="tree-chevron">›</span>
                                 <span class="tree-folder-icon">📁</span>
@@ -1207,6 +1217,15 @@
             'feedback-template': {
                 title: 'FEEDBACK.md',
                 desc: 'Starter template for team feedback. Add dated entries when Claude makes mistakes — include what went wrong and the correct approach. Claude reads this on every session.'
+            },
+            'hooks': {
+                title: 'hooks/',
+                desc: 'Executable scripts that run in response to Claude Code events. Unlike commands (which are prompts you invoke), hooks trigger automatically based on tool usage patterns.'
+            },
+            'claude-md-guard': {
+                title: 'claude-md-guard.js',
+                desc: 'Detects unauthorized edits to CLAUDE.md and migrates changes to FEEDBACK.md. Only triggers on Claude-initiated edits outside <code>/autoconfig</code> or <code>/sync-claude-md</code>.',
+                trigger: 'PostToolUse on Write to CLAUDE.md'
             },
             'autoconfig': {
                 title: 'autoconfig.md',
@@ -1772,6 +1791,33 @@ Always use the v2 API for user endpoints.
 
 ## 2026-01-07: Test database naming
 Use \`test_\` prefix for test databases, not \`dev_\`.`
+            },
+            'hooks': {
+                filename: 'hooks/',
+                content: null,
+                empty: true,
+                emptyMessage: 'Contains executable hook scripts that trigger on Claude Code events.'
+            },
+            'claude-md-guard': {
+                filename: 'claude-md-guard.js',
+                content: `/**
+ * @name CLAUDE.md Guard
+ * @description Detects unauthorized edits to CLAUDE.md and migrates
+ *              changes to FEEDBACK.md. Only triggers on Claude-initiated
+ *              edits outside /autoconfig or /sync-claude-md.
+ * @trigger PostToolUse on Write to CLAUDE.md
+ */
+
+// Reads hook input from stdin, checks if this is a Write to CLAUDE.md
+// If the file has an AUTO-GENERATED timestamp header:
+//   - Within 3s of timestamp = system edit (allowed)
+//   - Older than 3s = user edit (migrates to FEEDBACK.md)
+
+// Key behavior:
+// - Parses timestamp from CLAUDE.md header
+// - Compares against current time
+// - Appends captured content to FEEDBACK.md
+// - Shows friendly message to user`
             }
         };
 

@@ -15,7 +15,10 @@
       "Bash(node:*)",
       "Bash(npm version:*)",
       "Bash(git rm:*)",
-      "Bash(npm test)"
+      "Bash(npm test)",
+      "Bash(powershell -Command \"Get-ChildItem -Path ''.claude'' -Recurse -File | Where-Object { $_LastWriteTime.ToFileTimeUtc\\(\\) -gt 1768438268 } | Select-Object FullName, @{Name=''ModTime'';Expression={$_LastWriteTime.ToFileTimeUtc\\(\\)}}\")",
+      "Bash(powershell -Command:*)",
+      "Bash(git reset:*)"
     ]
   }
 }

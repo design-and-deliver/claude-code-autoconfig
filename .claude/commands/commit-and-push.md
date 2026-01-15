@@ -1,15 +1,17 @@
-<!-- @description Stages all changes, generates a conventional commit message from the diff, commits, and pushes. One command, full workflow. -->
+<!-- @description Runs tests, then stages all changes, generates a conventional commit message, commits, and pushes. -->
 
 # Commit and Push
 
-Stage all changes, create a commit with a good message, and push to the current branch.
+Run tests, stage all changes, create a commit with a good message, and push to the current branch.
 
 ## Steps
 
-1. Stage all changes (`git add -A`)
-2. Generate a conventional commit message based on the diff
-3. Commit the changes
-4. Push to the current branch
+1. Run the project's test suite (e.g., `npm test`)
+2. **If tests fail, stop here.** Do not commit or push failing code.
+3. Stage all changes (`git add -A`)
+4. Generate a conventional commit message based on the diff
+5. Commit the changes
+6. Push to the current branch
 
 ## Commit Message Format
 
