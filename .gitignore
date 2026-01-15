@@ -6,3 +6,6 @@ nul
 
 # Claude Code temp files
 tmpclaude-*
+
+# Test temp directories
+test/.test-temp-*
