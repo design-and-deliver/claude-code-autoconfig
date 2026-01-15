@@ -256,6 +256,13 @@ if (fs.existsSync(hooksSrc)) {
   copyDir(hooksSrc, path.join(claudeDest, 'hooks'));
 }
 
+// Copy settings.json (only if user doesn't have one - preserves existing config)
+const settingsSrc = path.join(packageDir, '.claude', 'settings.json');
+const settingsDest = path.join(claudeDest, 'settings.json');
+if (fs.existsSync(settingsSrc) && !fs.existsSync(settingsDest)) {
+  fs.copyFileSync(settingsSrc, settingsDest);
+}
+
 console.log('\x1b[32m%s\x1b[0m', '✅ Prepared /autoconfig command');
 
 // Step 4: Show "READY TO CONFIGURE" message

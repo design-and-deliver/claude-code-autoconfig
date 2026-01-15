@@ -7,6 +7,12 @@ Claude reads this directory and learns for next time.
 
 ---
 
+## Design Principles
+
+- Each file should have a single responsibility (one reason to change)
+- If a file exceeds 500 LOC, it likely lacks separation of concerns — look for decomposition opportunities
+- Keep cyclomatic complexity under 10 per function — extract helper functions or simplify branching if higher
+
 ## Development Rules
 
 ### Testing Requirements
