@@ -113,7 +113,65 @@ Write .claude/rules/.gitkeep with empty content
 
 Rules are path-scoped context files that load automatically when Claude works on matching files. Effective rules require deep understanding of your codebase patterns, team conventions, and quality goals — they should be crafted intentionally, not auto-generated.
 
-## Step 5: Configure Settings
+## Step 5: Configure Formatter (JS/Node Projects)
+
+**Only for projects with `package.json`:**
+
+1. Check if `scripts.format` already exists in `package.json`
+
+2. **If `scripts.format` exists:**
+   - Skip to adding the hook (Step 5b)
+
+3. **If `scripts.format` does NOT exist:**
+   - Ask the user:
+   ```
+   No formatter detected. Adding one ensures Claude's output
+   matches your project's style.
+
+   Should I add Prettier to this project? (y/n)
+   ```
+
+4. **If user says yes:**
+   - Run: `npm install -D prettier`
+   - Add to `package.json` scripts:
+     ```json
+     "format": "[ -f .prettierrc ] && prettier --write . || echo 'Create .prettierrc to enable formatting'"
+     ```
+   - Create `.prettierrc.example` in project root:
+     ```json
+     {
+       "semi": true,
+       "singleQuote": false,
+       "tabWidth": 2
+     }
+     ```
+   - Inform user: "Formatting is ready but inactive. Rename `.prettierrc.example` to `.prettierrc` when your team decides on style preferences."
+
+5. **If user says no:**
+   - Skip formatter setup, continue to Step 6
+
+**Step 5b: Add PostToolUse Format Hook**
+
+If the project has `scripts.format` (either existing or just added), ensure `.claude/settings.json` includes the format hook:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          { "type": "command", "command": "npm run format || true" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**Important:** Merge this with any existing hooks (like the CLAUDE.md guard hook). Don't overwrite existing hooks.
+
+## Step 6: Configure Settings
 
 Update `.claude/settings.json` using the official schema.
 
@@ -175,7 +233,7 @@ Set session-level env vars:
 - Optimize for Claude's efficiency, not human documentation
 - When uncertain, leave it out — Claude can ask or explore
 
-## Step 6: Update the Docs
+## Step 7: Update the Docs
 
 After populating CLAUDE.md, update the docs file preview to show the actual content:
 
