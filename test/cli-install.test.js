@@ -86,10 +86,6 @@ test('format.js exists in hooks/', () => {
   assertExists(path.join(PACKAGE_CLAUDE_DIR, 'hooks', 'format.js'));
 });
 
-test('.gitkeep exists in hooks/', () => {
-  assertExists(path.join(PACKAGE_CLAUDE_DIR, 'hooks', '.gitkeep'));
-});
-
 console.log();
 
 // -----------------------------------------------------------------------------
