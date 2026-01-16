@@ -38,7 +38,7 @@ function handleHook(data) {
 
   try {
     // Run formatter silently - errors are non-fatal
-    execSync('npm run format --silent 2>/dev/null || true', {
+    execSync('npm run format --silent || true', {
       cwd: process.cwd(),
       stdio: 'ignore'
     });
