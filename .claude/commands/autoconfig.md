@@ -58,6 +58,43 @@ Look for these indicators to understand the project:
 - `.github/workflows/` → GitHub Actions
 - `serverless.yml` → Serverless Framework
 
+## Step 2b: Detect Version Divergence
+
+Scan for version declarations across the project. Multiple version sources that disagree can cause release failures (e.g., package.json says 1.0.74 but a hardcoded constant says 1.0.72).
+
+**Version Sources to Check:**
+
+| Source | Detection Method |
+|--------|------------------|
+| `package.json` | Parse JSON, read `version` field |
+| `**/*.{ts,js,mjs}` | Regex: `/(?:export\s+)?(?:const\|let\|var)\s+((?:BASE_\|APP_\|LIB_)?VERSION)\s*=\s*['"](\d+\.\d+\.\d+)['"]/i` |
+| `**/manifest.json` | Parse JSON, read `version` field |
+| `**/manifest.config.{ts,js}` | Regex: `/version:\s*['"](\d+\.\d+\.\d+)['"]/` |
+| `**/Info.plist` | Regex: `/<key>CFBundleShortVersionString<\/key>\s*<string>(\d+\.\d+\.\d+)<\/string>/` |
+| `**/build.gradle` | Regex: `/versionName\s+['"](\d+\.\d+\.\d+)['"]/` |
+| `pyproject.toml` | Parse TOML, read `project.version` or `tool.poetry.version` |
+| `Cargo.toml` | Parse TOML, read `package.version` |
+
+**Algorithm:**
+
+1. Glob for each file pattern
+2. Extract version using the appropriate method (JSON parse, regex, TOML parse)
+3. Collect results as `{ file, identifier, version }`
+4. Compare all collected versions
+5. **If all versions match** → no action needed
+6. **If versions diverge** → flag for CLAUDE.md
+
+**Skip these locations** (generated/vendored):
+- `node_modules/**`
+- `dist/**`
+- `build/**`
+- `.git/**`
+
+**Edge Cases:**
+- If version field references a function or variable (not a literal), note it as "dynamic"
+- For monorepos, compare root package.json against workspace packages
+- If only one version source exists, no comparison needed — skip silently
+
 ## Step 3: Populate CLAUDE.md
 
 Focus on what Claude Code actually needs to work effectively. Claude can explore the codebase itself — don't document what it can discover.
@@ -80,6 +117,21 @@ Replace `{TIMESTAMP}` with the current UTC time in format `YYYY-MM-DD HH:MM:SS` 
 - **Tech stack**: Runtime, framework, database, key services (so Claude uses correct patterns)
 - **Commands**: How to run, test, build, deploy — Claude needs these to execute tasks
 - **Non-obvious conventions**: Multi-schema databases, monorepo structure, unusual patterns Claude wouldn't infer
+
+**Include if divergence detected (from Step 2b):**
+- **Version Management**: Only add this section if version divergence was found
+
+```markdown
+## Version Management
+
+⚠️ Multiple version sources detected with different values:
+- `package.json:version` → "X.Y.Z"
+- `{file}:{identifier}` → "A.B.C"
+
+Verify which source is authoritative before releases.
+```
+
+Place this section near the top (after Tech Stack, before Commands) since version issues block releases.
 
 **Include if relevant:**
 - **Deployment flow**: If non-standard or involves multiple steps

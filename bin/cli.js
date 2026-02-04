@@ -27,7 +27,7 @@ const WINDOWS_RESERVED = ['CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'COM3', 'C
   'LPT6', 'LPT7', 'LPT8', 'LPT9'];
 
 // Files/folders installed by autoconfig - don't backup these
-const AUTOCONFIG_FILES = ['commands', 'guide', 'agents', 'migration'];
+const AUTOCONFIG_FILES = ['commands', 'guide', 'agents', 'migration', 'hooks'];
 
 function isReservedName(name) {
   const baseName = name.replace(/\.[^.]*$/, '').toUpperCase();

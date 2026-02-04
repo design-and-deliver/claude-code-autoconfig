@@ -30,6 +30,15 @@ Scan for current project indicators:
 **Infrastructure:**
 - Docker, Terraform, CI/CD configs
 
+**Version Divergence Check:**
+Scan for version declarations that may have drifted out of sync:
+- `package.json:version`
+- Hardcoded constants like `BASE_VERSION`, `APP_VERSION` in `*.ts`, `*.js`
+- Platform configs: `manifest.json`, `Info.plist`, `build.gradle`
+- Language configs: `pyproject.toml`, `Cargo.toml`
+
+If multiple sources exist with different values, include a `## Version Management` section in CLAUDE.md warning about the divergence. If all versions match (or only one source exists), remove any existing Version Management section.
+
 ## Step 3: Update CLAUDE.md
 
 CLAUDE.md uses markers to identify auto-generated content:
