@@ -11,12 +11,10 @@ Add the following to the user's `MEMORY.md` file (Claude's persistent auto memor
 
 ```markdown
 ## Debugging — Evidence Before Solutions
-NEVER guess the root cause and jump to coding a fix. Always:
+NEVER guess the root cause and jump to coding a fix. Ask yourself: is the cause deterministic and verifiable from the error alone (e.g., stack trace, compile error)? If yes, fix it directly. If not:
 1. Add logging / check actual data first
 2. Confirm root cause with evidence
 3. Only then propose and implement a fix
-If you can't determine the cause from code alone, add diagnostic logging and verify with runtime data.
-CRITICAL: A plausible-looking cause from code reading is NOT confirmed evidence. Even if a mismatch looks obvious across multiple files, verify with runtime data before implementing. The more "obvious" the cause looks, the more important it is to verify — that's when the temptation to skip evidence gathering is strongest.
 ```
 
 ## After Applying
