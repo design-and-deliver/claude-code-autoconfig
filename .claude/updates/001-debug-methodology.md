@@ -7,6 +7,12 @@
 
 Add the following to the user's `MEMORY.md` file (Claude's persistent auto memory). This ensures the debugging methodology is always loaded into Claude's system prompt for every session.
 
+## Locate MEMORY.md
+
+The file lives at `~/.claude/projects/{encoded-project-path}/memory/MEMORY.md` where the project path is encoded by replacing path separators with dashes and removing colons (e.g., `C:\CODE\my-project` becomes `C--CODE-my-project`).
+
+**Important**: Do NOT write MEMORY.md to the project root. It must go in the Claude Code user directory above. Create the directory if it doesn't exist. Append if the file already exists.
+
 ## Content to Add
 
 ```markdown
