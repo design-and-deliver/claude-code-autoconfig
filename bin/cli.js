@@ -67,7 +67,7 @@ function formatTimestamp() {
 function parseAppliedUpdates(filePath) {
   if (!fs.existsSync(filePath)) return [];
   const content = fs.readFileSync(filePath, 'utf8');
-  const match = content.match(/<!-- @applied\n([\s\S]*?)-->/);
+  const match = content.match(/<!-- @applied\r?\n([\s\S]*?)-->/);
   if (!match) return [];
 
   return match[1].trim().split('\n')

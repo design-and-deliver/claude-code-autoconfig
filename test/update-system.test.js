@@ -73,7 +73,7 @@ test('autoconfig-update.md @applied block is initially empty', () => {
   const content = fs.readFileSync(
     path.join(PACKAGE_CLAUDE_DIR, 'commands', 'autoconfig-update.md'), 'utf8'
   );
-  const match = content.match(/<!-- @applied\n([\s\S]*?)-->/);
+  const match = content.match(/<!-- @applied\r?\n([\s\S]*?)-->/);
   assert(match, 'Should have parseable @applied block');
   assert(match[1].trim() === '', '@applied block should be empty in package');
 });
