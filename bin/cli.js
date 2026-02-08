@@ -27,7 +27,7 @@ const WINDOWS_RESERVED = ['CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'COM3', 'C
   'LPT6', 'LPT7', 'LPT8', 'LPT9'];
 
 // Files/folders installed by autoconfig - don't backup these
-const AUTOCONFIG_FILES = ['commands', 'guide', 'agents', 'migration', 'hooks'];
+const AUTOCONFIG_FILES = ['commands', 'guide', 'agents', 'migration', 'hooks', 'updates'];
 
 function isReservedName(name) {
   const baseName = name.replace(/\.[^.]*$/, '').toUpperCase();
@@ -61,6 +61,95 @@ function formatTimestamp() {
   const hour12 = hour % 12 || 12;
 
   return `${month}-${day}-${year}_${hour12}-${min}${ampm}`;
+}
+
+// --pull-updates: Copy new update files from package to user's project
+function parseAppliedUpdates(filePath) {
+  if (!fs.existsSync(filePath)) return [];
+  const content = fs.readFileSync(filePath, 'utf8');
+  const match = content.match(/<!-- @applied\n([\s\S]*?)-->/);
+  if (!match) return [];
+
+  return match[1].trim().split('\n')
+    .filter(line => line.trim())
+    .map(line => {
+      const idMatch = line.match(/^(\d{3})/);
+      return idMatch ? parseInt(idMatch[1], 10) : 0;
+    })
+    .filter(id => id > 0);
+}
+
+function getHighestAppliedId(appliedIds) {
+  return appliedIds.length > 0 ? Math.max(...appliedIds) : 0;
+}
+
+function pullUpdates() {
+  console.log('\x1b[36m%s\x1b[0m', '🔄 Checking for updates...');
+  console.log();
+
+  const userCmdPath = path.join(cwd, '.claude', 'commands', 'autoconfig-update.md');
+  const packageCmdPath = path.join(packageDir, '.claude', 'commands', 'autoconfig-update.md');
+  const packageUpdatesDir = path.join(packageDir, '.claude', 'updates');
+  const userUpdatesDir = path.join(cwd, '.claude', 'updates');
+
+  // Ensure .claude/commands/ exists
+  fs.mkdirSync(path.join(cwd, '.claude', 'commands'), { recursive: true });
+
+  // Refresh autoconfig-update.md (preserve user's @applied block)
+  if (fs.existsSync(packageCmdPath)) {
+    if (fs.existsSync(userCmdPath)) {
+      const userContent = fs.readFileSync(userCmdPath, 'utf8');
+      const packageContent = fs.readFileSync(packageCmdPath, 'utf8');
+      const userApplied = userContent.match(/<!-- @applied[\s\S]*?-->/);
+      if (userApplied) {
+        const merged = packageContent.replace(/<!-- @applied[\s\S]*?-->/, userApplied[0]);
+        fs.writeFileSync(userCmdPath, merged);
+      } else {
+        fs.copyFileSync(packageCmdPath, userCmdPath);
+      }
+    } else {
+      fs.copyFileSync(packageCmdPath, userCmdPath);
+    }
+  }
+
+  // Check for available updates in package
+  if (!fs.existsSync(packageUpdatesDir)) {
+    console.log('\x1b[32m%s\x1b[0m', '✅ Already up to date');
+    return;
+  }
+
+  const appliedIds = parseAppliedUpdates(userCmdPath);
+  const highestApplied = getHighestAppliedId(appliedIds);
+
+  const updateFiles = fs.readdirSync(packageUpdatesDir).filter(f => f.endsWith('.md'));
+  const newUpdates = updateFiles.filter(file => {
+    const match = file.match(/^(\d{3})-/);
+    if (!match) return false;
+    return parseInt(match[1], 10) > highestApplied;
+  });
+
+  if (newUpdates.length === 0) {
+    console.log('\x1b[32m%s\x1b[0m', '✅ Already up to date');
+    return;
+  }
+
+  // Copy new update files
+  fs.mkdirSync(userUpdatesDir, { recursive: true });
+  for (const file of newUpdates) {
+    fs.copyFileSync(
+      path.join(packageUpdatesDir, file),
+      path.join(userUpdatesDir, file)
+    );
+  }
+
+  console.log('\x1b[32m%s\x1b[0m', `✅ Copied ${newUpdates.length} new update${newUpdates.length > 1 ? 's' : ''} to .claude/updates/`);
+  console.log();
+  console.log('Run \x1b[36mclaude /autoconfig-update\x1b[0m to review and install updates.');
+}
+
+if (process.argv.includes('--pull-updates')) {
+  pullUpdates();
+  process.exit(0);
 }
 
 console.log('\x1b[36m%s\x1b[0m', '🚀 Claude Code Autoconfig');

@@ -287,7 +287,29 @@ Set session-level env vars:
 - Optimize for Claude's efficiency, not human documentation
 - When uncertain, leave it out — Claude can ask or explore
 
-## Step 7: Update the Docs
+## Step 7: Configure MEMORY.md
+
+Claude Code has a persistent auto memory file (`MEMORY.md`) that loads into the system prompt at the start of every session. Write the debugging methodology to this file so Claude always follows evidence-based troubleshooting.
+
+**Locate the MEMORY.md file:**
+
+The file lives at `~/.claude/projects/{encoded-project-path}/memory/MEMORY.md` where the project path is encoded by replacing path separators with dashes and removing colons (e.g., `C:\CODE\my-project` becomes `C--CODE-my-project`).
+
+**Write this content** (append if file already exists, create if it doesn't):
+
+```markdown
+## Debugging — Evidence Before Solutions
+NEVER guess the root cause and jump to coding a fix. Always:
+1. Add logging / check actual data first
+2. Confirm root cause with evidence
+3. Only then propose and implement a fix
+If you can't determine the cause from code alone, add diagnostic logging and verify with runtime data.
+CRITICAL: A plausible-looking cause from code reading is NOT confirmed evidence. Even if a mismatch looks obvious across multiple files, verify with runtime data before implementing. The more "obvious" the cause looks, the more important it is to verify — that's when the temptation to skip evidence gathering is strongest.
+```
+
+**Important**: Use the Write tool (or Edit to append). Do not skip this step — it ensures Claude investigates root causes before making changes in every future session.
+
+## Step 8: Update the Docs
 
 After populating CLAUDE.md, update the docs file preview to show the actual content:
 
@@ -306,7 +328,7 @@ This ensures double-clicking CLAUDE.md in the docs shows the real generated cont
 
 - macOS: `open .claude/docs/autoconfig.docs.html`
 - Linux: `xdg-open .claude/docs/autoconfig.docs.html`
-- Windows: `start .claude/docs/autoconfig.docs.html`
+- Windows: `powershell -NoProfile -Command "Start-Process '.claude/docs/autoconfig.docs.html'"`
 
 If the docs file exists, output:
 

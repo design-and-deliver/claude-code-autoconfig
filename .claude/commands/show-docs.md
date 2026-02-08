@@ -38,15 +38,10 @@ For each file in `.claude/` that is newer than the docs HTML:
 
 ## Step 3: Open Docs
 
-Open the docs in the default browser using the appropriate command for the OS:
+Open the docs in the default browser. Use the command matching the current OS:
 
-```bash
-# macOS
-open .claude/docs/autoconfig.docs.html
+- **macOS:** `open .claude/docs/autoconfig.docs.html`
+- **Linux:** `xdg-open .claude/docs/autoconfig.docs.html`
+- **Windows:** `powershell -NoProfile -Command "Start-Process '.claude/docs/autoconfig.docs.html'"`
 
-# Linux
-xdg-open .claude/docs/autoconfig.docs.html
-
-# Windows
-start .claude/docs/autoconfig.docs.html
-```
+**Important:** If the command exits with a non-zero exit code or produces an error, tell the user the file failed to open and suggest they open it manually. Do NOT report success unless the command completed without error.

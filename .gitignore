@@ -1,5 +1,6 @@
 # Local settings (not committed)
 .claude/settings.local.json
+.claude/commands/publish.md
 
 # Windows null device workaround
 nul

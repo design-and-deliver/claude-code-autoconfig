@@ -22,9 +22,10 @@
     "cli"
   ],
   "scripts": {
-    "test": "node test/box-alignment.test.js && node test/cli-install.test.js",
+    "test": "node test/box-alignment.test.js && node test/cli-install.test.js && node test/update-system.test.js",
     "test:box": "node test/box-alignment.test.js",
-    "test:install": "node test/cli-install.test.js"
+    "test:install": "node test/cli-install.test.js",
+    "test:update": "node test/update-system.test.js"
   },
   "bin": {
     "claude-code-autoconfig": "./bin/cli.js"

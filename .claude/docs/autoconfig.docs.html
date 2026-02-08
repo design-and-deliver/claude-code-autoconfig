@@ -378,19 +378,36 @@
             background: var(--bg-secondary);
             border-radius: 8px;
             overflow: hidden;
-            height: 375px;
+            height: 480px;
             position: relative;
         }
 
         .tree-side {
-            padding: 16px;
+            display: flex;
+            flex-direction: column;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Ubuntu', 'Roboto', 'Noto Sans', sans-serif;
             font-size: 13px;
             line-height: 1.4;
             border-right: 1px solid var(--bg-elevated);
-            overflow-y: auto;
             flex-shrink: 0;
             height: 100%;
+        }
+
+        .tree-content {
+            padding: 16px 16px 8px 16px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .tree-footer-hint {
+            padding: 6px 16px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            opacity: 0.5;
+            border-top: 1px solid var(--bg-elevated);
+            flex-shrink: 0;
         }
 
         .tree-item {
@@ -466,8 +483,11 @@
 
         .info-side {
             flex: 1;
-            min-width: 200px;
+            min-width: 0;
+            height: 100%;
             overflow-y: auto;
+            overflow-x: hidden;
+            word-wrap: break-word;
         }
 
         .info-panel {
@@ -498,6 +518,13 @@
             font-family: 'SF Mono', 'Fira Code', monospace;
             font-size: 13px;
             color: var(--accent-cyan);
+        }
+
+        .info-panel-hint {
+            margin-top: 20px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            opacity: 0.5;
         }
 
         /* Navigation */
@@ -815,6 +842,12 @@
                 <div class="slide-content">
                     <div class="tree-panel">
                         <div class="tree-side">
+                          <div class="tree-content">
+                            <div class="tree-item" data-info="memory-md">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">MEMORY.md</span>
+                            </div>
                             <div class="tree-item folder-row" data-info="root" data-folder="root">
                                 <span class="tree-chevron">›</span>
                                 <span class="tree-folder-icon">📁</span>
@@ -925,6 +958,8 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">CLAUDE.md</span>
                             </div>
+                          </div>
+                          <div class="tree-footer-hint">Double-click any file to preview contents</div>
                         </div>
                         <div class="info-side">
                             <div class="info-panel" id="infoPanel">
@@ -1007,7 +1042,7 @@
             
             // Select CLAUDE.md by default when entering slide 0 (tree view)
             if (currentSlide === 0) {
-                setTimeout(() => selectTreeItemByKey('claude-md'), 100);
+                setTimeout(() => selectTreeItemByKey('memory-md'), 100);
             }
         }
 
@@ -1037,7 +1072,7 @@
         });
         
         // Select CLAUDE.md on initial page load
-        setTimeout(() => selectTreeItemByKey('claude-md'), 300);
+        setTimeout(() => selectTreeItemByKey('memory-md'), 300);
 
         // Keyboard navigation for slides
         document.addEventListener('keydown', (e) => {
@@ -1091,6 +1126,24 @@
             rootItem.querySelector('.folder').textContent = projectName + '/';
         }
 
+        // Build full MEMORY.md path from project location
+        function getMemoryPath() {
+            try {
+                const path = window.location.pathname;
+                // Extract drive + full path up to .claude, then convert to Claude's encoding
+                const claudeIdx = path.indexOf('.claude');
+                if (claudeIdx > 0) {
+                    const projectPath = path.substring(0, claudeIdx - 1);
+                    // Claude encodes the path: C:\CODE\proj → C--CODE-proj
+                    const parts = projectPath.split('/').filter(p => p);
+                    const encoded = parts.join('-').replace(/:/g, '');
+                    return '~/.claude/projects/' + encoded + '/memory/MEMORY.md';
+                }
+            } catch (e) {}
+            return '~/.claude/projects/' + projectName + '/memory/MEMORY.md';
+        }
+        const memoryPath = getMemoryPath();
+
         // Calculate tree side width dynamically
         function setTreeWidth() {
             const treeSide = document.querySelector('.tree-side');
@@ -1120,7 +1173,8 @@
             });
             
             treeSide.style.width = (maxWidth + 32) + 'px';
-            treeSide.style.padding = '16px 8px';
+            treeSide.style.paddingLeft = '8px';
+            treeSide.style.paddingRight = '8px';
         }
         
         if (document.fonts && document.fonts.ready) {
@@ -1167,6 +1221,11 @@
 
         // Tree panel info data - UPDATED
         const treeInfo = {
+            'memory-md': {
+                title: 'MEMORY.md',
+                desc: 'Native Claude Code file — loaded into the system prompt at the start of every session. Autoconfig appends debugging methodology instructions here so Claude always follows evidence-based troubleshooting.<br><br><span style="color: var(--accent-orange);">Location: ' + memoryPath + '</span>',
+                trigger: 'Loaded into system prompt automatically'
+            },
             'root': {
                 title: projectName,
                 desc: 'The autoconfig adds CLAUDE.md at your project root and configuration files inside a .claude/ directory. Nothing else is touched.'
@@ -1267,7 +1326,7 @@
         const infoPanel = document.getElementById('infoPanel');
         const treeItems = document.querySelectorAll('.tree-item');
 
-        let selectedInfoKey = 'claude-md'; // Default selection
+        let selectedInfoKey = 'memory-md'; // Default selection
         
         function showInfo(key) {
             const info = treeInfo[key];
@@ -1429,6 +1488,22 @@
 
         // File Preview Modal
         const fileContents = {
+            'memory-md': {
+                filename: 'MEMORY.md',
+                content: `# Native Claude Code File — Debugging instructions appended by autoconfig
+
+Location: ` + memoryPath + `
+
+---
+
+## Debugging — Evidence Before Solutions
+NEVER guess the root cause and jump to coding a fix. Always:
+1. Add logging / check actual data first
+2. Confirm root cause with evidence
+3. Only then propose and implement a fix
+If you can't determine the cause from code alone, add diagnostic logging and verify with runtime data.
+CRITICAL: A plausible-looking cause from code reading is NOT confirmed evidence. Even if a mismatch looks obvious across multiple files, verify with runtime data before implementing. The more "obvious" the cause looks, the more important it is to verify — that's when the temptation to skip evidence gathering is strongest.`
+            },
             'claude-md': {
                 filename: 'CLAUDE.md',
                 content: `# Project Name
@@ -1443,29 +1518,50 @@
       "Read(./**)",
       "Edit(./**)",
       "Write(./**)",
+      "Glob",
+      "Grep",
+      "WebSearch",
+      "WebFetch",
       "Bash(npm run dev)",
       "Bash(npm run build)",
+      "Bash(npm run lint)",
+      "Bash(npm run lint:fix)",
+      "Bash(npm run typecheck)",
       "Bash(npm run test)",
+      "Bash(npm run test:*)",
+      "Bash(npm run validate)",
       "Bash(git status)",
       "Bash(git diff:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(git pull)",
+      "Bash(git checkout:*)",
+      "Bash(git branch:*)",
+      "Bash(ls:*)",
+      "Bash(dir:*)",
+      "Bash(mkdir:*)",
+      "Bash(mkdir -p:*)",
+      "Bash(start:*)",
+      "Bash(start .claude:*)",
+      "Bash(open:*)",
+      "Bash(open .claude:*)",
+      "Bash(xdg-open:*)",
+      "Bash(xdg-open .claude:*)"
     ],
     "deny": [
       "Read(./.env)",
       "Read(./.env.*)",
-      "Read(./secrets/**)"
+      "Read(./secrets/**)",
+      "Read(./**/credentials.*)",
+      "Read(./**/*.pem)",
+      "Read(./**/*.key)",
+      "Write(./nul)",
+      "Edit(./nul)",
+      "Bash(rm -rf:*)",
+      "Bash(curl:*)",
+      "Bash(wget:*)"
     ]
-  },
-  "hooks": {
-    "PostToolUse": [{
-      "matcher": "Edit|Write",
-      "hooks": [{
-        "type": "command",
-        "command": "// Auto-refresh docs when .claude/ changes"
-      }]
-    }]
   }
 }`
             },
@@ -1552,7 +1648,16 @@ Incrementally update the docs's treeInfo when \`.claude/\` files are added or mo
 
 Analyze this project and configure Claude Code with real context.
 
-## Step 1: Scan the Project
+**Setup Note**: During autoconfig, prefer Glob/Read/Write tools over Bash commands. This ensures smooth setup without permission prompts. Only use Bash for opening the guide at the end.
+
+## Step 1: Detect Environment
+
+**Operating System:**
+Check the platform and note it for command syntax:
+- Windows → use \\\`del\\\`, \\\`rmdir\\\`, backslashes, \\\`.cmd\\\`/\\\`.ps1\\\` scripts
+- macOS/Linux → use \\\`rm\\\`, \\\`mkdir -p\\\`, forward slashes, \\\`.sh\\\` scripts
+
+## Step 2: Scan the Project
 
 Look for these indicators to understand the project:
 
@@ -1566,122 +1671,27 @@ Look for these indicators to understand the project:
 - \`*.csproj\` / \`*.sln\` → .NET
 - \`composer.json\` → PHP
 
-**Framework Indicators:**
-- \`next.config.*\` / \`app/\` directory → Next.js
-- \`vite.config.*\` → Vite
-- \`angular.json\` → Angular
-- \`svelte.config.*\` → Svelte
-- \`remix.config.*\` → Remix
-- \`nuxt.config.*\` → Nuxt
-- \`django\` in imports → Django
-- \`flask\` in imports → Flask
-- \`fastapi\` in imports → FastAPI
-- \`express\` in dependencies → Express
-- \`rails\` / \`Gemfile\` with rails → Rails
-- \`laravel\` → Laravel
+**Framework/Testing/Infrastructure** indicators also scanned.
 
-**Testing Frameworks:**
-- \`jest.config.*\` / \`@jest\` in deps → Jest
-- \`vitest.config.*\` → Vitest
-- \`pytest.ini\` / \`conftest.py\` → Pytest
-- \`*_test.go\` files → Go testing
-- \`*_spec.rb\` files → RSpec
-- \`cypress/\` or \`playwright/\` → E2E testing
+## Step 2b: Detect Version Divergence
 
-**Infrastructure:**
-- \`Dockerfile\` / \`docker-compose.*\` → Docker
-- \`*.tf\` files → Terraform
-- \`k8s/\` or \`kubernetes/\` → Kubernetes
-- \`.github/workflows/\` → GitHub Actions
-- \`serverless.yml\` → Serverless Framework
+Scans for version declarations across the project. Flags mismatches between package.json, hardcoded constants, manifest files, etc.
 
-## Step 2: Populate CLAUDE.md
+## Step 3: Populate CLAUDE.md
 
-Focus on what Claude Code actually needs to work effectively. Claude can explore the codebase itself — don't document what it can discover.
+Focus on what Claude Code actually needs. Keep it tight — 30 lines beats 200.
 
-**Always include:**
-- **Project name + one-liner**: What is this thing?
-- **Tech stack**: Runtime, framework, database, key services (so Claude uses correct patterns)
-- **Commands**: How to run, test, build, deploy — Claude needs these to execute tasks
-- **Non-obvious conventions**: Multi-schema databases, monorepo structure, unusual patterns Claude wouldn't infer
+**Always include:** Project name, tech stack, commands, non-obvious conventions.
+**Skip:** File trees, endpoint lists, model lists — Claude discovers these.
 
-**Include if relevant:**
-- **Deployment flow**: If non-standard or involves multiple steps
-
-**Skip these — Claude can discover them:**
-- Detailed project structure trees (Claude can run \`ls\` or \`tree\`)
-- Exhaustive route/endpoint lists (Claude can grep)
-- File-by-file descriptions (Claude can read files)
-- Database model lists (Claude can read schema files)
-
-**Keep it tight.** A 30-line CLAUDE.md that hits the essentials beats a 200-line doc Claude has to parse every session.
-
-## Step 3: Create Rules Directory
-
-Create an empty \`.claude/rules/\` directory. Do not create any subdirectories or rule files.
-
-Rules are path-scoped context files that load automatically when Claude works on matching files. Effective rules require deep understanding of your codebase patterns, team conventions, and quality goals — they should be crafted intentionally, not auto-generated.
-
-## Step 4: Configure Settings
-
-Update \`.claude/settings.json\` using the official schema.
-
-### Deny Patterns (files Claude shouldn't read/write)
-
-Use \`Read()\` for blocking reads, \`Edit()\` for blocking writes:
-
-**Always deny (security):**
-\`\`\`
-Read(./.env)
-Read(./.env.*)
-Read(./secrets/**)
-Edit(./.env)
-Edit(./.env.*)
-\`\`\`
-
-**Often deny (generated/vendor):**
-\`\`\`
-Edit(./node_modules/**)
-Edit(./dist/**)
-Edit(./.git/**)
-\`\`\`
-
-### Allow Patterns (auto-approve without prompting)
-
-Use \`Bash()\` patterns with prefix matching:
-
-\`\`\`
-Bash(npm run test:*)
-Bash(npm run lint:*)
-Bash(npm run build)
-\`\`\`
-
-### Environment Variables
-
-Set session-level env vars:
-
-\`\`\`json
-{
-  "env": {
-    "NODE_ENV": "development"
-  }
-}
-\`\`\`
-
-**Keep it minimal** — only include patterns that actually exist in this project.
-
-## Guidelines
-
-- Replace ALL placeholder content with real values from THIS project
-- Delete sections that don't apply — no empty stubs
-- Optimize for Claude's efficiency, not human documentation
-- When uncertain, leave it out — Claude can ask or explore
+## Step 4: Create Rules Directory
+## Step 5: Configure Formatter (JS/Node Projects)
+## Step 6: Configure Settings
+## Step 7: Update the Docs
 
 ## After Completion
 
-Once autoconfig is complete, prompt the user:
-
-**Run \`/show-docs\` for an interactive walkthrough of your new Claude Code project setup.**`
+Opens interactive docs in browser. Clean finale message.`
             },
             'commit-and-push': {
                 filename: 'commit-and-push.md',
@@ -1778,19 +1788,35 @@ Work through items: "Fix retro #001"`
 Add corrections and guidance here when Claude does something wrong.
 Claude reads this directory and learns for next time.
 
-## YYYY-MM-DD: Brief title
+---
 
-Describe what Claude did wrong and what to do instead.
-Keep entries brief and actionable.
+## Debugging Methodology — Evidence Before Solutions
 
-Example:
+**NEVER jump to a fix based on assumptions.** When investigating a bug:
 
-## 2026-01-06: Don't use deprecated API
-Claude used \`oldFunction()\` instead of \`newFunction()\`.
-Always use the v2 API for user endpoints.
+1. **Gather evidence first** — add logging, check server logs, inspect actual data
+2. **Confirm the root cause** — present findings to the user with evidence
+3. **Only then propose a fix** — based on what you observed, not what you guessed
 
-## 2026-01-07: Test database naming
-Use \`test_\` prefix for test databases, not \`dev_\`.`
+---
+
+## Design Principles
+
+- Each file should have a single responsibility
+- If a file exceeds 500 LOC, look for decomposition opportunities
+- Keep cyclomatic complexity under 10 per function
+
+## Development Rules
+
+### Testing Requirements
+
+**CRITICAL: Before committing changes to bin/cli.js, run tests:**
+\\\`npm test\\\`
+
+### Box Drawing Guidelines
+
+All lines must be exactly 46 visible characters wide (including borders).
+ANSI escape codes don't count toward visible width.`
             },
             'hooks': {
                 filename: 'hooks/',

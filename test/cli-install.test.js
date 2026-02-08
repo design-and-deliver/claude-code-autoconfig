@@ -86,6 +86,14 @@ test('format.js exists in hooks/', () => {
   assertExists(path.join(PACKAGE_CLAUDE_DIR, 'hooks', 'format.js'));
 });
 
+test('updates/ directory exists in package', () => {
+  assertExists(path.join(PACKAGE_CLAUDE_DIR, 'updates'));
+});
+
+test('autoconfig-update.md exists in commands/', () => {
+  assertExists(path.join(PACKAGE_CLAUDE_DIR, 'commands', 'autoconfig-update.md'));
+});
+
 console.log();
 
 // -----------------------------------------------------------------------------

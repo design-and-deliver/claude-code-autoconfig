@@ -7,6 +7,23 @@ Claude reads this directory and learns for next time.
 
 ---
 
+## Debugging Methodology — Evidence Before Solutions
+
+**NEVER jump to a fix based on assumptions.** When investigating a bug:
+
+1. **Gather evidence first** — add logging, check server logs, inspect actual data
+2. **Confirm the root cause** — present findings to the user with evidence
+3. **Only then propose a fix** — based on what you observed, not what you guessed
+
+If you can't determine the root cause from code reading alone, **add diagnostic logging** and ask the user to reproduce. Do NOT:
+- Guess the root cause and immediately start coding a fix
+- Assume data mismatches without checking the actual data
+- Rewrite logic because you think values "might" differ
+
+The cost of a wrong fix is high: wasted time, unnecessary code complexity, and potentially masking the real issue.
+
+---
+
 ## Design Principles
 
 - Each file should have a single responsibility (one reason to change)
