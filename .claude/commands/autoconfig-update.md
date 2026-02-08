@@ -60,22 +60,22 @@ Then stop.
 
 **Important**: Do NOT narrate your internal steps (e.g., "The @applied block is empty" or "Let me check..."). Go straight to the formatted output below. The user doesn't need to see implementation details.
 
-Output the pending updates using this exact format:
+Output the pending updates using this exact format. Use **bold** for the header and update entries to visually distinguish this from regular Claude output:
 
 ```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Updates available ({count})
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  001 ─ Debug Methodology
-  002 ─ Some other feature
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  [1] Install all    [2] Review each
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+╔════════════════════════════════════════════╗
+║   Updates available ({count})
+╠════════════════════════════════════════════╣
+║
+║   001 ─ Debug Methodology
+║   002 ─ Some other feature
+║
+╠════════════════════════════════════════════╣
+║   [1] Install all    [2] Review each
+╚════════════════════════════════════════════╝
 ```
 
-Replace `{count}` with the number of pending updates. List each update with its ID and title. Wait for the user to respond with 1 or 2.
+Replace `{count}` with the number of pending updates. List each update with its ID and title. The left border `║` and horizontal dividers provide structure — no right border needed (content lines vary in length). Wait for the user to respond with 1 or 2.
 
 ## Step 5a: Install All (User picked 1)
 
