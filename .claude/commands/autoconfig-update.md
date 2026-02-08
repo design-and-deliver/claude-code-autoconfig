@@ -7,6 +7,8 @@
 
 Check for and install pending updates to your Claude Code configuration.
 
+**Style guideline**: Work silently through Steps 1-3. Do not narrate internal steps, implementation details, or progress messages (e.g., "Let me check...", "The @applied block is empty..."). The first output the user sees should be the formatted summary in Step 4 (or the "up to date" message).
+
 ## Step 1: Pull Latest Updates
 
 Run this command via Bash to pull new update files from the latest package:
@@ -56,20 +58,24 @@ Then stop.
 
 ## Step 4: Display Summary
 
-Output the pending updates as a numbered list:
+**Important**: Do NOT narrate your internal steps (e.g., "The @applied block is empty" or "Let me check..."). Go straight to the formatted output below. The user doesn't need to see implementation details.
+
+Output the pending updates using this exact format:
 
 ```
-These are the latest updates to claude-code-autoconfig:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Updates available ({count})
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-001 - Debug Methodology
-002 - Some other feature
-003 - Another update
+  001 ─ Debug Methodology
+  002 ─ Some other feature
 
-Press 1 to install all updates
-Press 2 to review each update before install
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  [1] Install all    [2] Review each
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-Wait for the user to respond with 1 or 2.
+Replace `{count}` with the number of pending updates. List each update with its ID and title. Wait for the user to respond with 1 or 2.
 
 ## Step 5a: Install All (User picked 1)
 
