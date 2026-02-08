@@ -34,6 +34,7 @@
     "bin",
     ".claude",
     "!.claude/settings.local.json",
+    "!.claude/commands/publish.md",
     "CLAUDE.md"
   ],
   "engines": {
