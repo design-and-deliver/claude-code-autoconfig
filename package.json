@@ -35,6 +35,7 @@
     ".claude",
     "!.claude/settings.local.json",
     "!.claude/commands/publish.md",
+    "!.claude/commands/gls.md",
     "CLAUDE.md"
   ],
   "engines": {

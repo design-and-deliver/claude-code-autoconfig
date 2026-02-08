@@ -309,14 +309,17 @@ NEVER guess the root cause and jump to coding a fix. Ask yourself: is the cause 
 
 ## Step 8: Update the Docs
 
-After populating CLAUDE.md, update the docs file preview to show the actual content:
+After populating CLAUDE.md, update the docs file previews to show actual project content:
 
 1. Open `.claude/docs/autoconfig.docs.html`
-2. Find the `fileContents` JavaScript object (search for `'claude-md':`)
-3. Replace the `content` value with the actual CLAUDE.md content you just generated
+2. Find the `fileContents` JavaScript object
+3. Update these entries with the real content just generated:
+   - `'claude-md'` → the CLAUDE.md content from Step 3
+   - `'memory-md'` → the MEMORY.md content from Step 7
+   - `'settings'` → the settings.json content from Step 6
 4. Use template literal syntax and escape any backticks in the content
 
-This ensures double-clicking CLAUDE.md in the docs shows the real generated content.
+This ensures double-clicking these files in the docs shows real project content, not stale placeholders.
 
 ## After Completion
 
