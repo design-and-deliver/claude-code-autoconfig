@@ -73,7 +73,7 @@ function testBoxAlignment() {
   }
 }
 
-// Test: Box structure validation
+// Test: Box structure validation (supports multiple boxes)
 function testBoxStructure() {
   const lines = extractBoxLines();
 
@@ -81,35 +81,62 @@ function testBoxStructure() {
 
   let allPass = true;
 
-  // First line should start with ╔ and end with ╗
-  const firstStripped = stripAnsi(lines[0]);
-  if (!firstStripped.startsWith('╔') || !firstStripped.endsWith('╗')) {
-    console.log('✗ First line should start with ╔ and end with ╗');
-    allPass = false;
-  } else {
-    console.log('✓ Top border correct (╔...╗)');
+  // Split lines into individual boxes (each starts with ╔ and ends with ╚)
+  const boxes = [];
+  let currentBox = [];
+  for (const line of lines) {
+    const stripped = stripAnsi(line);
+    if (stripped.startsWith('╔')) {
+      currentBox = [line];
+    } else {
+      currentBox.push(line);
+    }
+    if (stripped.startsWith('╚')) {
+      boxes.push(currentBox);
+      currentBox = [];
+    }
   }
 
-  // Last line should start with ╚ and end with ╝
-  const lastStripped = stripAnsi(lines[lines.length - 1]);
-  if (!lastStripped.startsWith('╚') || !lastStripped.endsWith('╝')) {
-    console.log('✗ Last line should start with ╚ and end with ╝');
-    allPass = false;
-  } else {
-    console.log('✓ Bottom border correct (╚...╝)');
-  }
+  console.log(`Found ${boxes.length} box(es)\n`);
 
-  // Middle lines should start and end with ║
-  for (let i = 1; i < lines.length - 1; i++) {
-    const stripped = stripAnsi(lines[i]);
-    if (!stripped.startsWith('║') || !stripped.endsWith('║')) {
-      console.log(`✗ Line ${i + 1} should start and end with ║`);
+  for (let b = 0; b < boxes.length; b++) {
+    const box = boxes[b];
+    const label = `Box ${b + 1}`;
+
+    // First line should start with ╔ and end with ╗
+    const firstStripped = stripAnsi(box[0]);
+    if (!firstStripped.startsWith('╔') || !firstStripped.endsWith('╗')) {
+      console.log(`✗ ${label}: Top border should be ╔...╗`);
       allPass = false;
+    } else {
+      console.log(`✓ ${label}: Top border correct (╔...╗)`);
+    }
+
+    // Last line should start with ╚ and end with ╝
+    const lastStripped = stripAnsi(box[box.length - 1]);
+    if (!lastStripped.startsWith('╚') || !lastStripped.endsWith('╝')) {
+      console.log(`✗ ${label}: Bottom border should be ╚...╝`);
+      allPass = false;
+    } else {
+      console.log(`✓ ${label}: Bottom border correct (╚...╝)`);
+    }
+
+    // Middle lines should start and end with ║
+    let middlePass = true;
+    for (let i = 1; i < box.length - 1; i++) {
+      const stripped = stripAnsi(box[i]);
+      if (!stripped.startsWith('║') || !stripped.endsWith('║')) {
+        console.log(`✗ ${label}: Line ${i + 1} should start and end with ║`);
+        allPass = false;
+        middlePass = false;
+      }
+    }
+    if (middlePass) {
+      console.log(`✓ ${label}: All middle lines have correct borders (║...║)`);
     }
   }
 
   if (allPass) {
-    console.log('✓ All middle lines have correct borders (║...║)');
     console.log('\nSUCCESS: Box structure is valid');
   } else {
     console.error('\nFAILURE: Box structure is invalid');
