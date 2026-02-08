@@ -115,15 +115,47 @@ test('CLI copies agents/', () => {
 });
 
 test('CLI copies feedback/', () => {
-  assertCliCopies("copyDir(feedbackSrc, path.join(claudeDest, 'feedback'))", 'feedback/');
+  assertCliCopies("copyFn(feedbackSrc, path.join(claudeDest, 'feedback'))", 'feedback/');
 });
 
 test('CLI copies hooks/', () => {
-  assertCliCopies("copyDir(hooksSrc, path.join(claudeDest, 'hooks'))", 'hooks/');
+  assertCliCopies("copyFn(hooksSrc, path.join(claudeDest, 'hooks'))", 'hooks/');
 });
 
 test('CLI copies settings.json', () => {
   assertCliCopies("fs.copyFileSync(settingsSrc, settingsDest)", 'settings.json');
+});
+
+console.log();
+
+// -----------------------------------------------------------------------------
+// Settings.json Content
+// -----------------------------------------------------------------------------
+
+// -----------------------------------------------------------------------------
+// Smart Re-install Protection
+// -----------------------------------------------------------------------------
+
+console.log('Smart Re-install Protection:');
+
+test('CLI has copyDirIfMissing function', () => {
+  const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
+  assert(cliCode.includes('function copyDirIfMissing('), 'CLI should have copyDirIfMissing function');
+});
+
+test('CLI uses copyDirIfMissing for feedback/', () => {
+  const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
+  assert(cliCode.includes("forceMode ? copyDir : copyDirIfMissing") && cliCode.includes("copyFn(feedbackSrc"), 'CLI should use copyDirIfMissing for feedback');
+});
+
+test('CLI uses copyDirIfMissing for hooks/', () => {
+  const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
+  assert(cliCode.includes("forceMode ? copyDir : copyDirIfMissing") && cliCode.includes("copyFn(hooksSrc"), 'CLI should use copyDirIfMissing for hooks');
+});
+
+test('CLI supports --force flag', () => {
+  const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
+  assert(cliCode.includes("'--force'"), 'CLI should support --force flag');
 });
 
 console.log();

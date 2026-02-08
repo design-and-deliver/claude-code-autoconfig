@@ -152,6 +152,8 @@ if (process.argv.includes('--pull-updates')) {
   process.exit(0);
 }
 
+const forceMode = process.argv.includes('--force');
+
 console.log('\x1b[36m%s\x1b[0m', '🚀 Claude Code Autoconfig');
 console.log();
 
@@ -317,6 +319,21 @@ function copyDir(src, dest) {
   }
 }
 
+function copyDirIfMissing(src, dest) {
+  fs.mkdirSync(dest, { recursive: true });
+  const entries = fs.readdirSync(src, { withFileTypes: true });
+  for (const entry of entries) {
+    if (isReservedName(entry.name)) continue;
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyDirIfMissing(srcPath, destPath);
+    } else if (!fs.existsSync(destPath)) {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
+}
+
 // Copy commands (required for /autoconfig to work)
 if (fs.existsSync(commandsSrc)) {
   copyDir(commandsSrc, path.join(claudeDest, 'commands'));
@@ -335,20 +352,28 @@ if (fs.existsSync(agentsSrc)) {
   copyDir(agentsSrc, path.join(claudeDest, 'agents'));
 }
 
-// Copy feedback template
+// Copy feedback template (preserve user customizations unless --force)
 if (fs.existsSync(feedbackSrc)) {
-  copyDir(feedbackSrc, path.join(claudeDest, 'feedback'));
+  const copyFn = forceMode ? copyDir : copyDirIfMissing;
+  copyFn(feedbackSrc, path.join(claudeDest, 'feedback'));
 }
 
-// Copy hooks directory (scaffolding for custom hooks)
+// Copy hooks directory (preserve user customizations unless --force)
 if (fs.existsSync(hooksSrc)) {
-  copyDir(hooksSrc, path.join(claudeDest, 'hooks'));
+  const copyFn = forceMode ? copyDir : copyDirIfMissing;
+  copyFn(hooksSrc, path.join(claudeDest, 'hooks'));
+}
+
+// Copy updates directory (new update files only, never overwrite existing)
+const updatesSrc = path.join(packageDir, '.claude', 'updates');
+if (fs.existsSync(updatesSrc)) {
+  copyDirIfMissing(updatesSrc, path.join(claudeDest, 'updates'));
 }
 
 // Copy settings.json (only if user doesn't have one - preserves existing config)
 const settingsSrc = path.join(packageDir, '.claude', 'settings.json');
 const settingsDest = path.join(claudeDest, 'settings.json');
-if (fs.existsSync(settingsSrc) && !fs.existsSync(settingsDest)) {
+if (fs.existsSync(settingsSrc) && (forceMode || !fs.existsSync(settingsDest))) {
   fs.copyFileSync(settingsSrc, settingsDest);
 }
 
