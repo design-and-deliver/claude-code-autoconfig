@@ -36,6 +36,7 @@
     "!.claude/settings.local.json",
     "!.claude/commands/publish.md",
     "!.claude/commands/gls.md",
+    "!.claude/docs/multi-stack-parity-plan.md",
     "CLAUDE.md"
   ],
   "engines": {
