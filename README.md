@@ -73,10 +73,21 @@ Most Claude Code templates are static — copy, paste, manually fill in the blan
 
 Autoconfig is **self-configuring**. Run `/autoconfig` and Claude:
 
-1. **Detects your environment** — Windows vs macOS/Linux for correct command syntax
+1. **Detects your environment** — Windows, macOS, or Linux
 2. **Scans your project** — Package files, framework indicators, test setup
 3. **Populates CLAUDE.md** — Project name, tech stack, commands, conventions
 4. **Configures settings.json** — Permissions tuned to your ecosystem
+
+**Supported stacks:** JavaScript/TypeScript, Python, Rust, Go, Ruby, Java, .NET, PHP
+
+| Feature | JS/TS | Python, Rust, Go, Ruby, Java, .NET, PHP |
+|---------|-------|------------------------------------------|
+| CLAUDE.md introspection | Yes | Yes |
+| Slash commands | Yes | Yes |
+| MEMORY.md | Yes | Yes |
+| Update system | Yes | Yes |
+| Auto-format hook | Yes | Coming soon |
+| Optimized permissions | Yes | Coming soon |
 
 Run `/sync-claude-md` anytime your project evolves to keep the configuration current.
 
