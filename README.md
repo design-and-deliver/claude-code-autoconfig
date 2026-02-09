@@ -85,7 +85,6 @@ Autoconfig is **self-configuring**. Run `/autoconfig` and Claude:
 | CLAUDE.md introspection | Yes | Yes |
 | Slash commands | Yes | Yes |
 | MEMORY.md | Yes | Yes |
-| Update system | Yes | Yes |
 | Auto-format hook | Yes | Coming soon |
 | Optimized permissions | Yes | Coming soon |
 
