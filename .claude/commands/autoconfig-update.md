@@ -91,29 +91,27 @@ After all updates are applied, go to Step 6.
 
 ## Step 5b: Review Each (User picked 2)
 
-For each pending update (in ID order), display a box:
+For each pending update (in ID order), display using horizontal dividers only (no vertical borders — they render poorly in Claude Code):
 
 ```
-╔══════════════════════════════════════════════════════════╗
-║  UPDATE {n} of {total}                          ⬡ {type} ║
-╠══════════════════════════════════════════════════════════╣
-║                                                          ║
-║  {title}                                                 ║
-║                                                          ║
-║  {description — wrap to fit within box borders}          ║
-║                                                          ║
-║  Files:  {comma-separated list of files touched}         ║
-║                                                          ║
-╠══════════════════════════════════════════════════════════╣
-║  [y] Install    [s] Skip    [a] Install all remaining    ║
-╚══════════════════════════════════════════════════════════╝
+════════════════════════════════════════════
+  UPDATE {n} of {total}              {type}
+════════════════════════════════════════════
+
+  {title}
+
+  {description}
+
+  Files:  {comma-separated list of files touched}
+
+════════════════════════════════════════════
+  [y] Install    [s] Skip    [a] Install all remaining
+════════════════════════════════════════════
 ```
 
-**Box rendering rules:**
-- Box width: 58 visible characters (including border chars)
-- Use Unicode box-drawing characters: `╔ ═ ╗ ║ ╠ ╣ ╚ ╝`
-- Pad content lines with spaces so right `║` aligns at column 58
-- Wrap description text to fit within the borders (54 chars of content)
+**Rendering rules:**
+- Use `═` horizontal dividers only — no `║ ╔ ╗ ╠ ╣ ╚ ╝` vertical/corner characters
+- Content lines are free-flowing (no padding or alignment needed)
 - `{n}` is the position in the pending list (1, 2, 3...), `{total}` is count of pending
 
 **User actions:**
