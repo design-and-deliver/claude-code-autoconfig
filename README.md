@@ -1,5 +1,5 @@
 [![npm version](https://img.shields.io/npm/v/claude-code-autoconfig.svg)](https://www.npmjs.com/package/claude-code-autoconfig)
-[![npm downloads](https://img.shields.io/npm/dw/claude-code-autoconfig.svg)](https://www.npmjs.com/package/claude-code-autoconfig)
+[![npm downloads](https://img.shields.io/npm/dt/claude-code-autoconfig.svg)](https://www.npmjs.com/package/claude-code-autoconfig)
 [![license](https://img.shields.io/npm/l/claude-code-autoconfig.svg)](https://github.com/design-and-deliver/claude-code-autoconfig/blob/main/LICENSE)
 
 # Claude Code Autoconfig
