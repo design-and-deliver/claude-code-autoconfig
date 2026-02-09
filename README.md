@@ -1,8 +1,23 @@
+[![npm version](https://img.shields.io/npm/v/claude-code-autoconfig.svg)](https://www.npmjs.com/package/claude-code-autoconfig)
+[![npm downloads](https://img.shields.io/npm/dw/claude-code-autoconfig.svg)](https://www.npmjs.com/package/claude-code-autoconfig)
+[![license](https://img.shields.io/npm/l/claude-code-autoconfig.svg)](https://github.com/design-and-deliver/claude-code-autoconfig/blob/main/LICENSE)
+
 # Claude Code Autoconfig
 
 Intelligent, self-configuring setup for Claude Code. One command analyzes your project, configures Claude, and shows you what it did.
 
+## Why
+
+Claude Code is powerful out of the box, but every new project means manually writing CLAUDE.md, configuring settings.json, setting up slash commands, and tuning permissions for your stack. It's repetitive, easy to get wrong, and most developers skip it entirely — leaving Claude underinformed about their project.
+
+**Autoconfig does it in one step.** Run `/autoconfig` and Claude scans your project, detects your tech stack, and generates a tailored configuration. No templates to fill in. No boilerplate to copy-paste.
+
 ## Quick Install
+
+**npm:**
+```bash
+npx claude-code-autoconfig
+```
 
 **macOS / Linux / WSL:**
 ```bash
@@ -29,15 +44,22 @@ your-project/
 └── .claude/
     ├── commands/                      # Slash commands
     │   ├── autoconfig.md              #   /autoconfig - self-configures
+    │   ├── autoconfig-update.md       #   /autoconfig-update - install updates
     │   ├── commit-and-push.md         #   /commit-and-push - git workflow
     │   ├── enable-retro.md            #   /enable-retro - opt-in tech debt tracking
-    │   ├── show-docs.md              #   /show-docs - interactive walkthrough
+    │   ├── show-docs.md               #   /show-docs - interactive walkthrough
     │   ├── sync-claude-md.md          #   /sync-claude-md - update CLAUDE.md
     │   └── test.md                    #   /test - run tests
+    ├── agents/                        # Agent definitions
+    │   ├── create-retro-item.md       #   Retro item creation agent
+    │   └── docs-refresh.md            #   Docs sync agent
     ├── feedback/                      # Team corrections for Claude
     │   └── FEEDBACK.md                #   Add entries when Claude errs
+    ├── hooks/                         # Hook scripts
+    │   └── format.js                  #   Auto-format on Write/Edit
     ├── docs/                          # Interactive documentation
     │   └── autoconfig.docs.html       #   Open with /show-docs
+    ├── updates/                       # Pending config updates
     ├── rules/                         # Path-scoped context (empty)
     ├── .mcp.json                      # MCP server configs (empty placeholder)
     └── settings.json                  # Permissions & security
@@ -47,27 +69,48 @@ your-project/
 
 ### Self-Configuration
 
-Most templates are static — copy, paste, manually fill in.
+Most Claude Code templates are static — copy, paste, manually fill in the blanks. If your project changes, your config is already stale.
 
-This one is **self-configuring**. Run `/autoconfig` and Claude:
+Autoconfig is **self-configuring**. Run `/autoconfig` and Claude:
 
 1. **Detects your environment** — Windows vs macOS/Linux for correct command syntax
 2. **Scans your project** — Package files, framework indicators, test setup
 3. **Populates CLAUDE.md** — Project name, tech stack, commands, conventions
 4. **Configures settings.json** — Permissions tuned to your ecosystem
 
-You get a custom-fit configuration without the manual work.
+Run `/sync-claude-md` anytime your project evolves to keep the configuration current.
 
 ### Slash Commands
 
 | Command | Description |
 |---------|-------------|
 | `/autoconfig` | Analyzes project and populates configuration |
+| `/autoconfig-update` | Check for and install configuration updates |
 | `/sync-claude-md` | Re-analyzes project and updates CLAUDE.md |
 | `/show-docs` | Opens interactive docs in browser |
 | `/test` | Runs your test suite (auto-detects framework) |
 | `/commit-and-push` | Stages, commits with good message, and pushes |
 | `/enable-retro` | (Experimental) Enable tech debt tracking |
+
+### Updates
+
+When new features or improvements are released, just run the install again:
+
+```bash
+npx claude-code-autoconfig@latest
+```
+
+Autoconfig detects existing installations and automatically launches `/autoconfig-update` instead of a full reconfigure. Your customizations (feedback, hooks, settings) are preserved — only new files are added.
+
+Use `--force` for a clean slate reset if needed:
+
+```bash
+npx claude-code-autoconfig@latest --force
+```
+
+### MEMORY.md
+
+Autoconfig writes a debug methodology to Claude's persistent memory (`MEMORY.md`), ensuring Claude investigates root causes with evidence before jumping to fixes. This loads into every future session automatically.
 
 ### Team Feedback
 
@@ -108,15 +151,16 @@ The included `settings.json` provides sensible defaults that balance productivit
 - **`allow`** — Auto-approved operations (file edits, tests, git commands)
 - **`deny`** — Always blocked (secrets, destructive commands, network calls)
 
-Review and adjust these for your team's needs. Run `/permissions` in Claude Code to inspect your current configuration.
+Review and adjust these for your team's needs.
 
 See [Claude Code Security Docs](https://docs.anthropic.com/en/docs/claude-code/security) for best practices.
 
 ## Links
 
+- [npm package](https://www.npmjs.com/package/claude-code-autoconfig)
 - [Claude Code Docs](https://docs.anthropic.com/en/docs/claude-code/overview)
 - [Slash Commands Reference](https://docs.anthropic.com/en/docs/claude-code/slash-commands)
 
 ---
 
-Built by [ADAC 1001](https://adac1001.com)
+Built by [Andrew Ciccarelli](https://www.linkedin.com/in/andrewciccarelli/) at [ADAC 1001](https://adac1001.com) — a solo dev who ships.
