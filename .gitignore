@@ -1,3 +1,5 @@
+node_modules/
+
 # Local settings (not committed)
 .claude/settings.local.json
 .claude/commands/publish.md
@@ -5,6 +7,9 @@
 
 # Windows null device workaround
 nul
+
+# Internal planning docs (not distributed)
+.claude/plans/
 
 # Claude Code temp files
 tmpclaude-*

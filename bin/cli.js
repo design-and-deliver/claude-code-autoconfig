@@ -342,9 +342,15 @@ if (fs.existsSync(commandsSrc)) {
   process.exit(1);
 }
 
-// Copy docs (interactive documentation)
+// Copy docs (only .html files — skip internal planning docs)
 if (fs.existsSync(docsSrc)) {
-  copyDir(docsSrc, path.join(claudeDest, 'docs'));
+  const docsDestDir = path.join(claudeDest, 'docs');
+  fs.mkdirSync(docsDestDir, { recursive: true });
+  for (const file of fs.readdirSync(docsSrc)) {
+    if (file.endsWith('.html')) {
+      fs.copyFileSync(path.join(docsSrc, file), path.join(docsDestDir, file));
+    }
+  }
 }
 
 // Copy agents if exists
@@ -392,6 +398,34 @@ const isUpgrade = (() => {
   if (fs.existsSync(docsPath)) return true;
   return false;
 })();
+
+// On fresh install, pre-mark all bundled updates as applied.
+// The /autoconfig command already handles their content (e.g., debug methodology in MEMORY.md),
+// so they shouldn't appear as "new" when the user later upgrades.
+if (!isUpgrade) {
+  const userCmdPath = path.join(claudeDest, 'commands', 'autoconfig-update.md');
+  const packageUpdatesDir = path.join(packageDir, '.claude', 'updates');
+  if (fs.existsSync(userCmdPath) && fs.existsSync(packageUpdatesDir)) {
+    const updateFiles = fs.readdirSync(packageUpdatesDir)
+      .filter(f => f.endsWith('.md') && /^\d{3}-/.test(f))
+      .sort();
+    if (updateFiles.length > 0) {
+      const appliedLines = updateFiles.map(file => {
+        const id = file.match(/^(\d{3})-/)[1];
+        const content = fs.readFileSync(path.join(packageUpdatesDir, file), 'utf8');
+        const titleMatch = content.match(/<!-- @title (.+?) -->/);
+        const title = titleMatch ? titleMatch[1] : file.replace(/^\d{3}-/, '').replace(/\.md$/, '');
+        return `${id} - ${title}`;
+      });
+      const cmdContent = fs.readFileSync(userCmdPath, 'utf8');
+      const updated = cmdContent.replace(
+        /<!-- @applied\r?\n-->/,
+        `<!-- @applied\n${appliedLines.join('\n')}\n-->`
+      );
+      fs.writeFileSync(userCmdPath, updated);
+    }
+  }
+}
 
 const launchCommand = isUpgrade ? '/autoconfig-update' : '/autoconfig';
 

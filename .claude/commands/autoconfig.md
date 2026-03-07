@@ -114,7 +114,7 @@ Replace `{TIMESTAMP}` with the current UTC time in format `YYYY-MM-DD HH:MM:SS` 
 
 **Always include:**
 - **Project name + one-liner**: What is this thing?
-- **Tech stack**: Runtime, framework, database, key services (so Claude uses correct patterns)
+- **Tech stack**: One to two lines max. Only mention choices Claude wouldn't guess from config files alone (e.g., "Firebase Auth via WEB_OAUTH" is worth including; "React 18 with TypeScript" is not — Claude sees that in `package.json`). Do NOT list individual dependencies, testing libraries, or build tools that appear in `package.json`/`requirements.txt` — Claude reads those files directly.
 - **Commands**: How to run, test, build, deploy — Claude needs these to execute tasks
 - **Non-obvious conventions**: Multi-schema databases, monorepo structure, unusual patterns Claude wouldn't infer
 
@@ -135,13 +135,15 @@ Place this section near the top (after Tech Stack, before Commands) since versio
 
 **Include if relevant:**
 - **Deployment flow**: If non-standard or involves multiple steps
-- **Key architectural decisions**: Only if Claude would make wrong assumptions without them
+- **Key architectural decisions**: Only when the project has non-standard module boundaries (e.g., Chrome extension background/content split, microservice routing, multi-entrypoint builds). For standard single-entrypoint apps (Next.js, Express, Django), skip it — Claude can infer the architecture from the file structure.
 
 **Skip these — Claude can discover them:**
 - Detailed project structure trees (Claude can run `ls` or `tree`)
 - Exhaustive route/endpoint lists (Claude can grep)
 - File-by-file descriptions (Claude can read files)
 - Database model lists (Claude can read schema files)
+- Individual dependency names or versions (Claude reads `package.json`/`requirements.txt` directly)
+- Standard framework patterns (e.g., "uses app router" for Next.js — Claude sees `app/` directory)
 
 **Keep it tight.** A 30-line CLAUDE.md that hits the essentials beats a 200-line doc Claude has to parse every session.
 
@@ -295,7 +297,9 @@ Claude Code has a persistent auto memory file (`MEMORY.md`) that loads into the 
 
 The file lives at `~/.claude/projects/{encoded-project-path}/memory/MEMORY.md` where the project path is encoded by replacing path separators with dashes and removing colons (e.g., `C:\CODE\my-project` becomes `C--CODE-my-project`).
 
-**Write this content** (append if file already exists, create if it doesn't):
+**Before writing, read MEMORY.md first.** If a `## Debugging` section (or similar heading like `## Debugging — Evidence Before Solutions`) already exists, **skip this step entirely** — never duplicate or overwrite user-curated memory content.
+
+**Only if no debugging section exists**, write this content (append if file already exists, create if it doesn't):
 
 ```markdown
 ## Debugging — Evidence Before Solutions
@@ -305,7 +309,7 @@ NEVER guess the root cause and jump to coding a fix. Ask yourself: is the cause 
 3. Only then propose and implement a fix
 ```
 
-**Important**: Use the Write tool (or Edit to append). Do not skip this step — it ensures Claude investigates root causes before making changes in every future session.
+**Important**: Use the Write tool (or Edit to append). Do not skip this step on first-time setup — it ensures Claude investigates root causes before making changes in every future session. But never overwrite existing user content in MEMORY.md.
 
 ## Step 8: Update the Docs
 

@@ -56,9 +56,15 @@ CLAUDE.md uses markers to identify auto-generated content:
 Compare detected state with current CLAUDE.md and update:
 
 1. **Project name** — if changed
-2. **Tech stack** — new frameworks, languages, databases
+2. **Tech stack** — One to two lines max. Only mention choices Claude wouldn't guess from config files alone. Do NOT list individual dependencies, testing libraries, or build tools that appear in `package.json`/`requirements.txt` — Claude reads those directly.
 3. **Commands** — new/changed npm scripts, build commands
 4. **Conventions** — if project structure changed
+5. **Architecture** — Only include when the project has non-standard module boundaries (e.g., Chrome extension background/content split, microservice routing, multi-entrypoint builds). For standard single-entrypoint apps, skip it.
+
+**Skip these — Claude can discover them:**
+- Detailed project structure trees, route/endpoint lists, file-by-file descriptions
+- Database model lists, individual dependency names or versions
+- Standard framework patterns (e.g., "uses app router" for Next.js)
 
 **Always include within markers:**
 - The `## Retro` section pointer
@@ -72,4 +78,5 @@ Show the user what changed in CLAUDE.md before finishing.
 
 - **Respect markers**: Only regenerate content between AUTO-GENERATED markers
 - **Be conservative**: Only update sections that actually changed
-- **Keep it tight**: CLAUDE.md should stay concise
+- **Keep it tight**: A 30-line CLAUDE.md that hits the essentials beats a 200-line doc Claude has to parse every session
+- **No boilerplate**: If Claude can infer it from scanning `package.json` or config files, don't put it in CLAUDE.md

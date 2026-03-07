@@ -106,8 +106,9 @@ test('CLI copies commands/', () => {
   assertCliCopies("copyDir(commandsSrc, path.join(claudeDest, 'commands'))", 'commands/');
 });
 
-test('CLI copies docs/', () => {
-  assertCliCopies("copyDir(docsSrc, path.join(claudeDest, 'docs'))", 'docs/');
+test('CLI copies docs/ (html only)', () => {
+  const content = fs.readFileSync(CLI_PATH, 'utf8');
+  assert(content.includes("file.endsWith('.html')"), 'CLI should filter docs to .html files only');
 });
 
 test('CLI copies agents/', () => {
