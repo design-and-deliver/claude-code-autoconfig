@@ -301,12 +301,16 @@ const agentsSrc = path.join(packageDir, '.claude', 'agents');
 const feedbackSrc = path.join(packageDir, '.claude', 'feedback');
 const hooksSrc = path.join(packageDir, '.claude', 'hooks');
 
+// Files that exist in the dev repo but should never be installed to user projects
+const DEV_ONLY_FILES = ['publish.md', 'gls.md'];
+
 function copyDir(src, dest) {
   fs.mkdirSync(dest, { recursive: true });
   const entries = fs.readdirSync(src, { withFileTypes: true });
 
   for (const entry of entries) {
     if (isReservedName(entry.name)) continue;
+    if (DEV_ONLY_FILES.includes(entry.name)) continue;
 
     const srcPath = path.join(src, entry.name);
     const destPath = path.join(dest, entry.name);
@@ -324,6 +328,7 @@ function copyDirIfMissing(src, dest) {
   const entries = fs.readdirSync(src, { withFileTypes: true });
   for (const entry of entries) {
     if (isReservedName(entry.name)) continue;
+    if (DEV_ONLY_FILES.includes(entry.name)) continue;
     const srcPath = path.join(src, entry.name);
     const destPath = path.join(dest, entry.name);
     if (entry.isDirectory()) {
