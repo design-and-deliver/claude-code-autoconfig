@@ -399,10 +399,11 @@ const isUpgrade = (() => {
   return false;
 })();
 
-// On fresh install, pre-mark all bundled updates as applied.
-// The /autoconfig command already handles their content (e.g., debug methodology in MEMORY.md),
-// so they shouldn't appear as "new" when the user later upgrades.
-if (!isUpgrade) {
+// Pre-mark all bundled updates as applied when the @applied block is empty.
+// On fresh installs, /autoconfig handles their content (e.g., debug methodology in MEMORY.md).
+// On upgrades from pre-update-system versions, these updates are already baked in.
+// The regex only matches an empty @applied block, so this is safe to run unconditionally.
+{
   const userCmdPath = path.join(claudeDest, 'commands', 'autoconfig-update.md');
   const packageUpdatesDir = path.join(packageDir, '.claude', 'updates');
   if (fs.existsSync(userCmdPath) && fs.existsSync(packageUpdatesDir)) {
