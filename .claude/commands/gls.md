@@ -1,3 +1,4 @@
+<!-- @screenshotDir  -->
 Get the latest screenshot(s) and display them.
 
 Usage:
@@ -5,51 +6,83 @@ Usage:
 - `/gls-2` - Get and display the 2 most recent screenshots
 - `/gls-3` - Get and display the 3 most recent screenshots
 - `/gls-N` - Get and display the N most recent screenshots
+- `/gls /path/to/dir` - Use a specific directory and save it
 
-## Step 1: Detect screenshot directory
+## Step 1: Check for saved path
 
-Find the screenshot directory by checking these paths in order. Use the Bash tool with `ls -d` to test existence. Stop at the **first match**.
+Check the `@screenshotDir` comment on line 1 of THIS file. If it has a path (not empty), use that path and skip to Step 3.
 
-**macOS:**
-1. Run `defaults read com.apple.screencapture location 2>/dev/null` — if it returns a path that exists, use it
-2. `~/Desktop`
-3. `~/Pictures/Screenshots`
+If it's empty (i.e., `<!-- @screenshotDir  -->`), continue to Step 2.
 
-**Windows (Git Bash / MSYS paths):**
-1. `~/OneDrive/Pictures/Screenshots*` (glob — OneDrive creates numbered variants like `Screenshots 1`)
-2. `~/Pictures/Screenshots`
-3. `~/Desktop`
+## Step 2: Detect screenshot directory
 
-**Linux:**
-1. Check `$XDG_PICTURES_DIR/Screenshots` if `XDG_PICTURES_DIR` is set
-2. `~/Pictures/Screenshots`
-3. `~/Pictures`
-4. `~/Desktop`
+If the user provides a path as an argument (e.g., `/gls /path/to/dir`), use that path and skip to Step 2b.
 
-Detect the OS using `uname -s` (Darwin = macOS, Linux = Linux, MINGW*/MSYS*/CYGWIN* = Windows).
+Otherwise, detect the OS and find the screenshot directory. Run this **single Bash command** which finds all candidate directories and reports the newest screenshot in each:
 
-If no candidate directory exists, tell the user: "Could not find a screenshot directory. Set one with `/gls /path/to/screenshots`."
+```bash
+OS=$(uname -s); echo "OS=$OS"; for d in \
+  "$HOME/OneDrive/Pictures/Screenshots"* \
+  "$HOME/Pictures/Screenshots" \
+  "$HOME/Desktop" \
+  "$HOME/Pictures" \
+  "$HOME/Videos/Captures"; do \
+  [ -d "$d" ] || continue; \
+  newest=$(ls -t "$d"/*.png "$d"/*.jpg "$d"/*.jpeg "$d"/*.bmp "$d"/*.webp "$d"/*.gif 2>/dev/null | head -1); \
+  if [ -n "$newest" ]; then \
+    echo "HAS_IMAGES: $d | newest: $newest"; \
+  else \
+    echo "EMPTY: $d"; \
+  fi; \
+done; \
+[ "$OS" = "Darwin" ] && defaults read com.apple.screencapture location 2>/dev/null && echo "(macos-custom)"; \
+[ "$OS" = "Linux" ] && [ -n "$XDG_PICTURES_DIR" ] && [ -d "$XDG_PICTURES_DIR/Screenshots" ] && echo "EXISTS: $XDG_PICTURES_DIR/Screenshots"
+```
 
-If the user provides a path as an argument (e.g., `/gls /path/to/dir`), use that path directly and skip detection.
+Pick the screenshot directory using these rules:
 
-## Step 2: List screenshots
+1. **macOS only**: If `(macos-custom)` appears in the output, prefer that path.
+2. Among all `HAS_IMAGES` directories, pick the one whose newest screenshot has the **most recent modification time** (the file paths are shown after `newest:`— compare them).
+3. If no directories have images, fall back to the first `EMPTY` directory (screenshots will land there eventually).
+4. If there are no candidate directories at all, detection has failed.
 
-List all image files (*.png, *.jpg, *.jpeg, *.bmp, *.webp) in the detected directory, sorted by modification time (newest first). Use `ls -t` via Bash.
+### If detection fails
 
-## Step 3: Select screenshots
+Ask the user:
 
-- If command is `/gls`, get the 1 most recent screenshot
-- If command is `/gls-N` (e.g., `/gls-2`), get the N most recent screenshots
+> Unable to detect your screenshot directory. Please enter your screenshot path to continue:
 
-## Step 4: Display
+Wait for the user to respond with a path, then use that path.
 
-Use the Read tool to display each screenshot. Display in order from newest to oldest.
+### Step 2b: Save the path
 
-## Step 5: Wait
+Use the Edit tool to update line 1 of THIS file, replacing the empty `@screenshotDir` tag with the detected (or user-provided) path. For example:
 
-Wait for the user to tell you what to do with the screenshot(s). Do not make assumptions about what they want done.
+`<!-- @screenshotDir /c/Users/jane/Pictures/Screenshots -->`
 
-Important:
-- Always use the Read tool to display screenshots (not Bash cat/echo)
-- Display screenshots in order from newest to oldest
-- After displaying, wait for user instructions
+This ensures detection only happens once per project.
+
+## Step 3: List screenshots
+
+Run this command (substitute the resolved directory for `$DIR`):
+
+```bash
+ls -t "$DIR"/*.png "$DIR"/*.jpg "$DIR"/*.jpeg "$DIR"/*.bmp "$DIR"/*.webp "$DIR"/*.gif 2>/dev/null | head -20
+```
+
+If no images are found, tell the user the directory exists but contains no screenshots. Suggest taking a screenshot first or specifying a different directory with `/gls /path/to/dir`.
+
+## Step 4: Select screenshots
+
+- `/gls` → 1 most recent
+- `/gls-N` (e.g., `/gls-2`) → N most recent
+
+## Step 5: Display
+
+Use the **Read tool** to display each screenshot file. Display in order from newest to oldest.
+
+IMPORTANT: Always use the Read tool — never use Bash cat/echo to display images.
+
+## Step 6: Wait
+
+Wait for the user to tell you what to do with the screenshot(s). Do not make assumptions about what they want.
