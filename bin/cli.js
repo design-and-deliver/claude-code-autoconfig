@@ -316,7 +316,7 @@ const feedbackSrc = path.join(packageDir, '.claude', 'feedback');
 const hooksSrc = path.join(packageDir, '.claude', 'hooks');
 
 // Files that exist in the dev repo but should never be installed to user projects
-const DEV_ONLY_FILES = ['publish.md', 'gls.md'];
+const DEV_ONLY_FILES = ['publish.md'];
 
 function copyDir(src, dest) {
   fs.mkdirSync(dest, { recursive: true });
