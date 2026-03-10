@@ -354,11 +354,29 @@ function copyDirIfMissing(src, dest) {
 }
 
 // Copy commands (required for /autoconfig to work)
+// Preserve user's saved @screenshotDir in gls.md across upgrades
+const glsDest = path.join(claudeDest, 'commands', 'gls.md');
+let savedScreenshotDir = null;
+if (fs.existsSync(glsDest)) {
+  const firstLine = fs.readFileSync(glsDest, 'utf8').split(/\r?\n/)[0];
+  const match = firstLine.match(/<!-- @screenshotDir (.+?) -->/);
+  if (match) savedScreenshotDir = match[1].trim();
+}
+
 if (fs.existsSync(commandsSrc)) {
   copyDir(commandsSrc, path.join(claudeDest, 'commands'));
 } else {
   console.log('\x1b[31m%s\x1b[0m', '❌ Error: commands directory not found');
   process.exit(1);
+}
+
+// Restore saved screenshot dir after commands overwrite
+if (savedScreenshotDir && fs.existsSync(glsDest)) {
+  const content = fs.readFileSync(glsDest, 'utf8');
+  fs.writeFileSync(glsDest, content.replace(
+    /<!-- @screenshotDir\s*-->/,
+    `<!-- @screenshotDir ${savedScreenshotDir} -->`
+  ));
 }
 
 // Copy docs (only .html files — skip internal planning docs)
