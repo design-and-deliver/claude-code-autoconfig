@@ -1,11 +1,23 @@
 <!-- @description The command you just ran. Analyzes your project and populates CLAUDE.md with real context. Re-run anytime your stack changes. -->
-<!-- @version 3 -->
+<!-- @version 4 -->
 
 # Autoconfig
 
 Analyze this project and configure Claude Code with real context.
 
-**Setup Note**: During autoconfig, prefer Glob/Read/Write tools over Bash commands. This ensures smooth setup without permission prompts. Only use Bash for opening the guide at the end.
+**Setup Note**: During autoconfig, prefer Glob/Read/Write tools over Bash commands. This ensures smooth setup without permission prompts. Only use Bash for Step 0 and opening the guide at the end.
+
+## Step 0: Pull Latest Package
+
+Run this command to ensure all commands, hooks, and settings are up to date before configuring:
+
+```bash
+npx claude-code-autoconfig@latest --pull-updates 2>&1 || true
+```
+
+This downloads the latest command files, hooks, and update definitions from the npm package. It's safe to run — it only copies files and never launches an interactive prompt.
+
+If the command fails (e.g., no network, npx not available), continue anyway — the existing files are still functional.
 
 ## Step 1: Detect Environment
 
