@@ -1,9 +1,9 @@
-<!-- @description Team-maintained corrections and guidance for Claude. Add notes here when Claude does something wrong — it learns for next time. This directory persists across /autoconfig runs. -->
+<!-- @description Human-authored corrections and guidance for Claude. Reserved for team feedback only — Claude must not write here. This directory persists across /autoconfig runs. -->
 
 # Team Feedback
 
-Add corrections and guidance here when Claude does something wrong.
-Claude reads this directory and learns for next time.
+**This file is for human-authored corrections and guidance only.**
+Claude reads this file but must never write to it. When Claude discovers project context, gotchas, or learnings, it should append to the `## Discoveries` section in CLAUDE.md instead.
 
 ---
 
