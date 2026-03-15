@@ -353,6 +353,12 @@ function copyDirIfMissing(src, dest) {
   }
 }
 
+// Track what commands are new/updated for summary
+const commandsDest = path.join(claudeDest, 'commands');
+const existingCommands = fs.existsSync(commandsDest)
+  ? new Set(fs.readdirSync(commandsDest).filter(f => f.endsWith('.md')))
+  : new Set();
+
 // Copy commands (required for /autoconfig to work)
 // Preserve user's saved @screenshotDir in gls.md across upgrades
 const glsDest = path.join(claudeDest, 'commands', 'gls.md');
@@ -369,6 +375,10 @@ if (fs.existsSync(commandsSrc)) {
   console.log('\x1b[31m%s\x1b[0m', '❌ Error: commands directory not found');
   process.exit(1);
 }
+
+// Detect new commands added in this update
+const newCommands = fs.readdirSync(commandsDest)
+  .filter(f => f.endsWith('.md') && !existingCommands.has(f) && !DEV_ONLY_FILES.includes(f));
 
 // Restore saved screenshot dir after commands overwrite
 if (savedScreenshotDir && fs.existsSync(glsDest)) {
@@ -421,6 +431,25 @@ if (fs.existsSync(settingsSrc) && (forceMode || !fs.existsSync(settingsDest))) {
 }
 
 console.log('\x1b[32m%s\x1b[0m', '✅ Prepared /autoconfig command');
+
+// Show what was installed
+if (isUpgrade && newCommands.length > 0) {
+  console.log();
+  console.log('\x1b[36m%s\x1b[0m', '   New commands installed:');
+  for (const cmd of newCommands) {
+    const name = cmd.replace('.md', '');
+    console.log('\x1b[36m%s\x1b[0m', `   + /${name}`);
+  }
+}
+
+// Always show full list of installed commands on upgrade
+if (isUpgrade) {
+  const allCommands = fs.readdirSync(commandsDest)
+    .filter(f => f.endsWith('.md') && !DEV_ONLY_FILES.includes(f))
+    .map(f => '/' + f.replace('.md', ''));
+  console.log();
+  console.log('\x1b[90m%s\x1b[0m', `   Installed commands (${allCommands.length}): ${allCommands.join(', ')}`);
+}
 
 // Pre-mark all bundled updates as applied when the @applied block is empty.
 // On fresh installs, /autoconfig handles their content (e.g., debug methodology in MEMORY.md).
