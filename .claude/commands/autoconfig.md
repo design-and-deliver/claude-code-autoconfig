@@ -5,19 +5,7 @@
 
 Analyze this project and configure Claude Code with real context.
 
-**Setup Note**: During autoconfig, prefer Glob/Read/Write tools over Bash commands. This ensures smooth setup without permission prompts. Only use Bash for Step 0 and opening the guide at the end.
-
-## Step 0: Pull Latest Package
-
-Run this command to ensure all commands, hooks, and settings are up to date before configuring:
-
-```bash
-npm exec -- claude-code-autoconfig@latest --pull-updates 2>&1 || true
-```
-
-This downloads the latest command files, hooks, and update definitions from the npm package. It exits cleanly with no interactive prompts.
-
-**Important:** Use `npm exec`, not `npx` — `npx` may be blocked in some environments. If the command fails (e.g., no network), continue anyway — the existing files are still functional.
+**Setup Note**: During autoconfig, prefer Glob/Read/Write tools over Bash commands. This ensures smooth setup without permission prompts. Only use Bash for opening the guide at the end.
 
 ## Step 1: Detect Environment
 

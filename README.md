@@ -14,6 +14,8 @@ Claude Code is powerful out of the box, but every new project means manually wri
 
 ## Quick Install
 
+**Important:** Run these commands in a regular terminal, **not** from inside a Claude Code session.
+
 **npm:**
 ```bash
 npx claude-code-autoconfig
