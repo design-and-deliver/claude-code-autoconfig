@@ -3,6 +3,17 @@
     "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "0"
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/migrate-feedback.js"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",

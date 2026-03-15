@@ -442,11 +442,49 @@ if (fs.existsSync(updatesSrc)) {
   copyDirIfMissing(updatesSrc, path.join(claudeDest, 'updates'));
 }
 
-// Copy settings.json (only if user doesn't have one - preserves existing config)
+// Copy settings.json — fresh install gets full copy, upgrades get hooks merged
 const settingsSrc = path.join(packageDir, '.claude', 'settings.json');
 const settingsDest = path.join(claudeDest, 'settings.json');
-if (fs.existsSync(settingsSrc) && (forceMode || !fs.existsSync(settingsDest))) {
-  fs.copyFileSync(settingsSrc, settingsDest);
+if (fs.existsSync(settingsSrc)) {
+  if (forceMode || !fs.existsSync(settingsDest)) {
+    fs.copyFileSync(settingsSrc, settingsDest);
+  } else {
+    // Merge hooks from package into existing settings
+    try {
+      const pkgSettings = JSON.parse(fs.readFileSync(settingsSrc, 'utf8'));
+      const userSettings = JSON.parse(fs.readFileSync(settingsDest, 'utf8'));
+      if (pkgSettings.hooks) {
+        if (!userSettings.hooks) userSettings.hooks = {};
+        for (const [event, matchers] of Object.entries(pkgSettings.hooks)) {
+          if (!userSettings.hooks[event]) {
+            userSettings.hooks[event] = matchers;
+          } else {
+            // Add any hook commands that don't already exist
+            for (const matcher of matchers) {
+              for (const hook of matcher.hooks || []) {
+                const exists = userSettings.hooks[event].some(m =>
+                  (m.hooks || []).some(h => h.command === hook.command)
+                );
+                if (!exists) {
+                  // Find matching matcher or create new one
+                  const existingMatcher = userSettings.hooks[event].find(m => m.matcher === matcher.matcher);
+                  if (existingMatcher) {
+                    existingMatcher.hooks = existingMatcher.hooks || [];
+                    existingMatcher.hooks.push(hook);
+                  } else {
+                    userSettings.hooks[event].push(matcher);
+                  }
+                }
+              }
+            }
+          }
+        }
+        fs.writeFileSync(settingsDest, JSON.stringify(userSettings, null, 2));
+      }
+    } catch (err) {
+      // If merge fails, don't break the install
+    }
+  }
 }
 
 console.log('\x1b[32m%s\x1b[0m', '✅ Prepared /autoconfig command');
