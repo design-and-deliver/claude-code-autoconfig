@@ -58,8 +58,6 @@
       "Read(./**/credentials.*)",
       "Read(./**/*.pem)",
       "Read(./**/*.key)",
-      "Write(./nul)",
-      "Edit(./nul)",
       "Bash(rm -rf:*)",
       "Bash(curl:*)",
       "Bash(wget:*)"
