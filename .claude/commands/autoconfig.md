@@ -1,11 +1,33 @@
 <!-- @description The command you just ran. Analyzes your project and populates CLAUDE.md with real context. Re-run anytime your stack changes. -->
-<!-- @version 4 -->
+<!-- @version 5 -->
 
 # Autoconfig
 
 Analyze this project and configure Claude Code with real context.
 
 **Setup Note**: During autoconfig, prefer Glob/Read/Write tools over Bash commands. This ensures smooth setup without permission prompts. Only use Bash for opening the guide at the end.
+
+## Step 0: Migrate FEEDBACK.md to Discoveries (one-time)
+
+Read `.claude/feedback/FEEDBACK.md`. If it contains custom content beyond the default template header (sections after the first `---`), and `CLAUDE.md` does NOT already have a `## Discoveries` section:
+
+1. Read all custom content from FEEDBACK.md (everything after the first `---` separator)
+2. Append a `## Discoveries` section to the bottom of CLAUDE.md with that content
+3. Reset FEEDBACK.md to the clean template:
+   ```
+   <!-- @description Human-authored corrections and guidance for Claude. Reserved for team feedback only — Claude must not write here. This directory persists across /autoconfig runs. -->
+
+   # Team Feedback
+
+   **This file is for human-authored corrections and guidance only.**
+   Claude reads this file but must never write to it. When Claude discovers project context, gotchas, or learnings, it should append to the `## Discoveries` section in CLAUDE.md instead.
+
+   ---
+
+   ```
+4. Tell the user: "Migrated {N} sections from FEEDBACK.md → CLAUDE.md Discoveries"
+
+If CLAUDE.md already has `## Discoveries`, or FEEDBACK.md has no custom content, skip this step silently.
 
 ## Step 1: Detect Environment
 
