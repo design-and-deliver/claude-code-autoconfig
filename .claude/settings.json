@@ -2,6 +2,19 @@
   "env": {
     "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "0"
   },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/feedback-rule-check.js"
+          }
+        ]
+      }
+    ]
+  },
   "permissions": {
     "allow": [
       "Read(./**)",

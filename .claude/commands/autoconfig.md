@@ -1,5 +1,5 @@
 <!-- @description The command you just ran. Analyzes your project and populates CLAUDE.md with real context. Re-run anytime your stack changes. -->
-<!-- @version 1 -->
+<!-- @version 2 -->
 
 # Autoconfig
 
@@ -151,10 +151,11 @@ Place this section near the top (after Tech Stack, before Commands) since versio
 **Always end with:**
 ```markdown
 ## Team Feedback
-See `.claude/feedback/` for corrections and guidance from the team.
+The contents of `.claude/feedback/FEEDBACK.md` are an extension of this file.
+Read it at the start of every session before taking any action.
 ```
 
-This pointer persists across autoconfig runs and directs Claude to team-maintained content.
+This pointer persists across autoconfig runs and ensures FEEDBACK.md guidance is reliably loaded every session.
 
 ## Step 4: Create Rules Directory
 

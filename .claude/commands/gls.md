@@ -1,4 +1,4 @@
-<!-- @screenshotDir  -->
+<!-- @screenshotDir /c/Users/andre/OneDrive/Pictures/Screenshots 1 -->
 <!-- @version 1 -->
 Get the latest screenshot(s) and display them.
 
