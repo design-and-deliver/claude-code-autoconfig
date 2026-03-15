@@ -355,9 +355,12 @@ function copyDirIfMissing(src, dest) {
 
 // Track what commands are new/updated for summary
 const commandsDest = path.join(claudeDest, 'commands');
-const existingCommands = fs.existsSync(commandsDest)
-  ? new Set(fs.readdirSync(commandsDest).filter(f => f.endsWith('.md')))
-  : new Set();
+const existingCommandContents = new Map();
+if (fs.existsSync(commandsDest)) {
+  for (const f of fs.readdirSync(commandsDest).filter(f => f.endsWith('.md'))) {
+    existingCommandContents.set(f, fs.readFileSync(path.join(commandsDest, f), 'utf8'));
+  }
+}
 
 // Copy commands (required for /autoconfig to work)
 // Preserve user's saved @screenshotDir in gls.md across upgrades
@@ -376,9 +379,19 @@ if (fs.existsSync(commandsSrc)) {
   process.exit(1);
 }
 
-// Detect new commands added in this update
-const newCommands = fs.readdirSync(commandsDest)
-  .filter(f => f.endsWith('.md') && !existingCommands.has(f) && !DEV_ONLY_FILES.includes(f));
+// Detect new and updated commands
+const newCommands = [];
+const updatedCommands = [];
+for (const f of fs.readdirSync(commandsDest).filter(f => f.endsWith('.md') && !DEV_ONLY_FILES.includes(f))) {
+  if (!existingCommandContents.has(f)) {
+    newCommands.push(f);
+  } else {
+    const newContent = fs.readFileSync(path.join(commandsDest, f), 'utf8');
+    if (newContent !== existingCommandContents.get(f)) {
+      updatedCommands.push(f);
+    }
+  }
+}
 
 // Restore saved screenshot dir after commands overwrite
 if (savedScreenshotDir && fs.existsSync(glsDest)) {
@@ -432,13 +445,16 @@ if (fs.existsSync(settingsSrc) && (forceMode || !fs.existsSync(settingsDest))) {
 
 console.log('\x1b[32m%s\x1b[0m', '✅ Prepared /autoconfig command');
 
-// Show what was installed
-if (isUpgrade && newCommands.length > 0) {
+// Show what was installed/updated
+if (isUpgrade && (newCommands.length > 0 || updatedCommands.length > 0)) {
   console.log();
-  console.log('\x1b[36m%s\x1b[0m', '   New commands installed:');
   for (const cmd of newCommands) {
     const name = cmd.replace('.md', '');
-    console.log('\x1b[36m%s\x1b[0m', `   + /${name}`);
+    console.log('\x1b[36m%s\x1b[0m', `   + /${name} (new)`);
+  }
+  for (const cmd of updatedCommands) {
+    const name = cmd.replace('.md', '');
+    console.log('\x1b[33m%s\x1b[0m', `   ↑ /${name} (updated)`);
   }
 }
 

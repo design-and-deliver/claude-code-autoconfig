@@ -24,6 +24,16 @@ The cost of a wrong fix is high: wasted time, unnecessary code complexity, and p
 
 ---
 
+## Update System Guidelines
+
+The `.claude/updates/` directory is for updates that **require Claude to execute instructions** — writing to MEMORY.md, modifying user config, running migrations, etc.
+
+**Do NOT create update files for simple command file drops.** Command files in `.claude/commands/` are automatically installed/updated by `copyDir` in the CLI. The CLI detects new and modified commands and reports them in the console output. Creating an update file for a command that's already shipped via `copyDir` is redundant.
+
+**Rule:** If the update is just a file → put it in the right directory and let the CLI copy it. If the update needs instructions → create a `NNN-*.md` update file.
+
+---
+
 ## Design Principles
 
 - Each file should have a single responsibility (one reason to change)
