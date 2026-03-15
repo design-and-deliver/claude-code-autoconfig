@@ -12,12 +12,12 @@ Analyze this project and configure Claude Code with real context.
 Run this command to ensure all commands, hooks, and settings are up to date before configuring:
 
 ```bash
-npx claude-code-autoconfig@latest --pull-updates 2>&1 || true
+npm exec -- claude-code-autoconfig@latest --pull-updates 2>&1 || true
 ```
 
-This downloads the latest command files, hooks, and update definitions from the npm package. It's safe to run — it only copies files and never launches an interactive prompt.
+This downloads the latest command files, hooks, and update definitions from the npm package. It exits cleanly with no interactive prompts.
 
-If the command fails (e.g., no network, npx not available), continue anyway — the existing files are still functional.
+**Important:** Use `npm exec`, not `npx` — `npx` may be blocked in some environments. If the command fails (e.g., no network), continue anyway — the existing files are still functional.
 
 ## Step 1: Detect Environment
 
