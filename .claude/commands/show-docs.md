@@ -1,4 +1,5 @@
 <!-- @description Opens the interactive docs in your browser. -->
+<!-- @version 1 -->
 
 # Show Docs
 

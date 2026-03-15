@@ -1,4 +1,5 @@
 <!-- @description Re-analyzes your project and updates CLAUDE.md to reflect current state. -->
+<!-- @version 1 -->
 
 # Sync CLAUDE.md
 

@@ -1,4 +1,5 @@
 <!-- @screenshotDir  -->
+<!-- @version 1 -->
 Get the latest screenshot(s) and display them.
 
 Usage:

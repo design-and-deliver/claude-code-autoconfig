@@ -1,4 +1,5 @@
 <!-- @description (Experimental) Enable Claude to log tech debt it encounters into .claude/retro. -->
+<!-- @version 1 -->
 
 # Enable Retro
 

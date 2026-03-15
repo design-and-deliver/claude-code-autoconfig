@@ -1,4 +1,5 @@
 <!-- @description Manages and installs updates to Claude Code configuration. -->
+<!-- @version 1 -->
 
 <!-- @applied
 -->

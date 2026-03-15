@@ -353,6 +353,12 @@ function copyDirIfMissing(src, dest) {
   }
 }
 
+// Parse @version from command file content
+function parseCommandVersion(content) {
+  const match = content.match(/<!-- @version (\d+) -->/);
+  return match ? parseInt(match[1], 10) : 0;
+}
+
 // Track what commands are new/updated for summary
 const commandsDest = path.join(claudeDest, 'commands');
 const existingCommandContents = new Map();
@@ -379,17 +385,17 @@ if (fs.existsSync(commandsSrc)) {
   process.exit(1);
 }
 
-// Detect new and updated commands
+// Detect new and updated commands (with version tracking)
 const newCommands = [];
-const updatedCommands = [];
+const updatedCommands = []; // { file, oldVersion, newVersion }
 for (const f of fs.readdirSync(commandsDest).filter(f => f.endsWith('.md') && !DEV_ONLY_FILES.includes(f))) {
+  const newContent = fs.readFileSync(path.join(commandsDest, f), 'utf8');
   if (!existingCommandContents.has(f)) {
-    newCommands.push(f);
-  } else {
-    const newContent = fs.readFileSync(path.join(commandsDest, f), 'utf8');
-    if (newContent !== existingCommandContents.get(f)) {
-      updatedCommands.push(f);
-    }
+    newCommands.push({ file: f, version: parseCommandVersion(newContent) });
+  } else if (newContent !== existingCommandContents.get(f)) {
+    const oldVersion = parseCommandVersion(existingCommandContents.get(f));
+    const newVersion = parseCommandVersion(newContent);
+    updatedCommands.push({ file: f, oldVersion, newVersion });
   }
 }
 
@@ -448,13 +454,15 @@ console.log('\x1b[32m%s\x1b[0m', '✅ Prepared /autoconfig command');
 // Show what was installed/updated
 if (isUpgrade && (newCommands.length > 0 || updatedCommands.length > 0)) {
   console.log();
-  for (const cmd of newCommands) {
-    const name = cmd.replace('.md', '');
-    console.log('\x1b[36m%s\x1b[0m', `   + /${name} (new)`);
+  for (const { file, version } of newCommands) {
+    const name = file.replace('.md', '');
+    const ver = version > 0 ? ` v${version}` : '';
+    console.log('\x1b[36m%s\x1b[0m', `   + /${name}${ver} (new)`);
   }
-  for (const cmd of updatedCommands) {
-    const name = cmd.replace('.md', '');
-    console.log('\x1b[33m%s\x1b[0m', `   ↑ /${name} (updated)`);
+  for (const { file, oldVersion, newVersion } of updatedCommands) {
+    const name = file.replace('.md', '');
+    const ver = (oldVersion > 0 && newVersion > 0) ? ` (v${oldVersion} → v${newVersion})` : ' (updated)';
+    console.log('\x1b[33m%s\x1b[0m', `   ↑ /${name}${ver}`);
   }
 }
 

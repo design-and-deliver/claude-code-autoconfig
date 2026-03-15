@@ -32,6 +32,8 @@ The `.claude/updates/` directory is for updates that **require Claude to execute
 
 **Rule:** If the update is just a file → put it in the right directory and let the CLI copy it. If the update needs instructions → create a `NNN-*.md` update file.
 
+**Command versioning:** Every command file must have a `<!-- @version N -->` comment (typically line 2, after `@description`). Bump the version number whenever you modify a command. The CLI parses this to show version transitions on upgrade (e.g., `↑ /recover-context (v1 → v2)`).
+
 ---
 
 ## Design Principles

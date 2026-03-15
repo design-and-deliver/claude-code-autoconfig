@@ -1,4 +1,5 @@
 <!-- @description The command you just ran. Analyzes your project and populates CLAUDE.md with real context. Re-run anytime your stack changes. -->
+<!-- @version 1 -->
 
 # Autoconfig
 

@@ -1,4 +1,5 @@
 <!-- @description Runs tests, then stages all changes, generates a conventional commit message, commits, and pushes. -->
+<!-- @version 1 -->
 
 # Commit and Push
 

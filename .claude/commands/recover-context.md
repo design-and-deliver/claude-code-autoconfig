@@ -1,4 +1,5 @@
 <!-- @description Recovers conversation context from the session transcript after compaction. -->
+<!-- @version 1 -->
 Recover recent conversation context from the raw session transcript on disk.
 
 Usage:
