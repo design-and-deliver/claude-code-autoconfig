@@ -442,14 +442,6 @@ if (isUpgrade && newCommands.length > 0) {
   }
 }
 
-// Always show full list of installed commands on upgrade
-if (isUpgrade) {
-  const allCommands = fs.readdirSync(commandsDest)
-    .filter(f => f.endsWith('.md') && !DEV_ONLY_FILES.includes(f))
-    .map(f => '/' + f.replace('.md', ''));
-  console.log();
-  console.log('\x1b[90m%s\x1b[0m', `   Installed commands (${allCommands.length}): ${allCommands.join(', ')}`);
-}
 
 // Pre-mark all bundled updates as applied when the @applied block is empty.
 // On fresh installs, /autoconfig handles their content (e.g., debug methodology in MEMORY.md).
