@@ -496,6 +496,48 @@ if (isUpgrade && (newCommands.length > 0 || updatedCommands.length > 0)) {
   }
 }
 
+// Migrate FEEDBACK.md content to CLAUDE.md Discoveries section (one-time, on upgrade)
+if (isUpgrade) {
+  const claudeMdPath = path.join(cwd, 'CLAUDE.md');
+  const feedbackPath = path.join(claudeDest, 'feedback', 'FEEDBACK.md');
+
+  if (fs.existsSync(claudeMdPath) && fs.existsSync(feedbackPath)) {
+    const feedbackContent = fs.readFileSync(feedbackPath, 'utf8');
+
+    // Extract custom content (everything after the first --- separator following the header)
+    const feedbackLines = feedbackContent.split(/\r?\n/);
+    let firstSeparatorIdx = -1;
+    for (let i = 0; i < feedbackLines.length; i++) {
+      if (feedbackLines[i].trim() === '---') {
+        firstSeparatorIdx = i;
+        break;
+      }
+    }
+
+    if (firstSeparatorIdx >= 0) {
+      const customContent = feedbackLines.slice(firstSeparatorIdx + 1).join('\n').trim();
+
+      // Only migrate if there's custom content and it hasn't already been migrated
+      const claudeMdContent = fs.readFileSync(claudeMdPath, 'utf8');
+      const hasDiscoveries = claudeMdContent.includes('## Discoveries');
+
+      if (customContent.length > 0 && !hasDiscoveries) {
+        // Add Discoveries section to CLAUDE.md
+        const discoveriesSection = `\n\n## Discoveries\n<!-- Claude: append project-specific learnings, gotchas, and context below. This section persists across /autoconfig runs. -->\n\n${customContent}\n`;
+        fs.writeFileSync(claudeMdPath, claudeMdContent + discoveriesSection);
+
+        // Reset FEEDBACK.md to clean template
+        const cleanTemplate = `<!-- @description Human-authored corrections and guidance for Claude. Reserved for team feedback only — Claude must not write here. This directory persists across /autoconfig runs. -->\n\n# Team Feedback\n\n**This file is for human-authored corrections and guidance only.**\nClaude reads this file but must never write to it. When Claude discovers project context, gotchas, or learnings, it should append to the \`## Discoveries\` section in CLAUDE.md instead.\n\n---\n\n`;
+        fs.writeFileSync(feedbackPath, cleanTemplate);
+
+        // Count migrated sections
+        const sectionCount = (customContent.match(/^## /gm) || []).length || 1;
+        console.log('\x1b[36m%s\x1b[0m', `   📋 Migrated ${sectionCount} section${sectionCount > 1 ? 's' : ''} from FEEDBACK.md → CLAUDE.md Discoveries`);
+      }
+    }
+  }
+}
+
 const launchCommand = isUpgrade ? '/autoconfig-update' : '/autoconfig';
 
 // Step 4: Show "READY" message
