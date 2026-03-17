@@ -154,6 +154,17 @@ if (process.argv.includes('--pull-updates')) {
 
 const forceMode = process.argv.includes('--force');
 
+// Block interactive install from inside Claude Code sessions
+if (process.env.CLAUDECODE === '1') {
+  console.log();
+  console.log('\x1b[33m%s\x1b[0m', '⚠️  This command must be run in a regular terminal, not inside Claude Code.');
+  console.log();
+  console.log('   Open a separate terminal and run:');
+  console.log('\x1b[36m%s\x1b[0m', '   npx claude-code-autoconfig@latest');
+  console.log();
+  process.exit(1);
+}
+
 console.log('\x1b[36m%s\x1b[0m', '🚀 Claude Code Autoconfig');
 console.log();
 
