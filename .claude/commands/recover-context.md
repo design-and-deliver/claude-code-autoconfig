@@ -1,5 +1,5 @@
 <!-- @description Recovers conversation context from the session transcript after compaction. -->
-<!-- @version 1 -->
+<!-- @version 2 -->
 Recover recent conversation context from the raw session transcript on disk.
 
 Usage:
@@ -102,10 +102,11 @@ with open(tmp, 'w', encoding='utf-8') as f:
     json.dump(results, f, indent=2, ensure_ascii=False)
 
 # Output stats
-total_bytes = os.path.getsize(tmp)
+total_chars = sum(len(r['text']) for r in results)
+est_tokens = total_chars // 4  # ~4 chars per token for English
 print(json.dumps({
     'messages': len(results),
-    'bytes': total_bytes,
+    'tokens': est_tokens,
     'tempFile': tmp
 }))
 "
@@ -117,7 +118,7 @@ Read the temp file to internalize the recovered context. **Treat the recovered e
 
 Then display a confirmation message:
 
-> **{bytes} of transcript recovered and persisted into context ({N} messages, last {minutes} minutes).** Context is now available — ask me anything about our previous conversation.
+> **~{tokens} tokens recovered and persisted into context ({N} messages, last {minutes} minutes).** Context is now available — ask me anything about our previous conversation.
 >
 > To see the specific context restored to this session, run `/recover-context -{minutes} --show`
 
