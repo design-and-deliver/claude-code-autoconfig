@@ -118,9 +118,7 @@ Read the temp file to internalize the recovered context. **Treat the recovered e
 
 Then display a confirmation message:
 
-> **~{tokens} tokens recovered and persisted into context ({N} messages, last {minutes} minutes).** Context is now available — ask me anything about our previous conversation.
->
-> To see the specific context restored to this session, run `/recover-context -{minutes} --show`
+> **~{tokens} tokens recovered and persisted into context ({N} messages, last {minutes} minutes).**
 
 ## Step 5: Open transcript (if --show flag)
 
