@@ -154,16 +154,8 @@ if (process.argv.includes('--pull-updates')) {
 
 const forceMode = process.argv.includes('--force');
 
-// Block interactive install from inside Claude Code sessions
-if (process.env.CLAUDECODE === '1') {
-  console.log();
-  console.log('\x1b[33m%s\x1b[0m', '⚠️  This command must be run in a regular terminal, not inside Claude Code.');
-  console.log();
-  console.log('   Open a separate terminal and run:');
-  console.log('\x1b[36m%s\x1b[0m', '   npx claude-code-autoconfig@latest');
-  console.log();
-  process.exit(1);
-}
+// Detect if running inside Claude Code session
+const insideClaude = process.env.CLAUDECODE === '1';
 
 console.log('\x1b[36m%s\x1b[0m', '🚀 Claude Code Autoconfig');
 console.log();
@@ -588,6 +580,17 @@ if (isUpgrade) {
 }
 
 const launchCommand = isUpgrade ? '/autoconfig-update' : '/autoconfig';
+
+// --bootstrap: copy files only, exit silently (used by /autoconfig inside Claude)
+const bootstrapMode = process.argv.includes('--bootstrap');
+if (bootstrapMode || insideClaude) {
+  if (!bootstrapMode) {
+    // insideClaude without --bootstrap: show guidance
+    console.log('\x1b[32m%s\x1b[0m', `✅ Files installed. Run ${launchCommand} to continue.`);
+    console.log();
+  }
+  process.exit(0);
+}
 
 // Step 4: Show "READY" message
 console.log();

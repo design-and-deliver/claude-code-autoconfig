@@ -1,13 +1,23 @@
 <!-- @description The command you just ran. Analyzes your project and populates CLAUDE.md with real context. Re-run anytime your stack changes. -->
-<!-- @version 5 -->
+<!-- @version 6 -->
 
 # Autoconfig
 
 Analyze this project and configure Claude Code with real context.
 
-**Setup Note**: During autoconfig, prefer Glob/Read/Write tools over Bash commands. This ensures smooth setup without permission prompts. Only use Bash for opening the guide at the end.
+**Setup Note**: During autoconfig, prefer Glob/Read/Write tools over Bash commands. This ensures smooth setup without permission prompts. Only use Bash for the bootstrap step and opening the guide at the end.
 
-## Step 0: Migrate FEEDBACK.md to Discoveries (one-time)
+## Step 0a: Bootstrap files from latest package
+
+Run this Bash command to ensure you have the latest commands, docs, and config files:
+
+```bash
+npx claude-code-autoconfig@latest --bootstrap
+```
+
+This copies the latest slash commands, hooks, agents, docs, and settings into `.claude/`. It exits silently on success. If it fails (e.g., no network), continue anyway — the existing files will still work.
+
+## Step 0b: Migrate FEEDBACK.md to Discoveries (one-time)
 
 Read `.claude/feedback/FEEDBACK.md`. If it contains custom content beyond the default template header (sections after the first `---`), and `CLAUDE.md` does NOT already have a `## Discoveries` section:
 

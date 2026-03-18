@@ -14,7 +14,7 @@ Claude Code is powerful out of the box, but every new project means manually wri
 
 ## Quick Install
 
-**Important:** Run these commands in a regular terminal, **not** from inside a Claude Code session.
+Works from a regular terminal or from inside an existing Claude Code session.
 
 **npm:**
 ```bash
@@ -49,6 +49,8 @@ your-project/
     │   ├── autoconfig-update.md       #   /autoconfig-update - install updates
     │   ├── commit-and-push.md         #   /commit-and-push - git workflow
     │   ├── enable-retro.md            #   /enable-retro - opt-in tech debt tracking
+    │   ├── gls.md                     #   /gls - view latest screenshot
+    │   ├── recover-context.md         #   /recover-context - restore context after compaction
     │   ├── show-docs.md               #   /show-docs - interactive walkthrough
     │   ├── sync-claude-md.md          #   /sync-claude-md - update CLAUDE.md
     │   └── test.md                    #   /test - run tests
@@ -102,6 +104,8 @@ Run `/sync-claude-md` anytime your project evolves to keep the configuration cur
 | `/show-docs` | Opens interactive docs in browser |
 | `/test` | Runs your test suite (auto-detects framework) |
 | `/commit-and-push` | Stages, commits with good message, and pushes |
+| `/recover-context` | Recovers conversation context after compaction |
+| `/gls` | Views latest screenshot for visual context |
 | `/enable-retro` | (Experimental) Enable tech debt tracking |
 
 ### Updates
