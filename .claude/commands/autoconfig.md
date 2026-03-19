@@ -1,5 +1,5 @@
 <!-- @description The command you just ran. Analyzes your project and populates CLAUDE.md with real context. Re-run anytime your stack changes. -->
-<!-- @version 6 -->
+<!-- @version 7 -->
 
 # Autoconfig
 
@@ -9,13 +9,13 @@ Analyze this project and configure Claude Code with real context.
 
 ## Step 0a: Bootstrap files from latest package
 
-Run this Bash command to ensure you have the latest commands, docs, and config files:
+**MANDATORY: You MUST run this Bash command before doing anything else.** Do not skip it. Do not assume it will fail. It is designed to work inside Claude Code sessions:
 
 ```bash
 npx claude-code-autoconfig@latest --bootstrap
 ```
 
-This copies the latest slash commands, hooks, agents, docs, and settings into `.claude/`. It exits silently on success. If it fails (e.g., no network), continue anyway — the existing files will still work.
+This downloads the latest package and copies slash commands, hooks, agents, docs, and settings into `.claude/`. The `--bootstrap` flag makes it safe to run inside Claude Code — it copies files and exits silently with code 0. If it fails (e.g., no network), continue anyway — the existing files will still work.
 
 ## Step 0b: Migrate FEEDBACK.md to Discoveries (one-time)
 
