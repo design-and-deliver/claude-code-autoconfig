@@ -1,43 +1,23 @@
 <!-- @description Opens the interactive docs in your browser. -->
-<!-- @version 1 -->
+<!-- @version 2 -->
 
 # Show Docs
 
 Open the interactive documentation for Claude Code Autoconfig.
 
-## Step 1: Check for Changes
+## Step 1: Sync Docs
 
-Compare modification times of files in `.claude/` against `.claude/docs/autoconfig.docs.html`.
+Run the sync script to ensure the docs reflect the current state of `.claude/`:
 
-If any files or folders in `.claude/` have a newer modification time than the docs HTML:
-1. Output: "Syncing docs with latest changes..."
-2. Proceed to Step 2
+```bash
+node .claude/scripts/sync-docs.js
+```
 
-If the docs are already current, skip to Step 3.
+This scans all files in `.claude/` (commands, hooks, agents, feedback, updates, settings) and updates the docs HTML file tree, info cards, and content previews automatically. It's fast and idempotent.
 
-## Step 2: Delta Sync
+If the script fails (e.g., file not found), skip to Step 2 — the docs will still open with whatever content they have.
 
-For each file in `.claude/` that is newer than the docs HTML:
-
-1. Map the file to its `fileContents` key in the docs HTML:
-   - `CLAUDE.md` → `claude-md`
-   - `settings.json` → `settings`
-   - `commands/autoconfig.md` → `autoconfig`
-   - `commands/show-docs.md` → `docs-cmd`
-   - `commands/sync-claude-md.md` → `sync-claude-md`
-   - `commands/commit-and-push.md` → `commit-and-push`
-   - `commands/enable-retro.md` → `enable-retro`
-   - `commands/test.md` → `test`
-   - `feedback/FEEDBACK.md` → `feedback-template`
-   - `agents/create-retro-item.md` → `create-retro-item` (only if `.claude/retro/` exists)
-
-2. Read the current content of the changed file
-
-3. Update only that entry's `content` value in the `fileContents` object in the docs HTML
-
-4. After all deltas are applied, the docs HTML's modification time will naturally update
-
-## Step 3: Open Docs
+## Step 2: Open Docs
 
 Open the docs in the default browser. Use the command matching the current OS:
 

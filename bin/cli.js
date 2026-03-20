@@ -27,7 +27,7 @@ const WINDOWS_RESERVED = ['CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'COM3', 'C
   'LPT6', 'LPT7', 'LPT8', 'LPT9'];
 
 // Files/folders installed by autoconfig - don't backup these
-const AUTOCONFIG_FILES = ['commands', 'guide', 'agents', 'migration', 'hooks', 'updates'];
+const AUTOCONFIG_FILES = ['commands', 'guide', 'agents', 'migration', 'hooks', 'updates', 'scripts'];
 
 function isReservedName(name) {
   const baseName = name.replace(/\.[^.]*$/, '').toUpperCase();
@@ -317,6 +317,7 @@ const docsSrc = path.join(packageDir, '.claude', 'docs');
 const agentsSrc = path.join(packageDir, '.claude', 'agents');
 const feedbackSrc = path.join(packageDir, '.claude', 'feedback');
 const hooksSrc = path.join(packageDir, '.claude', 'hooks');
+const scriptsSrc = path.join(packageDir, '.claude', 'scripts');
 
 // Files that exist in the dev repo but should never be installed to user projects
 const DEV_ONLY_FILES = ['publish.md'];
@@ -437,6 +438,11 @@ if (fs.existsSync(feedbackSrc)) {
 if (fs.existsSync(hooksSrc)) {
   const copyFn = forceMode ? copyDir : copyDirIfMissing;
   copyFn(hooksSrc, path.join(claudeDest, 'hooks'));
+}
+
+// Copy scripts directory (always overwrite — these are utility scripts, not user-customizable)
+if (fs.existsSync(scriptsSrc)) {
+  copyDir(scriptsSrc, path.join(claudeDest, 'scripts'));
 }
 
 // Copy updates directory (new update files only, never overwrite existing)

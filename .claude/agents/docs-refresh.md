@@ -2,28 +2,20 @@
 
 # Docs Refresh Agent
 
-Incrementally update the docs' treeInfo when `.claude/` files are added or modified.
+Sync the interactive docs with the current state of `.claude/`.
 
-## Trigger
+## How
 
-- PostToolUse hook on Edit|Write to `.claude/`
+Run:
 
-## Scope
+```bash
+node .claude/scripts/sync-docs.js
+```
 
-- Read `.claude/**/*.md` for `@description` comments
-- Update `.claude/docs/autoconfig.docs.html` treeInfo
+This scans `.claude/` for all files, extracts `@description` metadata, and updates the docs HTML (file tree, info cards, and content previews).
 
-## Behavior
+## When to Use
 
-1. Check which `.claude/` file was just modified
-2. Extract the `<!-- @description ... -->` comment from the top
-3. Find the corresponding entry in the docs' `treeInfo` object
-4. Update only that entry's `desc` field
-5. If file is new, add a new treeInfo entry
-6. If file was deleted, remove the treeInfo entry
-
-## Guidelines
-
-- **Be fast**: Only touch the affected entry
-- **Be minimal**: Don't reformat or reorganize unrelated code
-- **Be silent**: Run in background, no output unless error
+- After adding, modifying, or deleting files in `.claude/`
+- Before opening docs with `/show-docs` (already built in)
+- As a background task when `.claude/` files change
