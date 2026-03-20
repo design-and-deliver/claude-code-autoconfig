@@ -83,7 +83,7 @@ function extractDescription(content, ext) {
 
 /**
  * Extract usage lines from a command file's content.
- * Looks for a "Usage:" section and collects the bullet points.
+ * Looks for a "Usage:" section and returns HTML-formatted usage list.
  */
 function extractUsage(content) {
   const lines = content.split(/\r?\n/);
@@ -94,14 +94,21 @@ function extractUsage(content) {
   for (let i = usageIdx + 1; i < lines.length; i++) {
     const line = lines[i].trim();
     if (line.startsWith('- ')) {
-      usageLines.push(line);
+      // Convert markdown backticks to <code> tags and strip leading "- "
+      const item = line.slice(2)
+        .replace(/`([^`]+)`/g, '<code>$1</code>');
+      usageLines.push(item);
     } else if (line === '') {
       continue; // skip blank lines within usage block
     } else {
       break; // end of usage block
     }
   }
-  return usageLines.length > 0 ? usageLines.join('\\n') : null;
+  if (usageLines.length === 0) return null;
+
+  // Build an HTML list
+  const listItems = usageLines.map(l => `<li>${l}</li>`).join('');
+  return `<div style="margin-top: 10px;"><strong>Usage:</strong><ul style="margin: 6px 0 0 0; padding-left: 20px; list-style: disc;">${listItems}</ul></div>`;
 }
 
 /**
@@ -343,7 +350,7 @@ function generateTreeInfo(entries) {
 
     let fullDesc = entry.desc;
     if (entry.usage) {
-      fullDesc += '\\n\\n' + entry.usage;
+      fullDesc += entry.usage;
     }
     const escapedDesc = fullDesc.replace(/'/g, "\\'");
     lines.push(`            '${entry.key}': {`);
