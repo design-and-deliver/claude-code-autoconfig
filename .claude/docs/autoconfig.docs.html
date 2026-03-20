@@ -883,6 +883,11 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">autoconfig.md</span>
                             </div>
+                            <div class="tree-item indent-3 hidden" data-info="autoconfig-update" data-parent="commands">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">autoconfig-update.md</span>
+                            </div>
                             <div class="tree-item indent-3 hidden" data-info="commit-and-push" data-parent="commands">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
@@ -892,6 +897,16 @@
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">enable-retro.md</span>
+                            </div>
+                            <div class="tree-item indent-3 hidden" data-info="gls" data-parent="commands">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">gls.md</span>
+                            </div>
+                            <div class="tree-item indent-3 hidden" data-info="recover-context" data-parent="commands">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">recover-context.md</span>
                             </div>
                             <div class="tree-item indent-3 hidden" data-info="docs-cmd" data-parent="commands">
                                 <span class="tree-spacer"></span>
@@ -1290,6 +1305,21 @@
                 title: 'autoconfig.md',
                 desc: 'The command you just ran. Analyzes your project and populates CLAUDE.md with real context. Re-run anytime your stack changes.',
                 trigger: '/autoconfig'
+            },
+            'autoconfig-update': {
+                title: 'autoconfig-update.md',
+                desc: 'Checks for and installs configuration updates. Tracks which updates have been applied and only runs new ones.',
+                trigger: '/autoconfig-update'
+            },
+            'gls': {
+                title: 'gls.md',
+                desc: 'Gets and displays your latest screenshot(s) for visual context. Auto-detects your screenshot directory on first use.',
+                trigger: '/gls'
+            },
+            'recover-context': {
+                title: 'recover-context.md',
+                desc: 'Recovers conversation context after compaction. Reads the session transcript to rebuild awareness of what was discussed and decided.',
+                trigger: '/recover-context'
             },
             'sync-claude-md': {
                 title: 'sync-claude-md.md',
