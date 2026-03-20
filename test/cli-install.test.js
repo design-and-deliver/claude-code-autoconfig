@@ -180,6 +180,85 @@ console.log();
 // Settings.json Content
 // -----------------------------------------------------------------------------
 
+// -----------------------------------------------------------------------------
+// Docs Sync — every shipped command must appear in the docs HTML
+// -----------------------------------------------------------------------------
+
+console.log('Docs Sync:');
+
+test('all shipped commands appear in docs HTML file tree', () => {
+  const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
+  const devOnlyMatch = cliCode.match(/const DEV_ONLY_FILES = \[([^\]]+)\]/);
+  const devOnly = devOnlyMatch
+    ? devOnlyMatch[1].match(/'([^']+)'/g).map(s => s.replace(/'/g, ''))
+    : [];
+
+  const commandsDir = path.join(PACKAGE_CLAUDE_DIR, 'commands');
+  const commands = fs.readdirSync(commandsDir)
+    .filter(f => f.endsWith('.md') && !devOnly.includes(f));
+
+  const docsHtml = fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'docs', 'autoconfig.docs.html'), 'utf8');
+
+  const missing = commands.filter(cmd => {
+    return !docsHtml.includes(`<span class="file">${cmd}</span>`);
+  });
+
+  assert(missing.length === 0,
+    `Commands missing from docs file tree: ${missing.join(', ')}`);
+});
+
+test('all shipped commands have info cards in docs', () => {
+  const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
+  const devOnlyMatch = cliCode.match(/const DEV_ONLY_FILES = \[([^\]]+)\]/);
+  const devOnly = devOnlyMatch
+    ? devOnlyMatch[1].match(/'([^']+)'/g).map(s => s.replace(/'/g, ''))
+    : [];
+
+  const commandsDir = path.join(PACKAGE_CLAUDE_DIR, 'commands');
+  const commands = fs.readdirSync(commandsDir)
+    .filter(f => f.endsWith('.md') && !devOnly.includes(f));
+
+  const docsHtml = fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'docs', 'autoconfig.docs.html'), 'utf8');
+
+  const missing = commands.filter(cmd => {
+    const name = cmd.replace('.md', '');
+    return !docsHtml.includes(`trigger: '/${name}'`);
+  });
+
+  assert(missing.length === 0,
+    `Commands missing info cards in docs: ${missing.join(', ')}`);
+});
+
+test('all shipped hooks appear in docs HTML file tree', () => {
+  const hooksDir = path.join(PACKAGE_CLAUDE_DIR, 'hooks');
+  const hooks = fs.readdirSync(hooksDir).filter(f => f.endsWith('.js'));
+
+  const docsHtml = fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'docs', 'autoconfig.docs.html'), 'utf8');
+
+  const missing = hooks.filter(hook => {
+    return !docsHtml.includes(`<span class="file">${hook}</span>`);
+  });
+
+  assert(missing.length === 0,
+    `Hooks missing from docs file tree: ${missing.join(', ')}`);
+});
+
+test('all shipped agents appear in docs HTML file tree', () => {
+  const agentsDir = path.join(PACKAGE_CLAUDE_DIR, 'agents');
+  const agents = fs.readdirSync(agentsDir).filter(f => f.endsWith('.md'));
+
+  const docsHtml = fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'docs', 'autoconfig.docs.html'), 'utf8');
+
+  const missing = agents.filter(agent => {
+    return !docsHtml.includes(`<span class="file">${agent}</span>`);
+  });
+
+  assert(missing.length === 0,
+    `Agents missing from docs file tree: ${missing.join(', ')}`);
+});
+
+console.log();
+
 console.log('Settings.json Content:');
 
 test('settings.json has permissions', () => {

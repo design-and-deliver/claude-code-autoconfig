@@ -938,10 +938,20 @@
                                 <span class="tree-folder-icon">📁</span>
                                 <span class="folder">hooks</span>
                             </div>
+                            <div class="tree-item indent-3 hidden" data-info="feedback-rule-check-hook" data-parent="hooks">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">feedback-rule-check.js</span>
+                            </div>
                             <div class="tree-item indent-3 hidden" data-info="format-hook" data-parent="hooks">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">format.js</span>
+                            </div>
+                            <div class="tree-item indent-3 hidden" data-info="migrate-feedback-hook" data-parent="hooks">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">migrate-feedback.js</span>
                             </div>
                             <div class="tree-item indent-2 folder-row hidden collapsed" data-info="docs" data-folder="docs-folder" data-parent="claude-dir">
                                 <span class="tree-chevron">›</span>
@@ -957,6 +967,16 @@
                                 <span class="tree-spacer"></span>
                                 <span class="tree-folder-icon">📁</span>
                                 <span class="folder">rules</span>
+                            </div>
+                            <div class="tree-item indent-2 folder-row hidden collapsed" data-info="updates" data-folder="updates" data-parent="claude-dir">
+                                <span class="tree-chevron">›</span>
+                                <span class="tree-folder-icon">📁</span>
+                                <span class="folder">updates</span>
+                            </div>
+                            <div class="tree-item indent-3 hidden" data-info="updates" data-parent="updates">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">NNN-*.md</span>
                             </div>
                             <div class="tree-item indent-2 hidden" data-info="mcp" data-parent="claude-dir">
                                 <span class="tree-spacer"></span>
@@ -1296,10 +1316,20 @@
                 title: 'hooks/',
                 desc: 'Executable scripts that run in response to Claude Code events. Unlike commands (which are prompts you invoke), hooks trigger automatically based on tool usage patterns.'
             },
+            'feedback-rule-check-hook': {
+                title: 'feedback-rule-check.js',
+                desc: 'Validates that Claude never writes to FEEDBACK.md. Runs as a PostToolUse hook on Write/Edit operations.',
+                trigger: 'PostToolUse on Write|Edit'
+            },
             'format-hook': {
                 title: 'format.js',
                 desc: 'Runs the project formatter after Write/Edit operations on source files. Filters by file extension and skips generated directories like node_modules.',
                 trigger: 'PostToolUse on Write|Edit (JS/TS projects only)'
+            },
+            'migrate-feedback-hook': {
+                title: 'migrate-feedback.js',
+                desc: 'Migrates custom content from FEEDBACK.md to the Discoveries section in CLAUDE.md. Runs as a PostToolUse hook.',
+                trigger: 'PostToolUse on Write|Edit'
             },
             'autoconfig': {
                 title: 'autoconfig.md',
@@ -1344,6 +1374,11 @@
             'rules': {
                 title: 'rules/',
                 desc: 'Path-scoped context that loads when Claude works on matching files. Optimized rules are based on your project\'s needs, patterns and practices.<br><br><div style="background: var(--bg-elevated); border: 1px solid var(--accent-cyan); border-radius: 8px; padding: 16px; margin-top: 8px;"><strong style="color: var(--accent-orange);">Want optimized rules for your project?</strong><br>Reach out: <a href="mailto:info@adac1001.com" style="color: var(--accent-cyan);">info@adac1001.com</a></div>'
+            },
+            'updates': {
+                title: 'updates/',
+                desc: 'Pending configuration updates shipped with new versions. Each update file (NNN-*.md) contains instructions Claude follows to apply changes. Managed by <code>/autoconfig-update</code>.',
+                trigger: '/autoconfig-update'
             },
             'docs': {
                 title: 'docs/autoconfig.docs.html',
