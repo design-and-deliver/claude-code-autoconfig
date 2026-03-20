@@ -1263,7 +1263,7 @@
                 title: '.claude/ Directory',
                 desc: 'Commands, rules, settings, and these docs. Keeps configuration organized as your project grows.'
             },
-                                                            'rules': {
+                                                                        'rules': {
                 title: 'rules/',
                 desc: 'Path-scoped context that loads when Claude works on matching files.'
             },
@@ -1305,7 +1305,7 @@
             },
             'gls': {
                 title: 'gls.md',
-                desc: 'gls.md in commands/',
+                desc: 'gls.md in commands/\n\n- `/gls` - Get and display the most recent screenshot\n- `/gls-2` - Get and display the 2 most recent screenshots\n- `/gls-3` - Get and display the 3 most recent screenshots\n- `/gls-N` - Get and display the N most recent screenshots\n- `/gls /path/to/dir` - Use a specific directory and save it',
                 trigger: '/gls'
             },
             'publish': {
@@ -1315,7 +1315,7 @@
             },
             'recover-context': {
                 title: 'recover-context.md',
-                desc: 'Recovers conversation context from the session transcript after compaction.\n\nUsage: /recover-context -60 (last 60 min), -30 (last 30 min), -120 (last 2 hrs).\nAdd --show to open the transcript in your editor.\nThe number works with or without the leading dash.',
+                desc: 'Recovers conversation context from the session transcript after compaction.\n\n- `/recover-context -60` — last 60 minutes of conversation\n- `/recover-context 60` — same thing (dash is optional)\n- `/recover-context -30` — last 30 minutes\n- `/recover-context -120` — last 2 hours\n- `/recover-context -60 --show` — same as above, but also opens the filtered transcript in default editor',
                 trigger: '/recover-context'
             },
             'show-docs': {
@@ -1569,7 +1569,7 @@ CRITICAL: A plausible-looking cause from code reading is NOT confirmed evidence.
 
 > Run \`/autoconfig\` to populate this based on your project.`
             },
-                                                            'autoconfig-update': {
+                                                                        'autoconfig-update': {
                 filename: 'autoconfig-update.md',
                 content: `<!-- @applied
 -->
@@ -1760,11 +1760,12 @@ Run tests, bump the patch version, commit, push, and publish to npm.
 
 Usage:
 - \`/recover-context -60\` — last 60 minutes of conversation
+- \`/recover-context 60\` — same thing (dash is optional)
 - \`/recover-context -30\` — last 30 minutes
 - \`/recover-context -120\` — last 2 hours
 - \`/recover-context -60 --show\` — same as above, but also opens the filtered transcript in default editor
 
-The negative number means "go back N minutes from now." The minutes argument is **required**.
+The number means "go back N minutes from now." The leading dash is optional. The minutes argument is **required**.
 
 ## Step 1: Parse the arguments
 
@@ -2084,6 +2085,8 @@ Claude reads this file but must never write to it. When Claude discovers project
       "Grep",
       "WebSearch",
       "WebFetch",
+      "Bash(npm test)",
+      "Bash(npm test *)",
       "Bash(npm run dev)",
       "Bash(npm run build)",
       "Bash(npm run lint)",
@@ -2093,23 +2096,25 @@ Claude reads this file but must never write to it. When Claude discovers project
       "Bash(npm run test:*)",
       "Bash(npm run validate)",
       "Bash(git status)",
-      "Bash(git diff:*)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "Bash(git push:*)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
       "Bash(git pull)",
-      "Bash(git checkout:*)",
-      "Bash(git branch:*)",
-      "Bash(ls:*)",
-      "Bash(dir:*)",
-      "Bash(mkdir:*)",
-      "Bash(mkdir -p:*)",
-      "Bash(start:*)",
-      "Bash(start .claude:*)",
-      "Bash(open:*)",
-      "Bash(open .claude:*)",
-      "Bash(xdg-open:*)",
-      "Bash(xdg-open .claude:*)"
+      "Bash(git pull *)",
+      "Bash(git checkout *)",
+      "Bash(git branch *)",
+      "Bash(ls *)",
+      "Bash(dir *)",
+      "Bash(mkdir *)",
+      "Bash(mkdir -p *)",
+      "Bash(start *)",
+      "Bash(start .claude *)",
+      "Bash(open *)",
+      "Bash(open .claude *)",
+      "Bash(xdg-open *)",
+      "Bash(xdg-open .claude *)"
     ],
     "deny": [
       "Read(./.env)",
@@ -2118,9 +2123,9 @@ Claude reads this file but must never write to it. When Claude discovers project
       "Read(./**/credentials.*)",
       "Read(./**/*.pem)",
       "Read(./**/*.key)",
-      "Bash(rm -rf:*)",
-      "Bash(curl:*)",
-      "Bash(wget:*)"
+      "Bash(rm -rf *)",
+      "Bash(curl *)",
+      "Bash(wget *)"
     ]
   }
 }`

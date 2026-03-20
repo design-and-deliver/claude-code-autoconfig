@@ -82,6 +82,29 @@ function extractDescription(content, ext) {
 }
 
 /**
+ * Extract usage lines from a command file's content.
+ * Looks for a "Usage:" section and collects the bullet points.
+ */
+function extractUsage(content) {
+  const lines = content.split(/\r?\n/);
+  const usageIdx = lines.findIndex(l => /^Usage:$/i.test(l.trim()));
+  if (usageIdx === -1) return null;
+
+  const usageLines = [];
+  for (let i = usageIdx + 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line.startsWith('- ')) {
+      usageLines.push(line);
+    } else if (line === '') {
+      continue; // skip blank lines within usage block
+    } else {
+      break; // end of usage block
+    }
+  }
+  return usageLines.length > 0 ? usageLines.join('\\n') : null;
+}
+
+/**
  * Extract @trigger from a JS file's JSDoc.
  */
 function extractTrigger(content) {
@@ -170,8 +193,9 @@ function scanFiles() {
       const desc = extractDescription(content, ext) || `${file} in ${folder}/`;
       const trigger = deriveTrigger(folder, file, content);
       const preview = generatePreview(content, ext);
+      const usage = (folder === 'commands') ? extractUsage(content) : null;
 
-      entries.push({ key, folder, file, desc, trigger, preview });
+      entries.push({ key, folder, file, desc, trigger, preview, usage });
     }
   }
 
@@ -317,7 +341,11 @@ function generateTreeInfo(entries) {
   for (const entry of entries) {
     if (entry.isEmptyFolder) continue;
 
-    const escapedDesc = entry.desc.replace(/'/g, "\\'");
+    let fullDesc = entry.desc;
+    if (entry.usage) {
+      fullDesc += '\\n\\n' + entry.usage;
+    }
+    const escapedDesc = fullDesc.replace(/'/g, "\\'");
     lines.push(`            '${entry.key}': {`);
     lines.push(`                title: '${entry.file}',`);
     lines.push(`                desc: '${escapedDesc}'${entry.trigger ? ',' : ''}`);
