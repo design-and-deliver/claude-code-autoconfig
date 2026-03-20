@@ -451,17 +451,19 @@ if (fs.existsSync(updatesSrc)) {
   copyDirIfMissing(updatesSrc, path.join(claudeDest, 'updates'));
 }
 
-// Copy settings.json — fresh install gets full copy, upgrades get hooks merged
+// Copy settings.json — fresh install gets full copy, upgrades get hooks + permissions merged
 const settingsSrc = path.join(packageDir, '.claude', 'settings.json');
 const settingsDest = path.join(claudeDest, 'settings.json');
 if (fs.existsSync(settingsSrc)) {
   if (forceMode || !fs.existsSync(settingsDest)) {
     fs.copyFileSync(settingsSrc, settingsDest);
   } else {
-    // Merge hooks from package into existing settings
+    // Merge hooks and permissions from package into existing settings
     try {
       const pkgSettings = JSON.parse(fs.readFileSync(settingsSrc, 'utf8'));
       const userSettings = JSON.parse(fs.readFileSync(settingsDest, 'utf8'));
+
+      // Merge hooks
       if (pkgSettings.hooks) {
         if (!userSettings.hooks) userSettings.hooks = {};
         for (const [event, matchers] of Object.entries(pkgSettings.hooks)) {
@@ -488,8 +490,31 @@ if (fs.existsSync(settingsSrc)) {
             }
           }
         }
-        fs.writeFileSync(settingsDest, JSON.stringify(userSettings, null, 2));
       }
+
+      // Merge permissions — add missing allow/deny entries, migrate deprecated :* syntax
+      if (pkgSettings.permissions) {
+        if (!userSettings.permissions) userSettings.permissions = {};
+        for (const key of ['allow', 'deny']) {
+          if (!pkgSettings.permissions[key]) continue;
+          if (!userSettings.permissions[key]) {
+            userSettings.permissions[key] = pkgSettings.permissions[key];
+          } else {
+            // Migrate deprecated :* syntax to space-* in existing entries
+            userSettings.permissions[key] = userSettings.permissions[key].map(rule =>
+              rule.replace(/^(Bash\([^)]*):(\*\))$/, '$1 $2')
+            );
+            // Add any package rules not already present
+            for (const rule of pkgSettings.permissions[key]) {
+              if (!userSettings.permissions[key].includes(rule)) {
+                userSettings.permissions[key].push(rule);
+              }
+            }
+          }
+        }
+      }
+
+      fs.writeFileSync(settingsDest, JSON.stringify(userSettings, null, 2));
     } catch (err) {
       // If merge fails, don't break the install
     }
