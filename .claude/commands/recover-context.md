@@ -4,10 +4,7 @@ Recover recent conversation context from the raw session transcript on disk.
 
 Usage:
 - `/recover-context -60` — last 60 minutes of conversation
-- `/recover-context 60` — same thing (dash is optional)
-- `/recover-context -30` — last 30 minutes
-- `/recover-context -120` — last 2 hours
-- `/recover-context -60 --show` — same as above, but also opens the filtered transcript in default editor
+- `/recover-context -60 --show` — same, but also opens the transcript in your editor
 
 The number means "go back N minutes from now." The leading dash is optional. The minutes argument is **required**.
 
