@@ -1,5 +1,5 @@
 <!-- @description The command you just ran. Analyzes your project and populates CLAUDE.md with real context. Re-run anytime your stack changes. -->
-<!-- @version 7 -->
+<!-- @version 8 -->
 
 # Autoconfig
 
@@ -407,7 +407,7 @@ Run `/show-docs` to view the interactive documentation (requires full install vi
 On Windows, if a `nul` file was accidentally created in the project root (a common artifact from bash/Unix command translation), delete it silently using the Bash tool:
 
 ```bash
-del nul 2>NUL
+[ -f nul ] && rm nul
 ```
 
 Do this cleanup silently without any output to the user.
