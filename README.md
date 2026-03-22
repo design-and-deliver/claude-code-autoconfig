@@ -53,7 +53,8 @@ your-project/
     │   ├── recover-context.md         #   /recover-context - restore context after compaction
     │   ├── show-docs.md               #   /show-docs - interactive walkthrough
     │   ├── sync-claude-md.md          #   /sync-claude-md - update CLAUDE.md
-    │   └── test.md                    #   /test - run tests
+    │   ├── test.md                    #   /test - run tests
+    │   └── validate-cca-install.md   #   /validate-cca-install - verify installation
     ├── agents/                        # Agent definitions
     │   ├── create-retro-item.md       #   Retro item creation agent
     │   └── docs-refresh.md            #   Docs sync agent
@@ -106,6 +107,7 @@ Run `/sync-claude-md` anytime your project evolves to keep the configuration cur
 | `/commit-and-push` | Stages, commits with good message, and pushes |
 | `/recover-context` | Recovers conversation context after compaction |
 | `/gls` | Views latest screenshot for visual context |
+| `/validate-cca-install` | Validates installation against latest published version |
 | `/enable-retro` | (Experimental) Enable tech debt tracking |
 
 ### Updates

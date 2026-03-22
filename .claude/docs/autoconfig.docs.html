@@ -913,6 +913,11 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">test.md</span>
                             </div>
+                            <div class="tree-item indent-3 hidden" data-info="validate-cca-install" data-parent="commands">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">validate-cca-install.md</span>
+                            </div>
                             <div class="tree-item indent-2 folder-row hidden collapsed" data-info="agents" data-folder="agents" data-parent="claude-dir">
                                 <span class="tree-chevron">›</span>
                                 <span class="tree-folder-icon">📁</span>
@@ -1263,7 +1268,7 @@
                 title: '.claude/ Directory',
                 desc: 'Commands, rules, settings, and these docs. Keeps configuration organized as your project grows.'
             },
-                                                                                                            'rules': {
+                                                                                                                        'rules': {
                 title: 'rules/',
                 desc: 'Path-scoped context that loads when Claude works on matching files.'
             },
@@ -1332,6 +1337,11 @@
                 title: 'test.md',
                 desc: 'Runs your test suite. Auto-detects Jest, Vitest, Pytest, Go, RSpec, or falls back to npm test.',
                 trigger: '/test'
+            },
+            'validate-cca-install': {
+                title: 'validate-cca-install.md',
+                desc: 'Validates your claude-code-autoconfig installation against the latest published version.<div style="margin-top: 10px;"><strong>Usage:</strong><ul style="margin: 6px 0 0 0; padding-left: 20px; list-style: disc;"><li><code>/validate-cca-install</code> — run a full validation check</li></ul></div>',
+                trigger: '/validate-cca-install'
             },
             'create-retro-item-agent': {
                 title: 'create-retro-item.md',
@@ -1569,7 +1579,7 @@ CRITICAL: A plausible-looking cause from code reading is NOT confirmed evidence.
 
 > Run \`/autoconfig\` to populate this based on your project.`
             },
-                                                                                                            'autoconfig-update': {
+                                                                                                                        'autoconfig-update': {
                 filename: 'autoconfig-update.md',
                 content: `<!-- @applied
 -->
@@ -1772,19 +1782,19 @@ The arguments are: $ARGUMENTS
 - Strip the leading \`-\` from the number and treat it as the number of minutes to look back
 - Check if \`--show\` flag is present
 
-## Step 2: Find the transcript file
+## Step 2: List candidate transcript files
 
-Find the current session's transcript by looking for the most recently modified \`.jsonl\` file in the Claude projects directory:
+List all \`.jsonl\` transcript files sorted by most recently modified:
 
 \`\`\`bash
-ls -t ~/.claude/projects/*/*.jsonl 2>/dev/null | head -1
+ls -t ~/.claude/projects/*/*.jsonl 2>/dev/null | head -20
 \`\`\`
 
-If no transcript is found, tell the user and stop.
+If no transcripts are found, tell the user and stop. Store the list as \`$TRANSCRIPT_FILES\` (one path per line).
 
-## Step 3: Extract conversation context
+## Step 3: Identify which files to parse (lazy probing)
 
-Run this Python script to extract the stripped-down conversation. Substitute \`$MINUTES\` with the resolved minutes value and \`$TRANSCRIPT_PATH\` with the path from Step 2:`
+For each file in \`$TRANSCRIPT_FILES\` (starting from most recent), probe its time range by reading only the **first and last timestamp** — do NOT parse the full file yet. Run this script, substituting \`$MINUTES\` and \`$TRANSCRIPT_FILES\`:`
             },
             'show-docs': {
                 filename: 'show-docs.md',
@@ -1857,6 +1867,39 @@ Run tests for this project.
 If no scope provided, run the full test suite. Otherwise run tests matching the scope (file, directory, or pattern).
 
 Detect the test command from project config (package.json scripts, pytest, go test, etc.) and execute it.`
+            },
+            'validate-cca-install': {
+                filename: 'validate-cca-install.md',
+                content: `Validate the current claude-code-autoconfig installation. Reports what's correct, what's outdated, and what's missing. **Does not modify anything.**
+
+Usage:
+- \`/validate-cca-install\` — run a full validation check
+
+## Step 1: Fetch the latest package metadata
+
+Query the npm registry for the latest published version and its file manifest:
+
+\`\`\`bash
+python3 -c "
+import json, urllib.request
+url = 'https://registry.npmjs.org/claude-code-autoconfig/latest'
+data = json.loads(urllib.request.urlopen(url, timeout=10).read())
+print(json.dumps({'version': data.get('version', 'unknown')}))
+"
+\`\`\`
+
+Store the latest version as \`$LATEST_VERSION\`.
+
+## Step 2: Download and extract the latest package to a temp directory
+
+\`\`\`bash
+TMPDIR=$(mktemp -d)
+npm pack claude-code-autoconfig@latest --pack-destination "$TMPDIR" 2>/dev/null
+tar -xzf "$TMPDIR"/*.tgz -C "$TMPDIR"
+echo "$TMPDIR/package"
+\`\`\`
+
+Store the extracted path as \`$PKG_DIR\`. This gives us the ground truth for what files and versions should be installed.`
             },
             'create-retro-item-agent': {
                 filename: 'create-retro-item.md',
