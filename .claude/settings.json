@@ -55,6 +55,7 @@
       "Bash(git pull *)",
       "Bash(git checkout *)",
       "Bash(git branch *)",
+      "Bash(find ./*)",
       "Bash(ls *)",
       "Bash(dir *)",
       "Bash(mkdir *)",
