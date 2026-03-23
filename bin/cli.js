@@ -616,14 +616,13 @@ const launchCommand = isUpgrade ? '/autoconfig-update' : '/autoconfig';
 const bootstrapMode = process.argv.includes('--bootstrap');
 if (bootstrapMode || insideClaude) {
   if (!bootstrapMode) {
-    // insideClaude without --bootstrap: show guidance
+    // insideClaude without --bootstrap: block with clear message
     console.log();
-    console.log('\x1b[32m%s\x1b[0m', `✅ Autoconfig installed successfully.`);
+    console.log('\x1b[31m%s\x1b[0m', `❌ Cannot run inside an active Claude Code session.`);
     console.log();
-    console.log('\x1b[33m%s\x1b[0m', `⚡ NEXT STEP: Type ${launchCommand} below and press Enter to complete setup.`);
+    console.log('\x1b[36m%s\x1b[0m', `   Please run this command from a regular terminal instead:`);
     console.log();
-    console.log('\x1b[90m%s\x1b[0m', `   (This CLI can't auto-trigger slash commands inside an active Claude session.`);
-    console.log('\x1b[90m%s\x1b[0m', `   Just type "${launchCommand}" at the prompt and Claude will handle the rest.)`);
+    console.log('\x1b[33;1m%s\x1b[0m', `   npx claude-code-autoconfig@latest`);
     console.log();
   }
   process.exit(0);
