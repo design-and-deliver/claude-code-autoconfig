@@ -1,5 +1,9 @@
 <!-- @description Manages and installs updates to Claude Code configuration. -->
 <!-- @version 1 -->
+<!-- @response updates-available | Displays list of pending updates with install/review options. -->
+<!-- @response up-to-date | All updates are already installed. -->
+<!-- @sideeffect Pulls latest update files from npm, executes update instructions, tracks applied updates -->
+<!-- @example /autoconfig-update | Check for and install configuration updates -->
 
 <!-- @applied
 -->

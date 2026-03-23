@@ -1,5 +1,9 @@
 <!-- @description Opens the interactive docs in your browser. -->
 <!-- @version 2 -->
+<!-- @response success | Docs synced and opened in default browser. -->
+<!-- @response no-docs | Docs file not found — run /autoconfig first. -->
+<!-- @sideeffect Runs sync-docs.js to refresh content, opens browser -->
+<!-- @example /show-docs | Open interactive documentation -->
 
 # Show Docs
 

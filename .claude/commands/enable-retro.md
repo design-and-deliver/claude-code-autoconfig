@@ -1,5 +1,8 @@
 <!-- @description (Experimental) Enable Claude to log tech debt it encounters into .claude/retro. -->
 <!-- @version 1 -->
+<!-- @response success | Retro enabled — Claude will log tech debt to .claude/retro/ when encountered. -->
+<!-- @sideeffect Creates .claude/retro/README.md, adds agent, updates CLAUDE.md -->
+<!-- @example /enable-retro | Activate tech debt tracking -->
 
 # Enable Retro
 

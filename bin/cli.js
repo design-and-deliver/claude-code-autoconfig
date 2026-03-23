@@ -617,7 +617,13 @@ const bootstrapMode = process.argv.includes('--bootstrap');
 if (bootstrapMode || insideClaude) {
   if (!bootstrapMode) {
     // insideClaude without --bootstrap: show guidance
-    console.log('\x1b[32m%s\x1b[0m', `✅ Files installed. Run ${launchCommand} to continue.`);
+    console.log();
+    console.log('\x1b[32m%s\x1b[0m', `✅ Autoconfig installed successfully.`);
+    console.log();
+    console.log('\x1b[33m%s\x1b[0m', `⚡ NEXT STEP: Type ${launchCommand} below and press Enter to complete setup.`);
+    console.log();
+    console.log('\x1b[90m%s\x1b[0m', `   (This CLI can't auto-trigger slash commands inside an active Claude session.`);
+    console.log('\x1b[90m%s\x1b[0m', `   Just type "${launchCommand}" at the prompt and Claude will handle the rest.)`);
     console.log();
   }
   process.exit(0);

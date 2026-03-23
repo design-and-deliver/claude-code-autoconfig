@@ -1,5 +1,9 @@
 <!-- @description Validates your claude-code-autoconfig installation against the latest published version. -->
 <!-- @version 1 -->
+<!-- @response valid | Install validated — all checks passed. -->
+<!-- @response issues | Validation found {N} issue(s) with fix suggestions. -->
+<!-- @sideeffect Read-only. Downloads latest package to temp dir for comparison, then cleans up. -->
+<!-- @example /validate-cca-install | Run full installation validation -->
 Validate the current claude-code-autoconfig installation. Reports what's correct, what's outdated, and what's missing. **Does not modify anything.**
 
 Usage:

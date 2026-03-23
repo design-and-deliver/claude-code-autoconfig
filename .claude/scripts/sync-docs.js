@@ -82,33 +82,103 @@ function extractDescription(content, ext) {
 }
 
 /**
- * Extract usage lines from a command file's content.
- * Looks for a "Usage:" section and returns HTML-formatted usage list.
+ * Extract structured Swagger-style metadata from command file content.
+ * Parses @param, @response, @sideeffect, and @example comments.
  */
-function extractUsage(content) {
-  const lines = content.split(/\r?\n/);
-  const usageIdx = lines.findIndex(l => /^Usage:$/i.test(l.trim()));
-  if (usageIdx === -1) return null;
+function extractSwaggerMeta(content) {
+  const params = [];
+  const responses = [];
+  const examples = [];
+  let sideeffect = null;
 
-  const usageLines = [];
-  for (let i = usageIdx + 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (line.startsWith('- ')) {
-      // Convert markdown backticks to <code> tags and strip leading "- "
-      const item = line.slice(2)
-        .replace(/`([^`]+)`/g, '<code>$1</code>');
-      usageLines.push(item);
-    } else if (line === '') {
-      continue; // skip blank lines within usage block
-    } else {
-      break; // end of usage block
+  const lines = content.split(/\r?\n/);
+  for (const line of lines) {
+    const paramMatch = line.match(/<!--\s*@param\s+(.+?)\s*-->/);
+    if (paramMatch) {
+      const parts = paramMatch[1].split('|').map(s => s.trim());
+      if (parts.length >= 4) {
+        params.push({ name: parts[0], type: parts[1], required: parts[2], desc: parts[3] });
+      }
+    }
+    const respMatch = line.match(/<!--\s*@response\s+(.+?)\s*-->/);
+    if (respMatch) {
+      const parts = respMatch[1].split('|').map(s => s.trim());
+      if (parts.length >= 2) {
+        responses.push({ status: parts[0], desc: parts[1] });
+      }
+    }
+    const exMatch = line.match(/<!--\s*@example\s+(.+?)\s*-->/);
+    if (exMatch) {
+      const parts = exMatch[1].split('|').map(s => s.trim());
+      if (parts.length >= 2) {
+        examples.push({ usage: parts[0], desc: parts[1] });
+      }
+    }
+    const seMatch = line.match(/<!--\s*@sideeffect\s+(.+?)\s*-->/);
+    if (seMatch) {
+      sideeffect = seMatch[1].trim();
     }
   }
-  if (usageLines.length === 0) return null;
 
-  // Build an HTML list
-  const listItems = usageLines.map(l => `<li>${l}</li>`).join('');
-  return `<div style="margin-top: 10px;"><strong>Usage:</strong><ul style="margin: 6px 0 0 0; padding-left: 20px; list-style: disc;">${listItems}</ul></div>`;
+  return { params, responses, examples, sideeffect };
+}
+
+/**
+ * Build Swagger-style HTML from extracted metadata.
+ */
+function buildSwaggerHtml(meta) {
+  const parts = [];
+
+  // Parameters table
+  if (meta.params.length > 0) {
+    let table = '<div style="margin-top: 12px;"><strong>Parameters</strong>';
+    table += '<table style="width: 100%; margin-top: 6px; border-collapse: collapse; font-size: 0.9em;">';
+    table += '<tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px;">Name</th><th style="padding: 4px 8px;">Type</th><th style="padding: 4px 8px;">Required</th><th style="padding: 4px 8px;">Description</th></tr>';
+    for (const p of meta.params) {
+      table += `<tr style="border-bottom: 1px solid var(--border);">`;
+      table += `<td style="padding: 4px 8px; white-space: nowrap;"><code>${p.name}</code></td>`;
+      table += `<td style="padding: 4px 8px;"><code>${p.type}</code></td>`;
+      table += `<td style="padding: 4px 8px;">${p.required}</td>`;
+      table += `<td style="padding: 4px 8px;">${p.desc}</td>`;
+      table += `</tr>`;
+    }
+    table += '</table></div>';
+    parts.push(table);
+  } else {
+    parts.push('<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div>');
+  }
+
+  // Responses table
+  if (meta.responses.length > 0) {
+    let table = '<div style="margin-top: 12px;"><strong>Responses</strong>';
+    table += '<table style="width: 100%; margin-top: 6px; border-collapse: collapse; font-size: 0.9em;">';
+    table += '<tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px;">Status</th><th style="padding: 4px 8px;">Description</th></tr>';
+    for (const r of meta.responses) {
+      table += `<tr style="border-bottom: 1px solid var(--border);">`;
+      table += `<td style="padding: 4px 8px; white-space: nowrap;"><code>${r.status}</code></td>`;
+      table += `<td style="padding: 4px 8px;">${r.desc}</td>`;
+      table += `</tr>`;
+    }
+    table += '</table></div>';
+    parts.push(table);
+  }
+
+  // Side effects
+  if (meta.sideeffect) {
+    parts.push(`<div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">${meta.sideeffect}</div></div>`);
+  }
+
+  // Examples
+  if (meta.examples.length > 0) {
+    let html = '<div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;">';
+    for (const ex of meta.examples) {
+      html += `<div><code>${ex.usage}</code> <span style="opacity: 0.6;">— ${ex.desc}</span></div>`;
+    }
+    html += '</div></div>';
+    parts.push(html);
+  }
+
+  return parts.length > 0 ? parts.join('') : null;
 }
 
 /**
@@ -200,9 +270,10 @@ function scanFiles() {
       const desc = extractDescription(content, ext) || `${file} in ${folder}/`;
       const trigger = deriveTrigger(folder, file, content);
       const preview = generatePreview(content, ext);
-      const usage = (folder === 'commands') ? extractUsage(content) : null;
+      const swagger = (folder === 'commands') ? extractSwaggerMeta(content) : null;
+      const swaggerHtml = swagger ? buildSwaggerHtml(swagger) : null;
 
-      entries.push({ key, folder, file, desc, trigger, preview, usage });
+      entries.push({ key, folder, file, desc, trigger, preview, swaggerHtml });
     }
   }
 
@@ -349,8 +420,8 @@ function generateTreeInfo(entries) {
     if (entry.isEmptyFolder) continue;
 
     let fullDesc = entry.desc;
-    if (entry.usage) {
-      fullDesc += entry.usage;
+    if (entry.swaggerHtml) {
+      fullDesc += entry.swaggerHtml;
     }
     const escapedDesc = fullDesc.replace(/'/g, "\\'");
     lines.push(`            '${entry.key}': {`);

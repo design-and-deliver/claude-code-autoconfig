@@ -1,5 +1,14 @@
 <!-- @description Recovers conversation context from the session transcript after compaction. -->
 <!-- @version 4 -->
+<!-- @param minutes | integer | required | How far back to recover, in minutes. Leading dash optional. Min: 1. -->
+<!-- @param --show | flag | optional | Opens the extracted transcript in your default editor. -->
+<!-- @response success | ~{tokens} tokens recovered ({N} messages across {sessions} session(s), last {minutes} min). -->
+<!-- @response no-transcript | No transcript files found. -->
+<!-- @response no-messages | No messages found in the requested time range. -->
+<!-- @sideeffect Reads .jsonl transcripts from ~/.claude/projects/, writes temp file -->
+<!-- @example /recover-context -60 | Last 60 minutes of conversation -->
+<!-- @example /recover-context 120 | Last 2 hours (dash optional) -->
+<!-- @example /recover-context -60 --show | Last 60 min + open transcript file -->
 Recover recent conversation context from the raw session transcript on disk.
 
 Usage:

@@ -1,5 +1,9 @@
 <!-- @description Runs tests, then stages all changes, generates a conventional commit message, commits, and pushes. -->
 <!-- @version 1 -->
+<!-- @response success | Changes committed and pushed to current branch. -->
+<!-- @response test-failure | Tests failed — no commit made. -->
+<!-- @sideeffect Runs test suite, stages all changes, creates git commit, pushes to remote -->
+<!-- @example /commit-and-push | Run tests, commit, and push -->
 
 # Commit and Push
 

@@ -1,5 +1,8 @@
 <!-- @description Re-analyzes your project and updates CLAUDE.md to reflect current state. -->
 <!-- @version 2 -->
+<!-- @response success | CLAUDE.md updated with current project state. -->
+<!-- @sideeffect Overwrites auto-generated sections of CLAUDE.md, preserves Discoveries section -->
+<!-- @example /sync-claude-md | Re-scan project and update CLAUDE.md -->
 
 # Sync CLAUDE.md
 

@@ -1,5 +1,9 @@
-<!-- @description The command you just ran. Analyzes your project and populates CLAUDE.md with real context. Re-run anytime your stack changes. -->
+<!-- @description Analyzes your project and populates CLAUDE.md with real context. Re-run anytime your stack changes. -->
 <!-- @version 8 -->
+<!-- @response success | CLAUDE.md populated, settings configured, docs opened in browser. -->
+<!-- @response no-project | No project detected — asks user to confirm directory. -->
+<!-- @sideeffect Generates CLAUDE.md, settings.json, hooks, and MEMORY.md -->
+<!-- @example /autoconfig | Analyze project and configure Claude -->
 
 # Autoconfig
 

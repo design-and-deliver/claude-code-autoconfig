@@ -1,5 +1,15 @@
 <!-- @screenshotDir /c/Users/andre/OneDrive/Pictures/Screenshots 1 -->
+<!-- @description Get the latest screenshot(s) and display them. -->
 <!-- @version 1 -->
+<!-- @param count | integer | optional | Number of screenshots to display. Use /gls-N syntax. Default: 1. Min: 1. -->
+<!-- @param path | string | optional | Screenshot directory path. Saved for future use. Auto-detected if omitted. -->
+<!-- @response success | Displays requested screenshot(s) from newest to oldest. -->
+<!-- @response no-screenshots | Directory exists but contains no image files. -->
+<!-- @response no-directory | Unable to detect screenshot directory — prompts for path. -->
+<!-- @sideeffect Saves detected screenshot path to command file on first run -->
+<!-- @example /gls | Display the most recent screenshot -->
+<!-- @example /gls-3 | Display the 3 most recent screenshots -->
+<!-- @example /gls /path/to/dir | Use a specific screenshot directory -->
 Get the latest screenshot(s) and display them.
 
 Usage:
