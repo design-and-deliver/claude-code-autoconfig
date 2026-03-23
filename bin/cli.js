@@ -618,7 +618,7 @@ if (bootstrapMode || insideClaude) {
   if (!bootstrapMode) {
     // insideClaude without --bootstrap: block with clear message
     console.log();
-    console.log('\x1b[31m%s\x1b[0m', `❌ Cannot run "npx claude-code-autoconfig" inside an active Claude Code session.`);
+    console.log('\x1b[31m%s\x1b[0m', `❌ npx claude-code-autoconfig must be run outside of an active Claude Code session.`);
     console.log();
     console.log('\x1b[32m%s\x1b[0m', `✅ Run from a regular terminal instead:`);
     console.log();
