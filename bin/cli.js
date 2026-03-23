@@ -620,9 +620,9 @@ if (bootstrapMode || insideClaude) {
     console.log();
     console.log('\x1b[31m%s\x1b[0m', `❌ Cannot run inside an active Claude Code session.`);
     console.log();
-    console.log('\x1b[36m%s\x1b[0m', `   Please run this command from a regular terminal instead:`);
+    console.log('\x1b[32m%s\x1b[0m', `✅ Run from a regular terminal instead:`);
     console.log();
-    console.log('\x1b[33;1m%s\x1b[0m', `   npx claude-code-autoconfig@latest`);
+    console.log('\x1b[33;1m%s\x1b[0m', `👉 npx claude-code-autoconfig@latest`);
     console.log();
   }
   process.exit(0);
