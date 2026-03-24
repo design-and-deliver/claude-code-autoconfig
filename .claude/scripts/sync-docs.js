@@ -132,7 +132,7 @@ function buildSwaggerHtml(meta) {
   // Parameters table
   if (meta.params.length > 0) {
     let table = '<div style="margin-top: 12px;"><strong>Parameters</strong>';
-    table += '<table style="width: 100%; margin-top: 6px; border-collapse: collapse; font-size: 0.9em;">';
+    table += '<table style="width: 100%; margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;">';
     table += '<tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px;">Name</th><th style="padding: 4px 8px;">Type</th><th style="padding: 4px 8px;">Required</th><th style="padding: 4px 8px;">Description</th></tr>';
     for (const p of meta.params) {
       table += `<tr style="border-bottom: 1px solid var(--border);">`;
@@ -151,7 +151,7 @@ function buildSwaggerHtml(meta) {
   // Responses table
   if (meta.responses.length > 0) {
     let table = '<div style="margin-top: 12px;"><strong>Responses</strong>';
-    table += '<table style="width: 100%; margin-top: 6px; border-collapse: collapse; font-size: 0.9em;">';
+    table += '<table style="width: 100%; margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;">';
     table += '<tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px;">Status</th><th style="padding: 4px 8px;">Description</th></tr>';
     for (const r of meta.responses) {
       table += `<tr style="border-bottom: 1px solid var(--border);">`;
