@@ -171,13 +171,7 @@ print(json.dumps({'issues': issues, 'info': info}, indent=2))
 "
 ```
 
-## Step 4: Clean up temp directory
-
-```bash
-rm -rf "$TMPDIR"
-```
-
-## Step 5: Display the report
+## Step 4: Display the report
 
 Format the results as a clear report. Use this structure:
 
@@ -200,6 +194,6 @@ If there are **issues**:
 
 Always list the OK items in a collapsed/brief summary (don't enumerate every OK item unless the user asks). Focus attention on the issues.
 
-## Step 6: Stop
+## Step 5: Stop
 
 Do NOT take any action to fix issues. The user decides what to do next.

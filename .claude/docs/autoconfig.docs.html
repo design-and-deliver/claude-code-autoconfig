@@ -1267,7 +1267,7 @@
                 title: '.claude/ Directory',
                 desc: 'Commands, rules, settings, and these docs. Keeps configuration organized as your project grows.'
             },
-                                                                                                                                                                        'rules': {
+                                                                                                                                                                                    'rules': {
                 title: 'rules/',
                 desc: 'Path-scoped context that loads when Claude works on matching files.'
             },
@@ -1578,7 +1578,7 @@ CRITICAL: A plausible-looking cause from code reading is NOT confirmed evidence.
 
 > Run \`/autoconfig\` to populate this based on your project.`
             },
-                                                                                                                                                                        'autoconfig-update': {
+                                                                                                                                                                                    'autoconfig-update': {
                 filename: 'autoconfig-update.md',
                 content: `<!-- @applied
 -->
@@ -2146,6 +2146,12 @@ Claude reads this file but must never write to it. When Claude discovers project
       "Bash(git pull *)",
       "Bash(git checkout *)",
       "Bash(git branch *)",
+      "Bash(node .claude/*)",
+      "Bash(python3 *)",
+      "Bash(npx claude-code-autoconfig*)",
+      "Bash(npm pack *)",
+      "Bash(tar *)",
+      "Bash(mktemp *)",
       "Bash(find ./*)",
       "Bash(ls *)",
       "Bash(dir *)",
