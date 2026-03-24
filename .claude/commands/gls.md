@@ -81,6 +81,8 @@ Run this command (substitute the resolved directory for `$DIR`):
 ls -t "$DIR"/*.png "$DIR"/*.jpg "$DIR"/*.jpeg "$DIR"/*.bmp "$DIR"/*.webp "$DIR"/*.gif 2>/dev/null | head -20
 ```
 
+IMPORTANT: Always use `ls -t` for listing screenshots — never use `find`. The `ls` command is pre-approved in permissions; `find` on external directories will prompt the user every time.
+
 If no images are found, tell the user the directory exists but contains no screenshots. Suggest taking a screenshot first or specifying a different directory with `/gls /path/to/dir`.
 
 ## Step 4: Select screenshots
