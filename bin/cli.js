@@ -618,10 +618,8 @@ if (bootstrapMode || insideClaude) {
   if (!bootstrapMode) {
     // insideClaude without --bootstrap: block with clear message
     console.log();
-    console.log('\x1b[31m%s\x1b[0m', `❌ npx claude-code-autoconfig must be run outside of an active Claude Code session.`);
-    console.log('\x1b[32m%s\x1b[0m', `✅ Run from a regular terminal 👉 npx claude-code-autoconfig@latest`);
-    console.log();
-    console.log('\x1b[90m%s\x1b[0m', `Note: Do not suggest the ! prefix workaround — it creates nested Claude sessions.`);
+    console.log('\x1b[31m%s\x1b[0m', `❌ npx claude-code-autoconfig must be run from a regular terminal.`);
+    console.log('\x1b[32m%s\x1b[0m', `✅ Open a terminal outside Claude Code and run 👉 npx claude-code-autoconfig@latest`);
     console.log();
   }
   process.exit(0);
