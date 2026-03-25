@@ -1,13 +1,15 @@
-<!-- @description Analyzes your project and populates CLAUDE.md with real context. Re-run anytime your stack changes. -->
-<!-- @version 8 -->
-<!-- @response success | CLAUDE.md populated, settings configured, docs opened in browser. -->
+<!-- @description Configures Claude Code scaffolding for your project. Sets up settings, permissions, hooks, commands, and docs. -->
+<!-- @version 9 -->
+<!-- @response success | Scaffolding configured, CLAUDE.md initialized, docs opened in browser. -->
 <!-- @response no-project | No project detected — asks user to confirm directory. -->
-<!-- @sideeffect Generates CLAUDE.md, settings.json, hooks, and MEMORY.md -->
+<!-- @sideeffect Initializes CLAUDE.md, settings.json, hooks, commands, and MEMORY.md -->
 <!-- @example /autoconfig | Analyze project and configure Claude -->
 
 # Autoconfig
 
-Analyze this project and configure Claude Code with real context.
+Configure Claude Code scaffolding for this project — settings, permissions, hooks, commands, and docs.
+
+CLAUDE.md is intentionally kept minimal. Claude can read your config files directly — pre-populating project descriptions wastes tokens and dilutes important rules. Instead, CLAUDE.md grows organically through Discoveries as you work.
 
 **Setup Note**: During autoconfig, prefer Glob/Read/Write tools over Bash commands. This ensures smooth setup without permission prompts. Only use Bash for the bootstrap step and opening the guide at the end.
 
@@ -43,170 +45,32 @@ Read `.claude/feedback/FEEDBACK.md`. If it contains custom content beyond the de
 
 If CLAUDE.md already has `## Discoveries`, or FEEDBACK.md has no custom content, skip this step silently.
 
-## Step 1: Detect Environment
+## Step 1: Initialize CLAUDE.md
 
-**Operating System:**
-Check the platform and note it for command syntax:
-- Windows → use `del`, `rmdir`, backslashes, `.cmd`/`.ps1` scripts
-- macOS/Linux → use `rm`, `mkdir -p`, forward slashes, `.sh` scripts
+Create a minimal CLAUDE.md. Do NOT populate it with project descriptions, tech stack, commands, or conventions — Claude can read config files directly. Pre-populating wastes tokens and dilutes important rules that accumulate organically through Discoveries.
 
-Include this in CLAUDE.md so all commands use the correct syntax.
-
-## Step 2: Scan the Project
-
-Look for these indicators to understand the project:
-
-**Package/Config Files:**
-- `package.json` → Node.js, npm scripts, dependencies
-- `requirements.txt` / `pyproject.toml` / `setup.py` → Python
-- `Cargo.toml` → Rust
-- `go.mod` → Go
-- `Gemfile` → Ruby
-- `pom.xml` / `build.gradle` → Java
-- `*.csproj` / `*.sln` → .NET
-- `composer.json` → PHP
-
-**Framework Indicators:**
-- `next.config.*` / `app/` directory → Next.js
-- `vite.config.*` → Vite
-- `angular.json` → Angular
-- `svelte.config.*` → Svelte
-- `remix.config.*` → Remix
-- `nuxt.config.*` → Nuxt
-- `django` in imports → Django
-- `flask` in imports → Flask
-- `fastapi` in imports → FastAPI
-- `express` in dependencies → Express
-- `rails` / `Gemfile` with rails → Rails
-- `laravel` → Laravel
-
-**Testing Frameworks:**
-- `jest.config.*` / `@jest` in deps → Jest
-- `vitest.config.*` → Vitest
-- `pytest.ini` / `conftest.py` → Pytest
-- `*_test.go` files → Go testing
-- `*_spec.rb` files → RSpec
-- `cypress/` or `playwright/` → E2E testing
-
-**Infrastructure:**
-- `Dockerfile` / `docker-compose.*` → Docker
-- `*.tf` files → Terraform
-- `k8s/` or `kubernetes/` → Kubernetes
-- `.github/workflows/` → GitHub Actions
-- `serverless.yml` → Serverless Framework
-
-## Step 2b: Detect Version Divergence
-
-Scan for version declarations across the project. Multiple version sources that disagree can cause release failures (e.g., package.json says 1.0.74 but a hardcoded constant says 1.0.72).
-
-**Version Sources to Check:**
-
-| Source | Detection Method |
-|--------|------------------|
-| `package.json` | Parse JSON, read `version` field |
-| `**/*.{ts,js,mjs}` | Regex: `/(?:export\s+)?(?:const\|let\|var)\s+((?:BASE_\|APP_\|LIB_)?VERSION)\s*=\s*['"](\d+\.\d+\.\d+)['"]/i` |
-| `**/manifest.json` | Parse JSON, read `version` field |
-| `**/manifest.config.{ts,js}` | Regex: `/version:\s*['"](\d+\.\d+\.\d+)['"]/` |
-| `**/Info.plist` | Regex: `/<key>CFBundleShortVersionString<\/key>\s*<string>(\d+\.\d+\.\d+)<\/string>/` |
-| `**/build.gradle` | Regex: `/versionName\s+['"](\d+\.\d+\.\d+)['"]/` |
-| `pyproject.toml` | Parse TOML, read `project.version` or `tool.poetry.version` |
-| `Cargo.toml` | Parse TOML, read `package.version` |
-
-**Algorithm:**
-
-1. Glob for each file pattern
-2. Extract version using the appropriate method (JSON parse, regex, TOML parse)
-3. Collect results as `{ file, identifier, version }`
-4. Compare all collected versions
-5. **If all versions match** → no action needed
-6. **If versions diverge** → flag for CLAUDE.md
-
-**Skip these locations** (generated/vendored):
-- `node_modules/**`
-- `dist/**`
-- `build/**`
-- `.git/**`
-
-**Edge Cases:**
-- If version field references a function or variable (not a literal), note it as "dynamic"
-- For monorepos, compare root package.json against workspace packages
-- If only one version source exists, no comparison needed — skip silently
-
-## Step 3: Populate CLAUDE.md
-
-Focus on what Claude Code actually needs to work effectively. Claude can explore the codebase itself — don't document what it can discover.
-
-**Wrap content in markers** so `/sync-claude-md` knows what's auto-generated:
+**If CLAUDE.md does not exist**, create it:
 
 ```markdown
-<!-- AUTO-GENERATED BY /autoconfig at {TIMESTAMP} UTC — Do not edit between markers. -->
+<!-- AUTO-GENERATED BY /autoconfig at {TIMESTAMP} UTC -->
 
-# Project Name
-...content...
-
-<!-- END AUTO-GENERATED at {TIMESTAMP} UTC -->
-```
-
-Replace `{TIMESTAMP}` with the current UTC time in format `YYYY-MM-DD HH:MM:SS` (e.g., `2026-01-14 16:30:45`). Use the same timestamp in both markers.
-
-**Always include:**
-- **Project name + one-liner**: What is this thing?
-- **Tech stack**: One to two lines max. Only mention choices Claude wouldn't guess from config files alone (e.g., "Firebase Auth via WEB_OAUTH" is worth including; "React 18 with TypeScript" is not — Claude sees that in `package.json`). Do NOT list individual dependencies, testing libraries, or build tools that appear in `package.json`/`requirements.txt` — Claude reads those files directly.
-- **Commands**: How to run, test, build, deploy — Claude needs these to execute tasks
-- **Non-obvious conventions**: Multi-schema databases, monorepo structure, unusual patterns Claude wouldn't infer
-
-**Include if divergence detected (from Step 2b):**
-- **Version Management**: Only add this section if version divergence was found
-
-```markdown
-## Version Management
-
-⚠️ Multiple version sources detected with different values:
-- `package.json:version` → "X.Y.Z"
-- `{file}:{identifier}` → "A.B.C"
-
-Verify which source is authoritative before releases.
-```
-
-Place this section near the top (after Tech Stack, before Commands) since version issues block releases.
-
-**Include if relevant:**
-- **Deployment flow**: If non-standard or involves multiple steps
-- **Key architectural decisions**: Only when the project has non-standard module boundaries (e.g., Chrome extension background/content split, microservice routing, multi-entrypoint builds). For standard single-entrypoint apps (Next.js, Express, Django), skip it — Claude can infer the architecture from the file structure.
-
-**Skip these — Claude can discover them:**
-- Detailed project structure trees (Claude can run `ls` or `tree`)
-- Exhaustive route/endpoint lists (Claude can grep)
-- File-by-file descriptions (Claude can read files)
-- Database model lists (Claude can read schema files)
-- Individual dependency names or versions (Claude reads `package.json`/`requirements.txt` directly)
-- Standard framework patterns (e.g., "uses app router" for Next.js — Claude sees `app/` directory)
-
-**Keep it tight.** A 30-line CLAUDE.md that hits the essentials beats a 200-line doc Claude has to parse every session.
-
-**Always end with (inside markers):**
-```markdown
 ## Team Feedback
 The contents of `.claude/feedback/FEEDBACK.md` are an extension of this file.
 Read it at the start of every session before taking any action.
 FEEDBACK.md is reserved for human-authored corrections only — do not write to it.
-```
 
-**Always add below the end marker:**
-```markdown
+<!-- END AUTO-GENERATED at {TIMESTAMP} UTC -->
 
 ## Discoveries
 <!-- Claude: append project-specific learnings, gotchas, and context below. This section persists across /autoconfig runs. -->
 
 ```
 
-This creates two zones in CLAUDE.md:
-1. **Between markers** — auto-generated by /autoconfig, never manually edited
-2. **Below markers (Discoveries section)** — Claude appends learnings here instead of FEEDBACK.md
+Replace `{TIMESTAMP}` with the current UTC time in format `YYYY-MM-DD HH:MM:SS` (e.g., `2026-01-14 16:30:45`). Use the same timestamp in both markers.
 
-When Claude discovers project-specific context (related projects, non-obvious gotchas, critical workflows) during a session, it should append to the Discoveries section. This keeps FEEDBACK.md clean for human team corrections only.
+**If CLAUDE.md already exists**, preserve all existing content. Only ensure the auto-generated markers and Discoveries section are present. Do not overwrite user content or existing Discoveries.
 
-## Step 4: Create Rules Directory
+## Step 2: Create Rules Directory
 
 Create `.claude/rules/` directory if it doesn't exist by writing a `.gitkeep` file to it:
 
@@ -218,7 +82,7 @@ Write .claude/rules/.gitkeep with empty content
 
 Rules are path-scoped context files that load automatically when Claude works on matching files. Effective rules require deep understanding of your codebase patterns, team conventions, and quality goals — they should be crafted intentionally, not auto-generated.
 
-## Step 5: Configure Formatter (JS/Node Projects)
+## Step 3: Configure Formatter (JS/Node Projects)
 
 **Only for projects with `package.json`:**
 
@@ -278,7 +142,7 @@ The format hook script (`.claude/hooks/format.js`) runs `npm run format` after W
 
 **Important:** Merge this with any existing hooks. Don't overwrite existing hooks.
 
-## Step 6: Configure Settings
+## Step 4: Configure Settings
 
 Update `.claude/settings.json` using the official schema.
 
@@ -340,7 +204,7 @@ Set session-level env vars:
 - Optimize for Claude's efficiency, not human documentation
 - When uncertain, leave it out — Claude can ask or explore
 
-## Step 7: Configure MEMORY.md
+## Step 5: Configure MEMORY.md
 
 Claude Code has a persistent auto memory file (`MEMORY.md`) that loads into the system prompt at the start of every session. Write the debugging methodology to this file so Claude always follows evidence-based troubleshooting.
 
@@ -362,16 +226,16 @@ NEVER guess the root cause and jump to coding a fix. Ask yourself: is the cause 
 
 **Important**: Use the Write tool (or Edit to append). Do not skip this step on first-time setup — it ensures Claude investigates root causes before making changes in every future session. But never overwrite existing user content in MEMORY.md.
 
-## Step 8: Update the Docs
+## Step 6: Update the Docs
 
 After populating CLAUDE.md, update the docs file previews to show actual project content:
 
 1. Open `.claude/docs/autoconfig.docs.html`
 2. Find the `fileContents` JavaScript object
 3. Update these entries with the real content just generated:
-   - `'claude-md'` → the CLAUDE.md content from Step 3
-   - `'memory-md'` → the MEMORY.md content from Step 7
-   - `'settings'` → the settings.json content from Step 6
+   - `'claude-md'` → the CLAUDE.md content from Step 1
+   - `'memory-md'` → the MEMORY.md content from Step 5
+   - `'settings'` → the settings.json content from Step 4
 4. Use template literal syntax and escape any backticks in the content
 
 This ensures double-clicking these files in the docs shows real project content, not stale placeholders.

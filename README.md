@@ -99,9 +99,9 @@ Run `/sync-claude-md` anytime your project evolves to keep the configuration cur
 
 | Command | Description |
 |---------|-------------|
-| `/autoconfig` | Analyzes project and populates configuration |
+| `/autoconfig` | Configures Claude Code scaffolding for your project |
 | `/autoconfig-update` | Check for and install configuration updates |
-| `/sync-claude-md` | Re-analyzes project and updates CLAUDE.md |
+| `/sync-claude-md` | Verifies CLAUDE.md structure and markers |
 | `/show-docs` | Opens interactive docs in browser |
 | `/test` | Runs your test suite (auto-detects framework) |
 | `/commit-and-push` | Stages, commits with good message, and pushes |
