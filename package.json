@@ -34,6 +34,7 @@
     "bin",
     ".claude",
     "!.claude/settings.local.json",
+    "!.claude/cca.config.json",
     "!.claude/commands/publish.md",
     "!.claude/plans",
     "CLAUDE.md"
