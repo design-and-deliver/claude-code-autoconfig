@@ -1,12 +1,11 @@
-<!-- @screenshotDir /c/Users/andre/OneDrive/Pictures/Screenshots 1 -->
 <!-- @description Get the latest screenshot(s) and display them. -->
-<!-- @version 1 -->
+<!-- @version 4 -->
 <!-- @param count | integer | optional | Number of screenshots to display. Use /gls-N syntax. Default: 1. Min: 1. -->
 <!-- @param path | string | optional | Screenshot directory path. Saved for future use. Auto-detected if omitted. -->
 <!-- @response success | Displays requested screenshot(s) from newest to oldest. -->
 <!-- @response no-screenshots | Directory exists but contains no image files. -->
 <!-- @response no-directory | Unable to detect screenshot directory — prompts for path. -->
-<!-- @sideeffect Saves detected screenshot path to command file on first run -->
+<!-- @sideeffect Saves detected screenshot path to .claude/cca.config.json on first run -->
 <!-- @example /gls | Display the most recent screenshot -->
 <!-- @example /gls-3 | Display the 3 most recent screenshots -->
 <!-- @example /gls /path/to/dir | Use a specific screenshot directory -->
@@ -21,9 +20,9 @@ Usage:
 
 ## Step 1: Check for saved path
 
-Check the `@screenshotDir` comment on line 1 of THIS file. If it has a path (not empty), use that path and skip to Step 3.
+Read `.claude/cca.config.json` in the project root. If it exists and contains a `gls.screenshotDir` value, use that path and skip to Step 3.
 
-If it's empty (i.e., `<!-- @screenshotDir  -->`), continue to Step 2.
+If the file doesn't exist or the key is missing, continue to Step 2.
 
 ## Step 2: Detect screenshot directory
 
@@ -39,7 +38,7 @@ OS=$(uname -s); echo "OS=$OS"; for d in \
   "$HOME/Pictures" \
   "$HOME/Videos/Captures"; do \
   [ -d "$d" ] || continue; \
-  newest=$(ls -t "$d"/*.png "$d"/*.jpg "$d"/*.jpeg "$d"/*.bmp "$d"/*.webp "$d"/*.gif 2>/dev/null | head -1); \
+  newest=$(ls -t "$d/" 2>/dev/null | grep -iE '\.(png|jpg|jpeg|bmp|webp|gif)$' | head -1); \
   if [ -n "$newest" ]; then \
     echo "HAS_IMAGES: $d | newest: $newest"; \
   else \
@@ -65,21 +64,38 @@ Ask the user:
 
 Wait for the user to respond with a path, then use that path.
 
-### Step 2b: Save the path
+### Step 2b: Normalize and save the path
 
-Use the Edit tool to update line 1 of THIS file, replacing the empty `@screenshotDir` tag with the detected (or user-provided) path. For example:
+**Windows path fix:** If the path starts with a MSYS/Git Bash prefix like `/c/` or `/d/`, convert it to a Windows-style path (e.g., `/c/Users/jane/...` → `C:/Users/jane/...`). Run this to normalize:
 
-`<!-- @screenshotDir /c/Users/jane/Pictures/Screenshots -->`
+```bash
+DIR="/c/Users/jane/Pictures/Screenshots"  # substitute actual detected path
+echo "$DIR" | sed 's|^/\([a-zA-Z]\)/|\U\1:/|'
+```
 
-This ensures detection only happens once per project.
+Use the normalized path for all subsequent steps.
+
+**Save to config:** Write (or update) `.claude/cca.config.json` in the project root with the normalized path. If the file already exists, merge the `gls` key — don't overwrite other keys. Example:
+
+```json
+{
+  "gls": {
+    "screenshotDir": "C:/Users/jane/Pictures/Screenshots"
+  }
+}
+```
+
+This ensures detection only happens once per project, and the saved path is local (gitignored).
 
 ## Step 3: List screenshots
 
 Run this command (substitute the resolved directory for `$DIR`):
 
 ```bash
-ls -t "$DIR"/*.png "$DIR"/*.jpg "$DIR"/*.jpeg "$DIR"/*.bmp "$DIR"/*.webp "$DIR"/*.gif 2>/dev/null | head -20
+ls -t "$DIR/" 2>/dev/null | grep -iE '\.(png|jpg|jpeg|bmp|webp|gif)$' | head -20
 ```
+
+Note: This lists filenames only (not full paths). Prepend `$DIR/` when constructing full paths for the Read tool.
 
 IMPORTANT: Always use `ls -t` for listing screenshots — never use `find`. The `ls` command is pre-approved in permissions; `find` on external directories will prompt the user every time.
 
