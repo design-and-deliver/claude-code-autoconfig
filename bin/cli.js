@@ -658,8 +658,10 @@ if (isUpgrade) {
   console.log('\x1b[33m╚════════════════════════════════════════════╝\x1b[0m');
 }
 // Show changelog on upgrade
+console.log('\x1b[90m%s\x1b[0m', `  [debug] isUpgrade=${isUpgrade} previousVersion=${previousVersion} currentVersion=${currentVersion}`);
 if (isUpgrade && previousVersion) {
   const changelogPath = path.join(packageDir, 'CHANGELOG.md');
+  console.log('\x1b[90m%s\x1b[0m', `  [debug] changelogPath=${changelogPath} exists=${fs.existsSync(changelogPath)}`);
   if (fs.existsSync(changelogPath)) {
     const changelog = fs.readFileSync(changelogPath, 'utf8');
     const prevPatch = parseInt(previousVersion.split('.').pop(), 10);
