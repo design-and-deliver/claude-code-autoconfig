@@ -25,7 +25,8 @@
     "test": "node test/box-alignment.test.js && node test/cli-install.test.js && node test/update-system.test.js",
     "test:box": "node test/box-alignment.test.js",
     "test:install": "node test/cli-install.test.js",
-    "test:update": "node test/update-system.test.js"
+    "test:update": "node test/update-system.test.js",
+    "preversion": "node scripts/generate-changelog.js && git add CHANGELOG.md"
   },
   "bin": {
     "claude-code-autoconfig": "./bin/cli.js"
@@ -35,9 +36,11 @@
     ".claude",
     "!.claude/settings.local.json",
     "!.claude/cca.config.json",
+    "!.claude/.autoconfig-version",
     "!.claude/commands/publish.md",
     "!.claude/plans",
-    "CLAUDE.md"
+    "CLAUDE.md",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=16.0.0"

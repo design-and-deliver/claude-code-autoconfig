@@ -297,6 +297,13 @@ cp .claude/migration/${timestamp}/settings.json .claude/settings.json
   }
 }
 
+// Read previous installed version (before copying overwrites it)
+const versionFile = path.join(claudeDest, '.autoconfig-version');
+const previousVersion = fs.existsSync(versionFile)
+  ? fs.readFileSync(versionFile, 'utf8').trim()
+  : null;
+const currentVersion = require(path.join(packageDir, 'package.json')).version;
+
 // Detect upgrade vs fresh install (must run BEFORE copying files)
 const isUpgrade = (() => {
   // Indicator 1: CLAUDE.md has autoconfig marker
@@ -611,6 +618,9 @@ if (isUpgrade) {
   }
 }
 
+// Write current version marker
+fs.writeFileSync(versionFile, currentVersion);
+
 const launchCommand = isUpgrade ? '/autoconfig-update' : '/autoconfig';
 
 // --bootstrap: copy files only, exit silently (used by /autoconfig inside Claude)
@@ -647,7 +657,44 @@ if (isUpgrade) {
   console.log('\x1b[33m║                                            ║\x1b[0m');
   console.log('\x1b[33m╚════════════════════════════════════════════╝\x1b[0m');
 }
-console.log();
+// Show changelog on upgrade
+if (isUpgrade && previousVersion) {
+  const changelogPath = path.join(packageDir, 'CHANGELOG.md');
+  if (fs.existsSync(changelogPath)) {
+    const changelog = fs.readFileSync(changelogPath, 'utf8');
+    const prevPatch = parseInt(previousVersion.split('.').pop(), 10);
+    const entries = [];
+    let currentEntry = null;
+    for (const line of changelog.split(/\r?\n/)) {
+      if (line.startsWith('## v')) {
+        const ver = line.slice(3).trim();
+        const patch = parseInt(ver.split('.').pop(), 10);
+        currentEntry = patch > prevPatch ? { ver, items: [] } : null;
+      } else if (currentEntry && line.startsWith('- ')) {
+        currentEntry.items.push(line.slice(2));
+      } else if (currentEntry && line === '' && currentEntry.items.length > 0) {
+        entries.push(currentEntry);
+        currentEntry = null;
+      }
+    }
+    if (currentEntry && currentEntry.items.length > 0) entries.push(currentEntry);
+    if (entries.length > 0) {
+      console.log(`\x1b[90m  What's new since v${previousVersion}:\x1b[0m`);
+      console.log();
+      const show = entries.slice(0, 10);
+      for (const e of show) {
+        for (const item of e.items) {
+          console.log(`\x1b[90m  ${e.ver} — ${item}\x1b[0m`);
+        }
+      }
+      const remaining = entries.length - show.length;
+      if (remaining > 0) {
+        console.log(`\x1b[90m  ... and ${remaining} more (see CHANGELOG.md)\x1b[0m`);
+      }
+      console.log();
+    }
+  }
+}
 if (!isUpgrade) {
   console.log('\x1b[90m%s\x1b[0m', "You'll need to approve a few file prompts to complete the installation.");
   console.log();
