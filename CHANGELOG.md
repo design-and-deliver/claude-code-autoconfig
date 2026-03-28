@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.162
+- feat: show changelog on upgrade
+
 ## v1.0.161
 - fix(docs): top-align and left-align table cells in sync script
 
@@ -146,7 +149,4 @@
 
 ## v1.0.113
 - fix: remove redundant installed commands list from upgrade output
-
-## v1.0.112
-- fix: show installed commands summary on upgrade
 
