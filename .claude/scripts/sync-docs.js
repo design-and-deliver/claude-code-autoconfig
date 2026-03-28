@@ -133,13 +133,13 @@ function buildSwaggerHtml(meta) {
   if (meta.params.length > 0) {
     let table = '<div style="margin-top: 12px;"><strong>Parameters</strong>';
     table += '<table style="width: 100%; margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;">';
-    table += '<tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px;">Name</th><th style="padding: 4px 8px;">Type</th><th style="padding: 4px 8px;">Required</th><th style="padding: 4px 8px;">Description</th></tr>';
+    table += '<tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0;">Name</th><th style="padding: 4px 8px 4px 0;">Type</th><th style="padding: 4px 8px 4px 0;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr>';
     for (const p of meta.params) {
       table += `<tr style="border-bottom: 1px solid var(--border);">`;
-      table += `<td style="padding: 4px 8px; white-space: nowrap;"><code>${p.name}</code></td>`;
-      table += `<td style="padding: 4px 8px;"><code>${p.type}</code></td>`;
-      table += `<td style="padding: 4px 8px;">${p.required}</td>`;
-      table += `<td style="padding: 4px 8px;">${p.desc}</td>`;
+      table += `<td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>${p.name}</code></td>`;
+      table += `<td style="padding: 4px 8px 4px 0; vertical-align: top;"><code>${p.type}</code></td>`;
+      table += `<td style="padding: 4px 8px 4px 0; vertical-align: top;">${p.required}</td>`;
+      table += `<td style="padding: 4px 8px 4px 0; vertical-align: top;">${p.desc}</td>`;
       table += `</tr>`;
     }
     table += '</table></div>';
@@ -152,11 +152,11 @@ function buildSwaggerHtml(meta) {
   if (meta.responses.length > 0) {
     let table = '<div style="margin-top: 12px;"><strong>Responses</strong>';
     table += '<table style="width: 100%; margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;">';
-    table += '<tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px;">Status</th><th style="padding: 4px 8px;">Description</th></tr>';
+    table += '<tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr>';
     for (const r of meta.responses) {
       table += `<tr style="border-bottom: 1px solid var(--border);">`;
-      table += `<td style="padding: 4px 8px; white-space: nowrap;"><code>${r.status}</code></td>`;
-      table += `<td style="padding: 4px 8px;">${r.desc}</td>`;
+      table += `<td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>${r.status}</code></td>`;
+      table += `<td style="padding: 4px 8px 4px 0; vertical-align: top;">${r.desc}</td>`;
       table += `</tr>`;
     }
     table += '</table></div>';
