@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.167
+- fix: postversion creates separate commit instead of amending
+
 ## v1.0.165
 - debug: add temporary changelog debug logging
 
@@ -143,7 +146,4 @@
 
 ## v1.0.118
 - feat: add feedback-to-rules migration update (003)
-
-## v1.0.117
-- refactor: let Claude evaluate rule migration candidates
 
