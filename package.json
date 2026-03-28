@@ -26,7 +26,7 @@
     "test:box": "node test/box-alignment.test.js",
     "test:install": "node test/cli-install.test.js",
     "test:update": "node test/update-system.test.js",
-    "preversion": "node scripts/generate-changelog.js && git add CHANGELOG.md"
+    "postversion": "node scripts/generate-changelog.js && git add CHANGELOG.md && git commit --amend --no-edit"
   },
   "bin": {
     "claude-code-autoconfig": "./bin/cli.js"
