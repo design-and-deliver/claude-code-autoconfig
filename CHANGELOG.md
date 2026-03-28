@@ -147,6 +147,3 @@
 ## v1.0.117
 - refactor: let Claude evaluate rule migration candidates
 
-## v1.0.116
-- feat: improve FEEDBACK.md reliability and add rule migration hook
-
