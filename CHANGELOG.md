@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.164
+- fix: use postversion hook so changelog includes current version
+
+## v1.0.163
+- fix: correct AUTOCONFIG_FILES list (guide→docs, add rules)
+
 ## v1.0.162
 - feat: show changelog on upgrade
 
@@ -143,10 +149,4 @@
 
 ## v1.0.115
 - feat: add @version tracking to all command files
-
-## v1.0.114
-- fix: detect updated commands, remove redundant update file
-
-## v1.0.113
-- fix: remove redundant installed commands list from upgrade output
 
