@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.165
+- debug: add temporary changelog debug logging
+
 ## v1.0.164
 - fix: use postversion hook so changelog includes current version
 
@@ -146,7 +149,4 @@
 
 ## v1.0.116
 - feat: improve FEEDBACK.md reliability and add rule migration hook
-
-## v1.0.115
-- feat: add @version tracking to all command files
 
