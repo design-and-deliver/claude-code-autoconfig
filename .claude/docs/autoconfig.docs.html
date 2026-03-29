@@ -883,11 +883,6 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">enable-retro.md</span>
                             </div>
-                            <div class="tree-item indent-3 hidden" data-info="extract-rules" data-parent="commands">
-                                <span class="tree-spacer"></span>
-                                <span class="tree-file-icon">📄</span>
-                                <span class="file">extract-rules.md</span>
-                            </div>
                             <div class="tree-item indent-3 hidden" data-info="gls" data-parent="commands">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
@@ -1268,7 +1263,7 @@
                 title: '.claude/ Directory',
                 desc: 'Commands, rules, settings, and these docs. Keeps configuration organized as your project grows.'
             },
-                                                                                                                                                                                                                        'rules': {
+                                                                                                                                                                                                                                    'rules': {
                 title: 'rules/',
                 desc: 'Path-scoped context that loads when Claude works on matching files.'
             },
@@ -1307,11 +1302,6 @@
                 title: 'enable-retro.md',
                 desc: '(Experimental) Enable Claude to log tech debt it encounters into .claude/retro.<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="width: 100%; margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Retro enabled — Claude will log tech debt to .claude/retro/ when encountered.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Creates .claude/retro/README.md, adds agent, updates CLAUDE.md</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/enable-retro</code> <span style="opacity: 0.6;">— Activate tech debt tracking</span></div></div></div>',
                 trigger: '/enable-retro'
-            },
-            'extract-rules': {
-                title: 'extract-rules.md',
-                desc: 'Scan Claude artifacts and propose structured rules for .claude/rules/<div style="margin-top: 12px;"><strong>Parameters</strong><table style="width: 100%; margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0;">Name</th><th style="padding: 4px 8px 4px 0;">Type</th><th style="padding: 4px 8px 4px 0;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>mode</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;"><code>string</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">"preview" (default) shows proposals, "apply" writes and cleans sources</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="width: 100%; margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Rules extracted and optionally applied with source cleanup.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-rules</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">No extractable rules found in scanned sources.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">May create .claude/rules/ files and remove extracted content from source files</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/extract-rules</code> <span style="opacity: 0.6;">— Preview proposed rules without writing</span></div><div><code>/extract-rules --apply</code> <span style="opacity: 0.6;">— Write rules and clean up sources</span></div></div></div>',
-                trigger: '/extract-rules'
             },
             'gls': {
                 title: 'gls.md',
@@ -1579,7 +1569,7 @@ CRITICAL: A plausible-looking cause from code reading is NOT confirmed evidence.
 
 > Run \`/autoconfig\` to populate this based on your project.`
             },
-                                                                                                                                                                                                                        'autoconfig-update': {
+                                                                                                                                                                                                                                    'autoconfig-update': {
                 filename: 'autoconfig-update.md',
                 content: `<!-- @applied
 -->
@@ -1699,38 +1689,6 @@ Each item is a structured story file with:
 
 - "Fix retro #001" — Work on a specific item
 - "What's in the retro backlog?" — List pending items`
-            },
-            'extract-rules': {
-                filename: 'extract-rules.md',
-                content: `# Extract Rules
-
-Scan all Claude configuration artifacts and propose structured rules for \`.claude/rules/\`.
-
-## Step 0: Git safety check
-
-Before doing anything else, check for uncommitted changes:
-
-\`\`\`bash
-git status --porcelain
-\`\`\`
-
-If there are uncommitted changes, show this warning and wait for confirmation:
-
-> **Warning:** This command will modify files (extract rules from sources and optionally clean up originals). You have uncommitted changes.
->
-> Commit your work before proceeding, or type "continue" to proceed anyway.
-
-If the working tree is clean, proceed silently.
-
-## Step 1: Discover sources
-
-Scan these locations for \`.md\` files containing potential rules. **Skip any that don't exist** — not all projects have all of these:
-
-1. \`CLAUDE.md\` (project root)
-2. \`CLAUDE.local.md\` (project root, if present)
-3. All \`.md\` files in \`.claude/\` recursively (feedback, commands, etc.) — **excluding** \`.claude/rules/\` and \`.claude/commands/extract-rules.md\`
-4. Any nested \`CLAUDE.md\` files in subdirectories (e.g., \`src/CLAUDE.md\`)
-5. \`.claude/settings.json\` (hooks section — behavioral rules implied by hooks)`
             },
             'gls': {
                 filename: 'gls.md',
