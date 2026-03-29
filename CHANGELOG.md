@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.168
+- feat: remove /sync-claude-md command
+
 ## v1.0.167
 - fix: postversion creates separate commit instead of amending
 
@@ -143,7 +146,4 @@
 
 ## v1.0.119
 - fix: remove nul deny rules that block Windows bash redirections
-
-## v1.0.118
-- feat: add feedback-to-rules migration update (003)
 
