@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.170
+- revert: remove /extract-rules from deployed build
+
 ## v1.0.169
 - feat: add /extract-rules command
 
@@ -143,7 +146,4 @@
 
 ## v1.0.121
 - feat: add feedback-to-discoveries migration update (004)
-
-## v1.0.120
-- feat: separate Claude discoveries from human feedback
 
