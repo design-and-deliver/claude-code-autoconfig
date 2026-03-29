@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.169
+- feat: add /extract-rules command
+
 ## v1.0.168
 - feat: remove /sync-claude-md command
 
@@ -143,7 +146,4 @@
 
 ## v1.0.120
 - feat: separate Claude discoveries from human feedback
-
-## v1.0.119
-- fix: remove nul deny rules that block Windows bash redirections
 
