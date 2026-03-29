@@ -38,6 +38,7 @@
     "!.claude/cca.config.json",
     "!.claude/.autoconfig-version",
     "!.claude/commands/publish.md",
+    "!.claude/commands/extract-rules.md",
     "!.claude/plans",
     "CLAUDE.md",
     "CHANGELOG.md"

@@ -327,7 +327,7 @@ const hooksSrc = path.join(packageDir, '.claude', 'hooks');
 const scriptsSrc = path.join(packageDir, '.claude', 'scripts');
 
 // Files that exist in the dev repo but should never be installed to user projects
-const DEV_ONLY_FILES = ['publish.md'];
+const DEV_ONLY_FILES = ['publish.md', 'extract-rules.md'];
 
 function copyDir(src, dest) {
   fs.mkdirSync(dest, { recursive: true });
