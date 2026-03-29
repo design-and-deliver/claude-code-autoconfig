@@ -49,6 +49,7 @@ your-project/
     │   ├── autoconfig-update.md       #   /autoconfig-update - install updates
     │   ├── commit-and-push.md         #   /commit-and-push - git workflow
     │   ├── enable-retro.md            #   /enable-retro - opt-in tech debt tracking
+    │   ├── extract-rules.md          #   /extract-rules - extract rules from artifacts
     │   ├── gls.md                     #   /gls - view latest screenshot
     │   ├── recover-context.md         #   /recover-context - restore context after compaction
     │   ├── show-docs.md               #   /show-docs - interactive walkthrough
@@ -101,6 +102,7 @@ Autoconfig is **self-configuring**. Run `/autoconfig` and Claude:
 | `/show-docs` | Opens interactive docs in browser |
 | `/test` | Runs your test suite (auto-detects framework) |
 | `/commit-and-push` | Stages, commits with good message, and pushes |
+| `/extract-rules` | Scan artifacts and propose structured rules for `.claude/rules/` |
 | `/recover-context` | Recovers conversation context after compaction |
 | `/gls` | Views latest screenshot for visual context |
 | `/validate-cca-install` | Validates installation against latest published version |
