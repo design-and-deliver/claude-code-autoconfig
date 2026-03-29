@@ -52,7 +52,6 @@ your-project/
     │   ├── gls.md                     #   /gls - view latest screenshot
     │   ├── recover-context.md         #   /recover-context - restore context after compaction
     │   ├── show-docs.md               #   /show-docs - interactive walkthrough
-    │   ├── sync-claude-md.md          #   /sync-claude-md - update CLAUDE.md
     │   ├── test.md                    #   /test - run tests
     │   └── validate-cca-install.md   #   /validate-cca-install - verify installation
     ├── agents/                        # Agent definitions
@@ -93,15 +92,12 @@ Autoconfig is **self-configuring**. Run `/autoconfig` and Claude:
 | Auto-format hook | Yes | Coming soon |
 | Optimized permissions | Yes | Coming soon |
 
-Run `/sync-claude-md` anytime your project evolves to keep the configuration current.
-
 ### Slash Commands
 
 | Command | Description |
 |---------|-------------|
 | `/autoconfig` | Configures Claude Code scaffolding for your project |
 | `/autoconfig-update` | Check for and install configuration updates |
-| `/sync-claude-md` | Verifies CLAUDE.md structure and markers |
 | `/show-docs` | Opens interactive docs in browser |
 | `/test` | Runs your test suite (auto-detects framework) |
 | `/commit-and-push` | Stages, commits with good message, and pushes |

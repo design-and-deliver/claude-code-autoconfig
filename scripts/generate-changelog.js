@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const run = (cmd) => execSync(cmd, { encoding: 'utf8' }).trim();
+const postversion = process.argv.includes('--postversion');
 
 // Get all version tags sorted descending
 const tags = run('git tag --sort=-v:refname')
@@ -40,3 +41,12 @@ fs.writeFileSync(
   lines.join('\n') + '\n'
 );
 console.log(`Generated CHANGELOG.md with ${tags.length - 1} versions`);
+
+// When called with --postversion, commit the changelog and re-tag
+if (postversion) {
+  const version = require(path.join(__dirname, '..', 'package.json')).version;
+  run('git add CHANGELOG.md');
+  run('git commit -m "chore: update changelog"');
+  run(`git tag -f v${version}`);
+  console.log(`Re-tagged v${version} to include changelog`);
+}

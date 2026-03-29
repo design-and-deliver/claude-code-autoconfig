@@ -147,5 +147,5 @@ Then delete the `.claude/updates/` directory (it's ephemeral — updates are tra
 If the user installed any updates that modified `.claude/commands/autoconfig.md`, suggest:
 
 ```
-Run /sync-claude-md to apply these changes to your current project's CLAUDE.md.
+Run /autoconfig to apply these changes to your current project.
 ```

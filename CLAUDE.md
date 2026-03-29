@@ -21,7 +21,7 @@ npm run test:install # Run CLI install tests only
 ## Project Structure
 
 - `bin/cli.js` — Main CLI entry point, handles bootstrap and /autoconfig launch
-- `.claude/commands/` — Slash command definitions (/autoconfig, /sync-claude-md, etc.)
+- `.claude/commands/` — Slash command definitions (/autoconfig, /autoconfig-update, etc.)
 - `.claude/hooks/` — Hook scripts (format.js for JS/TS projects)
 - `.claude/feedback/` — Team feedback and corrections
 - `test/` — Test files
