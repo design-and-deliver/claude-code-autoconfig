@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.171
+- feat: /extract-rules v3 — automatic flow, --keep-sources, changelog summary
+
 ## v1.0.170
 - revert: remove /extract-rules from deployed build
 
@@ -143,7 +146,4 @@
 
 ## v1.0.122
 - feat: /autoconfig pulls latest package before configuring
-
-## v1.0.121
-- feat: add feedback-to-discoveries migration update (004)
 
