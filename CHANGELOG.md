@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.174
+- feat: add pre-publish rules for README and docs sync
+
 ## v1.0.173
 - feat: ship /extract-rules to users
 
@@ -143,7 +146,4 @@
 
 ## v1.0.125
 - feat: auto-migrate FEEDBACK.md to Discoveries during CLI upgrade
-
-## v1.0.124
-- fix: remove Step 0 from /autoconfig, clarify terminal requirement
 
