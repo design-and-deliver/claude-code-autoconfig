@@ -231,25 +231,30 @@ Format each rule as a block with a blank line between blocks:
 
 ```
 NEW   .claude/rules/build-rules.md
+      [manifest.config.ts, package.json]
       1. "ALWAYS use dev build, NEVER use prod for local testing"
       2. "Bump BASE_VERSION before CWS builds"
       from FEEDBACK.md
 
 NEW   .claude/rules/content-logging.md
+      [src/content.tsx, src/components/**/*.tsx]
       "Never import fileLogger in content scripts"
       from MEMORY.md → feedback_check_logs_yourself.md
 
 UPD   .claude/rules/debugging.md
+      [src/**/*.ts, src/**/*.tsx]
       added "check logs yourself, never ask user"
       from MEMORY.md → feedback_check_logs_yourself.md
 
 ---   4 rules unchanged
 ```
 
-Rules:
-- Use full path (`.claude/rules/filename.md`) on the first line — clarifies this is the target file, not a source
-- If multiple imperatives were extracted into one file, show them as a numbered list
-- If only one imperative, no number — the absence of numbering signals a single item
-- `from` line shows the source file. For memory files discovered via the MEMORY.md index, use arrow notation: `from MEMORY.md → specific_file.md`
+Each block has four lines:
+1. Status prefix + full rule file path (`.claude/rules/filename.md`)
+2. `[paths]` — the file patterns that trigger this rule, in square brackets
+3. Rule description(s) — numbered list if multiple imperatives, no number if single
+4. `from` — source file. For memory files discovered via MEMORY.md index, use arrow notation: `from MEMORY.md → specific_file.md`
+
+Other rules:
 - Status prefixes: `NEW` (created), `UPD` (merged new content into existing rule), `---` (unchanged count)
 - On re-runs with no changes, show: `No new rules found. N existing rules unchanged.`
