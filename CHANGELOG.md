@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.172
+- feat: /extract-rules v3 — auto-apply, --keep-sources, changelog with paths
+
 ## v1.0.171
 - feat: /extract-rules v3 — automatic flow, --keep-sources, changelog summary
 
@@ -143,7 +146,4 @@
 
 ## v1.0.123
 - fix: use npm exec instead of npx in Step 0
-
-## v1.0.122
-- feat: /autoconfig pulls latest package before configuring
 
