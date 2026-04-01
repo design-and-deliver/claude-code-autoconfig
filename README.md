@@ -49,6 +49,7 @@ your-project/
     │   ├── autoconfig-update.md       #   /autoconfig-update - install updates
     │   ├── commit-and-push.md         #   /commit-and-push - git workflow
     │   ├── enable-retro.md            #   /enable-retro - opt-in tech debt tracking
+    │   ├── extract-rules.md            #   /extract-rules - scan & extract rules
     │   ├── gls.md                     #   /gls - view latest screenshot
     │   ├── recover-context.md         #   /recover-context - restore context after compaction
     │   ├── show-docs.md               #   /show-docs - interactive walkthrough
@@ -64,7 +65,11 @@ your-project/
     ├── docs/                          # Interactive documentation
     │   └── autoconfig.docs.html       #   Open with /show-docs
     ├── updates/                       # Pending config updates
-    ├── rules/                         # Path-scoped context (empty)
+    ├── rules/                         # Path-scoped context rules
+    │   ├── deploy-approval.md         #   Require approval before publish
+    │   └── readme-sync.md             #   Sync README & docs before publish
+    ├── scripts/                       # Utility scripts
+    │   └── sync-docs.js               #   Regenerate interactive HTML docs
     ├── .mcp.json                      # MCP server configs (empty placeholder)
     └── settings.json                  # Permissions & security
 ```
@@ -104,6 +109,7 @@ Autoconfig is **self-configuring**. Run `/autoconfig` and Claude:
 | `/recover-context` | Recovers conversation context after compaction |
 | `/gls` | Views latest screenshot for visual context |
 | `/validate-cca-install` | Validates installation against latest published version |
+| `/extract-rules` | Scan Claude artifacts and extract structured rules |
 | `/enable-retro` | (Experimental) Enable tech debt tracking |
 
 ### Updates
@@ -153,7 +159,7 @@ Work through items anytime: *"Hey Claude, fix retro #001"*
 
 ### Rules
 
-The `rules/` directory is intentionally empty. Effective rules require understanding your codebase patterns, team conventions, and quality standards.
+The `rules/` directory contains path-scoped context rules that activate when Claude edits matching files. Autoconfig ships with publish-safety rules; you can add your own or use `/extract-rules` to generate rules from existing Claude artifacts.
 
 **Want optimized rules for your project?**
 Reach out: [info@adac1001.com](mailto:info@adac1001.com)
