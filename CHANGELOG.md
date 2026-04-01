@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.173
+- feat: ship /extract-rules to users
+
 ## v1.0.172
 - feat: /extract-rules v3 — auto-apply, --keep-sources, changelog with paths
 
@@ -143,7 +146,4 @@
 
 ## v1.0.124
 - fix: remove Step 0 from /autoconfig, clarify terminal requirement
-
-## v1.0.123
-- fix: use npm exec instead of npx in Step 0
 
