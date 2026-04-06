@@ -160,6 +160,17 @@ const insideClaude = process.env.CLAUDECODE === '1';
 console.log('\x1b[36m%s\x1b[0m', '🚀 Claude Code Autoconfig');
 console.log();
 
+// Block early if running inside Claude Code (unless --bootstrap)
+if (insideClaude && !process.argv.includes('--bootstrap')) {
+  console.log('\x1b[31m%s\x1b[0m', '● The tool needs to be run from a regular terminal, not from within Claude Code.');
+  console.log();
+  console.log('   Open a separate terminal window and run:');
+  console.log();
+  console.log('   \x1b[36mnpx claude-code-autoconfig@latest\x1b[0m');
+  console.log();
+  process.exit(0);
+}
+
 // Step 1: Check if Claude Code is installed
 function isClaudeInstalled() {
   try {
@@ -659,14 +670,7 @@ const launchCommand = isUpgrade ? '/autoconfig-update' : '/autoconfig';
 
 // --bootstrap: copy files only, exit silently (used by /autoconfig inside Claude)
 const bootstrapMode = process.argv.includes('--bootstrap');
-if (bootstrapMode || insideClaude) {
-  if (!bootstrapMode) {
-    // insideClaude without --bootstrap: block with clear message
-    console.log();
-    console.log('\x1b[31m%s\x1b[0m', `❌ npx claude-code-autoconfig must be run from a regular terminal.`);
-    console.log('\x1b[32m%s\x1b[0m', `✅ Open a terminal outside Claude Code and run 👉 npx claude-code-autoconfig@latest`);
-    console.log();
-  }
+if (bootstrapMode) {
   process.exit(0);
 }
 
