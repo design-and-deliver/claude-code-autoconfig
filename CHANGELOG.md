@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.176
+- fix: add feedback to AUTOCONFIG_FILES to prevent false upgrade detection
+
 ## v1.0.175
 - fix: include extract-rules command in user installs
 
@@ -143,7 +146,4 @@
 
 ## v1.0.127
 - feat: SessionStart hook for feedback migration, merge hooks on upgrade
-
-## v1.0.126
-- feat: add FEEDBACK.md migration to /autoconfig Step 0
 
