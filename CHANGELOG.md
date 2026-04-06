@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.180
+- fix: improve autoconfig-update messaging when all updates are applied
+
 ## v1.0.179
 - fix: add settings.local.json to AUTOCONFIG_FILES, tighten docs table columns
 
@@ -143,7 +146,4 @@
 
 ## v1.0.131
 - feat: support running autoconfig from inside Claude Code sessions
-
-## v1.0.130
-- fix: block interactive install from inside Claude Code sessions
 
