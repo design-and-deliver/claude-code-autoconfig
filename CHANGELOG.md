@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.179
+- fix: add settings.local.json to AUTOCONFIG_FILES, tighten docs table columns
+
 ## v1.0.178
 - fix: move insideClaude check before file copying
 
@@ -143,7 +146,4 @@
 
 ## v1.0.130
 - fix: block interactive install from inside Claude Code sessions
-
-## v1.0.129
-- fix: tighten /recover-context confirmation to single line
 
