@@ -1,5 +1,5 @@
 <!-- @description Manages and installs updates to Claude Code configuration. -->
-<!-- @version 1 -->
+<!-- @version 2 -->
 <!-- @response updates-available | Displays list of pending updates with install/review options. -->
 <!-- @response up-to-date | All updates are already installed. -->
 <!-- @sideeffect Pulls latest update files from npm, executes update instructions, tracks applied updates -->
@@ -56,7 +56,7 @@ Parse the `<!-- @applied -->` block in THIS file (`.claude/commands/autoconfig-u
 Filter out any updates whose ID appears in the applied list. If no pending updates remain, output:
 
 ```
-All updates are already installed. You're up to date.
+✅ All configuration updates are applied. Your commands, docs, and settings were refreshed by the installer.
 ```
 
 Then stop.
