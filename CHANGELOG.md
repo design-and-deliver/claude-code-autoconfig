@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.178
+- fix: move insideClaude check before file copying
+
 ## v1.0.177
 - feat: add pre-install diagnostic logging and fix AUTOCONFIG_FILES
 
@@ -143,7 +146,4 @@
 
 ## v1.0.129
 - fix: tighten /recover-context confirmation to single line
-
-## v1.0.128
-- fix: show estimated tokens instead of bytes in /recover-context
 
