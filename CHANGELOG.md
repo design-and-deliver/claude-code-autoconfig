@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.182
+- fix: tight column alignment in docs parameter tables
+
 ## v1.0.181
 - fix: tighten td code padding in docs parameter tables
 
@@ -143,7 +146,4 @@
 
 ## v1.0.133
 - fix: add recover-context, gls, and autoconfig-update to interactive docs
-
-## v1.0.132
-- fix: strengthen bootstrap step instruction so Claude executes it
 
