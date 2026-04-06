@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.181
+- fix: tighten td code padding in docs parameter tables
+
 ## v1.0.180
 - fix: improve autoconfig-update messaging when all updates are applied
 
@@ -143,7 +146,4 @@
 
 ## v1.0.132
 - fix: strengthen bootstrap step instruction so Claude executes it
-
-## v1.0.131
-- feat: support running autoconfig from inside Claude Code sessions
 
