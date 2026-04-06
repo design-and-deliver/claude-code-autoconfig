@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.177
+- feat: add pre-install diagnostic logging and fix AUTOCONFIG_FILES
+
 ## v1.0.176
 - fix: add feedback to AUTOCONFIG_FILES to prevent false upgrade detection
 
@@ -143,7 +146,4 @@
 
 ## v1.0.128
 - fix: show estimated tokens instead of bytes in /recover-context
-
-## v1.0.127
-- feat: SessionStart hook for feedback migration, merge hooks on upgrade
 
