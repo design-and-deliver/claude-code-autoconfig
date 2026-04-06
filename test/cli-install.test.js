@@ -259,6 +259,47 @@ test('all shipped agents appear in docs HTML file tree', () => {
 
 console.log();
 
+console.log('Docs Table Alignment:');
+
+// Test the sync-docs.js output (parameter/response tables) for tight column alignment
+const syncDocsCode = fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'scripts', 'sync-docs.js'), 'utf8');
+
+test('parameter table must not use width: 100%', () => {
+  // Extract the parameter table <table> tag from sync-docs.js
+  const paramTableMatch = syncDocsCode.match(/Parameters[\s\S]*?<table style="([^"]+)"/);
+  assert(paramTableMatch, 'should find parameter table in sync-docs.js');
+  assert(!paramTableMatch[1].includes('width: 100%'),
+    'parameter table should not use width: 100% (causes even column distribution instead of content-fit)');
+});
+
+test('parameter th/td columns use white-space: nowrap', () => {
+  // Check that Name, Type, Required th cells have nowrap
+  const thMatches = syncDocsCode.match(/<th[^>]*>Name<\/th>/);
+  assert(thMatches, 'should find Name th');
+  assert(thMatches[0].includes('white-space: nowrap'),
+    'Name th should have white-space: nowrap');
+});
+
+test('parameter td padding-right is 8px or less for tight columns', () => {
+  // Extract td style for param name cells — look for the first td in param rows
+  const tdMatch = syncDocsCode.match(/\$\{p\.name\}[\s\S]*?padding:\s*([^"]+?)"/);
+  assert(tdMatch, 'should find param name td padding');
+  const paddingRight = tdMatch[1].match(/\d+px\s+(\d+)px/);
+  assert(paddingRight, 'should parse padding values');
+  assert(parseInt(paddingRight[1]) <= 8,
+    `param name td padding-right should be <= 8px for tight alignment, got ${paddingRight[1]}px`);
+});
+
+test('docs HTML td code padding is tight (4px or less horizontal)', () => {
+  const docsHtml = fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'docs', 'autoconfig.docs.html'), 'utf8');
+  const tdCodeMatch = docsHtml.match(/td code\s*\{[^}]*padding:\s*(\d+)px\s+(\d+)px/);
+  assert(tdCodeMatch, 'should find td code padding in docs HTML');
+  assert(parseInt(tdCodeMatch[2]) <= 4,
+    `td code horizontal padding should be <= 4px, got ${tdCodeMatch[2]}px`);
+});
+
+console.log();
+
 console.log('Settings.json Content:');
 
 test('settings.json has permissions', () => {
