@@ -27,7 +27,7 @@ const WINDOWS_RESERVED = ['CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'COM3', 'C
   'LPT6', 'LPT7', 'LPT8', 'LPT9'];
 
 // Files/folders installed by autoconfig - don't backup these
-const AUTOCONFIG_FILES = ['commands', 'docs', 'agents', 'migration', 'hooks', 'updates', 'scripts', 'rules', 'feedback', 'settings.json', 'settings.local.json', '.mcp.json', '.autoconfig-version'];
+const AUTOCONFIG_FILES = ['commands', 'docs', 'agents', 'migration', 'hooks', 'scripts', 'rules', 'feedback', 'settings.json', 'settings.local.json', '.mcp.json', '.autoconfig-version'];
 
 function isReservedName(name) {
   const baseName = name.replace(/\.[^.]*$/, '').toUpperCase();
@@ -497,11 +497,10 @@ if (fs.existsSync(scriptsSrc)) {
   copyDir(scriptsSrc, path.join(claudeDest, 'scripts'));
 }
 
-// Copy updates directory (new update files only, never overwrite existing)
-const updatesSrc = path.join(packageDir, '.claude', 'updates');
-if (fs.existsSync(updatesSrc)) {
-  copyDirIfMissing(updatesSrc, path.join(claudeDest, 'updates'));
-}
+// Note: updates directory is no longer copied to user projects.
+// Update files are only used by --pull-updates (for /autoconfig-update).
+// On fresh install, all updates are pre-marked as applied and the content
+// is already baked into /autoconfig itself, so the files are unnecessary.
 
 // Copy settings.json — fresh install gets full copy, upgrades get hooks + permissions merged
 const settingsSrc = path.join(packageDir, '.claude', 'settings.json');
@@ -619,6 +618,13 @@ if (isUpgrade && (newCommands.length > 0 || updatedCommands.length > 0)) {
       fs.writeFileSync(userCmdPath, updated);
     }
   }
+}
+
+// Clean up updates directory — updates are tracked in the @applied block,
+// so the .md files don't need to stay in the user's project
+const userUpdatesDir = path.join(claudeDest, 'updates');
+if (fs.existsSync(userUpdatesDir)) {
+  fs.rmSync(userUpdatesDir, { recursive: true });
 }
 
 // Migrate FEEDBACK.md content to CLAUDE.md Discoveries section (one-time, on upgrade)
