@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.183
+- fix: stop copying updates dir to user projects and clean up existing ones
+
 ## v1.0.182
 - fix: tight column alignment in docs parameter tables
 
@@ -143,7 +146,4 @@
 
 ## v1.0.134
 - fix: add missing hooks/updates to docs, expand sync tests
-
-## v1.0.133
-- fix: add recover-context, gls, and autoconfig-update to interactive docs
 
