@@ -141,6 +141,3 @@
 ## v1.0.136
 - fix: modernize permission syntax and merge perms on upgrade
 
-## v1.0.135
-- feat: auto-sync docs with .claude/ contents via sync-docs.js
-
