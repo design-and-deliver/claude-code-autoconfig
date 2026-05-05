@@ -54,8 +54,8 @@ your-project/
     │   ├── show-docs.md               #   /show-docs - interactive walkthrough
     │   ├── test.md                    #   /test - run tests
     │   └── validate-cca-install.md   #   /validate-cca-install - verify installation
-    ├── agents/                        # Agent definitions
-    │   └── docs-refresh.md            #   Docs sync agent
+    ├── agents/                        # Custom subagents (add your own)
+    │   └── README.md                  #   How to define agents
     ├── feedback/                      # Team corrections for Claude
     │   └── FEEDBACK.md                #   Add entries when Claude errs
     ├── hooks/                         # Hook scripts

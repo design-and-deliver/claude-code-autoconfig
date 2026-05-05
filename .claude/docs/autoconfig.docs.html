@@ -918,10 +918,10 @@
                                 <span class="tree-folder-icon">📁</span>
                                 <span class="folder">agents</span>
                             </div>
-                            <div class="tree-item indent-3 hidden" data-info="docs-refresh-agent" data-parent="agents">
+                            <div class="tree-item indent-3 hidden" data-info="README-agent" data-parent="agents">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
-                                <span class="file">docs-refresh.md</span>
+                                <span class="file">README.md</span>
                             </div>
                             <div class="tree-item indent-2 folder-row hidden collapsed" data-info="feedback" data-folder="feedback" data-parent="claude-dir">
                                 <span class="tree-chevron">›</span>
@@ -1258,7 +1258,7 @@
                 title: '.claude/ Directory',
                 desc: 'Commands, rules, settings, and these docs. Keeps configuration organized as your project grows.'
             },
-                                                                                                                                                                                                                                                                                                                                                'rules': {
+                                                                                                                                                                                                                                                                                                                                                            'rules': {
                 title: 'rules/',
                 desc: 'Path-scoped context that loads when Claude works on matching files.'
             },
@@ -1328,9 +1328,9 @@
                 desc: 'Validates your claude-code-autoconfig installation against the latest published version.<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>valid</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Install validated — all checks passed.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>issues</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Validation found {N} issue(s) with fix suggestions.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Read-only. Downloads latest package to temp dir for comparison, then cleans up.</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/validate-cca-install</code> <span style="opacity: 0.6;">— Run full installation validation</span></div></div></div>',
                 trigger: '/validate-cca-install'
             },
-            'docs-refresh-agent': {
-                title: 'docs-refresh.md',
-                desc: 'Background worker that syncs the docs when .claude/ files change.',
+            'README-agent': {
+                title: 'README.md',
+                desc: 'Placeholder — drop your project\'s custom subagent definitions in this directory.',
                 trigger: 'Background agent'
             },
             'feedback-rule-check-hook': {
@@ -1559,7 +1559,7 @@ CRITICAL: A plausible-looking cause from code reading is NOT confirmed evidence.
 
 > Run \`/autoconfig\` to populate this based on your project.`
             },
-                                                                                                                                                                                                                                                                                                                                                'autoconfig-update': {
+                                                                                                                                                                                                                                                                                                                                                            'autoconfig-update': {
                 filename: 'autoconfig-update.md',
                 content: `<!-- @applied
 -->
@@ -1847,27 +1847,16 @@ echo "$TMPDIR/package"
 
 Store the extracted path as \`$PKG_DIR\`. This gives us the ground truth for what files and versions should be installed.`
             },
-            'docs-refresh-agent': {
-                filename: 'docs-refresh.md',
-                content: `# Docs Refresh Agent
+            'README-agent': {
+                filename: 'README.md',
+                content: `# Agents
 
-Sync the interactive docs with the current state of \`.claude/\`.
+This directory is where you define **subagents** — focused assistants Claude can delegate to during a task (e.g., a code reviewer, a test writer, a security auditor).
 
-## How
+claude-code-autoconfig ships this folder empty so you can populate it with agents tuned to your project. Each agent is a single Markdown file with frontmatter describing its purpose, tools, and system prompt.
 
-Run:
-
-\`\`\`bash
-node .claude/scripts/sync-docs.js
-\`\`\`
-
-This scans \`.claude/\` for all files, extracts \`@description\` metadata, and updates the docs HTML (file tree, info cards, and content previews).
-
-## When to Use
-
-- After adding, modifying, or deleting files in \`.claude/\`
-- Before opening docs with \`/show-docs\` (already built in)
-- As a background task when \`.claude/\` files change`
+See Anthropic's subagents docs for the file format:
+https://docs.anthropic.com/en/docs/claude-code/sub-agents`
             },
             'feedback-rule-check-hook': {
                 filename: 'feedback-rule-check.js',
