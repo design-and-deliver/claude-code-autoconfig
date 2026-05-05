@@ -878,11 +878,6 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">commit-and-push.md</span>
                             </div>
-                            <div class="tree-item indent-3 hidden" data-info="enable-retro" data-parent="commands">
-                                <span class="tree-spacer"></span>
-                                <span class="tree-file-icon">📄</span>
-                                <span class="file">enable-retro.md</span>
-                            </div>
                             <div class="tree-item indent-3 hidden" data-info="extract-rules" data-parent="commands">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
@@ -922,11 +917,6 @@
                                 <span class="tree-chevron">›</span>
                                 <span class="tree-folder-icon">📁</span>
                                 <span class="folder">agents</span>
-                            </div>
-                            <div class="tree-item indent-3 hidden" data-info="create-retro-item-agent" data-parent="agents">
-                                <span class="tree-spacer"></span>
-                                <span class="tree-file-icon">📄</span>
-                                <span class="file">create-retro-item.md</span>
                             </div>
                             <div class="tree-item indent-3 hidden" data-info="docs-refresh-agent" data-parent="agents">
                                 <span class="tree-spacer"></span>
@@ -1268,7 +1258,7 @@
                 title: '.claude/ Directory',
                 desc: 'Commands, rules, settings, and these docs. Keeps configuration organized as your project grows.'
             },
-                                                                                                                                                                                                                                                                                                                                    'rules': {
+                                                                                                                                                                                                                                                                                                                                                'rules': {
                 title: 'rules/',
                 desc: 'Path-scoped context that loads when Claude works on matching files.'
             },
@@ -1302,11 +1292,6 @@
                 title: 'commit-and-push.md',
                 desc: 'Runs tests, then stages all changes, generates a conventional commit message, commits, and pushes.<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Changes committed and pushed to current branch.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>test-failure</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Tests failed — no commit made.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Runs test suite, stages all changes, creates git commit, pushes to remote</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/commit-and-push</code> <span style="opacity: 0.6;">— Run tests, commit, and push</span></div></div></div>',
                 trigger: '/commit-and-push'
-            },
-            'enable-retro': {
-                title: 'enable-retro.md',
-                desc: '(Experimental) Enable Claude to log tech debt it encounters into .claude/retro.<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Retro enabled — Claude will log tech debt to .claude/retro/ when encountered.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Creates .claude/retro/README.md, adds agent, updates CLAUDE.md</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/enable-retro</code> <span style="opacity: 0.6;">— Activate tech debt tracking</span></div></div></div>',
-                trigger: '/enable-retro'
             },
             'extract-rules': {
                 title: 'extract-rules.md',
@@ -1342,11 +1327,6 @@
                 title: 'validate-cca-install.md',
                 desc: 'Validates your claude-code-autoconfig installation against the latest published version.<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>valid</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Install validated — all checks passed.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>issues</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Validation found {N} issue(s) with fix suggestions.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Read-only. Downloads latest package to temp dir for comparison, then cleans up.</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/validate-cca-install</code> <span style="opacity: 0.6;">— Run full installation validation</span></div></div></div>',
                 trigger: '/validate-cca-install'
-            },
-            'create-retro-item-agent': {
-                title: 'create-retro-item.md',
-                desc: 'Creates a formatted retro item when tech debt or improvements are spotted.',
-                trigger: 'Background agent'
             },
             'docs-refresh-agent': {
                 title: 'docs-refresh.md',
@@ -1579,7 +1559,7 @@ CRITICAL: A plausible-looking cause from code reading is NOT confirmed evidence.
 
 > Run \`/autoconfig\` to populate this based on your project.`
             },
-                                                                                                                                                                                                                                                                                                                                    'autoconfig-update': {
+                                                                                                                                                                                                                                                                                                                                                'autoconfig-update': {
                 filename: 'autoconfig-update.md',
                 content: `<!-- @applied
 -->
@@ -1666,39 +1646,6 @@ Use conventional commits: \`type(scope): description\`
 Types: feat, fix, docs, style, refactor, test, chore
 
 Keep the subject line under 50 chars. Add body if the change needs explanation.`
-            },
-            'enable-retro': {
-                filename: 'enable-retro.md',
-                content: `# Enable Retro
-
-Enable the experimental Retro feature, which lets Claude log tech debt and improvement opportunities as structured story files.
-
-## What This Does
-
-1. Creates \`.claude/retro/\` directory with a README
-2. Creates \`.claude/agents/create-retro-item.md\` agent
-3. Adds Retro instructions to CLAUDE.md
-
-## Step 1: Create Retro Directory
-
-Create \`.claude/retro/README.md\` with:
-
-\`\`\`markdown
-# Retro Items
-
-Tech debt and improvement opportunities identified during development.
-
-Each item is a structured story file with:
-- Problem description
-- Acceptance criteria
-- Suggested approach
-- Priority & effort sizing
-- Files involved
-
-## Working with Retro Items
-
-- "Fix retro #001" — Work on a specific item
-- "What's in the retro backlog?" — List pending items`
             },
             'extract-rules': {
                 filename: 'extract-rules.md',
@@ -1899,39 +1846,6 @@ echo "$TMPDIR/package"
 \`\`\`
 
 Store the extracted path as \`$PKG_DIR\`. This gives us the ground truth for what files and versions should be installed.`
-            },
-            'create-retro-item-agent': {
-                filename: 'create-retro-item.md',
-                content: `# Create Retro Item Agent
-
-Create a fully-scoped story file in \`.claude/retro/\` when tech debt or improvement opportunities are identified.
-
-## When to Trigger
-
-Call this agent when you notice:
-- Tech debt that should be addressed later
-- Code that works but could be improved
-- Missing tests, documentation, or error handling
-- Architectural improvements worth tracking
-
-## Input
-
-Provide these details when calling:
-- **title**: Short descriptive name (used for filename)
-- **problem**: What's wrong or what friction was encountered
-- **criteria**: Specific, testable acceptance criteria
-- **approach**: How to fix it
-- **priority**: Critical | High | Medium | Low
-- **effort**: S | M | L | XL
-- **files**: List of files involved
-
-## Behavior
-
-1. Generate filename from title: \`kebab-case.md\`
-2. Create story file in \`.claude/retro/\` using this format:
-
-\`\`\`markdown
-# [Title]`
             },
             'docs-refresh-agent': {
                 filename: 'docs-refresh.md',

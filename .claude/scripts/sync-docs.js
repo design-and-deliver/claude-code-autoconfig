@@ -25,7 +25,7 @@ if (!fs.existsSync(docsPath)) {
 
 // Directories/files to skip entirely
 const SKIP = new Set([
-  'docs', 'plans', 'migration', 'retro', 'scripts',
+  'docs', 'plans', 'migration', 'scripts',
   'settings.local.json'
 ]);
 

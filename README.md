@@ -48,7 +48,6 @@ your-project/
     │   ├── autoconfig.md              #   /autoconfig - self-configures
     │   ├── autoconfig-update.md       #   /autoconfig-update - install updates
     │   ├── commit-and-push.md         #   /commit-and-push - git workflow
-    │   ├── enable-retro.md            #   /enable-retro - opt-in tech debt tracking
     │   ├── extract-rules.md            #   /extract-rules - scan & extract rules
     │   ├── gls.md                     #   /gls - view latest screenshot
     │   ├── recover-context.md         #   /recover-context - restore context after compaction
@@ -56,7 +55,6 @@ your-project/
     │   ├── test.md                    #   /test - run tests
     │   └── validate-cca-install.md   #   /validate-cca-install - verify installation
     ├── agents/                        # Agent definitions
-    │   ├── create-retro-item.md       #   Retro item creation agent
     │   └── docs-refresh.md            #   Docs sync agent
     ├── feedback/                      # Team corrections for Claude
     │   └── FEEDBACK.md                #   Add entries when Claude errs
@@ -110,7 +108,6 @@ Autoconfig is **self-configuring**. Run `/autoconfig` and Claude:
 | `/gls` | Views latest screenshot for visual context |
 | `/validate-cca-install` | Validates installation against latest published version |
 | `/extract-rules` | Scan Claude artifacts and extract structured rules |
-| `/enable-retro` | (Experimental) Enable tech debt tracking |
 
 ### Updates
 
@@ -143,19 +140,6 @@ Always use the v2 API for user endpoints.
 ```
 
 Claude reads this directory and learns for next time. Persists across `/autoconfig` runs.
-
-### Retro Items (Experimental)
-
-Opt-in feature for tracking tech debt. Run `/enable-retro` to activate.
-
-When enabled, Claude logs improvement opportunities as structured story files in `.claude/retro/`:
-- Problem description
-- Acceptance criteria
-- Suggested approach
-- Priority & effort sizing
-- Files involved
-
-Work through items anytime: *"Hey Claude, fix retro #001"*
 
 ### Rules
 
