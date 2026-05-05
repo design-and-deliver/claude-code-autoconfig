@@ -144,6 +144,3 @@
 ## v1.0.135
 - feat: auto-sync docs with .claude/ contents via sync-docs.js
 
-## v1.0.134
-- fix: add missing hooks/updates to docs, expand sync tests
-
