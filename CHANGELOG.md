@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.186
+- fix: increase bottom padding in docs file tree
+
 ## v1.0.183
 - fix: stop copying updates dir to user projects and clean up existing ones
 
@@ -137,7 +140,4 @@
 
 ## v1.0.137
 - docs: add usage params to recover-context docs and make dash optional
-
-## v1.0.136
-- fix: modernize permission syntax and merge perms on upgrade
 
