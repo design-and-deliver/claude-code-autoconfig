@@ -3,8 +3,8 @@
 /**
  * @name Terminal Title
  * @description Renders a descriptive, state-aware title on the terminal tab:
- *              "{glyph} {bounded-context} — {use-case}". The model authors the
- *              text (a DDD-style compass title) into a per-session file; this
+ *              "{glyph} {scope} — {use-case}". The model authors the
+ *              text (a use-case compass title: design scope + goal level) into a per-session file; this
  *              hook prepends a live state glyph and emits the title.
  * @trigger UserPromptSubmit, Stop, Notification(permission_prompt), PostToolUse
  *

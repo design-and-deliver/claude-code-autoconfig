@@ -139,7 +139,7 @@ test('creates the .titles dir but NOT the title file (Write-tool invariant)', ()
 test('normal turn injects the SHIFT directive (not the COMMAND one)', () => {
   const cwd = mkWorkspace();
   const r = runHook({ hook_event_name: 'UserPromptSubmit', session_id: 's', cwd, prompt: 'do a thing' });
-  assert(/BOUNDED CONTEXT, use-case, or sub-function SHIFTS/.test(r.directive), 'expected SHIFT directive text');
+  assert(/SCOPE, use-case, or sub-function SHIFTS/.test(r.directive), 'expected SHIFT directive text');
   assert(!/command NAME is an implementation detail/.test(r.directive), 'SHIFT turn must not use COMMAND text');
 });
 
