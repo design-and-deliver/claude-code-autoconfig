@@ -3,3 +3,6 @@
 
 # Internal planning docs (not for distribution)
 .claude/plans
+
+# Terminal-title per-session state (runtime scratch, never distributed)
+.claude/hooks/.titles/

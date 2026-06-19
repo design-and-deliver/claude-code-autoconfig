@@ -543,6 +543,16 @@ if (fs.existsSync(settingsSrc)) {
         }
       }
 
+      // Merge env — additive only; never overwrite a value the user already set
+      if (pkgSettings.env) {
+        if (!userSettings.env) userSettings.env = {};
+        for (const [key, value] of Object.entries(pkgSettings.env)) {
+          if (!(key in userSettings.env)) {
+            userSettings.env[key] = value;
+          }
+        }
+      }
+
       // Merge permissions — add missing allow/deny entries, migrate deprecated :* syntax
       if (pkgSettings.permissions) {
         if (!userSettings.permissions) userSettings.permissions = {};

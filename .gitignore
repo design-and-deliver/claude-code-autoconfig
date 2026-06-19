@@ -14,5 +14,8 @@ nul
 # Claude Code temp files
 tmpclaude-*
 
+# Terminal-title per-session state (runtime scratch, never distributed)
+.claude/hooks/.titles/
+
 # Test temp directories
 test/.test-temp-*
