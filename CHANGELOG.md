@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.0.187
+- refactor(terminal-title): reframe directive to use-case vocabulary (scope + infinitive goal)
+- docs: add TODO for deterministic settings.json deny list
+- feat(terminal-title): add question-awaiting state + AskUserQuestion refresh
+
 ## v1.0.186
 - fix: increase bottom padding in docs file tree
 
@@ -137,7 +142,4 @@
 
 ## v1.0.138
 - feat: auto-include Usage sections in docs info cards
-
-## v1.0.137
-- docs: add usage params to recover-context docs and make dash optional
 
