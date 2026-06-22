@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.188
+- feat(plugins): add drop-in plugin system (plugin add/remove/list)
+
 ## v1.0.187
 - refactor(terminal-title): reframe directive to use-case vocabulary (scope + infinitive goal)
 - docs: add TODO for deterministic settings.json deny list
@@ -139,7 +142,4 @@
 
 ## v1.0.139
 - fix: render usage params as structured HTML list in docs info cards
-
-## v1.0.138
-- feat: auto-include Usage sections in docs info cards
 
