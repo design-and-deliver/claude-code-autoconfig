@@ -953,16 +953,6 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">migrate-feedback.js</span>
                             </div>
-                            <div class="tree-item indent-3 hidden" data-info="terminal-title-hook" data-parent="hooks">
-                                <span class="tree-spacer"></span>
-                                <span class="tree-file-icon">📄</span>
-                                <span class="file">terminal-title.js</span>
-                            </div>
-                            <div class="tree-item indent-3 hidden" data-info="terminal-title-directive" data-parent="hooks">
-                                <span class="tree-spacer"></span>
-                                <span class="tree-file-icon">📄</span>
-                                <span class="file">terminal-title.directive.md</span>
-                            </div>
                             <div class="tree-item indent-2 folder-row hidden collapsed" data-info="docs" data-folder="docs-folder" data-parent="claude-dir">
                                 <span class="tree-chevron">›</span>
                                 <span class="tree-folder-icon">📁</span>
@@ -1357,16 +1347,6 @@
                 title: 'migrate-feedback.js',
                 desc: 'On session start, migrates custom FEEDBACK.md content to',
                 trigger: 'SessionStart'
-            },
-            'terminal-title-hook': {
-                title: 'terminal-title.js',
-                desc: 'Renders a state-aware tab title "{glyph} {bounded-context} — {use-case}". The model authors the text; this hook prepends a live glyph (⚫︎ working · ◐ awaiting approval · ✻ idle).',
-                trigger: 'UserPromptSubmit · Stop · Notification · PostToolUse'
-            },
-            'terminal-title-directive': {
-                title: 'terminal-title.directive.md',
-                desc: 'The instruction terminal-title.js injects into context, teaching the title format. Reword this to tune titling — no code change needed.',
-                trigger: 'Injected on each prompt'
             },
             'feedback-feedback': {
                 title: 'FEEDBACK.md',
