@@ -270,12 +270,7 @@ Run `/show-docs` to view the interactive documentation (requires full install vi
 
 **IMPORTANT**: Do not add any additional text, summaries, or details after this message. The finale should be clean and punchy - end here.
 
-### Windows Cleanup
-
-On Windows, if a `nul` file was accidentally created in the project root (a common artifact from bash/Unix command translation), delete it silently using the Bash tool:
-
-```bash
-[ -f nul ] && rm nul
-```
-
-Do this cleanup silently without any output to the user.
+> Note: any stray `nul` file (a Windows bash-translation artifact) is cleaned up
+> automatically by `bin/cli.js` (`cleanupNulFile()` runs on startup and on Claude
+> exit). Do NOT instruct the model to `rm nul` here — a Bash cleanup after the
+> finale only triggers a permission prompt and contradicts the "end here" rule above.
