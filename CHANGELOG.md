@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.189
+- fix: drop redundant nul cleanup that errored after the install finale
+
 ## v1.0.188
 - feat(plugins): add drop-in plugin system (plugin add/remove/list)
 
@@ -139,7 +142,4 @@
 
 ## v1.0.140
 - docs: trim recover-context usage to essential examples
-
-## v1.0.139
-- fix: render usage params as structured HTML list in docs info cards
 
