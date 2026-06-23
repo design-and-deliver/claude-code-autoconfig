@@ -953,6 +953,11 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">migrate-feedback.js</span>
                             </div>
+                            <div class="tree-item indent-3 hidden" data-info="terminal-title-hook" data-parent="hooks">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">terminal-title.js</span>
+                            </div>
                             <div class="tree-item indent-2 folder-row hidden collapsed" data-info="docs" data-folder="docs-folder" data-parent="claude-dir">
                                 <span class="tree-chevron">›</span>
                                 <span class="tree-folder-icon">📁</span>
@@ -1347,6 +1352,11 @@
                 title: 'migrate-feedback.js',
                 desc: 'On session start, migrates custom FEEDBACK.md content to',
                 trigger: 'SessionStart'
+            },
+            'terminal-title-hook': {
+                title: 'terminal-title.js',
+                desc: 'Use-case-framed terminal tab titles with live working / idle / awaiting state indicators, so multiple Claude sessions are easy to tell apart',
+                trigger: 'SessionStart, UserPromptSubmit, PostToolUse, Notification, Stop'
             },
             'feedback-feedback': {
                 title: 'FEEDBACK.md',
