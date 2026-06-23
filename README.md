@@ -59,7 +59,8 @@ your-project/
     ├── feedback/                      # Team corrections for Claude
     │   └── FEEDBACK.md                #   Add entries when Claude errs
     ├── hooks/                         # Hook scripts
-    │   └── format.js                  #   Auto-format on Write/Edit
+    │   ├── format.js                  #   Auto-format on Write/Edit
+    │   └── terminal-title.js          #   Use-case terminal tab titles + live state
     ├── docs/                          # Interactive documentation
     │   └── autoconfig.docs.html       #   Open with /show-docs
     ├── updates/                       # Pending config updates
@@ -128,6 +129,10 @@ npx claude-code-autoconfig@latest --force
 ### MEMORY.md
 
 Autoconfig writes a debug methodology to Claude's persistent memory (`MEMORY.md`), ensuring Claude investigates root causes with evidence before jumping to fixes. This loads into every future session automatically.
+
+### Terminal Titles
+
+Run several Claude Code sessions at once and the tabs all look alike. Autoconfig retitles each tab as `{scope} — {what you're working on}` with a live state indicator — ⬤ working, ◐ waiting on you, ✻ idle — so you can tell sessions apart at a glance. Claude updates the title itself as the work shifts; nothing to configure.
 
 ### Team Feedback
 
