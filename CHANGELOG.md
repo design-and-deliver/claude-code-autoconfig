@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.0.190
+- docs(readme): document the bundled terminal-title hook
+- feat(terminal-title): bundle the terminal-title hook into core
+
 ## v1.0.189
 - fix: drop redundant nul cleanup that errored after the install finale
 
@@ -139,7 +143,4 @@
 
 ## v1.0.141
 - fix: replace Windows NUL cleanup with cross-platform command
-
-## v1.0.140
-- docs: trim recover-context usage to essential examples
 
