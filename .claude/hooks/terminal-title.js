@@ -14,7 +14,9 @@
  * `terminalSequence` (honored on the other events). node writes UTF-8 natively, so glyphs go out as-is.
  *
  * Title files are PROJECT-SCOPED at <cwd>/.claude/hooks/.titles/<session_id>.txt — the model authors
- * them; the directive injected each prompt tells it the path + format. No logging.
+ * them; the directive injected each prompt tells it the path + format. Optional forensic log (one line
+ * per paint, for tracing an out-of-sync tab) is gated behind CLAUDE_TITLE_DEBUG=1 — default OFF,
+ * ~512KB-capped, written to .titles/_debug.log — so it never ships a growing log.
  *
  * Requires `env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE = "1"` (set by plugin.json), or CC's own writer races.
  */
@@ -35,6 +37,9 @@ const GLYPH = {
   idle: String.fromCodePoint(0x273B),
 };
 
+// Per-invocation context for the optional debug log (populated in handle, read by titleLog).
+let logCtx = null;
+
 let input = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', chunk => (input += chunk));
@@ -54,6 +59,7 @@ function handle(data) {
   // variant uses os.homedir() instead; that is the only difference between the two.)
   const dir = path.join(cwd, '.claude', 'hooks', '.titles');
   const file = path.join(dir, `${sid}.txt`);
+  logCtx = { event, sid, dir, note: '' };
 
   if (event === 'UserPromptSubmit') {
     // Ensure the state dir exists, but NOT the file — the model's Write tool refuses to overwrite a
@@ -95,8 +101,10 @@ function handle(data) {
   // assistant text ends in '?' (transcript heuristic) OR an explicit {sid}.ask flag (consumed here).
   const askFile = path.join(dir, `${sid}.ask`);
   let pending = lastResponseEndsWithQuestion(data.transcript_path);
-  if (!pending && fileExists(askFile)) pending = true;
+  let note = pending ? 'q-mark' : 'idle';
+  if (!pending && fileExists(askFile)) { pending = true; note = 'ask-flag'; }
   if (fileExists(askFile)) { try { fs.unlinkSync(askFile); } catch (_) { /* ignore */ } }
+  if (logCtx) logCtx.note = note;
   const glyph = pending ? GLYPH.awaiting : GLYPH.idle;
   emit(setTitle(glyph, normalize(readTitle(file) || folderName(cwd)), pending));
 }
@@ -109,7 +117,26 @@ function setTitle(glyph, title, ring) {
   try { process.title = text; } catch (_) { /* ignore */ }
   let seq = `${ESC}]0;${text}${BEL}`;
   if (ring) seq += BEL;
+  titleLog(glyph, title, ring);
   return { terminalSequence: seq };
+}
+
+// Optional forensic log (default OFF — gate: CLAUDE_TITLE_DEBUG=1). One line per paint, so a tab that
+// ends up out of sync (e.g. a ◐ that never cleared to ✻) can be traced to the exact event + glyph that
+// last painted it. Bounded to ~512KB with a single rotation; wrapped so it can never break a turn.
+function titleLog(glyph, title, ring) {
+  if (process.env.CLAUDE_TITLE_DEBUG !== '1' || !logCtx) return;
+  try {
+    const name = glyph === GLYPH.working ? 'working'
+      : glyph === GLYPH.awaiting ? 'awaiting'
+      : glyph === GLYPH.idle ? 'idle' : 'other';
+    const line = `${new Date().toISOString()}  ${logCtx.event.padEnd(16)} `
+      + `${name.padEnd(8)} ring=${ring ? 1 : 0} note=${(logCtx.note || '-').padEnd(8)} `
+      + `sid=${logCtx.sid} | ${title}\n`;
+    const f = path.join(logCtx.dir, '_debug.log');
+    try { if (fs.statSync(f).size > 512 * 1024) fs.renameSync(f, `${f}.1`); } catch (_) { /* none yet */ }
+    fs.appendFileSync(f, line);
+  } catch (_) { /* logging must never throw */ }
 }
 
 function fileExists(file) {
