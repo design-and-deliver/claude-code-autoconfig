@@ -60,7 +60,8 @@ your-project/
     │   └── FEEDBACK.md                #   Add entries when Claude errs
     ├── hooks/                         # Hook scripts
     │   ├── format.js                  #   Auto-format on Write/Edit
-    │   └── terminal-title.js          #   Use-case terminal tab titles + live state
+    │   ├── terminal-title.js          #   Use-case terminal tab titles + live state
+    │   └── terminal-title.directive.md # Injected title directive (tunable wording)
     ├── docs/                          # Interactive documentation
     │   └── autoconfig.docs.html       #   Open with /show-docs
     ├── updates/                       # Pending config updates
