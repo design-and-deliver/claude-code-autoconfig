@@ -35,6 +35,8 @@
     "bin",
     ".claude",
     "!.claude/settings.local.json",
+    "!.claude/hooks/.titles",
+    "!.claude/hooks/.titles/**",
     "!.claude/cca.config.json",
     "!.claude/.autoconfig-version",
     "!.claude/.autoconfig-plugins.json",
