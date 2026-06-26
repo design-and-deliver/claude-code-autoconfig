@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.192
+- fix(pkg): exclude runtime .titles/ from published tarball
+
 ## v1.0.191
 - docs(readme): list terminal-title.directive.md in the hooks tree
 - feat(terminal-title): add opt-in CLAUDE_TITLE_DEBUG forensic logging
@@ -141,7 +144,4 @@
 
 ## v1.0.143
 - feat: add /validate-cca-install command
-
-## v1.0.142
-- feat(recover-context): support cross-session recovery
 
