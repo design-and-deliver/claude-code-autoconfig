@@ -42,6 +42,18 @@ See `.claude/feedback/` for corrections and guidance from the team.
 ## Discoveries
 <!-- Claude: append project-specific learnings, gotchas, and context below. This section persists across /autoconfig runs. -->
 
+### Publishing to npm — web-auth (passkey) flow, run by the human
+
+`npm publish` for this package is a **two-actor** flow; a bare in-agent `npm publish` will FAIL. (Supersedes the auto-generated "## Publishing" one-liner above.)
+
+- The npm account has **2FA**. A sandboxed/agent shell can't open a browser, so `npm publish` there dies with `npm error code EOTP`. Don't retry it in-agent; don't default to asking for a typed OTP.
+- **Working flow:** the agent runs `npm test` + `npm version patch` (commit + tag), then the **human runs the publish in their own terminal** (needs a browser):
+  ```
+  cd C:\CODE\claude-code-autoconfig && npm login --auth-type=web && npm publish
+  ```
+  → browser opens → pick the Google passkey → close it → `+ claude-code-autoconfig@<version>`.
+- **After** the success line, the agent pushes: `git push origin main --follow-tags`. Never double-bump if the version is already bumped. Full procedure: `.claude/commands/publish.md`.
+
 ## Debugging Methodology — Evidence Before Solutions
 
 **NEVER jump to a fix based on assumptions.** When investigating a bug:
