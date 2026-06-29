@@ -11,6 +11,7 @@
 
   Tokens (substituted at runtime):
     {{TITLE_FILE}} — absolute path to this session's title file the model writes
+    {{ASK_FILE}}   — absolute path to this session's one-shot {sid}.ask flag (PENDING block)
     {{FOLDER}}     — the working-directory folder name (scope fallback)
     {{EMDASH}}     — the ' — ' segment separator
     {{CMD}}        — the slash-command name (COMMAND block only)
@@ -63,9 +64,14 @@ already exists, read it first then overwrite.
 <!-- /DIRECTIVE:SHIFT -->
 
 <!-- DIRECTIVE:PENDING -->
-Pending-question signal: if you END this turn by asking the user a question they must answer
-before you can proceed, phrase it so your FINAL line ends with a question mark ('?') -- the tab
-indicator then flips to the AWAITING half-circle automatically (instead of the idle asterisk).
+Pending-question signal: when you END this turn on a question the user must answer before you can
+proceed, do BOTH of these as near-final actions so the tab flips to the AWAITING half-circle
+(instead of the idle asterisk):
+  1. Write the flag file {{ASK_FILE}} (any short content, e.g. "1"). This is the RELIABLE trigger --
+     it is on disk before the turn ends, so it never misses (the transcript-text check in 2 can race
+     the turn-end write and silently miss). The flag is one-shot: it is consumed at turn end and
+     auto-cleared next turn, so write it ONLY on a turn you are genuinely blocked on an answer.
+  2. Phrase your FINAL line so it ends with a question mark ('?') -- a backup signal, and good UX.
 Make the closing question self-contained: answerable from the question alone, without re-reading
-the response above it. Only end on a '?' for a genuine blocking question, never a rhetorical one.
+the response above it. Only do this for a genuine blocking question, never a rhetorical one or a recap.
 <!-- /DIRECTIVE:PENDING -->

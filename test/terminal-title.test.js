@@ -157,6 +157,24 @@ test('injected directive appends the PENDING block (end blocking questions on "?
   assert(/ends with a question mark/.test(shift.directive), 'SHIFT directive should include the PENDING block');
   assert(/ends with a question mark/.test(command.directive), 'COMMAND directive should include the PENDING block');
 });
+
+test("injected directive names this session's {sid}.ask flag path + instructs writing it", () => {
+  const cwd = mkWorkspace();
+  const sid = 'ask-path';
+  const r = runHook({ hook_event_name: 'UserPromptSubmit', session_id: sid, cwd, prompt: 'do a thing' });
+  assert(r.directive.includes(`${sid}.ask`), "directive should name this session's .ask path");
+  assert(/Write the flag file/.test(r.directive), 'directive should instruct writing the .ask flag');
+});
+
+test('UserPromptSubmit clears a stale {sid}.ask flag from an interrupted prior turn', () => {
+  const cwd = mkWorkspace();
+  const sid = 'ups-ask';
+  const askFile = path.join(cwd, '.claude', 'hooks', '.titles', `${sid}.ask`);
+  fs.mkdirSync(path.dirname(askFile), { recursive: true });
+  fs.writeFileSync(askFile, '1');
+  runHook({ hook_event_name: 'UserPromptSubmit', session_id: sid, cwd, prompt: 'hi' });
+  assert(!fs.existsSync(askFile), 'a stale .ask flag should be cleared at UserPromptSubmit');
+});
 console.log();
 
 console.log('Title normalization:');

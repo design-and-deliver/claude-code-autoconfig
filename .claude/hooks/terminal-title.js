@@ -2,7 +2,8 @@
 /**
  * Terminal Title — distributable plugin hook (installed to <project>/.claude/hooks/terminal-title.js).
  * ONE self-dispatching hook for five events (keyed on hook_event_name):
- *   UserPromptSubmit -> ⬤ working  + inject the title directive into the model's context
+ *   UserPromptSubmit -> ⬤ working  + inject the title directive (incl. the {sid}.ask path) +
+ *                       clear any stale {sid}.ask flag so it reflects only the turn about to run
  *   PostToolUse      -> ⬤ working  (refresh, so a mid-turn title flip shows live + clears a stale ◐)
  *   Notification     -> ◐ awaiting your approval (permission_prompt matcher only)
  *   Stop             -> ✻ idle / done — OR ◐ awaiting (+ a 2nd BEL = gold tab) when the turn ended
@@ -65,6 +66,10 @@ function handle(data) {
     // Ensure the state dir exists, but NOT the file — the model's Write tool refuses to overwrite a
     // file it hasn't read, so a pre-created empty file would make its first title write fail.
     try { fs.mkdirSync(dir, { recursive: true }); } catch (_) { /* ignore */ }
+    // Clear any stale {sid}.ask left by an interrupted prior turn (Stop never ran to consume it), so a
+    // leftover flag can't paint a false ◐ on this turn's end. The flag must reflect ONLY this turn.
+    const askFile = path.join(dir, `${sid}.ask`);
+    if (fileExists(askFile)) { try { fs.unlinkSync(askFile); } catch (_) { /* ignore */ } }
     const title = normalize(readTitle(file) || folderName(cwd));
     const out = setTitle(GLYPH.working, title);
     out.hookSpecificOutput = {
@@ -221,6 +226,7 @@ function buildDirective(data, file, cwd) {
   const combined = pending ? `${block}\n\n${pending}` : block;
   return combined
     .split('{{TITLE_FILE}}').join(file)
+    .split('{{ASK_FILE}}').join(file.replace(/\.txt$/, '.ask'))
     .split('{{FOLDER}}').join(folderName(cwd))
     .split('{{EMDASH}}').join(EMDASH)
     .split('{{CMD}}').join(cmd);
