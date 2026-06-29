@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.0.193
+- fix(installer): always refresh cca-managed title hooks on upgrade
+- fix(terminal-title): arm the {sid}.ask flag so awaiting ◐ is race-free
+- docs(publish): document web-auth/passkey publish flow in Discoveries
+
 ## v1.0.192
 - fix(pkg): exclude runtime .titles/ from published tarball
 
@@ -141,7 +146,4 @@
 
 ## v1.0.144
 - feat: swagger-style docs, wider layout, better install UX
-
-## v1.0.143
-- feat: add /validate-cca-install command
 
