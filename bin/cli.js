@@ -767,10 +767,21 @@ if (fs.existsSync(feedbackSrc)) {
   copyFn(feedbackSrc, path.join(claudeDest, 'feedback'));
 }
 
-// Copy hooks directory (preserve user customizations unless --force)
+// Copy hooks directory. Genuinely user-authorable hooks are preserved on upgrade
+// (copyDirIfMissing), BUT the cca-managed title-hook files are ALWAYS refreshed so bug-fixes
+// reach existing installs — without this, copyDirIfMissing leaves stale hooks in place forever
+// (same always-overwrite rationale as scripts/ below). --force already overwrites everything.
+const MANAGED_HOOKS = ['terminal-title.js', 'terminal-title.directive.md'];
 if (fs.existsSync(hooksSrc)) {
   const copyFn = forceMode ? copyDir : copyDirIfMissing;
   copyFn(hooksSrc, path.join(claudeDest, 'hooks'));
+  if (!forceMode) {
+    const hooksDestDir = path.join(claudeDest, 'hooks');
+    for (const name of MANAGED_HOOKS) {
+      const src = path.join(hooksSrc, name);
+      if (fs.existsSync(src)) fs.copyFileSync(src, path.join(hooksDestDir, name));
+    }
+  }
 }
 
 // Copy scripts directory (always overwrite — these are utility scripts, not user-customizable)

@@ -154,6 +154,18 @@ test('CLI uses copyDirIfMissing for hooks/', () => {
   assert(cliCode.includes("forceMode ? copyDir : copyDirIfMissing") && cliCode.includes("copyFn(hooksSrc"), 'CLI should use copyDirIfMissing for hooks');
 });
 
+test('CLI always refreshes the managed title hooks (so fixes reach existing installs)', () => {
+  const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
+  assert(
+    cliCode.includes("MANAGED_HOOKS = ['terminal-title.js', 'terminal-title.directive.md']"),
+    'CLI should define MANAGED_HOOKS (cca-managed title-hook files)'
+  );
+  assert(
+    /for \(const name of MANAGED_HOOKS\)[\s\S]*?copyFileSync/.test(cliCode),
+    'CLI should copyFileSync (always overwrite) the managed hooks, even on upgrade'
+  );
+});
+
 test('CLI supports --force flag', () => {
   const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
   assert(cliCode.includes("'--force'"), 'CLI should support --force flag');
