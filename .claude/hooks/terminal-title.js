@@ -41,18 +41,23 @@ const GLYPH = {
 // Per-invocation context for the optional debug log (populated in handle, read by titleLog).
 let logCtx = null;
 
-let input = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', chunk => (input += chunk));
-process.stdin.on('end', () => {
-  try {
-    handle(JSON.parse(input));
-  } catch (err) {
-    process.exit(0); // never break the turn on a title error — emit nothing
-  }
-});
+// Only drive from stdin when run AS the hook (`node terminal-title.js`). When require()'d by a test the
+// functions below are exported instead, so the stdin read doesn't hang the runner. async because the
+// Stop branch may await a short re-read beat (see the flush-race guard in handle).
+if (require.main === module) {
+  let input = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', chunk => (input += chunk));
+  process.stdin.on('end', async () => {
+    try {
+      await handle(JSON.parse(input));
+    } catch (err) {
+      process.exit(0); // never break the turn on a title error — emit nothing
+    }
+  });
+}
 
-function handle(data) {
+async function handle(data) {
   const event = data.hook_event_name || '';
   const sid = data.session_id || '';
   const cwd = data.cwd || process.cwd();
@@ -105,11 +110,32 @@ function handle(data) {
   // so VS Code paints the (otherwise bell-less) tab gold. "Ended on a question" = last visible
   // assistant text ends in '?' (transcript heuristic) OR an explicit {sid}.ask flag (consumed here).
   const askFile = path.join(dir, `${sid}.ask`);
-  let pending = lastResponseEndsWithQuestion(data.transcript_path);
+  const askPresent = fileExists(askFile);
+
+  // Grade the transcript, guarding the flush race: the final assistant text can land in the JSONL a beat
+  // AFTER Stop fires (the screen renders from the live stream; the file append lags by ~200ms). The tell
+  // is `suspectRace`: the freshest on-disk assistant block is text-less (thinking/tool_use only), or no
+  // text was found at all — both mean the real final message is still flushing. When that's the case,
+  // re-read a few times (~120ms apart) before grading, so a turn that actually ended on '?' isn't painted
+  // ✻ idle off a stale earlier block. A fully-flushed turn hits the text block first → suspectRace=false →
+  // zero delay. The {sid}.ask flag remains the race-proof backstop.
+  let q = inspectLastResponse(data.transcript_path);
+  let reread = 0;
+  while (!q.ends && (q.suspectRace || !q.found) && reread < 7) {
+    await delay(120);
+    reread++;
+    q = inspectLastResponse(data.transcript_path);
+    if (q.ends || (q.found && !q.suspectRace)) break;
+  }
+
+  let pending = q.ends;
   let note = pending ? 'q-mark' : 'idle';
-  if (!pending && fileExists(askFile)) { pending = true; note = 'ask-flag'; }
-  if (fileExists(askFile)) { try { fs.unlinkSync(askFile); } catch (_) { /* ignore */ } }
-  if (logCtx) logCtx.note = note;
+  if (!pending && askPresent) { pending = true; note = 'ask-flag'; }
+  if (askPresent) { try { fs.unlinkSync(askFile); } catch (_) { /* ignore */ } }
+  if (logCtx) {
+    logCtx.note = note;
+    logCtx.diag = `ask=${askPresent ? 1 : 0} qmark=${q.ends ? 1 : 0} found=${q.found ? 1 : 0} reread=${reread} tail="${q.tail}"`;
+  }
   const glyph = pending ? GLYPH.awaiting : GLYPH.idle;
   emit(setTitle(glyph, normalize(readTitle(file) || folderName(cwd)), pending));
 }
@@ -135,9 +161,10 @@ function titleLog(glyph, title, ring) {
     const name = glyph === GLYPH.working ? 'working'
       : glyph === GLYPH.awaiting ? 'awaiting'
       : glyph === GLYPH.idle ? 'idle' : 'other';
+    const diag = logCtx.diag ? `  ${logCtx.diag}` : '';
     const line = `${new Date().toISOString()}  ${logCtx.event.padEnd(16)} `
       + `${name.padEnd(8)} ring=${ring ? 1 : 0} note=${(logCtx.note || '-').padEnd(8)} `
-      + `sid=${logCtx.sid} | ${title}\n`;
+      + `sid=${logCtx.sid} | ${title}${diag}\n`;
     const f = path.join(logCtx.dir, '_debug.log');
     try { if (fs.statSync(f).size > 512 * 1024) fs.renameSync(f, `${f}.1`); } catch (_) { /* none yet */ }
     fs.appendFileSync(f, line);
@@ -150,16 +177,26 @@ function fileExists(file) {
 
 // Stop heuristic: did the turn end on a question? Read the JSONL transcript, find the most-recent
 // assistant message with VISIBLE text (skip pure tool_use turns so a final title/memory Write doesn't
-// mask the question), test whether it ends in '?' (allowing trailing whitespace / ) * _ "). Any error → false.
-function lastResponseEndsWithQuestion(transcriptPath) {
-  if (!transcriptPath) return false;
+// mask the question), test whether it ends in '?' (allowing trailing whitespace / ) * _ "). Returns a
+// diagnostic record { ends, found, tail }: `ends` is the old boolean the caller branches on; `found`
+// and `tail` feed the debug log so a missing half-circle can be told apart — a transcript-flush race
+// shows found=0 (or a stale tail), a genuine regex miss shows a tail that's present but doesn't end
+// in '?'. Any error → a blank record (treated as "no question"), matching the old false return.
+function inspectLastResponse(transcriptPath) {
+  const blank = { ends: false, found: false, tail: '', suspectRace: false };
+  if (!transcriptPath) return blank;
   let content;
   try {
     content = fs.readFileSync(transcriptPath, 'utf8');
   } catch (_) {
-    return false;
+    return blank;
   }
   const lines = content.split('\n');
+  // Did we pass a TEXT-LESS assistant block (thinking-only / tool_use-only) on the way back to the last
+  // text block? At a fully-flushed Stop the final assistant message HAS text, so we hit it first and this
+  // stays false. If it's true, the turn's real final text is most likely still being appended to the
+  // JSONL (the flush race) — the caller re-reads after a beat before grading rather than trust this block.
+  let sawTextlessAssistant = false;
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i].trim();
     if (!line) continue;
@@ -176,10 +213,20 @@ function lastResponseEndsWithQuestion(transcriptPath) {
         .map(b => b.text)
         .join('\n');
     }
-    if (text.trim()) return /\?[\s)*_"]*$/.test(text);
+    if (text.trim()) {
+      // last ~60 chars, collapsed to one line and quote-stripped so it can't break the log framing
+      const tail = text.trim().slice(-60).replace(/\s+/g, ' ').replace(/"/g, "'");
+      return { ends: /\?[\s)*_"]*$/.test(text), found: true, tail, suspectRace: sawTextlessAssistant };
+    }
+    // assistant message with no visible text = a thinking-only or tool_use-only block sitting AFTER the
+    // last text we'll grade — a strong hint the final text line hasn't flushed yet.
+    sawTextlessAssistant = true;
   }
-  return false;
+  return blank;
 }
+
+// Event-loop-friendly sleep for the Stop flush-race re-read beat (handle awaits this; no busy-wait).
+function delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
 function readTitle(file) {
   try {
@@ -239,3 +286,6 @@ function extractBlock(tpl, name) {
   const m = tpl.match(re);
   return m ? m[1].trim() : '';
 }
+
+// Exported for tests (require()'d when require.main !== module). The hook itself never reads these.
+module.exports = { inspectLastResponse, normalize, GLYPH };

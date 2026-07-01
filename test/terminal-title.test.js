@@ -343,6 +343,46 @@ test('Notification -> single BEL (CC already rang its own bell)', () => {
 });
 console.log();
 
+console.log('Flush-race guard (inspectLastResponse.suspectRace — race-proof grading under transcript-flush lag):');
+
+// Unit-test the detector directly (require works because the hook guards its stdin drive behind
+// require.main === module and exports these). suspectRace is what makes handle re-read a few times
+// before grading, so a turn that really ended on '?' isn't painted idle off a stale earlier block.
+const { inspectLastResponse } = require(HOOK);
+
+test('race: newest on-disk block is text-less (tool_use/thinking) after a statement -> suspectRace, not ended', () => {
+  const cwd = mkWorkspace();
+  const tp = writeTranscript(cwd, 'race', [
+    asst([{ type: 'text', text: 'Working on the extraction change:' }]),
+    asst([{ type: 'tool_use', name: 'Edit', input: {} }]),
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'thinking', thinking: '...' }] } },
+  ]);
+  const q = inspectLastResponse(tp);
+  assert(q.ends === false && q.suspectRace === true, `expected {ends:false, suspectRace:true}, got ${JSON.stringify(q)}`);
+});
+
+test('after the "?" text flushes in as the newest block -> ends:true', () => {
+  const cwd = mkWorkspace();
+  const tp = writeTranscript(cwd, 'race-flushed', [
+    asst([{ type: 'text', text: 'Working on the extraction change:' }]),
+    asst([{ type: 'tool_use', name: 'Edit', input: {} }]),
+    asst([{ type: 'text', text: 'Want me to apply it?' }]),
+  ]);
+  const q = inspectLastResponse(tp);
+  assert(q.ends === true, `expected ends:true, got ${JSON.stringify(q)}`);
+});
+
+test('fully-flushed statement (newest block has text, no "?") -> not ended, no race suspected (zero-delay path)', () => {
+  const cwd = mkWorkspace();
+  const tp = writeTranscript(cwd, 'flushed-stmt', [
+    asst([{ type: 'text', text: 'Done. The fix is applied.' }]),
+  ]);
+  const q = inspectLastResponse(tp);
+  assert(q.ends === false && q.suspectRace === false, `expected {ends:false, suspectRace:false}, got ${JSON.stringify(q)}`);
+});
+console.log();
+
+
 // Cleanup
 for (const dir of tempDirs) {
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
