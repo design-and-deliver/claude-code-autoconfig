@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.194
+- fix(terminal-title): guard the Stop question-grade against the transcript-flush race
+
 ## v1.0.193
 - fix(installer): always refresh cca-managed title hooks on upgrade
 - fix(terminal-title): arm the {sid}.ask flag so awaiting ◐ is race-free
