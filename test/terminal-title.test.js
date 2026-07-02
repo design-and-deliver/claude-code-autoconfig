@@ -382,6 +382,49 @@ test('fully-flushed statement (newest block has text, no "?") -> not ended, no r
 });
 console.log();
 
+console.log('Parenthetical closing question (fallback regex tolerates one trailing aside):');
+
+// A closing question followed by a single parenthetical aside ("...option 2? (I lean 2.)") is a common
+// shape and IS a blocking question — the fallback regex allows one trailing (...) group after the '?'.
+// These guard both directions: the aside cases must grade ends:true, and a plain statement ending in
+// ')' / a mid-message rhetorical '?' must still grade ends:false (the widening added no false positives).
+test('question then a trailing parenthetical aside -> ends:true', () => {
+  const cwd = mkWorkspace();
+  const tp = writeTranscript(cwd, 'paren-aside', [
+    asst([{ type: 'text', text: 'How should we handle it? (I lean option 2.)' }]),
+  ]);
+  const q = inspectLastResponse(tp);
+  assert(q.ends === true, `a question + trailing (aside) should grade ends:true, got ${JSON.stringify(q)}`);
+});
+
+test('question fully wrapped in parens -> ends:true', () => {
+  const cwd = mkWorkspace();
+  const tp = writeTranscript(cwd, 'paren-wrap', [
+    asst([{ type: 'text', text: '(So how should we handle it?)' }]),
+  ]);
+  const q = inspectLastResponse(tp);
+  assert(q.ends === true, `a parenthesized question should grade ends:true, got ${JSON.stringify(q)}`);
+});
+
+test('plain statement ending in a paren -> ends:false (no false positive)', () => {
+  const cwd = mkWorkspace();
+  const tp = writeTranscript(cwd, 'paren-stmt', [
+    asst([{ type: 'text', text: 'I updated the file (finally).' }]),
+  ]);
+  const q = inspectLastResponse(tp);
+  assert(q.ends === false, `a statement ending in ")" must NOT grade as a question, got ${JSON.stringify(q)}`);
+});
+
+test('mid-message rhetorical "?" then a closing statement -> ends:false (no false positive)', () => {
+  const cwd = mkWorkspace();
+  const tp = writeTranscript(cwd, 'paren-rhetorical', [
+    asst([{ type: 'text', text: 'I asked: is this right? Then I fixed it and moved on.' }]),
+  ]);
+  const q = inspectLastResponse(tp);
+  assert(q.ends === false, `a mid-message "?" must NOT grade as a closing question, got ${JSON.stringify(q)}`);
+});
+console.log();
+
 
 // Cleanup
 for (const dir of tempDirs) {

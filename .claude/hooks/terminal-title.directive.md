@@ -69,9 +69,14 @@ proceed, do BOTH of these as near-final actions so the tab flips to the AWAITING
 (instead of the idle asterisk):
   1. Write the flag file {{ASK_FILE}} (any short content, e.g. "1"). This is the RELIABLE trigger --
      it is on disk before the turn ends, so it never misses (the transcript-text check in 2 can race
-     the turn-end write and silently miss). The flag is one-shot: it is consumed at turn end and
-     auto-cleared next turn, so write it ONLY on a turn you are genuinely blocked on an answer.
-  2. Phrase your FINAL line so it ends with a question mark ('?') -- a backup signal, and good UX.
+     the turn-end write and silently miss, or miss on phrasing -- see below). The flag is one-shot: it
+     is consumed at turn end and auto-cleared next turn, so write it ONLY on a turn you are genuinely
+     blocked on an answer. Write it WHENEVER the turn genuinely needs the user's answer to proceed --
+     the flag doesn't parse your text, so it is correct even when your closing question is wrapped in
+     parens, phrased as a parenthetical aside, or is not the literal final character of the message.
+  2. Phrase your FINAL line so it ends with a question mark ('?') -- a backup signal, and good UX. A
+     single trailing parenthetical aside after the '?' is fine ("...option A or B? (I lean B.)"), but
+     do not rely on phrasing for the signal -- the flag in step 1 is what reliably flips the tab.
 Make the closing question self-contained: answerable from the question alone, without re-reading
 the response above it. Only do this for a genuine blocking question, never a rhetorical one or a recap.
 <!-- /DIRECTIVE:PENDING -->

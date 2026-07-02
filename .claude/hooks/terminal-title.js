@@ -177,7 +177,8 @@ function fileExists(file) {
 
 // Stop heuristic: did the turn end on a question? Read the JSONL transcript, find the most-recent
 // assistant message with VISIBLE text (skip pure tool_use turns so a final title/memory Write doesn't
-// mask the question), test whether it ends in '?' (allowing trailing whitespace / ) * _ "). Returns a
+// mask the question), test whether it ends in '?' (allowing trailing whitespace / ) * _ ", plus one
+// trailing parenthetical aside — see the endsOnQuestion regex below). Returns a
 // diagnostic record { ends, found, tail }: `ends` is the old boolean the caller branches on; `found`
 // and `tail` feed the debug log so a missing half-circle can be told apart — a transcript-flush race
 // shows found=0 (or a stale tail), a genuine regex miss shows a tail that's present but doesn't end
@@ -216,7 +217,15 @@ function inspectLastResponse(transcriptPath) {
     if (text.trim()) {
       // last ~60 chars, collapsed to one line and quote-stripped so it can't break the log framing
       const tail = text.trim().slice(-60).replace(/\s+/g, ' ').replace(/"/g, "'");
-      return { ends: /\?[\s)*_"]*$/.test(text), found: true, tail, suspectRace: sawTextlessAssistant };
+      // Ends on a question? A '?' at the end, tolerating trailing whitespace / ) * _ " — AND an optional
+      // SINGLE trailing parenthetical aside after it ("How should we handle it? (I lean option 2.)"), a
+      // common shape: ask, then a bracketed recommendation/clarifier. The aside is one level only
+      // (`[^()]`, no nesting) and must sit at the very end, so a mid-message rhetorical '?' or a plain
+      // statement ending in ')' still won't match — only a genuine closing question does. Belt to the
+      // {sid}.ask flag's suspenders: the flag is the primary, parse-free path; this only hardens the
+      // fallback for turns that ended on a parenthetical question without writing one.
+      const endsOnQuestion = /\?[\s)*_"]*(\([^()]*\)[\s.*_"]*)?$/.test(text);
+      return { ends: endsOnQuestion, found: true, tail, suspectRace: sawTextlessAssistant };
     }
     // assistant message with no visible text = a thinking-only or tool_use-only block sitting AFTER the
     // last text we'll grade — a strong hint the final text line hasn't flushed yet.
