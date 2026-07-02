@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.195
+- fix(terminal-title): flip awaiting ◐ for a closing question with a trailing parenthetical aside
+
 ## v1.0.194
 - fix(terminal-title): guard the Stop question-grade against the transcript-flush race
 
@@ -143,10 +146,4 @@
 
 ## v1.0.146
 - style: improve inside-Claude block message formatting
-
-## v1.0.145
-- fix: block npx install from inside Claude Code session
-
-## v1.0.144
-- feat: swagger-style docs, wider layout, better install UX
 
