@@ -52,7 +52,7 @@ See `.claude/feedback/` for corrections and guidance from the team.
   cd C:\CODE\claude-code-autoconfig && npm login --auth-type=web && npm publish
   ```
   → browser opens → pick the Google passkey → close it → `+ claude-code-autoconfig@<version>`.
-- **After** the success line, the agent pushes: `git push origin main --follow-tags`. Never double-bump if the version is already bumped. Full procedure: `.claude/commands/publish.md`.
+- **After** the success line, the agent pushes: `git push origin main --follow-tags`. Never double-bump if the version is already bumped. Full procedure: `.claude/commands/deploy-to-npmjs.md` (`/deploy-to-npmjs`).
 
 ## Debugging Methodology — Evidence Before Solutions
 

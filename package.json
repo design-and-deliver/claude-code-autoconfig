@@ -40,7 +40,7 @@
     "!.claude/cca.config.json",
     "!.claude/.autoconfig-version",
     "!.claude/.autoconfig-plugins.json",
-    "!.claude/commands/publish.md",
+    "!.claude/commands/deploy-to-npmjs.md",
     "!.claude/plans",
     "CLAUDE.md",
     "CHANGELOG.md"

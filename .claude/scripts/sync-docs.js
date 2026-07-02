@@ -32,6 +32,10 @@ const SKIP = new Set([
 // Folders we scan for files
 const SCAN_FOLDERS = ['commands', 'agents', 'hooks', 'feedback'];
 
+// Dev-only files that live in the maintainer repo but are never installed to
+// user projects (mirror of bin/cli.js DEV_ONLY_FILES) — never document them.
+const DEV_ONLY_FILES = new Set(['deploy-to-npmjs.md']);
+
 // Structural keys that are not file-backed (always preserved, never generated)
 const STRUCTURAL_KEYS = new Set([
   'memory-md', 'root', 'claude-md', 'claude-dir'
@@ -263,6 +267,7 @@ function scanFiles() {
     }).sort();
 
     for (const file of files) {
+      if (DEV_ONLY_FILES.has(file)) continue;
       const ext = path.extname(file);
       const filePath = path.join(folderPath, file);
       const content = fs.readFileSync(filePath, 'utf8');
@@ -541,7 +546,12 @@ function generateFileContents(entries) {
 // =============================================================================
 
 const entries = scanFiles();
-let html = fs.readFileSync(docsPath, 'utf8');
+// The docs HTML may be CRLF on Windows, but every marker below is authored with
+// `\n`. Normalize to LF for the string surgery, then restore the file's original
+// EOL on write so we don't churn every line.
+const rawHtml = fs.readFileSync(docsPath, 'utf8');
+const eol = rawHtml.includes('\r\n') ? '\r\n' : '\n';
+let html = rawHtml.replace(/\r\n/g, '\n');
 
 // 1. Replace the file tree (between claude-dir folder row and settings.json closing div)
 //    We find the marker after the claude-dir folder and replace up to the settings div
@@ -656,7 +666,7 @@ if (fcEnd === -1) {
 const newFileContents = generateFileContents(entries);
 html = html.slice(0, fcInsertPoint) + newFileContents + '\n        ' + html.slice(fcEnd);
 
-fs.writeFileSync(docsPath, html);
+fs.writeFileSync(docsPath, eol === '\r\n' ? html.replace(/\n/g, '\r\n') : html);
 
 const fileCount = entries.filter(e => !e.isEmptyFolder).length;
 console.log(`Synced ${fileCount} files to docs.`);

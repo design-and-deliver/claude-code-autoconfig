@@ -3,7 +3,7 @@ node_modules/
 # Local settings (not committed)
 .claude/settings.local.json
 .claude/cca.config.json
-.claude/commands/publish.md
+.claude/commands/deploy-to-npmjs.md
 
 # Windows null device workaround
 nul

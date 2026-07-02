@@ -68,7 +68,7 @@ for d in expected_dirs:
         info.append(f'OK: .claude/{d}/ exists')
 
 # --- 2. Check command files and versions ---
-dev_only = ['publish.md']
+dev_only = ['deploy-to-npmjs.md']
 pkg_cmds_dir = os.path.join(pkg_dir, '.claude', 'commands')
 local_cmds_dir = os.path.join(claude_dir, 'commands')
 

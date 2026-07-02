@@ -888,11 +888,6 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">gls.md</span>
                             </div>
-                            <div class="tree-item indent-3 hidden" data-info="publish" data-parent="commands">
-                                <span class="tree-spacer"></span>
-                                <span class="tree-file-icon">📄</span>
-                                <span class="file">publish.md</span>
-                            </div>
                             <div class="tree-item indent-3 hidden" data-info="recover-context" data-parent="commands">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
@@ -1308,11 +1303,6 @@
                 desc: 'Get the latest screenshot(s) and display them.<div style="margin-top: 12px;"><strong>Parameters</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Name</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Type</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>count</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>integer</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Number of screenshots to display. Use /gls-N syntax. Default: 1. Min: 1.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>path</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>string</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Screenshot directory path. Saved for future use. Auto-detected if omitted.</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Displays requested screenshot(s) from newest to oldest.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-screenshots</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Directory exists but contains no image files.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-directory</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Unable to detect screenshot directory — prompts for path.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Saves detected screenshot path to .claude/cca.config.json on first run</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/gls</code> <span style="opacity: 0.6;">— Display the most recent screenshot</span></div><div><code>/gls-3</code> <span style="opacity: 0.6;">— Display the 3 most recent screenshots</span></div><div><code>/gls /path/to/dir</code> <span style="opacity: 0.6;">— Use a specific screenshot directory</span></div></div></div>',
                 trigger: '/gls'
             },
-            'publish': {
-                title: 'publish.md',
-                desc: 'Runs tests, bumps version, commits, and publishes to npm.<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div>',
-                trigger: '/publish'
-            },
             'recover-context': {
                 title: 'recover-context.md',
                 desc: 'Recovers conversation context from the session transcript after compaction.<div style="margin-top: 12px;"><strong>Parameters</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Name</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Type</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>minutes</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>integer</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">required</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">How far back to recover, in minutes. Leading dash optional. Min: 1.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>--show</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>flag</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Opens the extracted transcript in your default editor.</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">~{tokens} tokens recovered ({N} messages across {sessions} session(s), last {minutes} min).</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-transcript</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">No transcript files found.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-messages</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">No messages found in the requested time range.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Reads .jsonl transcripts from ~/.claude/projects/, writes temp file</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/recover-context -60</code> <span style="opacity: 0.6;">— Last 60 minutes of conversation</span></div><div><code>/recover-context 120</code> <span style="opacity: 0.6;">— Last 2 hours (dash optional)</span></div><div><code>/recover-context -60 --show</code> <span style="opacity: 0.6;">— Last 60 min + open transcript file</span></div></div></div>',
@@ -1721,36 +1711,6 @@ OS=$(uname -s); echo "OS=$OS"; for d in \\
   "$HOME/Videos/Captures"; do \\
   [ -d "$d" ] || continue; \\
   newest=$(ls -t "$d/" 2>/dev/null | grep -iE '\\.(png|jpg|jpeg|bmp|webp|gif)$' | head -1); \\`
-            },
-            'publish': {
-                filename: 'publish.md',
-                content: `# Publish
-
-Run tests, bump the patch version, commit, push, and publish to npm.
-
-## Steps
-
-1. **Sync README.md** — Compare the current README against the actual state of the project (file tree, slash commands, features, settings). If anything is out of date or missing, update the README before proceeding. Check:
-   - File tree matches actual \`.claude/\` directory contents
-   - Slash commands table matches actual \`.claude/commands/\` files
-   - Feature sections reflect current capabilities (update system, MEMORY.md, hooks, etc.)
-   - No references to nonexistent commands or files
-2. Run the project's test suite (\`npm test\`)
-3. **If tests fail, stop here.** Do not publish broken code.
-4. Check for uncommitted changes. If there are any:
-   a. Stage all changes (\`git add -A\`)
-   b. Generate a conventional commit message based on the diff
-   c. Commit the changes
-5. Bump the version: \`npm version patch\`
-6. Push the commit and tag: \`git push && git push --tags\`
-7. Publish to npm: \`npm publish\`
-8. Output the new version number on success
-
-## Important
-
-- Always run tests before publishing — never skip this step
-- If any step fails, stop immediately and report the error
-- Do not use \`--force\` on publish unless the user explicitly asks`
             },
             'recover-context': {
                 filename: 'recover-context.md',
