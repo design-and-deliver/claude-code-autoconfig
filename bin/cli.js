@@ -435,8 +435,12 @@ if (process.argv[2] === 'plugin') {
 
 const forceMode = process.argv.includes('--force');
 
-// Detect if running inside Claude Code session
-const insideClaude = process.env.CLAUDECODE === '1';
+// Detect if running inside Claude Code session.
+// CLAUDECODE=1 alone is not reliable: env vars inherit into every descendant
+// process (e.g. VS Code launched from a Claude session, and any terminal it
+// spawns). A genuine in-agent run has piped stdio (isTTY falsy), while a human
+// terminal has a real TTY — so require both signals before blocking.
+const insideClaude = process.env.CLAUDECODE === '1' && !process.stdout.isTTY;
 
 console.log('\x1b[36m%s\x1b[0m', '🚀 Claude Code Autoconfig');
 console.log();

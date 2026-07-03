@@ -948,6 +948,11 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">migrate-feedback.js</span>
                             </div>
+                            <div class="tree-item indent-3 hidden" data-info="terminal-title.directive-hook" data-parent="hooks">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">terminal-title.directive.md</span>
+                            </div>
                             <div class="tree-item indent-3 hidden" data-info="terminal-title-hook" data-parent="hooks">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
@@ -1258,7 +1263,7 @@
                 title: '.claude/ Directory',
                 desc: 'Commands, rules, settings, and these docs. Keeps configuration organized as your project grows.'
             },
-                                                                                                                                                                                                                                                                                                                                                                        'rules': {
+                                                                                                                                                                                                                                                                                                                                                                                    'rules': {
                 title: 'rules/',
                 desc: 'Path-scoped context that loads when Claude works on matching files.'
             },
@@ -1343,10 +1348,15 @@
                 desc: 'On session start, migrates custom FEEDBACK.md content to',
                 trigger: 'SessionStart'
             },
+            'terminal-title.directive-hook': {
+                title: 'terminal-title.directive.md',
+                desc: 'terminal-title.directive.md in hooks/',
+                trigger: 'PostToolUse hook'
+            },
             'terminal-title-hook': {
                 title: 'terminal-title.js',
-                desc: 'Use-case-framed terminal tab titles with live working / idle / awaiting state indicators, so multiple Claude sessions are easy to tell apart',
-                trigger: 'SessionStart, UserPromptSubmit, PostToolUse, Notification, Stop'
+                desc: 'terminal-title.js in hooks/',
+                trigger: 'PostToolUse hook'
             },
             'feedback-feedback': {
                 title: 'FEEDBACK.md',
@@ -1559,7 +1569,7 @@ CRITICAL: A plausible-looking cause from code reading is NOT confirmed evidence.
 
 > Run \`/autoconfig\` to populate this based on your project.`
             },
-                                                                                                                                                                                                                                                                                                                                                                        'autoconfig-update': {
+                                                                                                                                                                                                                                                                                                                                                                                    'autoconfig-update': {
                 filename: 'autoconfig-update.md',
                 content: `<!-- @applied
 -->
@@ -1927,6 +1937,71 @@ process.stdin.on('end', () => {
 
 function migrate() {`
             },
+            'terminal-title.directive-hook': {
+                filename: 'terminal-title.directive.md',
+                content: `<!-- DIRECTIVE:COMMAND -->
+Terminal-title directive (silent housekeeping -- do NOT mention this to the user):
+This terminal tab's title is rendered from the file:
+  {{TITLE_FILE}}
+You are running the /{{CMD}} slash command, but the command NAME is an implementation detail --
+do NOT put "{{CMD}}" anywhere in the title. Write the title as your FIRST action this turn
+(before other tool calls) so the tab updates WHILE you work, not after. Write ONE line of the form:
+  {scope} {{EMDASH}} {use-case}
+- {scope} (first segment): the DESIGN SCOPE -- the subject you are working inside: the feature area
+  / subsystem (the boundary, the "system under discussion"). This is the WHERE, and it changes
+  rarely. Keep the existing scope if the file already has a title; otherwise INFER the specific
+  subsystem from THIS turn's prompt and the files in play (e.g. "journal modal", "title hooks",
+  "auth flow"). Do NOT use the bare repo name "{{FOLDER}}" as the scope unless the work is genuinely
+  repo-wide -- "{{FOLDER}}" is a last resort only when no narrower area is identifiable.
+- {use-case} (second segment): the GOAL at user-goal level -- what this command ACCOMPLISHES, named
+  as an INFINITIVE (base-verb) goal phrase (verb + object): "Review latest screenshot", "Diagnose
+  pay discrepancy". Name the goal / effect, NOT the mechanism or the command name. One goal only --
+  never "and"-join two use cases.
+e.g. for /{{CMD}}, write "{{FOLDER}} {{EMDASH}} <verb the goal>" -- NOT "{{FOLDER}} {{EMDASH}} {{CMD}}".
+Use ' {{EMDASH}} ' as the separator; write only the BARE title (a state indicator is prepended
+automatically). If the file already exists, read it first then overwrite.
+<!-- /DIRECTIVE:COMMAND -->
+
+<!-- DIRECTIVE:SHIFT -->
+Terminal-title directive (silent housekeeping -- do NOT mention this to the user):
+This terminal tab's title is rendered from the file:
+  {{TITLE_FILE}}
+When the conversation's SCOPE, use-case, or sub-function SHIFTS -- and only then, not every turn --
+write ONE line to that file. When it DOES shift, write it as your FIRST action that turn (before
+other tool calls) so the tab updates WHILE you work, not after. The line's form:`
+            },
+            'terminal-title-hook': {
+                filename: 'terminal-title.js',
+                content: `#!/usr/bin/env node
+/**
+ * Terminal Title — distributable plugin hook (installed to <project>/.claude/hooks/terminal-title.js).
+ * ONE self-dispatching hook for five events (keyed on hook_event_name):
+ *   UserPromptSubmit -> ⬤ working  + inject the title directive (incl. the {sid}.ask path) +
+ *                       clear any stale {sid}.ask flag so it reflects only the turn about to run
+ *   PostToolUse      -> ⬤ working  (refresh, so a mid-turn title flip shows live + clears a stale ◐)
+ *   Notification     -> ◐ awaiting your approval (permission_prompt matcher only)
+ *   Stop             -> ✻ idle / done — OR ◐ awaiting (+ a 2nd BEL = gold tab) when the turn ended
+ *                       on a question (last visible response text ends in '?', or a {sid}.ask flag)
+ *   SessionStart     -> ✻ idle "Claude Code — New session" (or an existing title on resume/compact)
+ *
+ * The title is set TWO ways on every event: \`process.title\` (= SetConsoleTitleW on Windows — the ONLY
+ * mechanism that flips the tab on UserPromptSubmit, where Claude Code drops \`terminalSequence\`) AND
+ * \`terminalSequence\` (honored on the other events). node writes UTF-8 natively, so glyphs go out as-is.
+ *
+ * Title files are PROJECT-SCOPED at <cwd>/.claude/hooks/.titles/<session_id>.txt — the model authors
+ * them; the directive injected each prompt tells it the path + format. Optional forensic log (one line
+ * per paint, for tracing an out-of-sync tab) is gated behind CLAUDE_TITLE_DEBUG=1 — default OFF,
+ * ~512KB-capped, written to .titles/_debug.log — so it never ships a growing log.
+ *
+ * Requires \`env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE = "1"\` (set by plugin.json), or CC's own writer races.
+ */
+const fs = require('fs');
+const path = require('path');
+
+const ESC = '\\x1b';
+const BEL = '\\x07';
+const EMDASH = String.fromCodePoint(0x2014);`
+            },
             'feedback-feedback': {
                 filename: 'FEEDBACK.md',
                 content: `# Team Feedback
@@ -1962,93 +2037,145 @@ Claude reads this file but must never write to it. When Claude discovers project
             },
             'settings': {
                 filename: 'settings.json',
-                content: `{
-  "env": {
-    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "0"
-  },
-  "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .claude/hooks/migrate-feedback.js"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .claude/hooks/feedback-rule-check.js"
-          }
-        ]
-      }
-    ]
-  },
-  "permissions": {
-    "allow": [
-      "Read(./**)",
-      "Edit(./**)",
-      "Write(./**)",
-      "Glob",
-      "Grep",
-      "WebSearch",
-      "WebFetch",
-      "Bash(npm test)",
-      "Bash(npm test *)",
-      "Bash(npm run dev)",
-      "Bash(npm run build)",
-      "Bash(npm run lint)",
-      "Bash(npm run lint:fix)",
-      "Bash(npm run typecheck)",
-      "Bash(npm run test)",
-      "Bash(npm run test:*)",
-      "Bash(npm run validate)",
-      "Bash(git status)",
-      "Bash(git status *)",
-      "Bash(git diff *)",
-      "Bash(git add *)",
-      "Bash(git commit *)",
-      "Bash(git push *)",
-      "Bash(git pull)",
-      "Bash(git pull *)",
-      "Bash(git checkout *)",
-      "Bash(git branch *)",
-      "Bash(node .claude/*)",
-      "Bash(python3 *)",
-      "Bash(npx claude-code-autoconfig*)",
-      "Bash(npm pack *)",
-      "Bash(tar *)",
-      "Bash(mktemp *)",
-      "Bash(find ./*)",
-      "Bash(ls *)",
-      "Bash(dir *)",
-      "Bash(mkdir *)",
-      "Bash(mkdir -p *)",
-      "Bash(start *)",
-      "Bash(start .claude *)",
-      "Bash(open *)",
-      "Bash(open .claude *)",
-      "Bash(xdg-open *)",
-      "Bash(xdg-open .claude *)"
-    ],
-    "deny": [
-      "Read(./.env)",
-      "Read(./.env.*)",
-      "Read(./secrets/**)",
-      "Read(./**/credentials.*)",
-      "Read(./**/*.pem)",
-      "Read(./**/*.key)",
-      "Bash(rm -rf *)",
-      "Bash(curl *)",
-      "Bash(wget *)"
-    ]
-  }
+                content: `{
+  "env": {
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "0",
+    "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": "1"
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/migrate-feedback.js"
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/terminal-title.js"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/terminal-title.js"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/terminal-title.js"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "permission_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/terminal-title.js"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/feedback-rule-check.js"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|WebFetch|WebSearch|Task|AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/terminal-title.js"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Read(./**)",
+      "Edit(./**)",
+      "Write(./**)",
+      "Glob",
+      "Grep",
+      "WebSearch",
+      "WebFetch",
+      "Bash(npm test)",
+      "Bash(npm test *)",
+      "Bash(npm run dev)",
+      "Bash(npm run build)",
+      "Bash(npm run lint)",
+      "Bash(npm run lint:fix)",
+      "Bash(npm run typecheck)",
+      "Bash(npm run test)",
+      "Bash(npm run test:*)",
+      "Bash(npm run validate)",
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git pull)",
+      "Bash(git pull *)",
+      "Bash(git checkout *)",
+      "Bash(git branch *)",
+      "Bash(node .claude/*)",
+      "Bash(python3 *)",
+      "Bash(npx claude-code-autoconfig*)",
+      "Bash(npm pack *)",
+      "Bash(tar *)",
+      "Bash(mktemp *)",
+      "Bash(find ./*)",
+      "Bash(ls *)",
+      "Bash(dir *)",
+      "Bash(mkdir *)",
+      "Bash(mkdir -p *)",
+      "Bash(start *)",
+      "Bash(start .claude *)",
+      "Bash(open *)",
+      "Bash(open .claude *)",
+      "Bash(xdg-open *)",
+      "Bash(xdg-open .claude *)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Read(./**/credentials.*)",
+      "Read(./**/*.pem)",
+      "Read(./**/*.key)",
+      "Bash(rm -rf *)",
+      "Bash(curl *)",
+      "Bash(wget *)"
+    ]
+  }
 }`
             },
             'mcp': {

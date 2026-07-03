@@ -312,6 +312,34 @@ test('docs HTML td code padding is tight (4px or less horizontal)', () => {
 
 console.log();
 
+console.log('Inside-Claude Detection:');
+
+test('guard requires BOTH CLAUDECODE=1 and non-TTY stdout', () => {
+  // CLAUDECODE=1 inherits into descendants (e.g. VS Code launched from a
+  // Claude session), so the env var alone must never trigger the block.
+  const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
+  assert(
+    cliCode.includes("process.env.CLAUDECODE === '1' && !process.stdout.isTTY"),
+    'insideClaude should check CLAUDECODE === 1 AND !process.stdout.isTTY'
+  );
+});
+
+test('CLI blocks when run in-agent (CLAUDECODE=1, piped stdio)', () => {
+  const { spawnSync } = require('child_process');
+  const result = spawnSync(process.execPath, [CLI_PATH], {
+    env: { ...process.env, CLAUDECODE: '1' },
+    encoding: 'utf8',
+    timeout: 30000,
+  });
+  assert(
+    result.stdout.includes('regular terminal'),
+    `CLI should print the regular-terminal block message, got: ${result.stdout}`
+  );
+  assert(result.status === 0, `CLI should exit 0 when blocked, got ${result.status}`);
+});
+
+console.log();
+
 console.log('Settings.json Content:');
 
 test('settings.json has permissions', () => {
