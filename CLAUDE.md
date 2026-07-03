@@ -42,17 +42,13 @@ See `.claude/feedback/` for corrections and guidance from the team.
 ## Discoveries
 <!-- Claude: append project-specific learnings, gotchas, and context below. This section persists across /autoconfig runs. -->
 
-### Publishing to npm — web-auth (passkey) flow, run by the human
+### Publishing to npm — bypass-2FA token flow (web-auth publish is a DEAD END)
 
-`npm publish` for this package is a **two-actor** flow; a bare in-agent `npm publish` will FAIL. (Supersedes the auto-generated "## Publishing" one-liner above.)
+(Supersedes the auto-generated "## Publishing" one-liner above.)
 
-- The npm account has **2FA**. A sandboxed/agent shell can't open a browser, so `npm publish` there dies with `npm error code EOTP`. Don't retry it in-agent; don't default to asking for a typed OTP.
-- **Working flow:** the agent runs `npm test` + `npm version patch` (commit + tag), then the **human runs the publish in their own terminal** (needs a browser):
-  ```
-  cd C:\CODE\claude-code-autoconfig && npm login --auth-type=web && npm publish
-  ```
-  → browser opens → pick the Google passkey → close it → `+ claude-code-autoconfig@<version>`.
-- **After** the success line, the agent pushes: `git push origin main --follow-tags`. Never double-bump if the version is already bumped. Full procedure: `.claude/commands/deploy-to-npmjs.md` (`/deploy-to-npmjs`).
+- **Primary flow (agent can do it end-to-end):** `npm test` + `npm version patch` (commit + tag) → `npm whoami` to verify the Bypass-2FA granular token in `~/.npmrc` still authenticates → plain `npm publish` (works headless, no OTP) → after the `+ claude-code-autoconfig@<version>` line, `git push origin main --follow-tags`. Never double-bump if the version is already bumped.
+- **If `npm whoami` returns E401**, the token is dead/expired (90-day cap). The human rotates it (npmjs.com → Access Tokens → Granular → "Bypass 2FA", read-write, scoped to this package only) and pastes it into `~/.npmrc` in an editor — never via a command. Stopgap without a token: `npm publish --otp=<recovery-code>` in the human's own terminal.
+- **Do NOT use `npm login --auth-type=web && npm publish`:** login succeeds but publish still dies `EOTP` — the npm CLI can't route publish-time 2FA to the browser on this webauthn-only account (confirmed 2026-07-03, npm 10.9.2). Don't retry it in-agent, and don't ask for a typed TOTP (none exists). Full procedure: `.claude/commands/deploy-to-npmjs.md` (`/deploy-to-npmjs`).
 
 ## Debugging Methodology — Evidence Before Solutions
 

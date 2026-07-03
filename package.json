@@ -23,14 +23,14 @@
   ],
   "scripts": {
     "test": "node test/box-alignment.test.js && node test/cli-install.test.js && node test/update-system.test.js && node test/plugin-system.test.js && node test/terminal-title.test.js",
-    "pub": "npm login --auth-type=web && npm publish",
+    "pub": "npm whoami && npm publish",
     "test:box": "node test/box-alignment.test.js",
     "test:install": "node test/cli-install.test.js",
     "test:update": "node test/update-system.test.js",
     "postversion": "node scripts/generate-changelog.js --postversion"
   },
   "bin": {
-    "claude-code-autoconfig": "./bin/cli.js"
+    "claude-code-autoconfig": "bin/cli.js"
   },
   "files": [
     "bin",
