@@ -380,6 +380,20 @@ test('fully-flushed statement (newest block has text, no "?") -> not ended, no r
   const q = inspectLastResponse(tp);
   assert(q.ends === false && q.suspectRace === false, `expected {ends:false, suspectRace:false}, got ${JSON.stringify(q)}`);
 });
+
+test('race: prior turn ended on "?", a NEW user prompt followed, current-turn text not flushed -> suspectRace, not ended', () => {
+  // The exact stuck-◐ bug: a pure-text statement turn graded ◐ awaiting off the PREVIOUS turn's "?"
+  // because its own final text had not flushed to the JSONL yet. Walking back must stop at the real
+  // user prompt and flag a race — NOT fall through to the stale "?" block one turn older.
+  const cwd = mkWorkspace();
+  const tp = writeTranscript(cwd, 'stale-q-race', [
+    asst([{ type: 'text', text: 'Want me to drop a deploy-cca.bat for the zero-typing path?' }]),
+    { type: 'user', message: { role: 'user', content: 'nah i dont think theres a need for that' } },
+    // the current turn's assistant reply has NOT flushed yet — nothing after the user prompt
+  ]);
+  const q = inspectLastResponse(tp);
+  assert(q.ends === false && q.suspectRace === true, `stale-'?' after a new user prompt must be a race, not ends:true; got ${JSON.stringify(q)}`);
+});
 console.log();
 
 console.log('Parenthetical closing question (fallback regex tolerates one trailing aside):');

@@ -203,7 +203,15 @@ function inspectLastResponse(transcriptPath) {
     if (!line) continue;
     let obj;
     try { obj = JSON.parse(line); } catch (_) { continue; }
-    if (!obj || obj.type !== 'assistant' || !obj.message) continue;
+    if (!obj || !obj.message) continue;
+    // The current turn's response always sits AFTER the last real user prompt. Crossing one while
+    // scanning back for that response means it hasn't flushed to the JSONL yet (~200ms lag) — force a
+    // re-read (suspectRace) instead of falling through to the PRIOR turn's text, which may end in '?'
+    // and would wrongly paint the awaiting ◐ on what was really a statement turn.
+    if (obj.type === 'user' && isRealUserPrompt(obj)) {
+      return { ends: false, found: false, tail: '', suspectRace: true };
+    }
+    if (obj.type !== 'assistant') continue;
     const c = obj.message.content;
     let text = '';
     if (typeof c === 'string') {
@@ -232,6 +240,15 @@ function inspectLastResponse(transcriptPath) {
     sawTextlessAssistant = true;
   }
   return blank;
+}
+
+// A genuine human prompt (real text) vs a tool_result-carrier user message (content is only
+// tool_result blocks). Marks the boundary of the current turn's response while walking the transcript.
+function isRealUserPrompt(obj) {
+  const c = obj.message && obj.message.content;
+  if (typeof c === 'string') return c.trim().length > 0;
+  if (Array.isArray(c)) return c.some(b => b && b.type === 'text' && typeof b.text === 'string' && b.text.trim().length > 0);
+  return false;
 }
 
 // Event-loop-friendly sleep for the Stop flush-race re-read beat (handle awaits this; no busy-wait).
