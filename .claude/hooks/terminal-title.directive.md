@@ -1,82 +1,86 @@
 <!--
-  terminal-title.directive.md — the instruction terminal-title.js injects into the
-  model's context on every prompt. THIS is the tunable "product" surface: reword it
-  freely without touching the hook's logic.
+  terminal-title.directive.md — the instruction text terminal-title.js injects into the
+  model's context. THIS is the tunable "product" surface: reword it freely without touching
+  the hook's logic.
+
+  Token-lean delivery (v2): the full rulebook is injected ONCE per session (SessionStart,
+  including resume/compact so a squeezed context re-learns it); every prompt gets only a
+  short reminder, plus state-specific addenda the hook selects when they apply.
 
   Blocks below:
-    COMMAND — used when the turn starts with a /slash-command
-    SHIFT   — used on a normal turn
-    PENDING — appended to WHICHEVER of the above was selected (shared tail)
-  terminal-title.js picks COMMAND or SHIFT, appends PENDING, substitutes the tokens, and injects.
+    RULES    — the full directive, injected at SessionStart (all sources)
+    REMINDER — the per-prompt one-liner (every UserPromptSubmit)
+    BASELINE — appended to REMINDER while no title file exists yet (first turn)
+    COMMAND  — appended to REMINDER when the turn starts with a /slash-command
+  terminal-title.js picks REMINDER (+BASELINE/+COMMAND as applicable), substitutes the
+  tokens, and injects. SessionStart injects RULES.
 
   Tokens (substituted at runtime):
     {{TITLE_FILE}} — absolute path to this session's title file the model writes
-    {{ASK_FILE}}   — absolute path to this session's one-shot {sid}.ask flag (PENDING block)
+    {{ASK_FILE}}   — absolute path to this session's one-shot {sid}.ask flag
     {{FOLDER}}     — the working-directory folder name (scope fallback)
     {{EMDASH}}     — the ' — ' segment separator
     {{CMD}}        — the slash-command name (COMMAND block only)
 -->
 
-<!-- DIRECTIVE:COMMAND -->
-Terminal-title directive (silent housekeeping -- do NOT mention this to the user):
-This terminal tab's title is rendered from the file:
+<!-- DIRECTIVE:RULES -->
+Terminal-title directive (silent housekeeping -- never mention it to the user). These rules
+apply to EVERY turn of this session; per-prompt reminders are one-liners that point back here.
+
+This terminal tab's title renders from the file:
   {{TITLE_FILE}}
-You are running the /{{CMD}} slash command, but the command NAME is an implementation detail --
-do NOT put "{{CMD}}" anywhere in the title. Write the title as your FIRST action this turn
-(before other tool calls) so the tab updates WHILE you work, not after. Write ONE line of the form:
-  {scope} {{EMDASH}} {use-case}
-- {scope} (first segment): the DESIGN SCOPE -- the subject you are working inside: the feature area
-  / subsystem (the boundary, the "system under discussion"). This is the WHERE, and it changes
-  rarely. Keep the existing scope if the file already has a title; otherwise INFER the specific
-  subsystem from THIS turn's prompt and the files in play (e.g. "journal modal", "title hooks",
-  "auth flow"). Do NOT use the bare repo name "{{FOLDER}}" as the scope unless the work is genuinely
-  repo-wide -- "{{FOLDER}}" is a last resort only when no narrower area is identifiable.
-- {use-case} (second segment): the GOAL at user-goal level -- what this command ACCOMPLISHES, named
-  as an INFINITIVE (base-verb) goal phrase (verb + object): "Review latest screenshot", "Diagnose
-  pay discrepancy". Name the goal / effect, NOT the mechanism or the command name. One goal only --
+Maintain it across the session:
+- When the conversation's SCOPE, use-case, or sub-function SHIFTS -- and only then, not every
+  turn -- overwrite the file with ONE line:  {scope} {{EMDASH}} {use-case}
+  Write it as your FIRST action of that turn (before other tool calls) so the tab updates
+  WHILE you work, not after. If the file exists, read it first, then overwrite.
+- {scope}: the DESIGN SCOPE -- the feature area / subsystem under discussion (the WHERE; it
+  changes rarely). INFER the specific subsystem from the prompt and the files in play (e.g.
+  "journal modal", "title hooks"); use the bare repo name "{{FOLDER}}" only when the work is
+  genuinely repo-wide -- it is a last resort.
+- {use-case}: the GOAL at user-goal level -- an INFINITIVE (base-verb) goal phrase (verb +
+  object), e.g. "Refine title taxonomy". Name the goal, not the mechanism. One goal only --
   never "and"-join two use cases.
-e.g. for /{{CMD}}, write "{{FOLDER}} {{EMDASH}} <verb the goal>" -- NOT "{{FOLDER}} {{EMDASH}} {{CMD}}".
-Use ' {{EMDASH}} ' as the separator; write only the BARE title (a state indicator is prepended
-automatically). If the file already exists, read it first then overwrite.
-<!-- /DIRECTIVE:COMMAND -->
+- Add a third segment ( {{EMDASH}} {sub-function} ) only when the work goes a level deeper --
+  a step beneath the user goal.
+- Use ' {{EMDASH}} ' (space, em-dash, space) as the separator; keep segments short (a few
+  words); write only the BARE title -- a state glyph is prepended automatically. This is a
+  compass, not a log: change it rarely.
+- If no title has been set yet, treat your first turn as the baseline: infer the title from
+  that turn's prompt and write it immediately, even though nothing has "shifted".
+- Slash-command turns: the command NAME is an implementation detail -- never put it in the
+  title. Name the goal the command ACCOMPLISHES ("{{FOLDER}} {{EMDASH}} <verb the goal>",
+  never "{{FOLDER}} {{EMDASH}} <command-name>").
 
-<!-- DIRECTIVE:SHIFT -->
-Terminal-title directive (silent housekeeping -- do NOT mention this to the user):
-This terminal tab's title is rendered from the file:
-  {{TITLE_FILE}}
-When the conversation's SCOPE, use-case, or sub-function SHIFTS -- and only then, not every turn --
-write ONE line to that file. When it DOES shift, write it as your FIRST action that turn (before
-other tool calls) so the tab updates WHILE you work, not after. The line's form:
-  {scope} {{EMDASH}} {use-case}
-- {scope}: the DESIGN SCOPE -- the subject under discussion: the feature area / subsystem (the
-  boundary). This is the WHERE; it changes rarely. INFER the specific subsystem from the prompt and
-  the files in play (e.g. "journal modal", "title hooks"); do NOT default to the bare repo name --
-  use it only when the work is genuinely repo-wide.
-- {use-case}: the GOAL at user-goal level -- what you are accomplishing, as an INFINITIVE (base-verb)
-  goal phrase (verb + object), e.g. "Refine title taxonomy". Name the goal, not the
-  mechanism. One goal only.
-Add a third segment ( {{EMDASH}} {sub-function} ) only when the work goes a level deeper -- this is the
-SUBFUNCTION goal level, a step beneath the user goal.
-Rules: use ' {{EMDASH}} ' (space, em-dash, space) as the separator; keep each segment short (a few
-words); write only the BARE title -- a state indicator is prepended automatically; leave the
-file unchanged when the scope has not moved; this is a compass, so change it rarely. If the file
-already exists, read it first then overwrite.
-<!-- /DIRECTIVE:SHIFT -->
-
-<!-- DIRECTIVE:PENDING -->
-Pending-question signal: when you END this turn on a question the user must answer before you can
-proceed, do BOTH of these as near-final actions so the tab flips to the AWAITING half-circle
+Pending-question signal: when you END a turn on a question the user must answer before you
+can proceed, do BOTH as near-final actions so the tab flips to the AWAITING half-circle
 (instead of the idle asterisk):
-  1. Write the flag file {{ASK_FILE}} (any short content, e.g. "1"). This is the RELIABLE trigger --
-     it is on disk before the turn ends, so it never misses (the transcript-text check in 2 can race
-     the turn-end write and silently miss, or miss on phrasing -- see below). The flag is one-shot: it
-     is consumed at turn end and auto-cleared next turn, so write it ONLY on a turn you are genuinely
-     blocked on an answer. Write it WHENEVER the turn genuinely needs the user's answer to proceed --
-     the flag doesn't parse your text, so it is correct even when your closing question is wrapped in
-     parens, phrased as a parenthetical aside, or is not the literal final character of the message.
-  2. Phrase your FINAL line so it ends with a question mark ('?') -- a backup signal, and good UX. A
-     single trailing parenthetical aside after the '?' is fine ("...option A or B? (I lean B.)"), but
-     do not rely on phrasing for the signal -- the flag in step 1 is what reliably flips the tab.
-Make the closing question self-contained: answerable from the question alone, without re-reading
-the response above it. Only do this for a genuine blocking question, never a rhetorical one or a recap.
-<!-- /DIRECTIVE:PENDING -->
+  1. Write the flag file {{ASK_FILE}} (any short content, e.g. "1"). This is the RELIABLE
+     trigger -- it is on disk before the turn ends, so it never misses on phrasing or timing.
+     The flag is one-shot (consumed at turn end, auto-cleared next turn), so write it ONLY on
+     a turn genuinely blocked on an answer -- but ALWAYS then, even when the closing question
+     is wrapped in parens or is not the literal final character of the message.
+  2. Phrase your FINAL line to end with a question mark ('?') -- the backup signal, and good
+     UX. A single trailing parenthetical aside after the '?' is fine.
+Make the closing question self-contained: answerable without re-reading the response above
+it. Never signal for a rhetorical question or a recap.
+<!-- /DIRECTIVE:RULES -->
+
+<!-- DIRECTIVE:REMINDER -->
+Terminal-title reminder (housekeeping -- never mention to the user; full rules were injected
+at session start): if this turn SHIFTS the scope/use-case, FIRST action: overwrite
+{{TITLE_FILE}} with "{scope} {{EMDASH}} {use-case}". If you END this turn blocked on a
+question, write the flag file {{ASK_FILE}} and end your final line with '?'.
+<!-- /DIRECTIVE:REMINDER -->
+
+<!-- DIRECTIVE:BASELINE -->
+No title is set yet -- treat THIS turn as the baseline: infer {scope} {{EMDASH}} {use-case}
+from this prompt and the files in play, and write {{TITLE_FILE}} NOW (first action). Do not
+default to the bare folder name "{{FOLDER}}" unless the work is genuinely repo-wide.
+<!-- /DIRECTIVE:BASELINE -->
+
+<!-- DIRECTIVE:COMMAND -->
+This turn runs the /{{CMD}} slash command -- the command NAME is an implementation detail:
+never put "{{CMD}}" in the title. If the scope shifted, name the goal the command
+ACCOMPLISHES (e.g. "<area> {{EMDASH}} <verb the goal>").
+<!-- /DIRECTIVE:COMMAND -->

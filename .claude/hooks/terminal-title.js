@@ -2,13 +2,20 @@
 /**
  * Terminal Title — distributable plugin hook (installed to <project>/.claude/hooks/terminal-title.js).
  * ONE self-dispatching hook for five events (keyed on hook_event_name):
- *   UserPromptSubmit -> ⬤ working  + inject the title directive (incl. the {sid}.ask path) +
- *                       clear any stale {sid}.ask flag so it reflects only the turn about to run
+ *   UserPromptSubmit -> ⬤ working  + inject the per-prompt REMINDER one-liner (+BASELINE while no
+ *                       title exists, +COMMAND on /slash turns) + clear any stale {sid}.ask flag
  *   PostToolUse      -> ⬤ working  (refresh, so a mid-turn title flip shows live + clears a stale ◐)
  *   Notification     -> ◐ awaiting your approval (permission_prompt matcher only)
  *   Stop             -> ✻ idle / done — OR ◐ awaiting (+ a 2nd BEL = gold tab) when the turn ended
  *                       on a question (last visible response text ends in '?', or a {sid}.ask flag)
  *   SessionStart     -> ✻ idle "Claude Code — New session" (or an existing title on resume/compact)
+ *                       + inject the FULL RULES block — once per session instead of every prompt
+ *                       (~90% less directive overhead); resume/compact re-inject so a squeezed
+ *                       context re-learns the rules.
+ *
+ * Dedupe: when this file is the USER-LEVEL copy (~/.claude/hooks) and the project ships its own
+ * managed copy (<cwd>/.claude/hooks/terminal-title.js), this copy stands down entirely — otherwise
+ * both hooks inject directives naming two different title files (double tokens, double Writes).
  *
  * The title is set TWO ways on every event: `process.title` (= SetConsoleTitleW on Windows — the ONLY
  * mechanism that flips the tab on UserPromptSubmit, where Claude Code drops `terminalSequence`) AND
@@ -23,6 +30,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
 const ESC = '\x1b';
 const BEL = '\x07';
@@ -61,6 +69,10 @@ async function handle(data) {
   const event = data.hook_event_name || '';
   const sid = data.session_id || '';
   const cwd = data.cwd || process.cwd();
+  // User-level copy stands down when a project-level managed copy exists (see header).
+  if (shouldDefer(cwd, __dirname, __filename, path.join(os.homedir(), '.claude', 'hooks'))) {
+    process.exit(0);
+  }
   // PROJECT-SCOPED title dir (cwd-relative) — the plugin installs per-project. (The live ~/.claude
   // variant uses os.homedir() instead; that is the only difference between the two.)
   const dir = path.join(cwd, '.claude', 'hooks', '.titles');
@@ -96,7 +108,14 @@ async function handle(data) {
   if (event === 'SessionStart') {
     // Fresh-session placeholder; on resume/compact an existing model-authored title is preferred.
     const title = normalize(readTitle(file) || 'Claude Code - New session');
-    emit(setTitle(GLYPH.idle, title));
+    const out = setTitle(GLYPH.idle, title);
+    // Inject the FULL rulebook here — once per session — instead of on every prompt. All sources
+    // get it: startup/clear teach a fresh context, resume/compact re-teach a squeezed one.
+    const rules = buildBlocks(['RULES'], file, cwd, '');
+    if (rules) {
+      out.hookSpecificOutput = { hookEventName: 'SessionStart', additionalContext: rules };
+    }
+    emit(out);
     return;
   }
 
@@ -281,28 +300,47 @@ function emit(obj) {
   process.exit(0);
 }
 
-// Build the injected directive from terminal-title.directive.md (COMMAND block for a /slash-command
-// turn, SHIFT otherwise; PENDING tail appended). Wording lives in the .md so it tunes without code edits.
+// Build the per-prompt injection: the REMINDER one-liner, plus BASELINE while no title file
+// exists yet (first turn), plus COMMAND on a /slash-command turn. The full rulebook (RULES) is
+// injected by SessionStart, not here. Wording lives in the .md so it tunes without code edits.
 function buildDirective(data, file, cwd) {
+  const prompt = typeof data.prompt === 'string' ? data.prompt : '';
+  const m = prompt.match(/^\s*\/([A-Za-z0-9][\w:.-]*)/);
+  const blocks = ['REMINDER'];
+  if (!fileExists(file)) blocks.push('BASELINE');
+  if (m) blocks.push('COMMAND');
+  return buildBlocks(blocks, file, cwd, m ? m[1] : '');
+}
+
+// Extract the named blocks from terminal-title.directive.md, join them, substitute the tokens.
+function buildBlocks(names, file, cwd, cmd) {
   let tpl = '';
   try {
     tpl = fs.readFileSync(path.join(__dirname, 'terminal-title.directive.md'), 'utf8');
   } catch (_) {
     return '';
   }
-  const prompt = typeof data.prompt === 'string' ? data.prompt : '';
-  const m = prompt.match(/^\s*\/([A-Za-z0-9][\w:.-]*)/);
-  const cmd = m ? m[1] : '';
-  const block = extractBlock(tpl, cmd ? 'COMMAND' : 'SHIFT');
-  if (!block) return '';
-  const pending = extractBlock(tpl, 'PENDING');
-  const combined = pending ? `${block}\n\n${pending}` : block;
-  return combined
+  const parts = names.map(n => extractBlock(tpl, n)).filter(Boolean);
+  if (!parts.length) return '';
+  return parts.join('\n')
     .split('{{TITLE_FILE}}').join(file)
     .split('{{ASK_FILE}}').join(file.replace(/\.txt$/, '.ask'))
     .split('{{FOLDER}}').join(folderName(cwd))
     .split('{{EMDASH}}').join(EMDASH)
-    .split('{{CMD}}').join(cmd);
+    .split('{{CMD}}').join(cmd || '');
+}
+
+// Should THIS copy of the hook stand down? True only for the user-level copy (~/.claude/hooks)
+// running inside a project that ships its own managed copy — the project copy wins, so a session
+// gets ONE directive and ONE title file. Parameterized (no ambient __dirname/homedir) for tests.
+function shouldDefer(cwd, selfDir, selfFile, homeHooksDir) {
+  try {
+    if (path.resolve(selfDir) !== path.resolve(homeHooksDir)) return false; // we ARE the project copy
+    const projectCopy = path.join(cwd, '.claude', 'hooks', 'terminal-title.js');
+    return fs.existsSync(projectCopy) && path.resolve(projectCopy) !== path.resolve(selfFile);
+  } catch (_) {
+    return false;
+  }
 }
 
 function extractBlock(tpl, name) {
@@ -314,4 +352,4 @@ function extractBlock(tpl, name) {
 }
 
 // Exported for tests (require()'d when require.main !== module). The hook itself never reads these.
-module.exports = { inspectLastResponse, normalize, GLYPH };
+module.exports = { inspectLastResponse, normalize, GLYPH, shouldDefer };

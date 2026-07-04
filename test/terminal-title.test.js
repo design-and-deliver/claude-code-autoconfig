@@ -136,34 +136,46 @@ test('creates the .titles dir but NOT the title file (Write-tool invariant)', ()
   assert(!fs.existsSync(file), 'title file must NOT be pre-created (the model must create it)');
 });
 
-test('normal turn injects the SHIFT directive (not the COMMAND one)', () => {
+test('normal turn injects the compact REMINDER, not the full rulebook', () => {
   const cwd = mkWorkspace();
-  const r = runHook({ hook_event_name: 'UserPromptSubmit', session_id: 's', cwd, prompt: 'do a thing' });
-  assert(/SCOPE, use-case, or sub-function SHIFTS/.test(r.directive), 'expected SHIFT directive text');
-  assert(!/command NAME is an implementation detail/.test(r.directive), 'SHIFT turn must not use COMMAND text');
+  const sid = 's';
+  writeTitle(cwd, sid, 'Alpha — Beta'); // title exists -> no BASELINE addendum
+  const r = runHook({ hook_event_name: 'UserPromptSubmit', session_id: sid, cwd, prompt: 'do a thing' });
+  assert(/Terminal-title reminder/.test(r.directive), 'expected the REMINDER block');
+  assert(/full rules were injected\s+at session start/.test(r.directive), 'reminder should point back to session-start rules');
+  assert(!/DESIGN SCOPE/.test(r.directive), 'per-prompt injection must not carry the full RULES text');
+  assert(!/implementation detail/.test(r.directive), 'normal turn must not carry the COMMAND addendum');
+  assert(r.directive.length < 700, `reminder must stay compact (token guard), got ${r.directive.length} chars`);
 });
 
-test('slash-command turn injects the COMMAND directive (not the SHIFT one)', () => {
+test('slash-command turn appends the COMMAND addendum (with the command name)', () => {
   const cwd = mkWorkspace();
-  const r = runHook({ hook_event_name: 'UserPromptSubmit', session_id: 'c', cwd, prompt: '/bundle-prod ship' });
-  assert(/command NAME is an implementation detail/.test(r.directive), 'expected COMMAND directive text');
-  assert(!/sub-function SHIFTS/.test(r.directive), 'COMMAND turn must not use SHIFT text');
+  const sid = 'c';
+  writeTitle(cwd, sid, 'Alpha — Beta');
+  const r = runHook({ hook_event_name: 'UserPromptSubmit', session_id: sid, cwd, prompt: '/bundle-prod ship' });
+  assert(/implementation detail/.test(r.directive), 'expected the COMMAND addendum');
+  assert(r.directive.includes('bundle-prod'), 'COMMAND addendum should name the command');
+  assert(/Terminal-title reminder/.test(r.directive), 'REMINDER must still lead the injection');
 });
 
-test('injected directive appends the PENDING block (end blocking questions on "?")', () => {
+test('first turn (no title file) appends the BASELINE addendum; later turns do not', () => {
   const cwd = mkWorkspace();
-  const shift = runHook({ hook_event_name: 'UserPromptSubmit', session_id: 'p1', cwd, prompt: 'do a thing' });
-  const command = runHook({ hook_event_name: 'UserPromptSubmit', session_id: 'p2', cwd, prompt: '/gls show it' });
-  assert(/ends with a question mark/.test(shift.directive), 'SHIFT directive should include the PENDING block');
-  assert(/ends with a question mark/.test(command.directive), 'COMMAND directive should include the PENDING block');
+  const fresh = runHook({ hook_event_name: 'UserPromptSubmit', session_id: 'b1', cwd, prompt: 'hi' });
+  assert(/baseline/.test(fresh.directive), 'no-title turn should carry the BASELINE addendum');
+  const cwd2 = mkWorkspace();
+  writeTitle(cwd2, 'b2', 'Alpha — Beta');
+  const later = runHook({ hook_event_name: 'UserPromptSubmit', session_id: 'b2', cwd: cwd2, prompt: 'hi' });
+  assert(!/baseline/.test(later.directive), 'with a title present, no BASELINE addendum');
 });
 
-test("injected directive names this session's {sid}.ask flag path + instructs writing it", () => {
+test("reminder keeps both critical actions: title write + this session's {sid}.ask flag + '?'", () => {
   const cwd = mkWorkspace();
   const sid = 'ask-path';
   const r = runHook({ hook_event_name: 'UserPromptSubmit', session_id: sid, cwd, prompt: 'do a thing' });
-  assert(r.directive.includes(`${sid}.ask`), "directive should name this session's .ask path");
-  assert(/Write the flag file/.test(r.directive), 'directive should instruct writing the .ask flag');
+  assert(r.directive.includes(`${sid}.txt`), "reminder should name this session's title file");
+  assert(r.directive.includes(`${sid}.ask`), "reminder should name this session's .ask path");
+  assert(/write the flag file/i.test(r.directive), 'reminder should instruct writing the .ask flag');
+  assert(/end your final line with '\?'/.test(r.directive), "reminder should instruct ending on '?'");
 });
 
 test('UserPromptSubmit clears a stale {sid}.ask flag from an interrupted prior turn', () => {
@@ -301,11 +313,15 @@ test('no title file yet -> emits nothing', () => {
 console.log();
 
 console.log('SessionStart:');
-test('fresh session -> idle glyph + "New session" placeholder', () => {
+test('fresh session -> idle glyph + "New session" placeholder + injects the FULL rules', () => {
   const cwd = mkWorkspace();
   const r = runHook({ hook_event_name: 'SessionStart', session_id: 'ss-1', cwd, source: 'startup' });
   assert(leadsWithGlyph(r.codepoints, IDLE), `expected idle glyph, got ${r.shown}`);
   assert(/New session/.test(titleText(r.shown)), `expected "New session", got "${titleText(r.shown)}"`);
+  assert(r.directive && /DESIGN SCOPE/.test(r.directive), 'SessionStart should inject the full RULES block');
+  assert(/Pending-question signal/.test(r.directive), 'RULES should include the pending-question protocol');
+  assert(r.directive.includes('ss-1.txt') && r.directive.includes('ss-1.ask'),
+    'RULES should name this session\'s title + ask paths');
 });
 
 test('resume with an existing title -> prefers it over the placeholder', () => {
@@ -314,6 +330,46 @@ test('resume with an existing title -> prefers it over the placeholder', () => {
   writeTitle(cwd, sid, 'Auth Flow — Fix Login');
   const r = runHook({ hook_event_name: 'SessionStart', session_id: sid, cwd, source: 'resume' });
   assert(titleText(r.shown) === 'Auth Flow — Fix Login', `expected existing title, got "${titleText(r.shown)}"`);
+});
+
+test('compact source re-injects the FULL rules (a squeezed context re-learns them)', () => {
+  const cwd = mkWorkspace();
+  const r = runHook({ hook_event_name: 'SessionStart', session_id: 'ss-3', cwd, source: 'compact' });
+  assert(r.directive && /DESIGN SCOPE/.test(r.directive), 'compact SessionStart should re-inject RULES');
+});
+console.log();
+
+console.log('Dedupe (user-level copy stands down when a project copy exists):');
+const { shouldDefer } = require(HOOK);
+
+test('project copy never defers (selfDir is not the home hooks dir)', () => {
+  const cwd = mkWorkspace();
+  assert(
+    shouldDefer(cwd, path.join(cwd, '.claude', 'hooks'), path.join(cwd, '.claude', 'hooks', 'terminal-title.js'),
+      path.join(cwd, 'FAKE-HOME', '.claude', 'hooks')) === false,
+    'a project-level copy must never defer'
+  );
+});
+
+test('user-level copy defers when the project ships its own copy', () => {
+  const cwd = mkWorkspace();
+  const projHook = path.join(cwd, '.claude', 'hooks', 'terminal-title.js');
+  fs.mkdirSync(path.dirname(projHook), { recursive: true });
+  fs.writeFileSync(projHook, '// project copy');
+  const homeHooks = path.join(cwd, 'FAKE-HOME', '.claude', 'hooks');
+  assert(
+    shouldDefer(cwd, homeHooks, path.join(homeHooks, 'terminal-title.js'), homeHooks) === true,
+    'the user-level copy must defer to a project copy'
+  );
+});
+
+test('user-level copy does NOT defer when the project has no copy', () => {
+  const cwd = mkWorkspace();
+  const homeHooks = path.join(cwd, 'FAKE-HOME', '.claude', 'hooks');
+  assert(
+    shouldDefer(cwd, homeHooks, path.join(homeHooks, 'terminal-title.js'), homeHooks) === false,
+    'with no project copy, the user-level copy must keep working'
+  );
 });
 console.log();
 
