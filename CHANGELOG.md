@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.197
+- perf(terminal-title): deliver the directive once per session; dedupe user/project hooks
+
 ## v1.0.196
 - fix(terminal-title): stop at the turn boundary when grading the closing '?' (stale-awaiting race)
 - fix(cli): require non-TTY stdout for inside-Claude block (env var alone false-positives in inherited terminals)
@@ -144,7 +147,4 @@
 
 ## v1.0.148
 - fix: refine inside-Claude error wording
-
-## v1.0.147
-- fix: make inside-Claude error message more specific
 
