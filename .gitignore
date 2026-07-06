@@ -19,3 +19,9 @@ tmpclaude-*
 
 # Test temp directories
 test/.test-temp-*
+
+# Session-rendered article archive (/create-web-page output, local-only)
+ARTICLES/
+
+# Local feature pilots / experiments (not distributed)
+pilots/
