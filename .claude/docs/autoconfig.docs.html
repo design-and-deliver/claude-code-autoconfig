@@ -878,6 +878,16 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">commit-and-push.md</span>
                             </div>
+                            <div class="tree-item indent-3 hidden" data-info="disable-arcade-beeps" data-parent="commands">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">disable-arcade-beeps.md</span>
+                            </div>
+                            <div class="tree-item indent-3 hidden" data-info="enable-arcade-beeps" data-parent="commands">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">enable-arcade-beeps.md</span>
+                            </div>
                             <div class="tree-item indent-3 hidden" data-info="extract-rules" data-parent="commands">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
@@ -932,6 +942,11 @@
                                 <span class="tree-chevron">›</span>
                                 <span class="tree-folder-icon">📁</span>
                                 <span class="folder">hooks</span>
+                            </div>
+                            <div class="tree-item indent-3 hidden" data-info="arcade-beeps-hook" data-parent="hooks">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">arcade-beeps.js</span>
                             </div>
                             <div class="tree-item indent-3 hidden" data-info="feedback-rule-check-hook" data-parent="hooks">
                                 <span class="tree-spacer"></span>
@@ -1263,7 +1278,7 @@
                 title: '.claude/ Directory',
                 desc: 'Commands, rules, settings, and these docs. Keeps configuration organized as your project grows.'
             },
-                                                                                                                                                                                                                                                                                                                                                                                                            'rules': {
+                                                                                                                                                                                                                                                                                                                                                                                                                        'rules': {
                 title: 'rules/',
                 desc: 'Path-scoped context that loads when Claude works on matching files.'
             },
@@ -1297,6 +1312,16 @@
                 title: 'commit-and-push.md',
                 desc: 'Runs tests, then stages all changes, generates a conventional commit message, commits, and pushes.<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Changes committed and pushed to current branch.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>test-failure</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Tests failed — no commit made.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Runs test suite, stages all changes, creates git commit, pushes to remote</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/commit-and-push</code> <span style="opacity: 0.6;">— Run tests, commit, and push</span></div></div></div>',
                 trigger: '/commit-and-push'
+            },
+            'disable-arcade-beeps': {
+                title: 'disable-arcade-beeps.md',
+                desc: 'disable-arcade-beeps.md in commands/<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div>',
+                trigger: '/disable-arcade-beeps'
+            },
+            'enable-arcade-beeps': {
+                title: 'enable-arcade-beeps.md',
+                desc: 'enable-arcade-beeps.md in commands/<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div>',
+                trigger: '/enable-arcade-beeps'
             },
             'extract-rules': {
                 title: 'extract-rules.md',
@@ -1332,6 +1357,11 @@
                 title: 'README.md',
                 desc: 'Placeholder — drop your project\'s custom subagent definitions in this directory.',
                 trigger: 'Background agent'
+            },
+            'arcade-beeps-hook': {
+                title: 'arcade-beeps.js',
+                desc: 'arcade-beeps.js in hooks/',
+                trigger: 'PostToolUse hook'
             },
             'feedback-rule-check-hook': {
                 title: 'feedback-rule-check.js',
@@ -1569,7 +1599,7 @@ CRITICAL: A plausible-looking cause from code reading is NOT confirmed evidence.
 
 > Run \`/autoconfig\` to populate this based on your project.`
             },
-                                                                                                                                                                                                                                                                                                                                                                                                            'autoconfig-update': {
+                                                                                                                                                                                                                                                                                                                                                                                                                        'autoconfig-update': {
                 filename: 'autoconfig-update.md',
                 content: `<!-- @applied
 -->
@@ -1656,6 +1686,32 @@ Use conventional commits: \`type(scope): description\`
 Types: feat, fix, docs, style, refactor, test, chore
 
 Keep the subject line under 50 chars. Add body if the change needs explanation.`
+            },
+            'disable-arcade-beeps': {
+                filename: 'disable-arcade-beeps.md',
+                content: `---
+description: Turn OFF Pole Position tab status beeps
+allowed-tools: Bash
+---
+
+Run exactly this command, then reply with a single confirmation line and nothing else:
+
+\`\`\`
+rm -f ~/.claude/sounds/arcade-beeps.enabled && echo "arcade beeps DISABLED."
+\`\`\``
+            },
+            'enable-arcade-beeps': {
+                filename: 'enable-arcade-beeps.md',
+                content: `---
+description: Turn ON Pole Position tab status beeps (awaiting = low tone, complete = high tone)
+allowed-tools: Bash
+---
+
+Run exactly this command, then reply with a single confirmation line and nothing else:
+
+\`\`\`
+mkdir -p ~/.claude/sounds && touch ~/.claude/sounds/arcade-beeps.enabled && echo "arcade beeps ENABLED (every turn-end beeps: awaiting=low, complete=high). Disable with /disable-arcade-beeps."
+\`\`\``
             },
             'extract-rules': {
                 filename: 'extract-rules.md',
@@ -1837,6 +1893,39 @@ claude-code-autoconfig ships this folder empty so you can populate it with agent
 
 See Anthropic's subagents docs for the file format:
 https://docs.anthropic.com/en/docs/claude-code/sub-agents`
+            },
+            'arcade-beeps-hook': {
+                filename: 'arcade-beeps.js',
+                content: `#!/usr/bin/env node
+/**
+ * arcade-beeps — optional Pole-Position status cues for the Claude Code tab.
+ * Companion to terminal-title.js. Registered (settings.json) on Stop + Notification.
+ *
+ * OFF unless the enable flag exists:  ~/.claude/sounds/arcade-beeps.enabled
+ *   toggle via  /enable-arcade-beeps   /disable-arcade-beeps
+ * The flag is GLOBAL (homedir), so one toggle covers every project you've installed into.
+ *
+ * Mapping (matches the ◐/✻ tab glyph that terminal-title.js paints on the SAME event):
+ *   Stop, turn ended on a question   -> ◐ awaiting  -> get-ready tick (pp3-getready-G4.wav, G4/384Hz)
+ *   Stop, turn ended normally         -> ✻ complete  -> GO beep        (pp3-go-F#5.wav, F#5/759Hz)
+ *   Notification (permission_prompt) -> ◐ awaiting  -> get-ready tick
+ *
+ * Tones are an extracted+smoothed take on the Pole Position race-start cue (arcade-ping
+ * envelope). LOWER tick = awaiting, HIGHER GO = complete.
+ *
+ * Assets resolve relative to THIS file (../sounds) so a per-project CCA install finds its own
+ * copy at <project>/.claude/sounds — no dependency on a global sounds dir.
+ *
+ * Playback is cross-platform and best-effort: PowerShell SoundPlayer on Windows, afplay on
+ * macOS, paplay||aplay on Linux. If none is present the hook simply stays silent — never errors.
+ *
+ * Playback BLOCKS (spawnSync) so the sound finishes inside the hook's lifetime — a detached
+ * fire-and-forget child can be killed by the hook runner's job/process-group cleanup before it
+ * plays. Blocking costs ~0.5s on turn-end but is reliable. Still fail-safe: wrapped so it never
+ * throws into the turn, and every path ends in exit(0).
+ *
+ * State detection reuses terminal-title.js's exported inspectLastResponse (lazy-required only
+ * when enabled) so sound and glyph agree. A tiny inline '?' check is the fallback.`
             },
             'feedback-rule-check-hook': {
                 filename: 'feedback-rule-check.js',
@@ -2082,6 +2171,10 @@ Claude reads this file but must never write to it. When Claude discovers project
           {
             "type": "command",
             "command": "node .claude/hooks/terminal-title.js"
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/arcade-beeps.js"
           }
         ]
       }
@@ -2093,6 +2186,10 @@ Claude reads this file but must never write to it. When Claude discovers project
           {
             "type": "command",
             "command": "node .claude/hooks/terminal-title.js"
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/arcade-beeps.js"
           }
         ]
       }

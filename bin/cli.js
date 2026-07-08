@@ -27,7 +27,7 @@ const WINDOWS_RESERVED = ['CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'COM3', 'C
   'LPT6', 'LPT7', 'LPT8', 'LPT9'];
 
 // Files/folders installed by autoconfig - don't backup these
-const AUTOCONFIG_FILES = ['commands', 'docs', 'agents', 'migration', 'hooks', 'scripts', 'rules', 'feedback', 'settings.json', 'settings.local.json', '.mcp.json', '.autoconfig-version', '.autoconfig-plugins.json'];
+const AUTOCONFIG_FILES = ['commands', 'docs', 'agents', 'migration', 'hooks', 'scripts', 'sounds', 'rules', 'feedback', 'settings.json', 'settings.local.json', '.mcp.json', '.autoconfig-version', '.autoconfig-plugins.json'];
 
 function isReservedName(name) {
   const baseName = name.replace(/\.[^.]*$/, '').toUpperCase();
@@ -775,7 +775,7 @@ if (fs.existsSync(feedbackSrc)) {
 // (copyDirIfMissing), BUT the cca-managed title-hook files are ALWAYS refreshed so bug-fixes
 // reach existing installs — without this, copyDirIfMissing leaves stale hooks in place forever
 // (same always-overwrite rationale as scripts/ below). --force already overwrites everything.
-const MANAGED_HOOKS = ['terminal-title.js', 'terminal-title.directive.md'];
+const MANAGED_HOOKS = ['terminal-title.js', 'terminal-title.directive.md', 'arcade-beeps.js'];
 if (fs.existsSync(hooksSrc)) {
   const copyFn = forceMode ? copyDir : copyDirIfMissing;
   copyFn(hooksSrc, path.join(claudeDest, 'hooks'));
@@ -791,6 +791,12 @@ if (fs.existsSync(hooksSrc)) {
 // Copy scripts directory (always overwrite — these are utility scripts, not user-customizable)
 if (fs.existsSync(scriptsSrc)) {
   copyDir(scriptsSrc, path.join(claudeDest, 'scripts'));
+}
+
+// Copy sounds directory (binary status-cue assets for arcade-beeps; always overwrite)
+const soundsSrc = path.join(packageDir, '.claude', 'sounds');
+if (fs.existsSync(soundsSrc)) {
+  copyDir(soundsSrc, path.join(claudeDest, 'sounds'));
 }
 
 // Note: updates directory is no longer copied to user projects.

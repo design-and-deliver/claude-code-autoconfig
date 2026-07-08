@@ -157,8 +157,8 @@ test('CLI uses copyDirIfMissing for hooks/', () => {
 test('CLI always refreshes the managed title hooks (so fixes reach existing installs)', () => {
   const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
   assert(
-    cliCode.includes("MANAGED_HOOKS = ['terminal-title.js', 'terminal-title.directive.md']"),
-    'CLI should define MANAGED_HOOKS (cca-managed title-hook files)'
+    /MANAGED_HOOKS\s*=\s*\[[^\]]*'terminal-title\.js'[^\]]*'terminal-title\.directive\.md'[^\]]*'arcade-beeps\.js'[^\]]*\]/.test(cliCode),
+    'CLI should define MANAGED_HOOKS (cca-managed title + arcade-beeps hooks)'
   );
   assert(
     /for \(const name of MANAGED_HOOKS\)[\s\S]*?copyFileSync/.test(cliCode),

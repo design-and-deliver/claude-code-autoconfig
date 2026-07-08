@@ -61,7 +61,8 @@ your-project/
     ├── hooks/                         # Hook scripts
     │   ├── format.js                  #   Auto-format on Write/Edit
     │   ├── terminal-title.js          #   Use-case terminal tab titles + live state
-    │   └── terminal-title.directive.md # Injected title directive (tunable wording)
+    │   ├── terminal-title.directive.md # Injected title directive (tunable wording)
+    │   └── arcade-beeps.js            #   Optional Pole Position status beeps (opt-in)
     ├── docs/                          # Interactive documentation
     │   └── autoconfig.docs.html       #   Open with /show-docs
     ├── updates/                       # Pending config updates
@@ -70,6 +71,9 @@ your-project/
     │   └── readme-sync.md             #   Sync README & docs before publish
     ├── scripts/                       # Utility scripts
     │   └── sync-docs.js               #   Regenerate interactive HTML docs
+    ├── sounds/                        # Status-cue audio for arcade-beeps
+    │   ├── pp3-getready-G4.wav        #   Awaiting tone (get-ready tick)
+    │   └── pp3-go-F#5.wav             #   Complete tone (GO beep)
     ├── .mcp.json                      # MCP server configs (empty placeholder)
     └── settings.json                  # Permissions & security
 ```
@@ -110,6 +114,8 @@ Autoconfig is **self-configuring**. Run `/autoconfig` and Claude:
 | `/gls` | Views latest screenshot for visual context |
 | `/validate-cca-install` | Validates installation against latest published version |
 | `/extract-rules` | Scan Claude artifacts and extract structured rules |
+| `/enable-arcade-beeps` | Turn on opt-in Pole Position status beeps |
+| `/disable-arcade-beeps` | Turn off the status beeps |
 
 ### Updates
 
@@ -134,6 +140,10 @@ Autoconfig writes a debug methodology to Claude's persistent memory (`MEMORY.md`
 ### Terminal Titles
 
 Run several Claude Code sessions at once and the tabs all look alike. Autoconfig retitles each tab as `{scope} — {what you're working on}` with a live state indicator — ⬤ working, ◐ waiting on you, ✻ idle — so you can tell sessions apart at a glance. Claude updates the title itself as the work shifts; nothing to configure.
+
+### Status Beeps (opt-in)
+
+Prefer your ears to your eyes? Run `/enable-arcade-beeps` for Pole Position–style tab cues that mirror the title glyph: a low get-ready tick when a session is **waiting on you** and a higher GO tone when it **finishes**. Cross-platform (Windows / macOS / Linux) and off by default — toggle back off any time with `/disable-arcade-beeps`.
 
 ### Team Feedback
 
