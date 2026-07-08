@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.198
+- feat(arcade-beeps): ship opt-in Pole Position status beeps via CCA
+
 ## v1.0.197
 - perf(terminal-title): deliver the directive once per session; dedupe user/project hooks
 
@@ -144,7 +147,4 @@
 
 ## v1.0.149
 - style: consolidate inside-Claude message to two lines
-
-## v1.0.148
-- fix: refine inside-Claude error wording
 
