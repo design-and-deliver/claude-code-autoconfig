@@ -61,7 +61,10 @@ can proceed, do BOTH as near-final actions so the tab flips to the AWAITING half
      a turn genuinely blocked on an answer -- but ALWAYS then, even when the closing question
      is wrapped in parens or is not the literal final character of the message.
   2. Phrase your FINAL line to end with a question mark ('?') -- the backup signal, and good
-     UX. A single trailing parenthetical aside after the '?' is fine.
+     UX. The '?' must be the LAST character the user sees: do NOT append a declarative
+     sign-off after it (no "Standing by.", "Ready when you are.", "Let me know." -- a closing
+     statement lands the message on a period and defeats the signal). Only a single short
+     parenthetical aside after the '?' is allowed.
 Make the closing question self-contained: answerable without re-reading the response above
 it. Never signal for a rhetorical question or a recap.
 <!-- /DIRECTIVE:RULES -->
@@ -70,7 +73,8 @@ it. Never signal for a rhetorical question or a recap.
 Terminal-title reminder (housekeeping -- never mention to the user; full rules were injected
 at session start): if this turn SHIFTS the scope/use-case, FIRST action: overwrite
 {{TITLE_FILE}} with "{scope} {{EMDASH}} {use-case}". If you END this turn blocked on a
-question, write the flag file {{ASK_FILE}} and end your final line with '?'.
+question, write the flag file {{ASK_FILE}} and end your final line with '?' (the '?' is the
+last character -- no declarative sign-off after it).
 <!-- /DIRECTIVE:REMINDER -->
 
 <!-- DIRECTIVE:BASELINE -->
