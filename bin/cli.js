@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 const { execSync, spawn } = require('child_process');
+const { formatUpdateSummary } = require('./update-summary.js');
 
 const cwd = process.cwd();
 const packageDir = path.dirname(__dirname);
@@ -956,43 +957,22 @@ if (isUpgrade) {
   console.log('\x1b[33m║                                            ║\x1b[0m');
   console.log('\x1b[33m╚════════════════════════════════════════════╝\x1b[0m');
 }
-// Show changelog on upgrade
-if (isUpgrade && previousVersion) {
+// Show what changed on the upgrade path so a re-run never looks like "nothing came down":
+// grouped features/fixes since the installed version, or a single confirmation line when
+// already on the latest. Rendered here so it lands right before the ENTER prompt.
+// Logic lives in update-summary.js (pure + unit-tested).
+if (isUpgrade) {
   const changelogPath = path.join(packageDir, 'CHANGELOG.md');
-  if (fs.existsSync(changelogPath)) {
-    const changelog = fs.readFileSync(changelogPath, 'utf8');
-    const prevPatch = parseInt(previousVersion.split('.').pop(), 10);
-    const entries = [];
-    let currentEntry = null;
-    for (const line of changelog.split(/\r?\n/)) {
-      if (line.startsWith('## v')) {
-        const ver = line.slice(3).trim();
-        const patch = parseInt(ver.split('.').pop(), 10);
-        currentEntry = patch > prevPatch ? { ver, items: [] } : null;
-      } else if (currentEntry && line.startsWith('- ')) {
-        currentEntry.items.push(line.slice(2));
-      } else if (currentEntry && line === '' && currentEntry.items.length > 0) {
-        entries.push(currentEntry);
-        currentEntry = null;
-      }
-    }
-    if (currentEntry && currentEntry.items.length > 0) entries.push(currentEntry);
-    if (entries.length > 0) {
-      console.log(`\x1b[90m  What's new since v${previousVersion}:\x1b[0m`);
-      console.log();
-      const show = entries.slice(0, 10);
-      for (const e of show) {
-        for (const item of e.items) {
-          console.log(`\x1b[90m  ${e.ver} — ${item}\x1b[0m`);
-        }
-      }
-      const remaining = entries.length - show.length;
-      if (remaining > 0) {
-        console.log(`\x1b[90m  ... and ${remaining} more (see CHANGELOG.md)\x1b[0m`);
-      }
-      console.log();
-    }
+  const changelogText = fs.existsSync(changelogPath) ? fs.readFileSync(changelogPath, 'utf8') : '';
+  console.log();
+  for (const seg of formatUpdateSummary(previousVersion, currentVersion, changelogText)) {
+    if (seg.kind === 'latest')       console.log(`\x1b[32m  ✓ ${seg.text}\x1b[0m`);
+    else if (seg.kind === 'heading') console.log(`\x1b[36m  ${seg.text}\x1b[0m`);
+    else if (seg.kind === 'group')   console.log(`\x1b[33m    ${seg.text}:\x1b[0m`);
+    else if (seg.kind === 'item')    console.log(`\x1b[90m      • ${seg.text}\x1b[0m`);
+    else if (seg.kind === 'more')    console.log(`\x1b[90m    ${seg.text}\x1b[0m`);
   }
+  console.log();
 }
 if (!isUpgrade) {
   console.log('\x1b[90m%s\x1b[0m', "You'll need to approve a few file prompts to complete the installation.");
