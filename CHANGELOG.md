@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.0.201
+- fix(install): Hook commands now survive cd'ing around your project — no more 'Cannot find module' errors after changing directories, and upgrades fix existing installs automatically.
+- fix(terminal-title): The tab title no longer freezes when a session cd's into another project, and the 'awaiting your reply' half-circle now catches replies that ask for your go-ahead without a question mark.
+
 ## v1.0.200
 - feat(changelog): Release notes now written in plain language
 
@@ -145,7 +149,4 @@
 
 ## v1.0.152
 - fix: warn against ! prefix workaround in inside-Claude message
-
-## v1.0.151
-- fix: scope find permission to project directory for security
 
