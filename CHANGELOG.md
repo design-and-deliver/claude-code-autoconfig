@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.200
+- feat(changelog): Release notes now written in plain language
+
 ## v1.0.199
 - feat(cli): Clearer 'what's new' summary when updating
 - feat(terminal-title): More reliable 'awaiting your reply' tab indicator
@@ -145,7 +148,4 @@
 
 ## v1.0.151
 - fix: scope find permission to project directory for security
-
-## v1.0.150
-- style: use pointing emoji in inside-Claude message
 
