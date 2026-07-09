@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.203
+- fix(arcade-beeps): Arcade beeps are now off by default in every install — turn them on per project with /enable-arcade-beeps, off again with /disable-arcade-beeps.
+
 ## v1.0.202
 - feat(terminal-title): The 'awaiting your reply' tab indicator now also catches sign-off style endings like 'Ready when you are', and quietly logs a warning if a Claude Code update changes the data the hooks rely on.
 
@@ -146,7 +149,4 @@
 
 ## v1.0.154
 - fix: enforce ls -t over find in gls command to avoid permission prompts
-
-## v1.0.153
-- style: left-align all table cells in docs info cards
 
