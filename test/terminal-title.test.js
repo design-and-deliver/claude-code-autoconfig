@@ -792,6 +792,29 @@ test('user-level copy still defers when the OWNER project itself ships the manag
 });
 console.log();
 
+console.log('Harness-contract canary (debug-only platform-change alarm):');
+test('missing CLAUDE_PROJECT_DIR -> debug log carries contract=degraded', () => {
+  const cwd = mkWorkspace();
+  const sid = 'canary-degraded';
+  writeTitle(cwd, sid, 'Alpha — Beta');
+  runHook({ hook_event_name: 'PostToolUse', session_id: sid, cwd }, { CLAUDE_TITLE_DEBUG: '1' });
+  const log = fs.readFileSync(path.join(cwd, '.claude', 'hooks', '.titles', '_debug.log'), 'utf8');
+  assert(/contract=degraded\(CLAUDE_PROJECT_DIR\)/.test(log),
+    `expected contract=degraded(CLAUDE_PROJECT_DIR) in debug log, got: ${log.trim().split('\n').pop()}`);
+});
+test('full contract present -> no degraded marker', () => {
+  const cwd = mkWorkspace();
+  const sid = 'canary-clean';
+  writeTitle(cwd, sid, 'Alpha — Beta');
+  runHook(
+    { hook_event_name: 'PostToolUse', session_id: sid, cwd },
+    { CLAUDE_TITLE_DEBUG: '1', CLAUDE_PROJECT_DIR: cwd }
+  );
+  const log = fs.readFileSync(path.join(cwd, '.claude', 'hooks', '.titles', '_debug.log'), 'utf8');
+  assert(!/contract=degraded/.test(log), `no degraded marker expected, got: ${log.trim().split('\n').pop()}`);
+});
+console.log();
+
 console.log('Shipped settings template (cd-proof hook registrations):');
 test('every .claude/hooks command in the shipped settings.json is CLAUDE_PROJECT_DIR-anchored', () => {
   const shipped = JSON.parse(

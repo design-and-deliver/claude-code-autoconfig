@@ -95,6 +95,16 @@ async function handle(data) {
   const file = path.join(dir, `${sid}.txt`);
   logCtx = { event, sid, dir, note: '' };
 
+  // HARNESS-CONTRACT CANARY (debug-only surface): if Claude Code stops supplying a field the
+  // keying depends on, every fix above silently degrades to its fallback. Record the gap so the
+  // stale-glyph audit surfaces a platform change as one log line instead of the next mystery.
+  const degraded = [];
+  if (!process.env.CLAUDE_PROJECT_DIR) degraded.push('CLAUDE_PROJECT_DIR');
+  if (!data.cwd) degraded.push('cwd');
+  if (!sid) degraded.push('session_id');
+  if (event === 'Stop' && !data.transcript_path) degraded.push('transcript_path');
+  if (degraded.length) logCtx.contract = degraded.join(',');
+
   if (event === 'UserPromptSubmit') {
     // Ensure the state dir exists, but NOT the file — the model's Write tool refuses to overwrite a
     // file it hasn't read, so a pre-created empty file would make its first title write fail.
@@ -224,9 +234,10 @@ function titleLog(glyph, title, ring) {
       : glyph === GLYPH.awaiting ? 'awaiting'
       : glyph === GLYPH.idle ? 'idle' : 'other';
     const diag = logCtx.diag ? `  ${logCtx.diag}` : '';
+    const contract = logCtx.contract ? `  contract=degraded(${logCtx.contract})` : '';
     const line = `${new Date().toISOString()}  ${logCtx.event.padEnd(16)} `
       + `${name.padEnd(8)} ring=${ring ? 1 : 0} note=${(logCtx.note || '-').padEnd(8)} `
-      + `sid=${logCtx.sid} | ${title}${diag}\n`;
+      + `sid=${logCtx.sid} | ${title}${diag}${contract}\n`;
     const f = path.join(logCtx.dir, '_debug.log');
     try { if (fs.statSync(f).size > 512 * 1024) fs.renameSync(f, `${f}.1`); } catch (_) { /* none yet */ }
     fs.appendFileSync(f, line);
@@ -381,6 +392,14 @@ const SOLICIT_STRONG = [
   /\bok(?:ay)? to proceed\b/i,
   /^green-?light\b/i,
   /^confirm\b/i,
+  // Harvested 2026-07-08 from real _debug.log flag-turn tails — the historical "flag masked the
+  // prose violation" shapes. All are unambiguous waiting-on-you closers:
+  /^tell me\b/i,
+  /\byour call\b/i,
+  /\bready when you are\b/i,
+  /\bstanding by\b/i,
+  /\bon your go\b/i,
+  /\bwhenever you say\b/i,
 ];
 function solicitsReply(text) {
   if (!text) return false;
