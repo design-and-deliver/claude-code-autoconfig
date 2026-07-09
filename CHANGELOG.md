@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.202
+- feat(terminal-title): The 'awaiting your reply' tab indicator now also catches sign-off style endings like 'Ready when you are', and quietly logs a warning if a Claude Code update changes the data the hooks rely on.
+
 ## v1.0.201
 - fix(install): Hook commands now survive cd'ing around your project — no more 'Cannot find module' errors after changing directories, and upgrades fix existing installs automatically.
 - fix(terminal-title): The tab title no longer freezes when a session cd's into another project, and the 'awaiting your reply' half-circle now catches replies that ask for your go-ahead without a question mark.
@@ -146,7 +149,4 @@
 
 ## v1.0.153
 - style: left-align all table cells in docs info cards
-
-## v1.0.152
-- fix: warn against ! prefix workaround in inside-Claude message
 
