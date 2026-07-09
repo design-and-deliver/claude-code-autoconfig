@@ -175,7 +175,8 @@ test("reminder keeps both critical actions: title write + this session's {sid}.a
   assert(r.directive.includes(`${sid}.txt`), "reminder should name this session's title file");
   assert(r.directive.includes(`${sid}.ask`), "reminder should name this session's .ask path");
   assert(/write the flag file/i.test(r.directive), 'reminder should instruct writing the .ask flag');
-  assert(/end your final line with '\?'/.test(r.directive), "reminder should instruct ending on '?'");
+  assert(/make '\?' the message's last character/.test(r.directive), "reminder should instruct ending on '?'");
+  assert(/otherwise end on a statement/.test(r.directive), 'reminder should carry the inverse (no-signal) rule');
 });
 
 test('UserPromptSubmit clears a stale {sid}.ask flag from an interrupted prior turn', () => {
@@ -301,6 +302,44 @@ test('Stop -> idle when there is no transcript and no flag', () => {
   writeTitle(cwd, sid, 'Alpha — Beta');
   const r = runHook({ hook_event_name: 'Stop', session_id: sid, cwd });
   assert(leadsWithGlyph(r.codepoints, IDLE), `expected idle glyph, got ${r.shown}`);
+});
+
+test('Stop -> awaiting on a HUGE transcript (tail-read still finds the final "?")', () => {
+  const cwd = mkWorkspace();
+  const sid = 'q-huge';
+  writeTitle(cwd, sid, 'Alpha — Beta');
+  // >1MB transcript: ~800 filler lines of ~2KB each, then a user prompt, then the final question.
+  // Exercises inspectLastResponse's tail-read branch (size > 1MB) added for the stuck-⬤ fix — a broken
+  // tail-read (dropped final line / wrong offset) would return idle here.
+  const filler = JSON.stringify(asst([{ type: 'text', text: 'x'.repeat(2000) }]));
+  const lines = [];
+  for (let i = 0; i < 800; i++) lines.push(filler);
+  lines.push(JSON.stringify({ type: 'user', message: { role: 'user', content: 'go' } }));
+  lines.push(JSON.stringify(asst([{ type: 'text', text: 'All done — should I ship it?' }])));
+  const tp = path.join(cwd, `${sid}.jsonl`);
+  fs.writeFileSync(tp, lines.join('\n') + '\n');
+  assert(fs.statSync(tp).size > 1024 * 1024, 'fixture should exceed the 1MB tail threshold');
+  const r = runHook({ hook_event_name: 'Stop', session_id: sid, cwd, transcript_path: tp });
+  assert(leadsWithGlyph(r.codepoints, AWAITING), `expected awaiting on huge transcript, got ${r.shown}`);
+});
+
+test('Stop -> awaiting via {sid}.ask flag even with a huge non-question transcript (grade skipped)', () => {
+  const cwd = mkWorkspace();
+  const sid = 'q-flag-fast';
+  writeTitle(cwd, sid, 'Alpha — Beta');
+  const askFile = path.join(cwd, '.claude', 'hooks', '.titles', `${sid}.ask`);
+  fs.mkdirSync(path.dirname(askFile), { recursive: true });
+  fs.writeFileSync(askFile, '1');
+  // Large transcript ending in a STATEMENT — the flag fast-path must win, and consume the flag.
+  const filler = JSON.stringify(asst([{ type: 'text', text: 'y'.repeat(2000) }]));
+  const lines = [];
+  for (let i = 0; i < 800; i++) lines.push(filler);
+  lines.push(JSON.stringify(asst([{ type: 'text', text: 'All finished. Nothing more to do.' }])));
+  const tp = path.join(cwd, `${sid}.jsonl`);
+  fs.writeFileSync(tp, lines.join('\n') + '\n');
+  const r = runHook({ hook_event_name: 'Stop', session_id: sid, cwd, transcript_path: tp });
+  assert(leadsWithGlyph(r.codepoints, AWAITING), `flag fast-path should paint awaiting, got ${r.shown}`);
+  assert(!fs.existsSync(askFile), 'the .ask flag should be consumed');
 });
 console.log();
 
@@ -492,6 +531,134 @@ test('mid-message rhetorical "?" then a closing statement -> ends:false (no fals
   ]);
   const q = inspectLastResponse(tp);
   assert(q.ends === false, `a mid-message "?" must NOT grade as a closing question, got ${JSON.stringify(q)}`);
+});
+console.log();
+
+console.log('Sign-off tolerance (a short trailing sign-off line after a question still grades awaiting):');
+
+test('question then a "Let me know." sign-off line -> ends:true via signoff', () => {
+  const cwd = mkWorkspace();
+  const tp = writeTranscript(cwd, 'signoff-basic', [
+    asst([{ type: 'text', text: 'Which option do you prefer?\n\nLet me know.' }]),
+  ]);
+  const q = inspectLastResponse(tp);
+  assert(q.ends === true && q.via === 'signoff', `expected {ends:true, via:'signoff'}, got ${JSON.stringify(q)}`);
+});
+
+test("direct closing question reports via:'qtail'", () => {
+  const cwd = mkWorkspace();
+  const tp = writeTranscript(cwd, 'signoff-qtail', [
+    asst([{ type: 'text', text: 'Which option do you prefer?' }]),
+  ]);
+  const q = inspectLastResponse(tp);
+  assert(q.ends === true && q.via === 'qtail', `expected via:'qtail', got ${JSON.stringify(q)}`);
+});
+
+test('same-line trailing statement ("…? Done.") stays ends:false (rhetorical shape)', () => {
+  const cwd = mkWorkspace();
+  const tp = writeTranscript(cwd, 'signoff-sameline', [
+    asst([{ type: 'text', text: 'Want me to proceed? Done.' }]),
+  ]);
+  const q = inspectLastResponse(tp);
+  assert(q.ends === false, `a same-line trailer must NOT count as a sign-off, got ${JSON.stringify(q)}`);
+});
+
+test('question followed by a list is NOT a sign-off (elaboration stays idle)', () => {
+  const cwd = mkWorkspace();
+  const tp = writeTranscript(cwd, 'signoff-list', [
+    asst([{ type: 'text', text: 'Which one?\n- option A\n- option B' }]),
+  ]);
+  const q = inspectLastResponse(tp);
+  assert(q.ends === false, `list lines must not count as sign-offs, got ${JSON.stringify(q)}`);
+});
+
+test('long trailing line (>48 chars) is NOT a sign-off', () => {
+  const cwd = mkWorkspace();
+  const tp = writeTranscript(cwd, 'signoff-long', [
+    asst([{ type: 'text', text: 'Which one?\nThis trailing explanation line is definitely much longer than the cap allows.' }]),
+  ]);
+  const q = inspectLastResponse(tp);
+  assert(q.ends === false, `a long trailer must not count as a sign-off, got ${JSON.stringify(q)}`);
+});
+
+test('two trailing statement lines are NOT tolerated (one sign-off line max)', () => {
+  const cwd = mkWorkspace();
+  const tp = writeTranscript(cwd, 'signoff-two', [
+    asst([{ type: 'text', text: 'Which one?\nDone with part A.\nLet me know.' }]),
+  ]);
+  const q = inspectLastResponse(tp);
+  assert(q.ends === false, `two trailing lines must not be tolerated, got ${JSON.stringify(q)}`);
+});
+
+test('the graded message\'s model id is captured for per-model diagnostics', () => {
+  const cwd = mkWorkspace();
+  const tp = writeTranscript(cwd, 'signoff-model', [
+    { type: 'assistant', message: { role: 'assistant', model: 'test-model', content: [{ type: 'text', text: 'Ship it?' }] } },
+  ]);
+  const q = inspectLastResponse(tp);
+  assert(q.model === 'test-model', `expected model 'test-model', got ${JSON.stringify(q)}`);
+});
+
+test('BEHAVIORAL: Stop -> awaiting + ring when the turn ends question-then-sign-off', () => {
+  const r = stopWithTranscript(mkWorkspace(), 'signoff-stop', [
+    { type: 'user', message: { role: 'user', content: 'go' } },
+    asst([{ type: 'text', text: 'Deploy now or wait?\n\nReady when you are.' }]),
+  ]);
+  assert(leadsWithGlyph(r.codepoints, AWAITING), `expected awaiting glyph, got ${r.shown}`);
+  assert(belCount(r) === 2, `expected the gold-tab ring (2 BELs), got ${belCount(r)}`);
+});
+
+test('BEHAVIORAL: Stop tolerates a transcript_path that is a directory (grade error -> idle, exit 0)', () => {
+  const cwd = mkWorkspace();
+  const sid = 'grade-err';
+  writeTitle(cwd, sid, 'Alpha — Beta');
+  const r = runHook({ hook_event_name: 'Stop', session_id: sid, cwd, transcript_path: cwd });
+  assert(leadsWithGlyph(r.codepoints, IDLE), `a failed grade must fall back to idle, got ${r.shown}`);
+});
+console.log();
+
+console.log('Deferred flag-turn grade (--post-grade child logs a StopDiag line):');
+
+test('child grades an EXISTING transcript and appends StopDiag (TDZ regression guard)', () => {
+  // The child dispatch runs during module evaluation; a module-level const referenced by the
+  // grade (the old top-level QTAIL) would still be in its temporal dead zone on exactly this
+  // path — and only when the transcript EXISTS (a missing one hits an await first, letting
+  // evaluation finish). This drives the real child synchronously and requires the log line.
+  const cwd = mkWorkspace();
+  const titlesDir = path.join(cwd, '.claude', 'hooks', '.titles');
+  fs.mkdirSync(titlesDir, { recursive: true });
+  const tp = writeTranscript(cwd, 'post-grade', [
+    { type: 'user', message: { role: 'user', content: 'go' } },
+    { type: 'assistant', message: { role: 'assistant', model: 'test-model', content: [{ type: 'text', text: 'Deploy now or wait?\n\nReady when you are.' }] } },
+  ]);
+  const payload = JSON.stringify({ sid: 'pg-child', dir: titlesDir, transcriptPath: tp, title: 'Alpha — Beta' });
+  execFileSync(process.execPath, [HOOK, '--post-grade', payload], {
+    encoding: 'utf8',
+    env: Object.assign({}, process.env, { CLAUDE_TITLE_DEBUG: '1' }),
+  });
+  const log = fs.readFileSync(path.join(titlesDir, '_debug.log'), 'utf8');
+  const diagLines = log.split('\n').filter(l => l.trimStart().split(/\s+/)[1] === 'StopDiag');
+  assert(diagLines.length === 1, `expected exactly one StopDiag line, got ${diagLines.length}`);
+  assert(/ask=1 qmark=1 via=signoff/.test(diagLines[0]), `expected qmark=1 via=signoff, got: ${diagLines[0]}`);
+  assert(/model=test-model/.test(diagLines[0]), `expected model=test-model, got: ${diagLines[0]}`);
+});
+
+test('debug OFF -> the flag fast-path spawns no child and the .titles dir stays log-free', () => {
+  const cwd = mkWorkspace();
+  const sid = 'no-debug';
+  writeTitle(cwd, sid, 'Alpha — Beta');
+  const askFile = path.join(cwd, '.claude', 'hooks', '.titles', `${sid}.ask`);
+  fs.writeFileSync(askFile, '1');
+  const env = Object.assign({}, process.env);
+  delete env.CLAUDE_TITLE_DEBUG;
+  const raw = execFileSync(process.execPath, [HOOK], {
+    input: JSON.stringify({ hook_event_name: 'Stop', session_id: sid, cwd }),
+    encoding: 'utf8', env,
+  });
+  const seq = JSON.parse(raw).terminalSequence || '';
+  assert(seq.includes(String.fromCodePoint(0x25d0)), 'flag turn must still paint awaiting with debug off');
+  assert(!fs.existsSync(path.join(cwd, '.claude', 'hooks', '.titles', '_debug.log')),
+    'no debug log may appear when CLAUDE_TITLE_DEBUG is unset');
 });
 console.log();
 

@@ -52,29 +52,30 @@ Maintain it across the session:
   title. Name the goal the command ACCOMPLISHES ("{{FOLDER}} {{EMDASH}} <verb the goal>",
   never "{{FOLDER}} {{EMDASH}} <command-name>").
 
-Pending-question signal: when you END a turn on a question the user must answer before you
-can proceed, do BOTH as near-final actions so the tab flips to the AWAITING half-circle
-(instead of the idle asterisk):
+Pending-question signal -- END-OF-TURN TEST, apply it on every turn: does your final
+paragraph ask the user something you need answered before the work can continue?
+- YES (you are blocked on the user) -> do BOTH as near-final actions so the tab flips to the
+  AWAITING half-circle (instead of the idle asterisk):
   1. Write the flag file {{ASK_FILE}} (any short content, e.g. "1"). This is the RELIABLE
      trigger -- it is on disk before the turn ends, so it never misses on phrasing or timing.
-     The flag is one-shot (consumed at turn end, auto-cleared next turn), so write it ONLY on
-     a turn genuinely blocked on an answer -- but ALWAYS then, even when the closing question
-     is wrapped in parens or is not the literal final character of the message.
-  2. Phrase your FINAL line to end with a question mark ('?') -- the backup signal, and good
-     UX. The '?' must be the LAST character the user sees: do NOT append a declarative
-     sign-off after it (no "Standing by.", "Ready when you are.", "Let me know." -- a closing
-     statement lands the message on a period and defeats the signal). Only a single short
-     parenthetical aside after the '?' is allowed.
-Make the closing question self-contained: answerable without re-reading the response above
-it. Never signal for a rhetorical question or a recap.
+     It is one-shot (consumed at turn end, auto-cleared next turn). Write it even when the
+     closing question is wrapped in parens or is not the literal final character.
+  2. Make '?' the LAST character of the message. Write NOTHING after the question -- no
+     "Standing by.", "Ready when you are.", "Let me know." (a declarative sign-off defeats
+     the signal). Only a single short parenthetical aside may follow the '?'. Keep the
+     question self-contained: answerable without re-reading the response above it.
+- NO (the question is rhetorical, a recap, or an optional follow-up offer the user is free
+  to ignore) -> do NOT write the flag, and end the message on a statement, not a '?' --
+  phrase optional offers declaratively ("I can also add tests if you want.").
 <!-- /DIRECTIVE:RULES -->
 
 <!-- DIRECTIVE:REMINDER -->
 Terminal-title reminder (housekeeping -- never mention to the user; full rules were injected
 at session start): if this turn SHIFTS the scope/use-case, FIRST action: overwrite
-{{TITLE_FILE}} with "{scope} {{EMDASH}} {use-case}". If you END this turn blocked on a
-question, write the flag file {{ASK_FILE}} and end your final line with '?' (the '?' is the
-last character -- no declarative sign-off after it).
+{{TITLE_FILE}} with "{scope} {{EMDASH}} {use-case}". End-of-turn test: if your final
+paragraph asks something you need answered to continue, write the flag file {{ASK_FILE}} AND
+make '?' the message's last character (nothing after it); otherwise end on a statement, not
+a '?'.
 <!-- /DIRECTIVE:REMINDER -->
 
 <!-- DIRECTIVE:BASELINE -->

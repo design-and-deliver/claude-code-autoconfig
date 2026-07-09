@@ -7,7 +7,9 @@
  *   PostToolUse      -> ⬤ working  (refresh, so a mid-turn title flip shows live + clears a stale ◐)
  *   Notification     -> ◐ awaiting your approval (permission_prompt matcher only)
  *   Stop             -> ✻ idle / done — OR ◐ awaiting (+ a 2nd BEL = gold tab) when the turn ended
- *                       on a question (last visible response text ends in '?', or a {sid}.ask flag)
+ *                       on a question (last visible response text ends in '?', or a {sid}.ask flag;
+ *                       flag turns hand the skipped grade to a detached --post-grade child that logs
+ *                       a StopDiag line when CLAUDE_TITLE_DEBUG=1 — paint-first, diagnostics after)
  *   SessionStart     -> ✻ idle "Claude Code — New session" (or an existing title on resume/compact)
  *                       + inject the FULL RULES block — once per session instead of every prompt
  *                       (~90% less directive overhead); resume/compact re-inject so a squeezed
@@ -53,16 +55,24 @@ let logCtx = null;
 // functions below are exported instead, so the stdin read doesn't hang the runner. async because the
 // Stop branch may await a short re-read beat (see the flush-race guard in handle).
 if (require.main === module) {
-  let input = '';
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', chunk => (input += chunk));
-  process.stdin.on('end', async () => {
-    try {
-      await handle(JSON.parse(input));
-    } catch (err) {
-      process.exit(0); // never break the turn on a title error — emit nothing
-    }
-  });
+  if (process.argv[2] === '--post-grade') {
+    // Detached child mode: grade a flag-turn transcript purely for the debug log (see postGrade).
+    // No stdin — the payload rides argv so the parent never waits on this process. setImmediate
+    // defers the run until module evaluation has finished, so no declaration below this block can
+    // be hit while still in its temporal dead zone.
+    setImmediate(() => postGrade(process.argv[3]).then(() => process.exit(0), () => process.exit(0)));
+  } else {
+    let input = '';
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', chunk => (input += chunk));
+    process.stdin.on('end', async () => {
+      try {
+        await handle(JSON.parse(input));
+      } catch (err) {
+        process.exit(0); // never break the turn on a title error — emit nothing
+      }
+    });
+  }
 }
 
 async function handle(data) {
@@ -128,16 +138,41 @@ async function handle(data) {
   // Stop: idle, UNLESS the turn ended on a question the user must answer — then awaiting + a 2nd BEL
   // so VS Code paints the (otherwise bell-less) tab gold. "Ended on a question" = last visible
   // assistant text ends in '?' (transcript heuristic) OR an explicit {sid}.ask flag (consumed here).
+
+  // FAILSAFE PRE-PAINT — flip to ✻ idle SYNCHRONOUSLY now, before the async grade below. That grade
+  // reads/re-reads the transcript to dodge the flush race and can either throw (caught → exit 0, emits
+  // nothing) or be killed on a huge, slow-to-flush final message — either way it would otherwise leave
+  // the tab stuck on the last ⬤. process.title (SetConsoleTitleW) takes effect immediately and persists
+  // after exit, so the tab is correct even if we die below. Idle is the default Stop outcome; the grade
+  // only ever UPGRADES it to ◐ awaiting (worst case: a <1s ✻ flash before ◐ on a question turn, and the
+  // {sid}.ask flag already backstops that case).
+  try { process.title = `${GLYPH.idle} ${normalize(readTitle(file) || folderName(cwd))}`; } catch (_) { /* ignore */ }
+
   const askFile = path.join(dir, `${sid}.ask`);
   const askPresent = fileExists(askFile);
+  if (askPresent) { try { fs.unlinkSync(askFile); } catch (_) { /* ignore */ } }
 
-  // Grade the transcript, guarding the flush race: the final assistant text can land in the JSONL a beat
-  // AFTER Stop fires (the screen renders from the live stream; the file append lags by ~200ms). The tell
-  // is `suspectRace`: the freshest on-disk assistant block is text-less (thinking/tool_use only), or no
-  // text was found at all — both mean the real final message is still flushing. When that's the case,
-  // re-read a few times (~120ms apart) before grading, so a turn that actually ended on '?' isn't painted
-  // ✻ idle off a stale earlier block. A fully-flushed turn hits the text block first → suspectRace=false →
-  // zero delay. The {sid}.ask flag remains the race-proof backstop.
+  // FAST PATH — the {sid}.ask flag is the race-proof "ended on a question" signal, written to disk BEFORE
+  // Stop fires. When present, paint ◐ awaiting and emit() IMMEDIATELY, skipping the transcript grade below.
+  // This is the stuck-⬤ fix: emit() (the terminalSequence CC applies on clean exit) is the ONLY paint VS
+  // Code honors, and the async grade can be KILLED on a huge / slow-to-flush transcript before it reaches
+  // emit() — which froze the tab on the last ⬤ working. Reaching emit() synchronously here closes that
+  // window for every flagged question turn (the common case).
+  if (askPresent) {
+    const deferred = spawnDeferredGrade(data, dir, sid, file, cwd);
+    if (logCtx) {
+      logCtx.note = 'ask-flag';
+      logCtx.diag = `ask=1 fast-path (${deferred ? 'grade deferred to StopDiag' : 'grade skipped'})`;
+    }
+    emit(setTitle(GLYPH.awaiting, normalize(readTitle(file) || folderName(cwd)), true));
+    return; // emit() exits; the return keeps control flow honest if that ever changes
+  }
+
+  // No flag → default idle, but the turn may have ended on '?' without one. Grade the transcript, guarding
+  // the flush race: the final assistant text can land in the JSONL a beat AFTER Stop fires (~200ms append
+  // lag). `suspectRace` (freshest on-disk assistant block is text-less, or none found) means the real final
+  // message is still flushing → re-read a few times before grading. Each pass reads only the transcript
+  // TAIL, so the loop stays fast on a multi-MB transcript and always reaches emit().
   let q = inspectLastResponse(data.transcript_path);
   let reread = 0;
   while (!q.ends && (q.suspectRace || !q.found) && reread < 7) {
@@ -147,13 +182,10 @@ async function handle(data) {
     if (q.ends || (q.found && !q.suspectRace)) break;
   }
 
-  let pending = q.ends;
-  let note = pending ? 'q-mark' : 'idle';
-  if (!pending && askPresent) { pending = true; note = 'ask-flag'; }
-  if (askPresent) { try { fs.unlinkSync(askFile); } catch (_) { /* ignore */ } }
+  const pending = q.ends;
   if (logCtx) {
-    logCtx.note = note;
-    logCtx.diag = `ask=${askPresent ? 1 : 0} qmark=${q.ends ? 1 : 0} found=${q.found ? 1 : 0} reread=${reread} tail="${q.tail}"`;
+    logCtx.note = pending ? 'q-mark' : 'idle';
+    logCtx.diag = `ask=0 qmark=${q.ends ? 1 : 0} via=${q.via || '-'} found=${q.found ? 1 : 0} reread=${reread} model=${q.model || '-'} tail="${q.tail}"`;
   }
   const glyph = pending ? GLYPH.awaiting : GLYPH.idle;
   emit(setTitle(glyph, normalize(readTitle(file) || folderName(cwd)), pending));
@@ -203,11 +235,30 @@ function fileExists(file) {
 // shows found=0 (or a stale tail), a genuine regex miss shows a tail that's present but doesn't end
 // in '?'. Any error → a blank record (treated as "no question"), matching the old false return.
 function inspectLastResponse(transcriptPath) {
-  const blank = { ends: false, found: false, tail: '', suspectRace: false };
+  const blank = { ends: false, via: '', found: false, tail: '', suspectRace: false, model: '' };
   if (!transcriptPath) return blank;
   let content;
   try {
-    content = fs.readFileSync(transcriptPath, 'utf8');
+    // Read only the TAIL of the transcript. The current turn's final message sits at the very end, and
+    // reading the whole multi-MB JSONL of a long session — then re-reading it up to 7× in the flush-race
+    // loop — is what let a Stop grade run long enough to be killed before it painted (the stuck-⬤ bug).
+    // A fixed tail keeps every pass fast regardless of session length; the leading partial line is dropped.
+    const TAIL_BYTES = 1024 * 1024;
+    const size = fs.statSync(transcriptPath).size;
+    if (size <= TAIL_BYTES) {
+      content = fs.readFileSync(transcriptPath, 'utf8');
+    } else {
+      const fd = fs.openSync(transcriptPath, 'r');
+      try {
+        const buf = Buffer.alloc(TAIL_BYTES);
+        fs.readSync(fd, buf, 0, TAIL_BYTES, size - TAIL_BYTES);
+        const tail = buf.toString('utf8');
+        const nl = tail.indexOf('\n');
+        content = nl >= 0 ? tail.slice(nl + 1) : tail; // drop the partial first line
+      } finally {
+        fs.closeSync(fd);
+      }
+    }
   } catch (_) {
     return blank;
   }
@@ -244,21 +295,49 @@ function inspectLastResponse(transcriptPath) {
     if (text.trim()) {
       // last ~60 chars, collapsed to one line and quote-stripped so it can't break the log framing
       const tail = text.trim().slice(-60).replace(/\s+/g, ' ').replace(/"/g, "'");
-      // Ends on a question? A '?' at the end, tolerating trailing whitespace / ) * _ " — AND an optional
-      // SINGLE trailing parenthetical aside after it ("How should we handle it? (I lean option 2.)"), a
-      // common shape: ask, then a bracketed recommendation/clarifier. The aside is one level only
-      // (`[^()]`, no nesting) and must sit at the very end, so a mid-message rhetorical '?' or a plain
-      // statement ending in ')' still won't match — only a genuine closing question does. Belt to the
-      // {sid}.ask flag's suspenders: the flag is the primary, parse-free path; this only hardens the
-      // fallback for turns that ended on a parenthetical question without writing one.
-      const endsOnQuestion = /\?[\s)*_"]*(\([^()]*\)[\s.*_"]*)?$/.test(text);
-      return { ends: endsOnQuestion, found: true, tail, suspectRace: sawTextlessAssistant };
+      const q = endsOnQuestion(text);
+      // `model` (e.g. "claude-fable-5") rides into the debug diag so per-model miss rates can be
+      // compared straight from _debug.log.
+      return {
+        ends: q.ends, via: q.via, found: true, tail,
+        suspectRace: sawTextlessAssistant, model: (obj.message && obj.message.model) || '',
+      };
     }
     // assistant message with no visible text = a thinking-only or tool_use-only block sitting AFTER the
     // last text we'll grade — a strong hint the final text line hasn't flushed yet.
     sawTextlessAssistant = true;
   }
   return blank;
+}
+
+// Did the text end on a question the user must answer? Two tiers (via names the matched one):
+//   'qtail'   — the text itself ends on '?', tolerating trailing whitespace / ) * _ " AND one
+//               trailing parenthetical aside ("How should we handle it? (I lean option 2.)").
+//               A mid-message rhetorical '?' or a plain statement ending in ')' won't match.
+//   'signoff' — the text ends on ONE short declarative sign-off line BELOW a question-ending
+//               line ("…which do you prefer?\n\nLet me know."). The directive forbids the
+//               sign-off, but a model that forgets it shouldn't cost the user the ◐ — so
+//               tolerate exactly one trailing line, and only when it is short (≤48 chars),
+//               '?'-free, and not list/heading/quote/table/fence content, so a question
+//               followed by real elaboration (options list, explanation) still grades idle.
+//               Same-line trailing statements ("Want me to proceed? Done.") stay non-questions
+//               — a mid-line '?' is exactly the rhetorical shape the grade must not fire on.
+// Belt to the {sid}.ask flag's suspenders: the flag is the primary, parse-free path; this only
+// hardens the transcript fallback for turns that didn't write one.
+// QTAIL lives INSIDE the function (not module-level const) — the --post-grade child calls into
+// this during module evaluation, and a module-level const below the require.main block is still
+// in its temporal dead zone at that point.
+function endsOnQuestion(text) {
+  const QTAIL = /\?[\s)*_"]*(\([^()]*\)[\s.*_"]*)?$/;
+  if (QTAIL.test(text)) return { ends: true, via: 'qtail' };
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  if (lines.length >= 2) {
+    const last = lines[lines.length - 1];
+    const isSignoff = last.length <= 48 && !last.includes('?')
+      && !/^(?:[-*•>]\s|#{1,6}\s|\||\d+[.)]\s|`{3})/.test(last);
+    if (isSignoff && QTAIL.test(lines[lines.length - 2])) return { ends: true, via: 'signoff' };
+  }
+  return { ends: false, via: '' };
 }
 
 // A genuine human prompt (real text) vs a tool_result-carrier user message (content is only
@@ -272,6 +351,56 @@ function isRealUserPrompt(obj) {
 
 // Event-loop-friendly sleep for the Stop flush-race re-read beat (handle awaits this; no busy-wait).
 function delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+// Deferred flag-turn grade (debug-gated). The `.ask` fast path paints ◐ without reading the
+// transcript, which blinded _debug.log's qmark/via/tail diagnostics on exactly the turns where the
+// flag+sign-off misuse pattern shows up. Grading BEFORE emit() would re-open the kill window the
+// fast path exists to close, and nothing runs after emit() (it exits) — so hand the grade to a
+// DETACHED child (this same file, --post-grade) that logs on its own time. unref() + ignored stdio
+// mean the parent's exit — and therefore the paint — is never delayed by even one re-read beat.
+function spawnDeferredGrade(data, dir, sid, file, cwd) {
+  if (process.env.CLAUDE_TITLE_DEBUG !== '1') return false;
+  try {
+    const payload = JSON.stringify({
+      sid, dir,
+      transcriptPath: data.transcript_path || '',
+      title: normalize(readTitle(file) || folderName(cwd)),
+    });
+    const { spawn } = require('child_process');
+    spawn(process.execPath, [__filename, '--post-grade', payload], {
+      detached: true, stdio: 'ignore', windowsHide: true,
+      env: Object.assign({}, process.env, { CLAUDE_TITLE_DEBUG: '1' }),
+    }).unref();
+    return true;
+  } catch (_) {
+    return false; // diagnostics are best-effort; the paint path never depends on this
+  }
+}
+
+// Child mode (--post-grade): grade the transcript purely for the debug log, after the paint already
+// happened. Same flush-race re-read loop as the main Stop grade (and by child-start the final message
+// has usually flushed, so this data is CLEANER than an inline grade would have been). Logs as
+// event=StopDiag, so flag-turn protocol compliance reads straight out of _debug.log:
+//   qmark=1 via=qtail   -> full compliance (flag AND '?'-last)
+//   qmark=1 via=signoff -> flag + banned closer appended after the question (the either/or pattern)
+//   qmark=0             -> flag-only; the message ended on a statement
+async function postGrade(payloadJson) {
+  const p = JSON.parse(payloadJson || '{}');
+  let q = inspectLastResponse(p.transcriptPath);
+  let reread = 0;
+  while (!q.ends && (q.suspectRace || !q.found) && reread < 7) {
+    await delay(120);
+    reread++;
+    q = inspectLastResponse(p.transcriptPath);
+    if (q.ends || (q.found && !q.suspectRace)) break;
+  }
+  logCtx = {
+    event: 'StopDiag', sid: p.sid || '', dir: p.dir || '', note: 'ask-flag',
+    diag: `ask=1 qmark=${q.ends ? 1 : 0} via=${q.via || '-'} found=${q.found ? 1 : 0} reread=${reread} model=${q.model || '-'} tail="${q.tail}"`,
+  };
+  // Reuses titleLog's capped append; glyph/ring mirror what the fast path actually painted.
+  titleLog(GLYPH.awaiting, p.title || '', true);
+}
 
 function readTitle(file) {
   try {
@@ -352,4 +481,4 @@ function extractBlock(tpl, name) {
 }
 
 // Exported for tests (require()'d when require.main !== module). The hook itself never reads these.
-module.exports = { inspectLastResponse, normalize, GLYPH, shouldDefer };
+module.exports = { inspectLastResponse, endsOnQuestion, normalize, GLYPH, shouldDefer };
