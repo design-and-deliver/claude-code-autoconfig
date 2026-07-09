@@ -6,5 +6,5 @@ allowed-tools: Bash
 Run exactly this command, then reply with a single confirmation line and nothing else:
 
 ```
-mkdir -p ~/.claude/sounds && touch ~/.claude/sounds/arcade-beeps.enabled && echo "arcade beeps ENABLED (every turn-end beeps: awaiting=low, complete=high). Disable with /disable-arcade-beeps."
+mkdir -p "${CLAUDE_PROJECT_DIR:-.}/.claude/sounds" && touch "${CLAUDE_PROJECT_DIR:-.}/.claude/sounds/arcade-beeps.enabled" && echo "arcade beeps ENABLED for this project (every turn-end beeps: awaiting=low, complete=high). Disable with /disable-arcade-beeps."
 ```

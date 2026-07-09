@@ -3,9 +3,12 @@
  * arcade-beeps — optional Pole-Position status cues for the Claude Code tab.
  * Companion to terminal-title.js. Registered (settings.json) on Stop + Notification.
  *
- * OFF unless the enable flag exists:  ~/.claude/sounds/arcade-beeps.enabled
+ * OFF unless the enable flag exists:  <install>/.claude/sounds/arcade-beeps.enabled
  *   toggle via  /enable-arcade-beeps   /disable-arcade-beeps
- * The flag is GLOBAL (homedir), so one toggle covers every project you've installed into.
+ * The flag lives beside THIS install's sounds dir, so it is PER-PROJECT: a fresh
+ * `npx claude-code-autoconfig` install never beeps until /enable-arcade-beeps is run in that
+ * project. (A copy of this hook living in ~/.claude/hooks keys off ~/.claude/sounds — a
+ * deliberate consequence: a global install gets a global toggle.)
  *
  * Mapping (matches the ◐/✻ tab glyph that terminal-title.js paints on the SAME event):
  *   Stop, turn ended on a question   -> ◐ awaiting  -> get-ready tick (pp3-getready-G4.wav, G4/384Hz)
@@ -38,7 +41,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const ASSET_DIR = path.join(__dirname, '..', 'sounds');           // wavs ship beside the hook
-const FLAG = path.join(os.homedir(), '.claude', 'sounds', 'arcade-beeps.enabled'); // global toggle
+const FLAG = path.join(ASSET_DIR, 'arcade-beeps.enabled');        // per-install toggle, beside the wavs
 const LOG = path.join(os.homedir(), '.claude', 'hooks', '.titles', 'arcade-beeps.log');
 const DEBUG = process.env.ARCADE_BEEPS_DEBUG === '1';
 

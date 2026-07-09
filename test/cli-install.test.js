@@ -166,6 +166,50 @@ test('CLI always refreshes the managed title hooks (so fixes reach existing inst
   );
 });
 
+console.log();
+
+// -----------------------------------------------------------------------------
+// Arcade Beeps Opt-in (no beeps by default in a fresh install)
+// -----------------------------------------------------------------------------
+
+console.log('Arcade Beeps Opt-in:');
+
+test('arcade-beeps hook gates on the install-local flag, not a homedir-global one', () => {
+  const hookCode = fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'hooks', 'arcade-beeps.js'), 'utf8');
+  assert(
+    /const FLAG = path\.join\(ASSET_DIR, 'arcade-beeps\.enabled'\)/.test(hookCode),
+    'FLAG should resolve beside the install\'s own sounds dir (per-project opt-in)'
+  );
+  assert(
+    !/FLAG = path\.join\(os\.homedir\(\)/.test(hookCode),
+    'FLAG must not key off os.homedir() — a global flag makes every new install beep by default'
+  );
+});
+
+test('enable/disable toggle commands ship and target the project flag', () => {
+  const enablePath = path.join(PACKAGE_CLAUDE_DIR, 'commands', 'enable-arcade-beeps.md');
+  const disablePath = path.join(PACKAGE_CLAUDE_DIR, 'commands', 'disable-arcade-beeps.md');
+  assertExists(enablePath, 'enable-arcade-beeps command should exist');
+  assertExists(disablePath, 'disable-arcade-beeps command should exist');
+  const enable = fs.readFileSync(enablePath, 'utf8');
+  const disable = fs.readFileSync(disablePath, 'utf8');
+  assert(
+    enable.includes('${CLAUDE_PROJECT_DIR:-.}/.claude/sounds/arcade-beeps.enabled'),
+    'enable command should create the PROJECT flag'
+  );
+  assert(
+    !enable.includes('~/.claude/sounds/arcade-beeps.enabled'),
+    'enable command must not set the legacy global flag'
+  );
+  assert(
+    disable.includes('${CLAUDE_PROJECT_DIR:-.}/.claude/sounds/arcade-beeps.enabled') &&
+      disable.includes('~/.claude/sounds/arcade-beeps.enabled'),
+    'disable command should remove the project flag AND the legacy global flag'
+  );
+});
+
+console.log();
+
 test('CLI supports --force flag', () => {
   const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
   assert(cliCode.includes("'--force'"), 'CLI should support --force flag');
