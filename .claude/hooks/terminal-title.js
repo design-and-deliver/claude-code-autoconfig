@@ -79,13 +79,19 @@ async function handle(data) {
   const event = data.hook_event_name || '';
   const sid = data.session_id || '';
   const cwd = data.cwd || process.cwd();
-  // User-level copy stands down when a project-level managed copy exists (see header).
-  if (shouldDefer(cwd, __dirname, __filename, path.join(os.homedir(), '.claude', 'hooks'))) {
+  // User-level copy stands down when the SESSION'S OWN project ships a managed copy (see header).
+  // Keyed to CLAUDE_PROJECT_DIR (the dir whose settings registered this hook run), NOT the event's
+  // cwd: a mid-session `cd` into a copy-shipping repo must not silence this copy — that repo's
+  // settings aren't loaded, so its copy never runs and nobody would paint.
+  const ownerDir = process.env.CLAUDE_PROJECT_DIR || cwd;
+  if (shouldDefer(ownerDir, __dirname, __filename, path.join(os.homedir(), '.claude', 'hooks'))) {
     process.exit(0);
   }
-  // PROJECT-SCOPED title dir (cwd-relative) — the plugin installs per-project. (The live ~/.claude
-  // variant uses os.homedir() instead; that is the only difference between the two.)
-  const dir = path.join(cwd, '.claude', 'hooks', '.titles');
+  // PROJECT-SCOPED title dir — anchored to the session's project root (CLAUDE_PROJECT_DIR, with cwd
+  // fallback on older Claude Code versions that don't set it) so a mid-session `cd` can't scatter
+  // title state across directories. (The live ~/.claude variant uses os.homedir() instead; that is
+  // the only difference between the two.)
+  const dir = path.join(ownerDir, '.claude', 'hooks', '.titles');
   const file = path.join(dir, `${sid}.txt`);
   logCtx = { event, sid, dir, note: '' };
 
@@ -182,10 +188,15 @@ async function handle(data) {
     if (q.ends || (q.found && !q.suspectRace)) break;
   }
 
-  const pending = q.ends;
+  // LEXICAL RESCUE — no '?' on the final line, but its closing sentence is a formulaic offer
+  // ("Say the word and I'll…", "Want me to…"): the phrasing directive slipped. Paint ◐ anyway so
+  // the user still gets the awaiting signal; via=lex marks it a prose DEFECT for the miss-audit,
+  // not a working-as-intended path.
+  const lex = !q.ends && q.solicits === true;
+  const pending = q.ends || lex;
   if (logCtx) {
-    logCtx.note = pending ? 'q-mark' : 'idle';
-    logCtx.diag = `ask=0 qmark=${q.ends ? 1 : 0} via=${q.via || '-'} found=${q.found ? 1 : 0} reread=${reread} model=${q.model || '-'} tail="${q.tail}"`;
+    logCtx.note = pending ? (lex ? 'lex' : 'q-mark') : 'idle';
+    logCtx.diag = `ask=0 qmark=${q.ends ? 1 : 0} via=${lex ? 'lex' : (q.via || '-')} found=${q.found ? 1 : 0} reread=${reread} model=${q.model || '-'} tail="${q.tail}"`;
   }
   const glyph = pending ? GLYPH.awaiting : GLYPH.idle;
   emit(setTitle(glyph, normalize(readTitle(file) || folderName(cwd)), pending));
@@ -235,7 +246,7 @@ function fileExists(file) {
 // shows found=0 (or a stale tail), a genuine regex miss shows a tail that's present but doesn't end
 // in '?'. Any error → a blank record (treated as "no question"), matching the old false return.
 function inspectLastResponse(transcriptPath) {
-  const blank = { ends: false, via: '', found: false, tail: '', suspectRace: false, model: '' };
+  const blank = { ends: false, via: '', found: false, tail: '', suspectRace: false, model: '', solicits: false };
   if (!transcriptPath) return blank;
   let content;
   try {
@@ -301,6 +312,7 @@ function inspectLastResponse(transcriptPath) {
       return {
         ends: q.ends, via: q.via, found: true, tail,
         suspectRace: sawTextlessAssistant, model: (obj.message && obj.message.model) || '',
+        solicits: solicitsReply(text),
       };
     }
     // assistant message with no visible text = a thinking-only or tool_use-only block sitting AFTER the
@@ -351,6 +363,36 @@ function isRealUserPrompt(obj) {
 
 // Event-loop-friendly sleep for the Stop flush-race re-read beat (handle awaits this; no busy-wait).
 function delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+// LEXICAL solicitation detector (the '?'-less rescue). STRONG, formulaic offer phrases only, tested
+// against the CLOSING SENTENCE of the final non-empty line. Weak/courtesy phrases ("let me know",
+// "if you want", "happy to") are deliberately absent: as sign-offs after completed work they are
+// legitimate statement endings, and enforcing them would trade a rare false-✻ for chronic false-◐.
+// "green-light"/"confirm" are imperative-anchored (sentence-initial) so a recap that merely MENTIONS
+// them ("Andrew green-lighted the batch.") can't fire.
+const SOLICIT_STRONG = [
+  /\bwant me to\b/i,
+  /\bwould you like\b/i,
+  /\bshould i\b/i,
+  /\bshall i\b/i,
+  /\bdo you want\b/i,
+  /\bsay the word\b/i,
+  /\by\/n\b/i,
+  /\bok(?:ay)? to proceed\b/i,
+  /^green-?light\b/i,
+  /^confirm\b/i,
+];
+function solicitsReply(text) {
+  if (!text) return false;
+  const lines = String(text).trim().split('\n').filter(l => l.trim());
+  const lastLine = (lines[lines.length - 1] || '').trim();
+  // Any '?' on the final line means the question grade (qtail/signoff) owns the verdict — the
+  // lexicon exists solely for the question-less slip, and must never second-guess a graded line.
+  if (!lastLine || lastLine.includes('?')) return false;
+  const parts = lastLine.split(/[.!:;]\s+/);
+  const closing = (parts[parts.length - 1] || '').trim();
+  return SOLICIT_STRONG.some(re => re.test(closing));
+}
 
 // Deferred flag-turn grade (debug-gated). The `.ask` fast path paints ◐ without reading the
 // transcript, which blinded _debug.log's qmark/via/tail diagnostics on exactly the turns where the
@@ -460,12 +502,15 @@ function buildBlocks(names, file, cwd, cmd) {
 }
 
 // Should THIS copy of the hook stand down? True only for the user-level copy (~/.claude/hooks)
-// running inside a project that ships its own managed copy — the project copy wins, so a session
-// gets ONE directive and ONE title file. Parameterized (no ambient __dirname/homedir) for tests.
-function shouldDefer(cwd, selfDir, selfFile, homeHooksDir) {
+// when the session's OWN project (ownerDir = CLAUDE_PROJECT_DIR, cwd fallback) ships a managed
+// copy — that's the only case where the project copy is registered and will paint; the project
+// copy wins so a session gets ONE directive and ONE title file. The event's live cwd must NOT be
+// used here (mid-session cd into a copy-shipping repo would silence both copies — 2026-07-08).
+// Parameterized (no ambient __dirname/homedir) for tests.
+function shouldDefer(ownerDir, selfDir, selfFile, homeHooksDir) {
   try {
     if (path.resolve(selfDir) !== path.resolve(homeHooksDir)) return false; // we ARE the project copy
-    const projectCopy = path.join(cwd, '.claude', 'hooks', 'terminal-title.js');
+    const projectCopy = path.join(ownerDir, '.claude', 'hooks', 'terminal-title.js');
     return fs.existsSync(projectCopy) && path.resolve(projectCopy) !== path.resolve(selfFile);
   } catch (_) {
     return false;
@@ -481,4 +526,4 @@ function extractBlock(tpl, name) {
 }
 
 // Exported for tests (require()'d when require.main !== module). The hook itself never reads these.
-module.exports = { inspectLastResponse, endsOnQuestion, normalize, GLYPH, shouldDefer };
+module.exports = { inspectLastResponse, endsOnQuestion, normalize, GLYPH, shouldDefer, solicitsReply };

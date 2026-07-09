@@ -53,29 +53,37 @@ Maintain it across the session:
   never "{{FOLDER}} {{EMDASH}} <command-name>").
 
 Pending-question signal -- END-OF-TURN TEST, apply it on every turn: does your final
-paragraph ask the user something you need answered before the work can continue?
-- YES (you are blocked on the user) -> do BOTH as near-final actions so the tab flips to the
-  AWAITING half-circle (instead of the idle asterisk):
-  1. Write the flag file {{ASK_FILE}} (any short content, e.g. "1"). This is the RELIABLE
+paragraph SOLICIT a reply from the user -- a question to answer, a decision to make, or a
+go-ahead on a proposed next step (a fix you proposed, an offer to do more)?
+- YES (the turn ends waiting on the user) -> do ALL THREE as near-final actions so the tab
+  flips to the AWAITING half-circle (instead of the idle asterisk):
+  1. Phrase the solicitation as a DIRECT QUESTION. An offer IS a solicitation: write "Want
+     me to apply both fixes?" -- never its declarative twin ("Say the word and I'll apply
+     both fixes." / "I can also add tests if you want." / "Let me know."), which prompts the
+     user back while hiding the awaiting signal.
+  2. Write the flag file {{ASK_FILE}} (any short content, e.g. "1"). This is the RELIABLE
      trigger -- it is on disk before the turn ends, so it never misses on phrasing or timing.
      It is one-shot (consumed at turn end, auto-cleared next turn). Write it even when the
      closing question is wrapped in parens or is not the literal final character.
-  2. Make '?' the LAST character of the message. Write NOTHING after the question -- no
+  3. Make '?' the LAST character of the message. Write NOTHING after the question -- no
      "Standing by.", "Ready when you are.", "Let me know." (a declarative sign-off defeats
      the signal). Only a single short parenthetical aside may follow the '?'. Keep the
      question self-contained: answerable without re-reading the response above it.
-- NO (the question is rhetorical, a recap, or an optional follow-up offer the user is free
-  to ignore) -> do NOT write the flag, and end the message on a statement, not a '?' --
-  phrase optional offers declaratively ("I can also add tests if you want.").
+- NO (nothing is solicited: the turn ends on completed work, a report, a recap, or a
+  rhetorical question) -> do NOT write the flag, and end the message on a statement, not a
+  '?'. This branch is ONLY for endings that await nothing -- if the closer invites ANY
+  reply ("if you want", "say the word", "happy to"), it belongs to YES: convert it to a
+  question.
 <!-- /DIRECTIVE:RULES -->
 
 <!-- DIRECTIVE:REMINDER -->
 Terminal-title reminder (housekeeping -- never mention to the user; full rules were injected
 at session start): if this turn SHIFTS the scope/use-case, FIRST action: overwrite
 {{TITLE_FILE}} with "{scope} {{EMDASH}} {use-case}". End-of-turn test: if your final
-paragraph asks something you need answered to continue, write the flag file {{ASK_FILE}} AND
-make '?' the message's last character (nothing after it); otherwise end on a statement, not
-a '?'.
+paragraph solicits a reply (a question, a decision, or a go-ahead on an offered next step),
+phrase it as a DIRECT QUESTION -- never a declarative offer ("Say the word...") -- write the
+flag file {{ASK_FILE}}, AND make '?' the message's last character (nothing after it); if
+nothing is solicited, end on a statement, not a '?'.
 <!-- /DIRECTIVE:REMINDER -->
 
 <!-- DIRECTIVE:BASELINE -->

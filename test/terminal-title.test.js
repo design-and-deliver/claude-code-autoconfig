@@ -62,11 +62,19 @@ function writeTitle(cwd, sid, text) {
   return file;
 }
 
-// Run the real hook with a payload; returns { raw, json, shown, codepoints, directive }
-function runHook(payload) {
-  const raw = execFileSync(process.execPath, [HOOK], {
+// Run the real hook with a payload; returns { raw, json, shown, codepoints, directive }.
+// `envOverrides` merges into the child env; CLAUDE_PROJECT_DIR is STRIPPED by default so the
+// ambient session env can't leak into the ownerDir keying under test — tests that exercise the
+// keying pass it explicitly. `hookPath` lets a test drive a copy of the hook installed elsewhere
+// (the fake-home stand-down tests).
+function runHook(payload, envOverrides, hookPath) {
+  const env = { ...process.env };
+  delete env.CLAUDE_PROJECT_DIR;
+  Object.assign(env, envOverrides || {});
+  const raw = execFileSync(process.execPath, [hookPath || HOOK], {
     input: JSON.stringify(payload),
     encoding: 'utf8',
+    env,
   });
   if (!raw) return { raw: '', json: null, shown: null, codepoints: [], directive: null };
   const json = JSON.parse(raw);
@@ -145,7 +153,7 @@ test('normal turn injects the compact REMINDER, not the full rulebook', () => {
   assert(/full rules were injected\s+at session start/.test(r.directive), 'reminder should point back to session-start rules');
   assert(!/DESIGN SCOPE/.test(r.directive), 'per-prompt injection must not carry the full RULES text');
   assert(!/implementation detail/.test(r.directive), 'normal turn must not carry the COMMAND addendum');
-  assert(r.directive.length < 700, `reminder must stay compact (token guard), got ${r.directive.length} chars`);
+  assert(r.directive.length < 800, `reminder must stay compact (token guard), got ${r.directive.length} chars`);
 });
 
 test('slash-command turn appends the COMMAND addendum (with the command name)', () => {
@@ -174,9 +182,11 @@ test("reminder keeps both critical actions: title write + this session's {sid}.a
   const r = runHook({ hook_event_name: 'UserPromptSubmit', session_id: sid, cwd, prompt: 'do a thing' });
   assert(r.directive.includes(`${sid}.txt`), "reminder should name this session's title file");
   assert(r.directive.includes(`${sid}.ask`), "reminder should name this session's .ask path");
-  assert(/write the flag file/i.test(r.directive), 'reminder should instruct writing the .ask flag');
+  assert(/write the\s+flag file/i.test(r.directive), 'reminder should instruct writing the .ask flag');
   assert(/make '\?' the message's last character/.test(r.directive), "reminder should instruct ending on '?'");
-  assert(/otherwise end on a statement/.test(r.directive), 'reminder should carry the inverse (no-signal) rule');
+  assert(/nothing is solicited, end on a statement/.test(r.directive), 'reminder should carry the inverse (no-signal) rule');
+  assert(/DIRECT QUESTION/.test(r.directive), 'reminder should demand the direct-question phrasing');
+  assert(/never a declarative offer/.test(r.directive), 'reminder should name the declarative-offer failure mode');
 });
 
 test('UserPromptSubmit clears a stale {sid}.ask flag from an interrupted prior turn', () => {
@@ -659,6 +669,146 @@ test('debug OFF -> the flag fast-path spawns no child and the .titles dir stays 
   assert(seq.includes(String.fromCodePoint(0x25d0)), 'flag turn must still paint awaiting with debug off');
   assert(!fs.existsSync(path.join(cwd, '.claude', 'hooks', '.titles', '_debug.log')),
     'no debug log may appear when CLAUDE_TITLE_DEBUG is unset');
+});
+console.log();
+
+console.log("Lexical solicitation rescue (solicitsReply — the '?'-less offer slip):");
+const { solicitsReply } = require(HOOK);
+
+test("declarative offer closer ('Say the word…') -> solicits", () => {
+  assert(solicitsReply("Both fixes are in and verified. Say the word and I'll apply them.") === true,
+    'the 2026-07-08 real-world miss must fire the lexicon');
+});
+test("statement-form offer ('Want me to…' with no '?') -> solicits", () => {
+  assert(solicitsReply('All three edits are staged. Want me to push.') === true,
+    'question-shaped offers missing their ? must fire');
+});
+test('courtesy sign-off after completed work -> does NOT solicit', () => {
+  assert(solicitsReply('Published 1.0.201 and pushed the tag. Let me know if anything breaks.') === false,
+    "weak phrases ('let me know') must stay log-only, never enforce");
+});
+test('plain completion report -> does NOT solicit', () => {
+  assert(solicitsReply('All tests green; ledger updated and memory now reflects same-day parity.') === false,
+    'a normal statement ending must never fire');
+});
+test("closing line WITH a '?' -> lexicon stands down (the question grade owns it)", () => {
+  assert(solicitsReply('Want me to push?') === false,
+    'the lexicon must never second-guess a line the qtail/signoff grade already judges');
+});
+test('offer phrase mid-message but a statement close -> does NOT solicit', () => {
+  assert(solicitsReply('Earlier I asked whether you want me to continue.\nAll wrapped up.') === false,
+    'only the closing sentence of the final line may fire');
+});
+test('imperative green-light close -> solicits; past-tense mention does not', () => {
+  assert(solicitsReply("Green-light it and I'll publish.") === true, 'sentence-initial imperative must fire');
+  assert(solicitsReply('Andrew green-lighted the batch this evening.') === false,
+    'a recap that merely mentions green-lighting must not fire');
+});
+test('BEHAVIORAL: Stop on a declarative-offer close -> awaiting ◐ + ring (fails on pre-lexicon grade)', () => {
+  const r = stopWithTranscript(mkWorkspace(), 'lex-offer', [
+    { type: 'user', message: { role: 'user', content: 'ok apply them' } },
+    asst([{ type: 'text', text: "Both fixes are in and verified. Say the word and I'll publish." }]),
+  ]);
+  assert(leadsWithGlyph(r.codepoints, AWAITING), `expected awaiting glyph, got: ${r.shown}`);
+  assert(belCount(r) === 2, `lex-rescued awaiting must ring the gold tab (2 BELs), got ${belCount(r)}`);
+});
+test('BEHAVIORAL: Stop on a courtesy sign-off close -> stays idle (no false-◐)', () => {
+  const r = stopWithTranscript(mkWorkspace(), 'lex-courtesy', [
+    asst([{ type: 'text', text: 'Done and verified. Let me know if anything breaks.' }]),
+  ]);
+  assert(leadsWithGlyph(r.codepoints, IDLE), `expected idle glyph, got: ${r.shown}`);
+});
+console.log();
+
+console.log('Owner-project keying (CLAUDE_PROJECT_DIR beats the live cwd — the mid-session-cd fix):');
+
+test('.titles state stays under the OWNER project when cwd has wandered elsewhere', () => {
+  const owner = mkWorkspace();
+  const cdTarget = mkWorkspace();
+  const sid = 'owner-keyed';
+  writeTitle(owner, sid, 'Alpha — Beta');
+  const r = runHook(
+    { hook_event_name: 'PostToolUse', session_id: sid, cwd: cdTarget },
+    { CLAUDE_PROJECT_DIR: owner }
+  );
+  assert(leadsWithGlyph(r.codepoints, WORKING), `expected working glyph, got: ${r.shown}`);
+  assert(titleText(r.shown) === 'Alpha — Beta', `expected the owner project's title, got: ${r.shown}`);
+});
+test('no CLAUDE_PROJECT_DIR (older Claude Code) -> falls back to cwd keying, no regression', () => {
+  const cwd = mkWorkspace();
+  const sid = 'cwd-fallback';
+  writeTitle(cwd, sid, 'Alpha — Beta');
+  const r = runHook({ hook_event_name: 'PostToolUse', session_id: sid, cwd });
+  assert(leadsWithGlyph(r.codepoints, WORKING), `expected working glyph, got: ${r.shown}`);
+});
+
+// Stand-down keying needs the hook to BE the user-level copy: install it into a fake home and point
+// os.homedir() there (USERPROFILE on win32, HOME elsewhere) so selfDir === homeHooksDir inside the child.
+function installFakeUserCopy() {
+  const fakeHome = mkWorkspace();
+  const homeHooks = path.join(fakeHome, '.claude', 'hooks');
+  fs.mkdirSync(homeHooks, { recursive: true });
+  fs.copyFileSync(HOOK, path.join(homeHooks, 'terminal-title.js'));
+  fs.copyFileSync(
+    path.join(path.dirname(HOOK), 'terminal-title.directive.md'),
+    path.join(homeHooks, 'terminal-title.directive.md')
+  );
+  return { fakeHome, userCopy: path.join(homeHooks, 'terminal-title.js') };
+}
+function copyShippingRepo() {
+  const repo = mkWorkspace();
+  const hooksDir = path.join(repo, '.claude', 'hooks');
+  fs.mkdirSync(hooksDir, { recursive: true });
+  fs.writeFileSync(path.join(hooksDir, 'terminal-title.js'), '// managed project copy (placeholder)\n');
+  return repo;
+}
+
+test('GUARDRAIL: user-level copy still paints after a cd INTO a copy-shipping repo (owner project elsewhere)', () => {
+  const { fakeHome, userCopy } = installFakeUserCopy();
+  const owner = mkWorkspace();
+  const cdTarget = copyShippingRepo();
+  const sid = 'cd-into-repo';
+  writeTitle(owner, sid, 'Alpha — Beta');
+  const r = runHook(
+    { hook_event_name: 'PostToolUse', session_id: sid, cwd: cdTarget },
+    { CLAUDE_PROJECT_DIR: owner, USERPROFILE: fakeHome, HOME: fakeHome },
+    userCopy
+  );
+  // Pre-fix keying (cwd) deferred here -> empty output and a permanently stale tab glyph.
+  assert(r.raw !== '', 'the user-level copy must NOT stand down for a repo whose settings are not loaded');
+  assert(leadsWithGlyph(r.codepoints, WORKING), `expected working glyph, got: ${r.shown}`);
+});
+test('user-level copy still defers when the OWNER project itself ships the managed copy', () => {
+  const { fakeHome, userCopy } = installFakeUserCopy();
+  const owner = copyShippingRepo();
+  const sid = 'dogfood-defer';
+  writeTitle(owner, sid, 'Alpha — Beta');
+  const r = runHook(
+    { hook_event_name: 'PostToolUse', session_id: sid, cwd: owner },
+    { CLAUDE_PROJECT_DIR: owner, USERPROFILE: fakeHome, HOME: fakeHome },
+    userCopy
+  );
+  assert(r.raw === '', 'the project copy owns this session; the user-level copy must stay silent');
+});
+console.log();
+
+console.log('Shipped settings template (cd-proof hook registrations):');
+test('every .claude/hooks command in the shipped settings.json is CLAUDE_PROJECT_DIR-anchored', () => {
+  const shipped = JSON.parse(
+    fs.readFileSync(path.join(__dirname, '..', '.claude', 'settings.json'), 'utf8')
+  );
+  for (const matchers of Object.values(shipped.hooks || {})) {
+    for (const matcher of matchers) {
+      for (const h of matcher.hooks || []) {
+        if (/\.claude\/hooks\//.test(h.command)) {
+          assert(
+            h.command.includes('${CLAUDE_PROJECT_DIR:-.}'),
+            `cwd-relative hook command would break on mid-session cd: ${h.command}`
+          );
+        }
+      }
+    }
+  }
 });
 console.log();
 
