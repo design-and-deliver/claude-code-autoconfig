@@ -165,7 +165,8 @@ if (process.argv.includes('--pull-updates')) {
 //   2. mergeSettingsInto dedups by EXACT command string, so without this rewrite an upgrade
 //      would ADD the anchored template entry alongside the user's old relative one -> the
 //      hook runs twice per event.
-// Only known autoconfig-managed hook filenames are rewritten; user-authored commands are
+// Any .claude/hooks/*.js relative command is rewritten — anchored resolution is identical at
+// the project root and cd-proof everywhere else — while commands outside .claude/hooks are
 // never touched.
 function migrateLegacyHookCommands(userSettings) {
   if (!userSettings || !userSettings.hooks) return;
