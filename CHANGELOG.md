@@ -1,9 +1,8 @@
 # Changelog
 
 ## v1.0.199
-- feat(cli): grouped update summary on upgrade
-- feat(terminal-title): awaiting-signal hardening — sign-off-tolerant grade, deferred flag-turn diagnostics, failsafe pre-paint
-- fix(terminal-title): require the '?' to be the last character of a pending-question turn
+- feat(cli): Clearer 'what's new' summary when updating
+- feat(terminal-title): More reliable 'awaiting your reply' tab indicator
 
 ## v1.0.198
 - feat(arcade-beeps): ship opt-in Pole Position status beeps via CCA

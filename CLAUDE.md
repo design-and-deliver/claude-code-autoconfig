@@ -32,6 +32,25 @@ npm run test:install # Run CLI install tests only
 npm version patch && npm publish
 ```
 
+After publish, push the branch AND the release tag explicitly (the postversion changelog
+hook re-tags lightweight): `git push origin main && git push origin v<x.y.z>`.
+
+### Changelog is user-facing — write commits accordingly
+
+CHANGELOG.md regenerates from commit **subjects** on every `npm version`, and the installer
+shows those bullets verbatim to users on upgrade (`bin/update-summary.js`). So:
+
+- **Subjects may stay technical**, but then the commit body MUST carry a plain-language
+  trailer the changelog uses instead: `Changelog: More reliable 'awaiting your reply' tab
+  indicator`. Write it for a CCA user, not a maintainer — name the visible outcome, never
+  internals (no hook/regex/TDZ/function names).
+- `Changelog: none` (or `skip`) hides an internal-only commit from the changelog.
+- Keep the `feat:`/`fix:` conventional prefix on the subject — it drives the summary's
+  "New features" vs "Fixes & improvements" grouping.
+- Already-pushed commits can't be reworded in git; add a row to `OVERRIDES` in
+  `scripts/generate-changelog.js` instead (value `null` drops the bullet). New work never
+  uses OVERRIDES — author the trailer.
+
 ## Team Feedback
 
 See `.claude/feedback/` for corrections and guidance from the team.
