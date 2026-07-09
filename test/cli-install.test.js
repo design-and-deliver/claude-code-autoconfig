@@ -352,6 +352,74 @@ test('settings.json has permissions', () => {
 console.log();
 
 // -----------------------------------------------------------------------------
+// Legacy hook-command migration (cd-proof upgrade path, 2026-07-08)
+// -----------------------------------------------------------------------------
+
+console.log('Legacy Hook-Command Migration:');
+
+// cli.js is a script, not a module — extract the pure helpers by source for a functional check
+// (same source-level testing approach as assertCliCopies above).
+function extractCliFn(name) {
+  const src = fs.readFileSync(CLI_PATH, 'utf8');
+  const m = src.match(new RegExp('function ' + name + '\\([\\s\\S]*?\\n}'));
+  if (!m) throw new Error(`${name}() not found in cli.js`);
+  return eval('(' + m[0] + ')');
+}
+
+test('migrateLegacyHookCommands rewrites managed relative commands, leaves user commands alone', () => {
+  const migrate = extractCliFn('migrateLegacyHookCommands');
+  const s = {
+    hooks: {
+      Stop: [{ matcher: '', hooks: [
+        { type: 'command', command: 'node .claude/hooks/terminal-title.js' },
+        { type: 'command', command: 'node scripts/my-own-hook.js' },
+      ] }],
+    },
+  };
+  migrate(s);
+  assert(
+    s.hooks.Stop[0].hooks[0].command === 'node "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/terminal-title.js"',
+    `managed command not anchored: ${s.hooks.Stop[0].hooks[0].command}`
+  );
+  assert(
+    s.hooks.Stop[0].hooks[1].command === 'node scripts/my-own-hook.js',
+    'user-authored commands must never be rewritten'
+  );
+});
+
+test('upgrade path: migrate-then-merge yields ONE anchored entry, not a legacy+anchored double', () => {
+  const migrate = extractCliFn('migrateLegacyHookCommands');
+  const merge = extractCliFn('mergeSettingsInto');
+  const userSettings = {
+    hooks: { Stop: [{ matcher: '', hooks: [
+      { type: 'command', command: 'node .claude/hooks/terminal-title.js' },
+    ] }] },
+  };
+  const pkgFragment = {
+    hooks: { Stop: [{ matcher: '', hooks: [
+      { type: 'command', command: 'node "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/terminal-title.js"' },
+    ] }] },
+  };
+  migrate(userSettings);
+  merge(userSettings, pkgFragment);
+  const cmds = userSettings.hooks.Stop.flatMap(m => m.hooks.map(h => h.command))
+    .filter(c => c.includes('terminal-title.js'));
+  assert(cmds.length === 1, `expected exactly 1 terminal-title entry after upgrade, got ${cmds.length}: ${cmds.join(' | ')}`);
+  assert(cmds[0].includes('${CLAUDE_PROJECT_DIR:-.}'), `surviving entry must be the anchored one: ${cmds[0]}`);
+});
+
+test('cli.js migrates BEFORE merging on the settings upgrade path (ordering guard)', () => {
+  const src = fs.readFileSync(CLI_PATH, 'utf8');
+  const migrateAt = src.indexOf('migrateLegacyHookCommands(userSettings);');
+  const mergeAt = src.indexOf('mergeSettingsInto(userSettings, pkgSettings);');
+  assert(migrateAt !== -1, 'upgrade path must call migrateLegacyHookCommands');
+  assert(mergeAt !== -1, 'upgrade path must call mergeSettingsInto');
+  assert(migrateAt < mergeAt, 'migration must run before the merge or upgrades double the hooks');
+});
+
+console.log();
+
+// -----------------------------------------------------------------------------
 // Summary
 // -----------------------------------------------------------------------------
 

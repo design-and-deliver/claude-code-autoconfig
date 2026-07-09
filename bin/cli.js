@@ -157,6 +157,30 @@ if (process.argv.includes('--pull-updates')) {
 // Settings merge helpers (shared by the upgrade path and the plugin installer)
 // ============================================================================
 
+// Rewrite legacy cwd-relative hook commands ("node .claude/hooks/X.js") to the
+// ${CLAUDE_PROJECT_DIR:-.}-anchored form IN PLACE, mutating the given settings object.
+// Two reasons, both from the 2026-07-08 stuck-title postmortem:
+//   1. cwd-relative commands go MODULE_NOT_FOUND the moment a session cd's away from the
+//      project root — every matching tool call then spews a red hook error until cwd returns.
+//   2. mergeSettingsInto dedups by EXACT command string, so without this rewrite an upgrade
+//      would ADD the anchored template entry alongside the user's old relative one -> the
+//      hook runs twice per event.
+// Only known autoconfig-managed hook filenames are rewritten; user-authored commands are
+// never touched.
+function migrateLegacyHookCommands(userSettings) {
+  if (!userSettings || !userSettings.hooks) return;
+  const LEGACY = /^node \.claude\/hooks\/([\w.-]+\.js)$/;
+  for (const matchers of Object.values(userSettings.hooks)) {
+    if (!Array.isArray(matchers)) continue;
+    for (const matcher of matchers) {
+      for (const hook of matcher.hooks || []) {
+        const m = typeof hook.command === 'string' && hook.command.match(LEGACY);
+        if (m) hook.command = 'node "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/' + m[1] + '"';
+      }
+    }
+  }
+}
+
 // Additively fold a settings fragment (hooks / env / permissions) into an existing
 // settings object, mutating and returning it.
 //   - hooks: add hook commands that don't already exist (dedup by command string, per event)
@@ -816,6 +840,10 @@ if (fs.existsSync(settingsSrc)) {
     try {
       const pkgSettings = JSON.parse(fs.readFileSync(settingsSrc, 'utf8'));
       const userSettings = JSON.parse(fs.readFileSync(settingsDest, 'utf8'));
+
+      // Upgrade legacy relative hook commands FIRST so the anchored template entries below
+      // dedupe against them instead of doubling up (see migrateLegacyHookCommands).
+      migrateLegacyHookCommands(userSettings);
 
       // Additively fold package hooks/env/permissions into the user's settings
       // (shared with the plugin installer — see mergeSettingsInto).
