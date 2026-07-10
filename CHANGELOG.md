@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.205
+- fix(status-beeps): Fresh installs no longer receive the deprecated /enable-arcade-beeps and /disable-arcade-beeps commands — only upgrades that already had them keep the renamed aliases
+
 ## v1.0.204
 - feat(status-beeps): Beep toggle commands renamed to /enable-status-beeps and /disable-status-beeps — the old arcade-beeps names still work but are deprecated
 
@@ -146,7 +149,4 @@
 
 ## v1.0.156
 - fix: clean up inside-Claude block message wording
-
-## v1.0.155
-- feat: pre-approve permissions for all shipped command dependencies
 
