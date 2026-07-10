@@ -1,5 +1,5 @@
 <!-- @description Configures Claude Code scaffolding for your project. Sets up settings, permissions, hooks, commands, and docs. -->
-<!-- @version 10 -->
+<!-- @version 11 -->
 <!-- @response success | Scaffolding configured, CLAUDE.md initialized, docs opened in browser. -->
 <!-- @response no-project | No project detected — asks user to confirm directory. -->
 <!-- @sideeffect Initializes CLAUDE.md, settings.json, hooks, commands, and MEMORY.md -->
@@ -246,7 +246,7 @@ This ensures double-clicking these files in the docs shows real project content,
 
 Right before opening the docs, offer the optional sound cues. Ask with the AskUserQuestion tool:
 
-- Question: "Turn on status beeps? Pole Position–style tab cues that mirror the title glyph: a low get-ready tick when a session is waiting on you, a higher GO tone when it finishes."
+- Question: "Turn on Waiting/Done status beeps for Claude Code?"
 - Options: "Yes, enable beeps" / "No thanks"
 
 Only if the user picks yes, create the opt-in flag by writing an empty file with the Write tool:
