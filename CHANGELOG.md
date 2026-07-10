@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.204
+- feat(status-beeps): Beep toggle commands renamed to /enable-status-beeps and /disable-status-beeps — the old arcade-beeps names still work but are deprecated
+
 ## v1.0.203
 - fix(arcade-beeps): Arcade beeps are now off by default in every install — turn them on per project with /enable-arcade-beeps, off again with /disable-arcade-beeps.
 
@@ -146,7 +149,4 @@
 
 ## v1.0.155
 - feat: pre-approve permissions for all shipped command dependencies
-
-## v1.0.154
-- fix: enforce ls -t over find in gls command to avoid permission prompts
 
