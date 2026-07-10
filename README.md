@@ -145,7 +145,7 @@ Run several Claude Code sessions at once and the tabs all look alike. Autoconfig
 
 ### Status Beeps (opt-in)
 
-Prefer your ears to your eyes? Run `/enable-status-beeps` for Pole Position–style tab cues that mirror the title glyph: a low get-ready tick when a session is **waiting on you** and a higher GO tone when it **finishes**. Cross-platform (Windows / macOS / Linux) and off by default — toggle back off any time with `/disable-status-beeps`. (The old `/enable-arcade-beeps` and `/disable-arcade-beeps` names still work as deprecated aliases.)
+Prefer your ears to your eyes? Run `/enable-status-beeps` for Pole Position–style tab cues that mirror the title glyph: a low get-ready tick when a session is **waiting on you** and a higher GO tone when it **finishes**. Cross-platform (Windows / macOS / Linux) and off unless you opt in — fresh installs ask once at the end of `/autoconfig`, and you can flip the answer any time with `/enable-status-beeps` / `/disable-status-beeps`. (The old `/enable-arcade-beeps` and `/disable-arcade-beeps` names still work as deprecated aliases.)
 
 ### Team Feedback
 

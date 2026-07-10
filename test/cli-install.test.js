@@ -232,6 +232,19 @@ test('deprecated arcade-beeps aliases still ship and delegate to the new flag', 
   );
 });
 
+test('autoconfig finale offers the status-beeps opt-in but never defaults it on', () => {
+  const autoconfig = fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'commands', 'autoconfig.md'), 'utf8');
+  assert(
+    autoconfig.includes('### Status Beeps Opt-in') &&
+      autoconfig.includes('.claude/sounds/status-beeps.enabled'),
+    'autoconfig should ask about status beeps before opening the docs'
+  );
+  assert(
+    /Only if the user picks yes/.test(autoconfig) && /do NOT create the flag/.test(autoconfig),
+    'the opt-in must be consent-gated: no flag on decline, skip, or headless runs'
+  );
+});
+
 test('CLI never introduces deprecated aliases — they only replace a pre-existing command', () => {
   const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
   assert(
