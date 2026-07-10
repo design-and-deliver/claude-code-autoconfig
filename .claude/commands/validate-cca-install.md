@@ -1,5 +1,5 @@
 <!-- @description Validates your claude-code-autoconfig installation against the latest published version. -->
-<!-- @version 1 -->
+<!-- @version 2 -->
 <!-- @response valid | Install validated — all checks passed. -->
 <!-- @response issues | Validation found {N} issue(s) with fix suggestions. -->
 <!-- @sideeffect Read-only. Downloads latest package to temp dir for comparison, then cleans up. -->
@@ -76,9 +76,15 @@ if os.path.isdir(pkg_cmds_dir) and os.path.isdir(local_cmds_dir):
     pkg_cmds = set(f for f in os.listdir(pkg_cmds_dir) if f.endswith('.md') and f not in dev_only)
     local_cmds = set(f for f in os.listdir(local_cmds_dir) if f.endswith('.md') and f not in dev_only)
 
-    # Missing commands
+    # Missing commands. Deprecated aliases (old command names kept as shims after a
+    # rename) are only installed into projects that already had the old name, so their
+    # absence is the expected state — report as info, not an issue.
     for f in sorted(pkg_cmds - local_cmds):
-        issues.append(f'MISSING CMD: .claude/commands/{f} not installed')
+        pkg_content = open(os.path.join(pkg_cmds_dir, f), encoding='utf-8').read()
+        if re.search(r'deprecated', pkg_content[:400], re.I):
+            info.append(f'OK CMD (absent): {f} is a deprecated alias, only shipped to upgrades that had the old name')
+        else:
+            issues.append(f'MISSING CMD: .claude/commands/{f} not installed')
 
     # Extra commands (user-added, just note them)
     for f in sorted(local_cmds - pkg_cmds):

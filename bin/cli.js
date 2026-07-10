@@ -752,6 +752,17 @@ if (fs.existsSync(commandsSrc)) {
   process.exit(1);
 }
 
+// Deprecated command aliases (old names kept as shims after a rename) REPLACE an existing
+// command but are never introduced: a fresh install — or any project that never had the
+// old name — must not gain a deprecated alias, so drop the just-copied file unless the
+// destination already had it before this run (existingCommandContents snapshots pre-copy).
+const DEPRECATED_COMMAND_ALIASES = ['enable-arcade-beeps.md', 'disable-arcade-beeps.md'];
+for (const f of DEPRECATED_COMMAND_ALIASES) {
+  if (!existingCommandContents.has(f)) {
+    try { fs.unlinkSync(path.join(commandsDest, f)); } catch (_) { /* never copied */ }
+  }
+}
+
 // Detect new and updated commands (with version tracking)
 const newCommands = [];
 const updatedCommands = []; // { file, oldVersion, newVersion }

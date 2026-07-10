@@ -232,6 +232,18 @@ test('deprecated arcade-beeps aliases still ship and delegate to the new flag', 
   );
 });
 
+test('CLI never introduces deprecated aliases — they only replace a pre-existing command', () => {
+  const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
+  assert(
+    /DEPRECATED_COMMAND_ALIASES\s*=\s*\[[^\]]*'enable-arcade-beeps\.md'[^\]]*'disable-arcade-beeps\.md'[^\]]*\]/.test(cliCode),
+    'CLI should define DEPRECATED_COMMAND_ALIASES with both arcade-beeps files'
+  );
+  assert(
+    /for \(const f of DEPRECATED_COMMAND_ALIASES\)[\s\S]*?existingCommandContents\.has\(f\)[\s\S]*?unlinkSync/.test(cliCode),
+    'CLI should unlink a deprecated alias after the commands copy unless it pre-existed (fresh installs stay alias-free)'
+  );
+});
+
 console.log();
 
 test('CLI supports --force flag', () => {

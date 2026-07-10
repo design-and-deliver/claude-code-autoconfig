@@ -116,8 +116,8 @@ Autoconfig is **self-configuring**. Run `/autoconfig` and Claude:
 | `/extract-rules` | Scan Claude artifacts and extract structured rules |
 | `/enable-status-beeps` | Turn on opt-in Pole Position status beeps |
 | `/disable-status-beeps` | Turn off the status beeps |
-| `/enable-arcade-beeps` | Deprecated alias for `/enable-status-beeps` |
-| `/disable-arcade-beeps` | Deprecated alias for `/disable-status-beeps` |
+| `/enable-arcade-beeps` | Deprecated alias for `/enable-status-beeps` (upgrades only) |
+| `/disable-arcade-beeps` | Deprecated alias for `/disable-status-beeps` (upgrades only) |
 
 ### Updates
 
