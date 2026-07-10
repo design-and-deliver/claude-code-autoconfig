@@ -127,6 +127,8 @@ When new features or improvements are released, just run the install again:
 npx claude-code-autoconfig@latest
 ```
 
+Installing a specific older version isn't supported — if an old release is laid down explicitly (`npx claude-code-autoconfig@1.0.186`), the next `/autoconfig` announces it and brings the project up to the latest version.
+
 Autoconfig detects existing installations and automatically launches `/autoconfig-update` instead of a full reconfigure. Your customizations (feedback, hooks, settings) are preserved — only new files are added.
 
 Use `--force` for a clean slate reset if needed:

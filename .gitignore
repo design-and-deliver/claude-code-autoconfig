@@ -5,6 +5,10 @@ node_modules/
 .claude/cca.config.json
 .claude/commands/deploy-to-npmjs.md
 
+# Per-install opt-in flags (this repo's own toggles — shipping one would flip the
+# feature on for every fresh install; see the status-beeps opt-in design)
+.claude/sounds/*.enabled
+
 # Windows null device workaround
 nul
 

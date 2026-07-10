@@ -43,6 +43,7 @@
     "!.claude/.autoconfig-plugins.json",
     "!.claude/commands/deploy-to-npmjs.md",
     "!.claude/plans",
+    "!.claude/sounds/*.enabled",
     "CLAUDE.md",
     "CHANGELOG.md"
   ],
