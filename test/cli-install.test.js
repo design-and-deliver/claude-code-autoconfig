@@ -232,6 +232,19 @@ test('deprecated arcade-beeps aliases still ship and delegate to the new flag', 
   );
 });
 
+test('upgrades persist a what\'s-new summary and /autoconfig-update renders + consumes it', () => {
+  const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
+  assert(
+    /isUpgrade && previousVersion !== currentVersion[\s\S]*?\.autoconfig-whats-new\.json[\s\S]*?formatUpdateSummary/.test(cliCode),
+    'CLI should write .autoconfig-whats-new.json (via formatUpdateSummary) when the version changes'
+  );
+  const updateCmd = fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'commands', 'autoconfig-update.md'), 'utf8');
+  assert(
+    updateCmd.includes('.autoconfig-whats-new.json') && /delete `.claude\/\.autoconfig-whats-new\.json`/i.test(updateCmd),
+    '/autoconfig-update should render the what\'s-new file and delete it (one-shot)'
+  );
+});
+
 test('autoconfig finale offers the status-beeps opt-in but never defaults it on', () => {
   const autoconfig = fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'commands', 'autoconfig.md'), 'utf8');
   assert(

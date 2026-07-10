@@ -1,5 +1,5 @@
 <!-- @description Manages and installs updates to Claude Code configuration. -->
-<!-- @version 2 -->
+<!-- @version 3 -->
 <!-- @response updates-available | Displays list of pending updates with install/review options. -->
 <!-- @response up-to-date | All updates are already installed. -->
 <!-- @sideeffect Pulls latest update files from npm, executes update instructions, tracks applied updates -->
@@ -12,7 +12,23 @@
 
 Check for and install pending updates to your Claude Code configuration.
 
-**Style guideline**: Work silently through Steps 1-3. Do not narrate internal steps, implementation details, or progress messages (e.g., "Let me check...", "The @applied block is empty..."). The first output the user sees should be the formatted summary in Step 4 (or the "up to date" message).
+**Style guideline**: Work silently through Steps 0-3. Do not narrate internal steps, implementation details, or progress messages (e.g., "Let me check...", "The @applied block is empty..."). The first output the user sees should be the What's New list from Step 0 and/or the formatted summary in Step 4 (or the "up to date" message).
+
+## Step 0: What's New (installer handoff)
+
+Read `.claude/.autoconfig-whats-new.json`. If it doesn't exist, skip silently to Step 1.
+
+If it exists, it was written by the installer during a version upgrade and holds `{ from, to, segments }`, where each segment is `{ kind, text }`. Render it as the what's-new list, mapping kinds to lines:
+
+| kind | render as |
+|------|-----------|
+| `heading` | `⬆️  {text}` (the text is self-contained, e.g. "What's new since your last update (v1.0.186):") |
+| `group` | blank line, then `**{text}:**` |
+| `item` | `✅ {text}` |
+| `more` | `…{text}` |
+| `latest` | `✅ {text}` |
+
+Then **delete `.claude/.autoconfig-whats-new.json`** (it's one-shot — a later run must not repeat the list), and continue to Step 1.
 
 ## Step 1: Pull Latest Updates
 
@@ -24,7 +40,15 @@ npx claude-code-autoconfig@latest --pull-updates
 
 This copies any new update `.md` files into `.claude/updates/` and refreshes this command file (preserving the `@applied` block above).
 
-After the command completes, check `.claude/updates/` directory. If it doesn't exist or is empty, output:
+After the command completes, check `.claude/updates/` directory. If it doesn't exist or is empty, output one of:
+
+- If Step 0 displayed a what's-new list:
+
+```
+✅ Everything above is installed and ready. No further action needed.
+```
+
+- Otherwise:
 
 ```
 No new updates available. You're up to date.
@@ -53,7 +77,7 @@ Skip any files that are malformed (missing required headers) with a warning.
 
 Parse the `<!-- @applied -->` block in THIS file (`.claude/commands/autoconfig-update.md`) to get the list of already-applied update IDs. Extract the three-digit ID from the start of each line.
 
-Filter out any updates whose ID appears in the applied list. If no pending updates remain, output:
+Filter out any updates whose ID appears in the applied list. If no pending updates remain, output (prefixed by "Everything above is installed and ready." if Step 0 displayed a what's-new list):
 
 ```
 ✅ All configuration updates are applied. Your commands, docs, and settings were refreshed by the installer.

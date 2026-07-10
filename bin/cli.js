@@ -968,6 +968,27 @@ if (isUpgrade) {
 // Write current version marker
 fs.writeFileSync(versionFile, currentVersion);
 
+// On upgrade, persist the what's-new summary for /autoconfig-update to render as the
+// flow's finale. The same summary is printed to the terminal below, but Claude's
+// fullscreen UI takes over right after — the scrollback is gone by the time the flow
+// ends, so the last thing users see is "no pending updates" with no hint of what came
+// down. One-shot: /autoconfig-update deletes the file after displaying it. Written
+// before the --bootstrap early-exit so in-Claude upgrades produce it too.
+if (isUpgrade && previousVersion !== currentVersion) {
+  const changelogPath = path.join(packageDir, 'CHANGELOG.md');
+  const changelogText = fs.existsSync(changelogPath) ? fs.readFileSync(changelogPath, 'utf8') : '';
+  try {
+    fs.writeFileSync(
+      path.join(claudeDest, '.autoconfig-whats-new.json'),
+      JSON.stringify({
+        from: previousVersion,
+        to: currentVersion,
+        segments: formatUpdateSummary(previousVersion, currentVersion, changelogText)
+      }, null, 2)
+    );
+  } catch (err) { /* cosmetic — never block the install */ }
+}
+
 const launchCommand = isUpgrade ? '/autoconfig-update' : '/autoconfig';
 
 // --bootstrap: copy files only, exit silently (used by /autoconfig inside Claude)
