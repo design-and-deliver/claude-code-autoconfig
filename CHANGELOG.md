@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.207
+- fix(status-beeps): Clearer one-line setup question for the status beeps opt-in
+
 ## v1.0.206
 - feat(status-beeps): New installs now ask once during setup whether to turn on status beeps — sounds stay off unless you say yes
 
@@ -146,7 +149,4 @@
 
 ## v1.0.158
 - fix(gls): persist screenshot path in local config, fix Windows paths
-
-## v1.0.157
-- feat: stop pre-populating CLAUDE.md with project descriptions
 
