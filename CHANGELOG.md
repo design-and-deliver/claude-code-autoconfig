@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.208
+- feat(upgrade): Upgrades now end with a checklist of the new features and fixes you just received, instead of only "no new updates available"
+
 ## v1.0.207
 - fix(status-beeps): Clearer one-line setup question for the status beeps opt-in
 
@@ -146,7 +149,4 @@
 
 ## v1.0.159
 - fix: exclude cca.config.json from npm publish
-
-## v1.0.158
-- fix(gls): persist screenshot path in local config, fix Windows paths
 
