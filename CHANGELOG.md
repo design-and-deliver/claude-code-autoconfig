@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.206
+- feat(status-beeps): New installs now ask once during setup whether to turn on status beeps — sounds stay off unless you say yes
+
 ## v1.0.205
 - fix(status-beeps): Fresh installs no longer receive the deprecated /enable-arcade-beeps and /disable-arcade-beeps commands — only upgrades that already had them keep the renamed aliases
 
@@ -146,7 +149,4 @@
 
 ## v1.0.157
 - feat: stop pre-populating CLAUDE.md with project descriptions
-
-## v1.0.156
-- fix: clean up inside-Claude block message wording
 
