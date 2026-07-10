@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.209
+- feat(upgrade): Installing an outdated version now clearly announces that it's unsupported and installs the latest version instead
+
 ## v1.0.208
 - feat(upgrade): Upgrades now end with a checklist of the new features and fixes you just received, instead of only "no new updates available"
 
@@ -146,7 +149,4 @@
 
 ## v1.0.160
 - fix: hide same-version updates in CLI output, top-align docs tables
-
-## v1.0.159
-- fix: exclude cca.config.json from npm publish
 
