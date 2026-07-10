@@ -3,10 +3,14 @@
  * arcade-beeps — optional Pole-Position status cues for the Claude Code tab.
  * Companion to terminal-title.js. Registered (settings.json) on Stop + Notification.
  *
- * OFF unless the enable flag exists:  <install>/.claude/sounds/arcade-beeps.enabled
- *   toggle via  /enable-arcade-beeps   /disable-arcade-beeps
+ * OFF unless the enable flag exists:  <install>/.claude/sounds/status-beeps.enabled
+ *   toggle via  /enable-status-beeps   /disable-status-beeps
+ * (The legacy flag arcade-beeps.enabled is still honored so installs that enabled beeps
+ * before the status-beeps rename keep beeping after an upgrade; the deprecated
+ * /enable-arcade-beeps + /disable-arcade-beeps aliases now write/remove the new flag.
+ * This FILE keeps its arcade-beeps.js name — every installed settings.json points at it.)
  * The flag lives beside THIS install's sounds dir, so it is PER-PROJECT: a fresh
- * `npx claude-code-autoconfig` install never beeps until /enable-arcade-beeps is run in that
+ * `npx claude-code-autoconfig` install never beeps until /enable-status-beeps is run in that
  * project. (A copy of this hook living in ~/.claude/hooks keys off ~/.claude/sounds — a
  * deliberate consequence: a global install gets a global toggle.)
  *
@@ -41,9 +45,10 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const ASSET_DIR = path.join(__dirname, '..', 'sounds');           // wavs ship beside the hook
-const FLAG = path.join(ASSET_DIR, 'arcade-beeps.enabled');        // per-install toggle, beside the wavs
+const FLAG = path.join(ASSET_DIR, 'status-beeps.enabled');        // per-install toggle, beside the wavs
+const LEGACY_FLAG = path.join(ASSET_DIR, 'arcade-beeps.enabled'); // pre-rename toggle, still honored
 const LOG = path.join(os.homedir(), '.claude', 'hooks', '.titles', 'arcade-beeps.log');
-const DEBUG = process.env.ARCADE_BEEPS_DEBUG === '1';
+const DEBUG = process.env.STATUS_BEEPS_DEBUG === '1' || process.env.ARCADE_BEEPS_DEBUG === '1';
 
 function logLine(msg) {
   try {
@@ -52,7 +57,7 @@ function logLine(msg) {
   } catch (_) { /* logging must never throw */ }
 }
 
-function enabled() { try { return fs.existsSync(FLAG); } catch (_) { return false; } }
+function enabled() { try { return fs.existsSync(FLAG) || fs.existsSync(LEGACY_FLAG); } catch (_) { return false; } }
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // Pick a blocking audio player for the current OS. Returns [cmd, args].

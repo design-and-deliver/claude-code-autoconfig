@@ -169,16 +169,21 @@ test('CLI always refreshes the managed title hooks (so fixes reach existing inst
 console.log();
 
 // -----------------------------------------------------------------------------
-// Arcade Beeps Opt-in (no beeps by default in a fresh install)
+// Status Beeps Opt-in (no beeps by default in a fresh install)
 // -----------------------------------------------------------------------------
 
-console.log('Arcade Beeps Opt-in:');
+console.log('Status Beeps Opt-in:');
 
-test('arcade-beeps hook gates on the install-local flag, not a homedir-global one', () => {
+test('status-beeps hook gates on the install-local flag, not a homedir-global one', () => {
   const hookCode = fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'hooks', 'arcade-beeps.js'), 'utf8');
   assert(
-    /const FLAG = path\.join\(ASSET_DIR, 'arcade-beeps\.enabled'\)/.test(hookCode),
+    /const FLAG = path\.join\(ASSET_DIR, 'status-beeps\.enabled'\)/.test(hookCode),
     'FLAG should resolve beside the install\'s own sounds dir (per-project opt-in)'
+  );
+  assert(
+    /const LEGACY_FLAG = path\.join\(ASSET_DIR, 'arcade-beeps\.enabled'\)/.test(hookCode) &&
+      /fs\.existsSync\(FLAG\) \|\| fs\.existsSync\(LEGACY_FLAG\)/.test(hookCode),
+    'hook must still honor the legacy arcade-beeps.enabled flag so pre-rename installs keep beeping'
   );
   assert(
     !/FLAG = path\.join\(os\.homedir\(\)/.test(hookCode),
@@ -187,24 +192,43 @@ test('arcade-beeps hook gates on the install-local flag, not a homedir-global on
 });
 
 test('enable/disable toggle commands ship and target the project flag', () => {
-  const enablePath = path.join(PACKAGE_CLAUDE_DIR, 'commands', 'enable-arcade-beeps.md');
-  const disablePath = path.join(PACKAGE_CLAUDE_DIR, 'commands', 'disable-arcade-beeps.md');
-  assertExists(enablePath, 'enable-arcade-beeps command should exist');
-  assertExists(disablePath, 'disable-arcade-beeps command should exist');
+  const enablePath = path.join(PACKAGE_CLAUDE_DIR, 'commands', 'enable-status-beeps.md');
+  const disablePath = path.join(PACKAGE_CLAUDE_DIR, 'commands', 'disable-status-beeps.md');
+  assertExists(enablePath, 'enable-status-beeps command should exist');
+  assertExists(disablePath, 'disable-status-beeps command should exist');
   const enable = fs.readFileSync(enablePath, 'utf8');
   const disable = fs.readFileSync(disablePath, 'utf8');
   assert(
-    enable.includes('${CLAUDE_PROJECT_DIR:-.}/.claude/sounds/arcade-beeps.enabled'),
+    enable.includes('${CLAUDE_PROJECT_DIR:-.}/.claude/sounds/status-beeps.enabled'),
     'enable command should create the PROJECT flag'
   );
   assert(
-    !enable.includes('~/.claude/sounds/arcade-beeps.enabled'),
-    'enable command must not set the legacy global flag'
+    !enable.includes('~/.claude/sounds/status-beeps.enabled'),
+    'enable command must not set a homedir-global flag'
   );
   assert(
-    disable.includes('${CLAUDE_PROJECT_DIR:-.}/.claude/sounds/arcade-beeps.enabled') &&
+    disable.includes('${CLAUDE_PROJECT_DIR:-.}/.claude/sounds/status-beeps.enabled') &&
+      disable.includes('${CLAUDE_PROJECT_DIR:-.}/.claude/sounds/arcade-beeps.enabled') &&
+      disable.includes('~/.claude/sounds/status-beeps.enabled') &&
       disable.includes('~/.claude/sounds/arcade-beeps.enabled'),
-    'disable command should remove the project flag AND the legacy global flag'
+    'disable command should remove the project flags AND the legacy global flags (both names)'
+  );
+});
+
+test('deprecated arcade-beeps aliases still ship and delegate to the new flag', () => {
+  for (const name of ['enable-arcade-beeps', 'disable-arcade-beeps']) {
+    const p = path.join(PACKAGE_CLAUDE_DIR, 'commands', `${name}.md`);
+    assertExists(p, `${name} deprecated alias should still exist (renamed commands must not break existing users)`);
+    const content = fs.readFileSync(p, 'utf8');
+    assert(
+      /deprecated/i.test(content) && content.includes(name.replace('arcade', 'status')),
+      `${name} should be marked deprecated and point at the status-beeps replacement`
+    );
+  }
+  const enableAlias = fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'commands', 'enable-arcade-beeps.md'), 'utf8');
+  assert(
+    enableAlias.includes('${CLAUDE_PROJECT_DIR:-.}/.claude/sounds/status-beeps.enabled'),
+    'deprecated enable alias should create the NEW flag so installs converge on status-beeps.enabled'
   );
 });
 

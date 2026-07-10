@@ -883,10 +883,20 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">disable-arcade-beeps.md</span>
                             </div>
+                            <div class="tree-item indent-3 hidden" data-info="disable-status-beeps" data-parent="commands">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">disable-status-beeps.md</span>
+                            </div>
                             <div class="tree-item indent-3 hidden" data-info="enable-arcade-beeps" data-parent="commands">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">enable-arcade-beeps.md</span>
+                            </div>
+                            <div class="tree-item indent-3 hidden" data-info="enable-status-beeps" data-parent="commands">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">enable-status-beeps.md</span>
                             </div>
                             <div class="tree-item indent-3 hidden" data-info="extract-rules" data-parent="commands">
                                 <span class="tree-spacer"></span>
@@ -1278,7 +1288,7 @@
                 title: '.claude/ Directory',
                 desc: 'Commands, rules, settings, and these docs. Keeps configuration organized as your project grows.'
             },
-                                                                                                                                                                                                                                                                                                                                                                                                                        'rules': {
+                                                                                                                                                                                                                                                                                                                                                                                                                                    'rules': {
                 title: 'rules/',
                 desc: 'Path-scoped context that loads when Claude works on matching files.'
             },
@@ -1318,10 +1328,20 @@
                 desc: 'disable-arcade-beeps.md in commands/<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div>',
                 trigger: '/disable-arcade-beeps'
             },
+            'disable-status-beeps': {
+                title: 'disable-status-beeps.md',
+                desc: 'disable-status-beeps.md in commands/<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div>',
+                trigger: '/disable-status-beeps'
+            },
             'enable-arcade-beeps': {
                 title: 'enable-arcade-beeps.md',
                 desc: 'enable-arcade-beeps.md in commands/<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div>',
                 trigger: '/enable-arcade-beeps'
+            },
+            'enable-status-beeps': {
+                title: 'enable-status-beeps.md',
+                desc: 'enable-status-beeps.md in commands/<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div>',
+                trigger: '/enable-status-beeps'
             },
             'extract-rules': {
                 title: 'extract-rules.md',
@@ -1599,7 +1619,7 @@ CRITICAL: A plausible-looking cause from code reading is NOT confirmed evidence.
 
 > Run \`/autoconfig\` to populate this based on your project.`
             },
-                                                                                                                                                                                                                                                                                                                                                                                                                        'autoconfig-update': {
+                                                                                                                                                                                                                                                                                                                                                                                                                                    'autoconfig-update': {
                 filename: 'autoconfig-update.md',
                 content: `<!-- @applied
 -->
@@ -1690,27 +1710,61 @@ Keep the subject line under 50 chars. Add body if the change needs explanation.`
             'disable-arcade-beeps': {
                 filename: 'disable-arcade-beeps.md',
                 content: `---
-description: Turn OFF Pole Position tab status beeps
+description: (deprecated — use /disable-status-beeps) Turn OFF Pole Position tab status beeps
 allowed-tools: Bash
 ---
+<!-- @version 2 -->
+<!-- Deprecated alias: /disable-arcade-beeps was renamed to /disable-status-beeps.
+     Kept so existing users' muscle memory still works; remove in a future major version. -->
 
 Run exactly this command, then reply with a single confirmation line and nothing else:
 
 \`\`\`
-rm -f ~/.claude/sounds/arcade-beeps.enabled && echo "arcade beeps DISABLED."
+rm -f "\${CLAUDE_PROJECT_DIR:-.}/.claude/sounds/status-beeps.enabled" "\${CLAUDE_PROJECT_DIR:-.}/.claude/sounds/arcade-beeps.enabled" ~/.claude/sounds/status-beeps.enabled ~/.claude/sounds/arcade-beeps.enabled && echo "status beeps DISABLED. Heads up: /disable-arcade-beeps is deprecated — next time use /disable-status-beeps."
+\`\`\``
+            },
+            'disable-status-beeps': {
+                filename: 'disable-status-beeps.md',
+                content: `---
+description: Turn OFF Pole Position tab status beeps
+allowed-tools: Bash
+---
+<!-- @version 1 -->
+
+Run exactly this command, then reply with a single confirmation line and nothing else:
+
+\`\`\`
+rm -f "\${CLAUDE_PROJECT_DIR:-.}/.claude/sounds/status-beeps.enabled" "\${CLAUDE_PROJECT_DIR:-.}/.claude/sounds/arcade-beeps.enabled" ~/.claude/sounds/status-beeps.enabled ~/.claude/sounds/arcade-beeps.enabled && echo "status beeps DISABLED."
 \`\`\``
             },
             'enable-arcade-beeps': {
                 filename: 'enable-arcade-beeps.md',
                 content: `---
-description: Turn ON Pole Position tab status beeps (awaiting = low tone, complete = high tone)
+description: (deprecated — use /enable-status-beeps) Turn ON Pole Position tab status beeps
 allowed-tools: Bash
 ---
+<!-- @version 2 -->
+<!-- Deprecated alias: /enable-arcade-beeps was renamed to /enable-status-beeps.
+     Kept so existing users' muscle memory still works; remove in a future major version. -->
 
 Run exactly this command, then reply with a single confirmation line and nothing else:
 
 \`\`\`
-mkdir -p ~/.claude/sounds && touch ~/.claude/sounds/arcade-beeps.enabled && echo "arcade beeps ENABLED (every turn-end beeps: awaiting=low, complete=high). Disable with /disable-arcade-beeps."
+mkdir -p "\${CLAUDE_PROJECT_DIR:-.}/.claude/sounds" && touch "\${CLAUDE_PROJECT_DIR:-.}/.claude/sounds/status-beeps.enabled" && echo "status beeps ENABLED for this project (every turn-end beeps: awaiting=low, complete=high). Heads up: /enable-arcade-beeps is deprecated — next time use /enable-status-beeps. Disable with /disable-status-beeps."
+\`\`\``
+            },
+            'enable-status-beeps': {
+                filename: 'enable-status-beeps.md',
+                content: `---
+description: Turn ON Pole Position tab status beeps (awaiting = low tone, complete = high tone)
+allowed-tools: Bash
+---
+<!-- @version 1 -->
+
+Run exactly this command, then reply with a single confirmation line and nothing else:
+
+\`\`\`
+mkdir -p "\${CLAUDE_PROJECT_DIR:-.}/.claude/sounds" && touch "\${CLAUDE_PROJECT_DIR:-.}/.claude/sounds/status-beeps.enabled" && echo "status beeps ENABLED for this project (every turn-end beeps: awaiting=low, complete=high). Disable with /disable-status-beeps."
 \`\`\``
             },
             'extract-rules': {
@@ -1901,9 +1955,16 @@ https://docs.anthropic.com/en/docs/claude-code/sub-agents`
  * arcade-beeps — optional Pole-Position status cues for the Claude Code tab.
  * Companion to terminal-title.js. Registered (settings.json) on Stop + Notification.
  *
- * OFF unless the enable flag exists:  ~/.claude/sounds/arcade-beeps.enabled
- *   toggle via  /enable-arcade-beeps   /disable-arcade-beeps
- * The flag is GLOBAL (homedir), so one toggle covers every project you've installed into.
+ * OFF unless the enable flag exists:  <install>/.claude/sounds/status-beeps.enabled
+ *   toggle via  /enable-status-beeps   /disable-status-beeps
+ * (The legacy flag arcade-beeps.enabled is still honored so installs that enabled beeps
+ * before the status-beeps rename keep beeping after an upgrade; the deprecated
+ * /enable-arcade-beeps + /disable-arcade-beeps aliases now write/remove the new flag.
+ * This FILE keeps its arcade-beeps.js name — every installed settings.json points at it.)
+ * The flag lives beside THIS install's sounds dir, so it is PER-PROJECT: a fresh
+ * \`npx claude-code-autoconfig\` install never beeps until /enable-status-beeps is run in that
+ * project. (A copy of this hook living in ~/.claude/hooks keys off ~/.claude/sounds — a
+ * deliberate consequence: a global install gets a global toggle.)
  *
  * Mapping (matches the ◐/✻ tab glyph that terminal-title.js paints on the SAME event):
  *   Stop, turn ended on a question   -> ◐ awaiting  -> get-ready tick (pp3-getready-G4.wav, G4/384Hz)
@@ -1918,14 +1979,7 @@ https://docs.anthropic.com/en/docs/claude-code/sub-agents`
  *
  * Playback is cross-platform and best-effort: PowerShell SoundPlayer on Windows, afplay on
  * macOS, paplay||aplay on Linux. If none is present the hook simply stays silent — never errors.
- *
- * Playback BLOCKS (spawnSync) so the sound finishes inside the hook's lifetime — a detached
- * fire-and-forget child can be killed by the hook runner's job/process-group cleanup before it
- * plays. Blocking costs ~0.5s on turn-end but is reliable. Still fail-safe: wrapped so it never
- * throws into the turn, and every path ends in exit(0).
- *
- * State detection reuses terminal-title.js's exported inspectLastResponse (lazy-required only
- * when enabled) so sound and glyph agree. A tiny inline '?' check is the fallback.`
+ *`
             },
             'feedback-rule-check-hook': {
                 filename: 'feedback-rule-check.js',
@@ -2057,7 +2111,7 @@ Maintain it across the session:
   title. Name the goal the command ACCOMPLISHES ("{{FOLDER}} {{EMDASH}} <verb the goal>",
   never "{{FOLDER}} {{EMDASH}} <command-name>").
 
-Pending-question signal: when you END a turn on a question the user must answer before you`
+Pending-question signal -- END-OF-TURN TEST, apply it on every turn: does your final`
             },
             'terminal-title-hook': {
                 filename: 'terminal-title.js',
@@ -2070,7 +2124,9 @@ Pending-question signal: when you END a turn on a question the user must answer 
  *   PostToolUse      -> ⬤ working  (refresh, so a mid-turn title flip shows live + clears a stale ◐)
  *   Notification     -> ◐ awaiting your approval (permission_prompt matcher only)
  *   Stop             -> ✻ idle / done — OR ◐ awaiting (+ a 2nd BEL = gold tab) when the turn ended
- *                       on a question (last visible response text ends in '?', or a {sid}.ask flag)
+ *                       on a question (last visible response text ends in '?', or a {sid}.ask flag;
+ *                       flag turns hand the skipped grade to a detached --post-grade child that logs
+ *                       a StopDiag line when CLAUDE_TITLE_DEBUG=1 — paint-first, diagnostics after)
  *   SessionStart     -> ✻ idle "Claude Code — New session" (or an existing title on resume/compact)
  *                       + inject the FULL RULES block — once per session instead of every prompt
  *                       (~90% less directive overhead); resume/compact re-inject so a squeezed
@@ -2088,9 +2144,7 @@ Pending-question signal: when you END a turn on a question the user must answer 
  * them; the directive injected each prompt tells it the path + format. Optional forensic log (one line
  * per paint, for tracing an out-of-sync tab) is gated behind CLAUDE_TITLE_DEBUG=1 — default OFF,
  * ~512KB-capped, written to .titles/_debug.log — so it never ships a growing log.
- *
- * Requires \`env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE = "1"\` (set by plugin.json), or CC's own writer races.
- */`
+ *`
             },
             'feedback-feedback': {
                 filename: 'FEEDBACK.md',
@@ -2139,7 +2193,7 @@ Claude reads this file but must never write to it. When Claude discovers project
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/migrate-feedback.js"
+            "command": "node \\"\${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/migrate-feedback.js\\""
           }
         ]
       },
@@ -2148,7 +2202,7 @@ Claude reads this file but must never write to it. When Claude discovers project
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/terminal-title.js"
+            "command": "node \\"\${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/terminal-title.js\\""
           }
         ]
       }
@@ -2159,7 +2213,7 @@ Claude reads this file but must never write to it. When Claude discovers project
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/terminal-title.js"
+            "command": "node \\"\${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/terminal-title.js\\""
           }
         ]
       }
@@ -2170,11 +2224,11 @@ Claude reads this file but must never write to it. When Claude discovers project
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/terminal-title.js"
+            "command": "node \\"\${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/terminal-title.js\\""
           },
           {
             "type": "command",
-            "command": "node .claude/hooks/arcade-beeps.js"
+            "command": "node \\"\${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/arcade-beeps.js\\""
           }
         ]
       }
@@ -2185,11 +2239,11 @@ Claude reads this file but must never write to it. When Claude discovers project
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/terminal-title.js"
+            "command": "node \\"\${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/terminal-title.js\\""
           },
           {
             "type": "command",
-            "command": "node .claude/hooks/arcade-beeps.js"
+            "command": "node \\"\${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/arcade-beeps.js\\""
           }
         ]
       }
@@ -2200,7 +2254,7 @@ Claude reads this file but must never write to it. When Claude discovers project
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/feedback-rule-check.js"
+            "command": "node \\"\${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/feedback-rule-check.js\\""
           }
         ]
       },
@@ -2209,7 +2263,7 @@ Claude reads this file but must never write to it. When Claude discovers project
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/terminal-title.js"
+            "command": "node \\"\${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/terminal-title.js\\""
           }
         ]
       }
