@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.210
+- feat(status-beeps): Updating now also offers to turn on the status beeps — asked once, and your answer is remembered
+
 ## v1.0.209
 - feat(upgrade): Installing an outdated version now clearly announces that it's unsupported and installs the latest version instead
 
@@ -146,7 +149,4 @@
 
 ## v1.0.161
 - fix(docs): top-align and left-align table cells in sync script
-
-## v1.0.160
-- fix: hide same-version updates in CLI output, top-align docs tables
 
