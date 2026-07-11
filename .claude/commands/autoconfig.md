@@ -1,5 +1,5 @@
 <!-- @description Configures Claude Code scaffolding for your project. Sets up settings, permissions, hooks, commands, and docs. -->
-<!-- @version 12 -->
+<!-- @version 13 -->
 <!-- @response success | Scaffolding configured, CLAUDE.md initialized, docs opened in browser. -->
 <!-- @response no-project | No project detected — asks user to confirm directory. -->
 <!-- @sideeffect Initializes CLAUDE.md, settings.json, hooks, commands, and MEMORY.md -->
@@ -257,7 +257,9 @@ Only if the user picks yes, create the opt-in flag by writing an empty file with
 
 `.claude/sounds/status-beeps.enabled`
 
-On "No thanks" — or if the question is skipped or unanswerable (headless run) — do NOT create the flag; beeps are strictly opt-in. Either way the choice is reversible later with `/enable-status-beeps` / `/disable-status-beeps`.
+On "No thanks" — or if the question is skipped or unanswerable (headless run) — do NOT create the flag; beeps are strictly opt-in.
+
+After a **yes or no** answer (not after a skip), merge `"statusBeepsPrompted": true` into `.claude/cca.config.json` with the Write tool, preserving any existing keys — `/autoconfig-update` uses this to avoid re-asking on upgrades. Either way the choice is reversible later with `/enable-status-beeps` / `/disable-status-beeps`.
 
 ### Open Docs & Finale
 

@@ -256,6 +256,24 @@ test('autoconfig finale offers the status-beeps opt-in but never defaults it on'
     /Only if the user picks yes/.test(autoconfig) && /do NOT create the flag/.test(autoconfig),
     'the opt-in must be consent-gated: no flag on decline, skip, or headless runs'
   );
+  assert(
+    /statusBeepsPrompted/.test(autoconfig),
+    'autoconfig must record statusBeepsPrompted so upgrades never re-ask'
+  );
+});
+
+test('autoconfig-update offers the status-beeps opt-in exactly once', () => {
+  const updateCmd = fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'commands', 'autoconfig-update.md'), 'utf8');
+  assert(
+    updateCmd.includes('Status Beeps Opt-in') &&
+      updateCmd.includes('.claude/sounds/status-beeps.enabled'),
+    'autoconfig-update should offer beeps to upgraded projects'
+  );
+  assert(
+    /statusBeepsPrompted/.test(updateCmd) &&
+      /arcade-beeps\.enabled/.test(updateCmd),
+    'the update-path ask must skip when already enabled (either flag) or already prompted'
+  );
 });
 
 test('local opt-in flags can never ship in the npm tarball', () => {

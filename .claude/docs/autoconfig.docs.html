@@ -1288,7 +1288,7 @@
                 title: '.claude/ Directory',
                 desc: 'Commands, rules, settings, and these docs. Keeps configuration organized as your project grows.'
             },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            'rules': {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        'rules': {
                 title: 'rules/',
                 desc: 'Path-scoped context that loads when Claude works on matching files.'
             },
@@ -1619,7 +1619,7 @@ CRITICAL: A plausible-looking cause from code reading is NOT confirmed evidence.
 
 > Run \`/autoconfig\` to populate this based on your project.`
             },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            'autoconfig-update': {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        'autoconfig-update': {
                 filename: 'autoconfig-update.md',
                 content: `<!-- @applied
 -->
@@ -1644,13 +1644,13 @@ If it exists, it was written by the installer during a version upgrade and holds
 | \`more\` | \`…{text}\` |
 | \`latest\` | \`✅ {text}\` |
 
-Then **delete \`.claude/.autoconfig-whats-new.json\`** (it's one-shot — a later run must not repeat the list), and continue to Step 1.
+Then **delete \`.claude/.autoconfig-whats-new.json\`** (it's one-shot — a later run must not repeat the list), and continue to Step 0b.
 
-## Step 1: Pull Latest Updates
+## Step 0b: Status Beeps Opt-in (asked once)
 
-Run this command via Bash to pull new update files from the latest package:
+The status beeps are opt-in, and upgraded projects have never been asked. Offer them **once**:
 
-\`\`\`bash`
+1. **Skip silently** if any of these hold:`
             },
             'autoconfig': {
                 filename: 'autoconfig.md',

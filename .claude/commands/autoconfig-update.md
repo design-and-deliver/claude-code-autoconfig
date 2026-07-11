@@ -1,5 +1,5 @@
 <!-- @description Manages and installs updates to Claude Code configuration. -->
-<!-- @version 3 -->
+<!-- @version 4 -->
 <!-- @response updates-available | Displays list of pending updates with install/review options. -->
 <!-- @response up-to-date | All updates are already installed. -->
 <!-- @sideeffect Pulls latest update files from npm, executes update instructions, tracks applied updates -->
@@ -28,7 +28,23 @@ If it exists, it was written by the installer during a version upgrade and holds
 | `more` | `…{text}` |
 | `latest` | `✅ {text}` |
 
-Then **delete `.claude/.autoconfig-whats-new.json`** (it's one-shot — a later run must not repeat the list), and continue to Step 1.
+Then **delete `.claude/.autoconfig-whats-new.json`** (it's one-shot — a later run must not repeat the list), and continue to Step 0b.
+
+## Step 0b: Status Beeps Opt-in (asked once)
+
+The status beeps are opt-in, and upgraded projects have never been asked. Offer them **once**:
+
+1. **Skip silently** if any of these hold:
+   - `.claude/sounds/status-beeps.enabled` or `.claude/sounds/arcade-beeps.enabled` exists (already on), or
+   - `.claude/cca.config.json` has `"statusBeepsPrompted": true` (already asked), or
+   - the run is headless / the question can't be answered.
+2. Otherwise ask with the AskUserQuestion tool:
+   - Question: "Turn on Waiting/Done status beeps for Claude Code?"
+   - Options: "Yes, enable beeps" / "No thanks"
+3. On **yes**: create the flag by writing an empty file with the Write tool: `.claude/sounds/status-beeps.enabled`
+4. On **yes or no** (not on skip): merge `"statusBeepsPrompted": true` into `.claude/cca.config.json` with the Write tool, preserving any existing keys — this is what prevents re-asking on every future update.
+
+Either way the choice stays reversible with `/enable-status-beeps` / `/disable-status-beeps`. Continue to Step 1.
 
 ## Step 1: Pull Latest Updates
 
