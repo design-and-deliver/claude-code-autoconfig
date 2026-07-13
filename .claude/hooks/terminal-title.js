@@ -967,6 +967,20 @@ function buildBlocks(names, file, cwd, cmd) {
     .split('{{CMD}}').join(cmd || '');
 }
 
+// Canonicalize a path for identity comparison — resolve symlinks/junctions AND (on Windows) 8.3
+// short names + on-disk casing, so a realpath-resolved __dirname compares equal to an env-derived
+// os.homedir() that points at the SAME dir through a symlink (macOS /var -> /private/var), a
+// junction, or a short/mis-cased path (the CI-only stand-down miss — 2026-07-13). Falls back to
+// path.resolve when the path isn't on disk yet (realpath throws ENOENT) — matches prior behavior
+// for the not-yet-created fixture paths the unit tests pass in.
+function canonPath(p) {
+  try {
+    return fs.realpathSync.native(p);
+  } catch (_) {
+    return path.resolve(p);
+  }
+}
+
 // Should THIS copy of the hook stand down? True only for the user-level copy (~/.claude/hooks)
 // when the session's OWN project (ownerDir = CLAUDE_PROJECT_DIR, cwd fallback) ships a managed
 // copy — that's the only case where the project copy is registered and will paint; the project
@@ -975,9 +989,9 @@ function buildBlocks(names, file, cwd, cmd) {
 // Parameterized (no ambient __dirname/homedir) for tests.
 function shouldDefer(ownerDir, selfDir, selfFile, homeHooksDir) {
   try {
-    if (path.resolve(selfDir) !== path.resolve(homeHooksDir)) return false; // we ARE the project copy
+    if (canonPath(selfDir) !== canonPath(homeHooksDir)) return false; // we ARE the project copy
     const projectCopy = path.join(ownerDir, '.claude', 'hooks', 'terminal-title.js');
-    return fs.existsSync(projectCopy) && path.resolve(projectCopy) !== path.resolve(selfFile);
+    return fs.existsSync(projectCopy) && canonPath(projectCopy) !== canonPath(selfFile);
   } catch (_) {
     return false;
   }
