@@ -835,6 +835,179 @@ test('every .claude/hooks command in the shipped settings.json is CLAUDE_PROJECT
 });
 console.log();
 
+// ============================================================================
+// --turn-watch cancel watchdog (the user-interrupt rescue). Ported from the
+// scratchpad `watchdog-test.sh` 12-case suite (preserved at
+// ~/.claude/hooks/title-test-harnesses/). Drives the REAL detached watchdog
+// child with sessionPid INJECTED, so it never exercises `--find` (console
+// identity) — that path is only reachable against a real claude.exe and is
+// covered by the live e2e probe (e2e-live-idle.js), not here.
+//
+// WINDOWS-ONLY: the CPU-idle rescue samples via title-painter-v4.exe (a .NET
+// AttachConsole/TotalProcessorTime helper the watchdog lazy-compiles with the
+// in-box csc). Off win32 there is no painter, so `sampleCpu` returns null and
+// the CPU path can't fire — the suite is skipped there.
+//
+// TRAP 1 (co-tenancy): a session can't be tested from within itself. We sidestep
+// it entirely by injecting a FAKE isolated node process as sessionPid.
+// TRAP 2 (bursty fakes): a short CPU window can't see a 1/sec burst, so the busy
+// fake must be CONTINUOUSLY busy (~15ms of every 100ms ≈ 15%), like a real
+// thinking claude — never a periodic spike.
+// ============================================================================
+console.log('Cancel watchdog (--turn-watch rescue, Windows-only):');
+if (process.platform !== 'win32') {
+  console.log('  (skipped — not win32; the painter-backed CPU sampler is Windows-only)');
+} else if (process.env.SKIP_WATCHDOG_TESTS === '1') {
+  console.log('  (skipped — SKIP_WATCHDOG_TESTS=1)');
+} else {
+  const { spawn } = require('child_process');
+
+  const wcwd = mkWorkspace();
+  const wsid = 'watchdog-selftest';
+  const wdir = path.join(wcwd, '.claude', 'hooks', '.titles');
+  fs.mkdirSync(wdir, { recursive: true });
+  fs.writeFileSync(path.join(wdir, `${wsid}.txt`), 'canceled title');
+  const OLD = new Date(Date.now() - 10000).toISOString(); // a "stale" (>2.5s) prompt timestamp
+  const watchProcs = [];
+  let wIdlePid = 0, wBusyPid = 0, wd3 = null, wd4 = null, wd5 = null;
+
+  // Synchronous sleep (the test runner is synchronous; the watchdog runs in a
+  // separate process and communicates via files, so a blocked event loop is fine).
+  function sleepSync(ms) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); }
+  function isAlive(pid) { try { process.kill(pid, 0); return true; } catch (_) { return false; } }
+  function waitDead(pid, timeoutMs) {
+    const d = Date.now() + timeoutMs;
+    while (Date.now() < d) { if (!isAlive(pid)) return true; sleepSync(200); }
+    return false;
+  }
+  function wglyph() {
+    try { return fs.readFileSync(path.join(wdir, `${wsid}.glyph`), 'utf8'); } catch (_) { return ''; }
+  }
+  function waitWGlyph(prefix, timeoutS) {
+    const d = Date.now() + timeoutS * 1000;
+    while (Date.now() < d) { if (wglyph().startsWith(prefix)) return true; sleepSync(300); }
+    return false;
+  }
+  // Write {sid}.<ext> state files, e.g. setState({ glyph: 'working|UserPromptSubmit', watch: 'n1' }).
+  function setState(obj) {
+    for (const [ext, val] of Object.entries(obj)) fs.writeFileSync(path.join(wdir, `${wsid}.${ext}`), val);
+  }
+  function spawnFake(kind) {
+    const code = kind === 'busy'
+      ? 'setInterval(()=>{const t=Date.now();while(Date.now()-t<15){}},100)' // continuous ~15% of a core
+      : 'setTimeout(()=>{},600000)';                                          // parked/idle (~0%)
+    const c = spawn(process.execPath, ['-e', code], { stdio: 'ignore' });
+    watchProcs.push(c);
+    return c.pid;
+  }
+  function mkWTranscript(tag, kind) {
+    const tp = path.join(wdir, `${wsid}-${tag}.jsonl`);
+    let line;
+    if (kind === 'prompt') {
+      line = JSON.stringify({ type: 'user', timestamp: OLD, message: { role: 'user', content: 'whats the history of italy?' } });
+    } else if (kind === 'marker') {
+      line = JSON.stringify({ type: 'assistant', timestamp: OLD, message: { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: {} }] } })
+        + '\n' + JSON.stringify({ type: 'user', timestamp: OLD, message: { role: 'user', content: [{ type: 'text', text: '[Request interrupted by user for tool use]' }] } });
+    } else { // assistant / tool_use tail
+      line = JSON.stringify({ type: 'assistant', timestamp: OLD, message: { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: {} }] } });
+    }
+    fs.writeFileSync(tp, line + '\n');
+    return tp;
+  }
+  // Spawn the detached watchdog with sessionPid injected (skips --find console resolution).
+  function runWatch(transcript, pid, nonce) {
+    const payload = JSON.stringify({
+      sid: wsid, dir: wdir, file: path.join(wdir, `${wsid}.txt`), cwd: wcwd,
+      nonce, transcript, ppid: pid, sessionPid: pid,
+    });
+    const c = spawn(process.execPath, [HOOK, '--turn-watch', payload], { detached: true, stdio: 'ignore' });
+    watchProcs.push(c);
+    return c;
+  }
+
+  // --- 1. marker tail -> instant rescue (no CPU needed), stale .ask cleared, self-exit ---
+  let wd1 = null;
+  test('watchdog: marker tail -> rescued to idle (the tool-phase cancel path)', () => {
+    wIdlePid = spawnFake('idle');
+    sleepSync(300);
+    setState({ glyph: 'working|UserPromptSubmit', ask: '1', watch: 'n1' });
+    wd1 = runWatch(mkWTranscript('t1', 'marker'), wIdlePid, 'n1');
+    assert(waitWGlyph('idle|TurnWatch', 8), `marker cancel should rescue to idle|TurnWatch, glyph="${wglyph()}"`);
+  });
+  test("watchdog: the cancel's stale {sid}.ask is cleared by the rescue", () => {
+    assert(!fs.existsSync(path.join(wdir, `${wsid}.ask`)), 'a leftover .ask flag must be cleared on rescue');
+  });
+  test('watchdog: exits after the marker rescue', () => {
+    assert(waitDead(wd1.pid, 4000), 'the watchdog should self-exit once it has rescued');
+  });
+
+  // --- 2. stalled prompt + IDLE parent -> CPU-idle rescue ---
+  test('watchdog: stalled prompt + idle parent -> CPU-idle rescue (thinking-phase cancel)', () => {
+    setState({ glyph: 'working|UserPromptSubmit', watch: 'n2' });
+    runWatch(mkWTranscript('t2', 'prompt'), wIdlePid, 'n2');
+    assert(waitWGlyph('idle|TurnWatch', 25), `an idle parent under a stalled prompt should rescue via CPU, glyph="${wglyph()}"`);
+  });
+
+  // --- 3. stalled prompt + BUSY parent (live thinking) -> NO rescue; exits on conclude ---
+  test('watchdog: stalled prompt + BUSY parent -> never rescued (a live turn burns CPU)', () => {
+    wBusyPid = spawnFake('busy');
+    sleepSync(300);
+    setState({ glyph: 'working|UserPromptSubmit', watch: 'n3' });
+    wd3 = runWatch(mkWTranscript('t3', 'prompt'), wBusyPid, 'n3');
+    sleepSync(15000);
+    assert(wglyph() === 'working|UserPromptSubmit', `a busy parent must not be rescued, glyph="${wglyph()}"`);
+  });
+  test("watchdog: exits when the glyph concludes (Stop) and does NOT overwrite Stop's paint", () => {
+    setState({ glyph: 'idle|Stop' }); // simulate Stop concluding the turn
+    assert(waitDead(wd3.pid, 4000), 'the watchdog should stand down once the glyph concludes');
+    assert(wglyph() === 'idle|Stop', `Stop's own paint must be left intact, glyph="${wglyph()}"`);
+  });
+
+  // --- 4. assistant/tool_use tail + IDLE parent (silent Bash / open dialog) -> NO CPU rescue ---
+  test('watchdog: assistant tail + idle parent -> never CPU-rescued (a silent tool looks the same)', () => {
+    setState({ glyph: 'working|PostToolUse', watch: 'n4' });
+    wd4 = runWatch(mkWTranscript('t4', 'assistant'), wIdlePid, 'n4');
+    sleepSync(15000);
+    assert(wglyph() === 'working|PostToolUse', `an assistant/tool tail must never CPU-rescue, glyph="${wglyph()}"`);
+  });
+  test('watchdog: exits on a superseded nonce', () => {
+    setState({ watch: 'n4-superseded' });
+    assert(waitDead(wd4.pid, 4000), 'the watchdog should stand down when the next turn supersedes its nonce');
+  });
+
+  // --- 5. dead parent -> watchdog exits without painting ---
+  test('watchdog: dead session pid -> exits without painting', () => {
+    const dead = spawnFake('idle');
+    sleepSync(300);
+    try { process.kill(dead); } catch (_) { /* ignore */ }
+    assert(waitDead(dead, 4000), 'the fake session process should be dead before the watch starts');
+    setState({ glyph: 'working|UserPromptSubmit', watch: 'n5' });
+    wd5 = runWatch(mkWTranscript('t5', 'prompt'), dead, 'n5');
+    assert(waitDead(wd5.pid, 5000), 'the watchdog should exit when the session pid is gone');
+    assert(wglyph() === 'working|UserPromptSubmit', `there must be no paint for a dead parent, glyph="${wglyph()}"`);
+  });
+
+  // --- 6. UPS spawns the watchdog + writes the {sid}.watch nonce ---
+  test('watchdog: UserPromptSubmit spawns the watchdog and writes the {sid}.watch nonce', () => {
+    try { fs.unlinkSync(path.join(wdir, `${wsid}.watch`)); } catch (_) { /* ignore */ }
+    const tp = mkWTranscript('t6', 'prompt');
+    const env = { ...process.env, CLAUDE_PROJECT_DIR: wcwd };
+    execFileSync(process.execPath, [HOOK], {
+      input: JSON.stringify({ hook_event_name: 'UserPromptSubmit', session_id: wsid, cwd: wcwd, prompt: 'hi', transcript_path: tp }),
+      encoding: 'utf8', env,
+    });
+    assert(fs.existsSync(path.join(wdir, `${wsid}.watch`)), 'UserPromptSubmit should write the {sid}.watch nonce');
+    setState({ watch: 'superseded' }); // stand down the real watchdog UPS just spawned
+    sleepSync(1500);
+  });
+
+  // Reap every fake + watchdog process this suite spawned, and stand down any straggler.
+  setState({ watch: 'final-cleanup' });
+  sleepSync(500);
+  for (const c of watchProcs) { try { process.kill(c.pid); } catch (_) { /* already gone */ } }
+}
+console.log();
+
 
 // Cleanup
 for (const dir of tempDirs) {

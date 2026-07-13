@@ -4,8 +4,14 @@
  * ONE self-dispatching hook for five events (keyed on hook_event_name):
  *   UserPromptSubmit -> ⬤ working  + inject the per-prompt REMINDER one-liner (+BASELINE while no
  *                       title exists, +COMMAND on /slash turns) + clear any stale {sid}.ask flag
+ *                       + spawn the --turn-watch cancel watchdog (a user interrupt fires NO hook,
+ *                       so a detached per-turn child detects a dead turn via marker/CPU forensics
+ *                       and repaints ✻ through title-painter.exe: AttachConsole+SetConsoleTitleW)
  *   PostToolUse      -> ⬤ working  (refresh, so a mid-turn title flip shows live + clears a stale ◐)
- *   Notification     -> ◐ awaiting your approval (permission_prompt matcher only)
+ *   Notification     -> ◐ awaiting your approval (permission_prompt matcher) — or, invoked with
+ *                       --idle-rescue (idle_prompt matcher), flip a tab left stuck by a user
+ *                       interrupt back to ✻ idle (a cancel fires NO hook — Stop never runs);
+ *                       gated on transcript-tail forensics (marker / stalled prompt / missing Stop)
  *   Stop             -> ✻ idle / done — OR ◐ awaiting (+ a 2nd BEL = gold tab) when the turn ended
  *                       on a question (last visible response text ends in '?', or a {sid}.ask flag;
  *                       flag turns hand the skipped grade to a detached --post-grade child that logs
@@ -61,6 +67,11 @@ if (require.main === module) {
     // defers the run until module evaluation has finished, so no declaration below this block can
     // be hit while still in its temporal dead zone.
     setImmediate(() => postGrade(process.argv[3]).then(() => process.exit(0), () => process.exit(0)));
+  } else if (process.argv[2] === '--turn-watch') {
+    // Detached child mode: per-turn cancel watchdog (see turnWatch). Same argv/TDZ shape as
+    // --post-grade. Detached is MANDATORY (a non-detached node child dies with its parent on
+    // Windows); the console this forfeits is reattached at paint time by title-painter.exe.
+    setImmediate(() => turnWatch(process.argv[3]).then(() => process.exit(0), () => process.exit(0)));
   } else {
     let input = '';
     process.stdin.setEncoding('utf8');
@@ -81,8 +92,8 @@ async function handle(data) {
   const cwd = data.cwd || process.cwd();
   // User-level copy stands down when the SESSION'S OWN project ships a managed copy (see header).
   // Keyed to CLAUDE_PROJECT_DIR (the dir whose settings registered this hook run), NOT the event's
-  // cwd: a mid-session `cd` into a copy-shipping repo must not silence this copy — that repo's
-  // settings aren't loaded, so its copy never runs and nobody would paint.
+  // cwd: a mid-session `cd` into a copy-shipping repo (e.g. the CCA source repo) must not silence
+  // this copy — that repo's settings aren't loaded, so its copy never runs and nobody would paint.
   const ownerDir = process.env.CLAUDE_PROJECT_DIR || cwd;
   if (shouldDefer(ownerDir, __dirname, __filename, path.join(os.homedir(), '.claude', 'hooks'))) {
     process.exit(0);
@@ -102,7 +113,9 @@ async function handle(data) {
   if (!process.env.CLAUDE_PROJECT_DIR) degraded.push('CLAUDE_PROJECT_DIR');
   if (!data.cwd) degraded.push('cwd');
   if (!sid) degraded.push('session_id');
-  if (event === 'Stop' && !data.transcript_path) degraded.push('transcript_path');
+  const needsTranscript = event === 'Stop'
+    || (event === 'Notification' && process.argv[2] === '--idle-rescue');
+  if (needsTranscript && !data.transcript_path) degraded.push('transcript_path');
   if (degraded.length) logCtx.contract = degraded.join(',');
 
   if (event === 'UserPromptSubmit') {
@@ -119,6 +132,9 @@ async function handle(data) {
       hookEventName: 'UserPromptSubmit',
       additionalContext: buildDirective(data, file, cwd),
     };
+    // A user interrupt fires NO hook and CC's idle_prompt notification is not delivered after one
+    // (verified 2026-07-11), so each turn gets a watchdog child that notices a dead turn itself.
+    spawnTurnWatch(data, dir, sid, file, cwd);
     emit(out);
     return;
   }
@@ -146,6 +162,66 @@ async function handle(data) {
   }
 
   if (event === 'Notification') {
+    // --idle-rescue (idle_prompt matcher): a user interrupt fires NO hook — Stop never runs — and a
+    // thinking-phase cancel writes NOTHING to the transcript either (verified 2026-07-11: Esc during
+    // "Percolating" left the file untouched; the "[Request interrupted…]" marker only shows up for
+    // tool-use cancels). So the rescue triangulates from what IS observable once CC reports the REPL
+    // idle: the newest transcript entry, its age, and the last-painted glyph.
+    //   marker tail → canceled, definitely → paint ✻
+    //   bare-prompt tail, ≥2.2s old, transcript unmoved, glyph ⬤ → the turn died with the cancel
+    //     (a live turn would have flushed something; a just-submitted one is younger) → paint ✻
+    //   assistant tail + glyph still ⬤ after a 1.6s grace → mid-response cancel or a KILLED Stop
+    //     (the grace lets a racing Stop hook paint first — that's what keeps the ~0ms
+    //     messageIdleNotifThresholdMs safe); honors an unconsumed {sid}.ask with ◐
+    //   anything else → decline WITHOUT emitting. ◐ question tabs are never downgraded, and a LIVE
+    //     permission dialog is indistinguishable from a canceled one, so awaiting|Notification is
+    //     only ever rescued by a marker. Declines log note=int-decline when CLAUDE_TITLE_DEBUG=1.
+    if (process.argv[2] === '--idle-rescue') {
+      const glyphFile = path.join(dir, `${sid}.glyph`);
+      const painted = readTitle(glyphFile).split('|');
+      const lastGlyph = painted[0];
+      const decline = (why) => {
+        if (logCtx) { logCtx.note = 'int-decline'; logCtx.diag = why; }
+        titleLog(GLYPH[lastGlyph] || GLYPH.idle, normalize(readTitle(file) || folderName(cwd)), false);
+        process.exit(0);
+      };
+      if (lastGlyph === 'idle') decline('already-idle');
+      if (lastGlyph === 'awaiting' && painted[1] !== 'Notification') decline('question-tab');
+      let tail = classifyTail(data.transcript_path);
+      // ~200ms JSONL append lag (same flush race the Stop grade guards)
+      for (let i = 0; tail.kind === 'none' && i < 3; i++) {
+        await delay(150);
+        tail = classifyTail(data.transcript_path);
+      }
+      let via = '';
+      if (tail.kind === 'marker') {
+        via = 'marker';
+      } else if (lastGlyph !== 'working') {
+        decline(`kind=${tail.kind} glyph=${lastGlyph || '-'}`);
+      } else if (tail.kind === 'prompt') {
+        const age = tail.ts ? Date.now() - Date.parse(tail.ts) : NaN;
+        if (!(age > 0)) decline('prompt-unaged'); // no/garbled timestamp — can't prove the stall
+        if (age < 2200) await delay(2200 - age);
+        const again = classifyTail(data.transcript_path);
+        if (again.kind !== 'prompt' || again.size !== tail.size) decline('turn-progressed');
+        via = 'stalled-prompt';
+      } else if (tail.kind === 'assistant') {
+        await delay(1600); // grace: let a racing Stop hook finish its own paint
+        if (readTitle(glyphFile).split('|')[0] !== 'working') decline('stop-painted');
+        via = 'no-stop';
+      } else {
+        decline('no-transcript');
+      }
+      // Confirmed: the turn ended without a Stop. An unconsumed {sid}.ask on the no-stop path is a
+      // KILLED Stop's question turn — honor it with ◐ + ring; on a confirmed cancel it's a leftover —
+      // clear it either way so it can't paint a false ◐ on the NEXT turn's Stop.
+      const askFlag = path.join(dir, `${sid}.ask`);
+      const honorAsk = via === 'no-stop' && fileExists(askFlag);
+      if (fileExists(askFlag)) { try { fs.unlinkSync(askFlag); } catch (_) { /* ignore */ } }
+      if (logCtx) { logCtx.note = 'int-rescue'; logCtx.diag = `via=${via} ask=${honorAsk ? 1 : 0}`; }
+      emit(setTitle(honorAsk ? GLYPH.awaiting : GLYPH.idle, normalize(readTitle(file) || folderName(cwd)), honorAsk));
+      return;
+    }
     // A permission prompt is open. Single BEL only — CC already rings its own bell here (tab already gold).
     emit(setTitle(GLYPH.awaiting, normalize(readTitle(file) || folderName(cwd))));
     return;
@@ -173,7 +249,8 @@ async function handle(data) {
   // This is the stuck-⬤ fix: emit() (the terminalSequence CC applies on clean exit) is the ONLY paint VS
   // Code honors, and the async grade can be KILLED on a huge / slow-to-flush transcript before it reaches
   // emit() — which froze the tab on the last ⬤ working. Reaching emit() synchronously here closes that
-  // window for every flagged question turn (the common case).
+  // window for every flagged question turn (the common case). SetConsoleTitleW above is a Win-terminal-only
+  // bonus; VS Code never saw it, which is why the failsafe alone didn't rescue the tab.
   if (askPresent) {
     const deferred = spawnDeferredGrade(data, dir, sid, file, cwd);
     if (logCtx) {
@@ -218,6 +295,13 @@ async function handle(data) {
 function setTitle(glyph, title, ring) {
   const text = `${glyph} ${title}`;
   try { process.title = text; } catch (_) { /* ignore */ }
+  // Persist the last-painted glyph ({sid}.glyph, "name|event") — read by the --idle-rescue path to
+  // spot a ⬤ stranded by a user interrupt. Best-effort: the dir may not exist before the first
+  // UserPromptSubmit of a brand-new install; a failed write only costs that turn's rescue.
+  if (logCtx && logCtx.sid && logCtx.dir) {
+    const name = glyph === GLYPH.working ? 'working' : glyph === GLYPH.awaiting ? 'awaiting' : 'idle';
+    try { fs.writeFileSync(path.join(logCtx.dir, `${logCtx.sid}.glyph`), `${name}|${logCtx.event}`); } catch (_) { /* ignore */ }
+  }
   let seq = `${ESC}]0;${text}${BEL}`;
   if (ring) seq += BEL;
   titleLog(glyph, title, ring);
@@ -246,6 +330,55 @@ function titleLog(glyph, title, ring) {
 
 function fileExists(file) {
   try { return fs.existsSync(file); } catch (_) { return false; }
+}
+
+// Classify the newest transcript entry so the --idle-rescue path can tell a dead turn from a live
+// one. Walks a 64KB tail back to the first user/assistant line:
+//   marker    — user text starting "[Request interrupted" (CC's cancel marker; flushed for tool-use
+//               cancels, but a thinking-phase cancel writes NOTHING — verified 2026-07-11 by mtime)
+//   prompt    — a real user prompt (ts = its timestamp): either a just-submitted turn or a
+//               thinking-phase cancel; the caller disambiguates by age + growth
+//   assistant — assistant output (incl. tool_use) or a tool_result carrier: a finished/racing turn,
+//               a mid-response cancel, or a killed Stop; the caller disambiguates via the glyph
+//   none      — unreadable/empty (also: transcript_path missing)
+// `size` rides along for the caller's growth check. Any error → none (the rescue declines on doubt).
+function classifyTail(transcriptPath) {
+  const none = { kind: 'none', ts: '', size: 0 };
+  if (!transcriptPath) return none;
+  let content, size;
+  try {
+    const TAIL_BYTES = 64 * 1024;
+    size = fs.statSync(transcriptPath).size;
+    const fd = fs.openSync(transcriptPath, 'r');
+    try {
+      const len = Math.min(TAIL_BYTES, size);
+      const buf = Buffer.alloc(len);
+      fs.readSync(fd, buf, 0, len, size - len);
+      content = buf.toString('utf8');
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch (_) {
+    return none;
+  }
+  const lines = content.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    let obj;
+    try { obj = JSON.parse(line); } catch (_) { continue; } // includes the tail window's partial first line
+    if (!obj || !obj.message || (obj.type !== 'user' && obj.type !== 'assistant')) continue;
+    if (obj.type === 'assistant') return { kind: 'assistant', ts: obj.timestamp || '', size };
+    const c = obj.message.content;
+    const text = typeof c === 'string' ? c
+      : Array.isArray(c)
+        ? c.filter(b => b && b.type === 'text' && typeof b.text === 'string').map(b => b.text).join('\n')
+        : '';
+    if (text.trimStart().startsWith('[Request interrupted')) return { kind: 'marker', ts: obj.timestamp || '', size };
+    if (isRealUserPrompt(obj)) return { kind: 'prompt', ts: obj.timestamp || '', size };
+    return { kind: 'assistant', ts: obj.timestamp || '', size }; // tool_result carrier — mid-turn shape
+  }
+  return none;
 }
 
 // Stop heuristic: did the turn end on a question? Read the JSONL transcript, find the most-recent
@@ -349,7 +482,7 @@ function inspectLastResponse(transcriptPath) {
 // hardens the transcript fallback for turns that didn't write one.
 // QTAIL lives INSIDE the function (not module-level const) — the --post-grade child calls into
 // this during module evaluation, and a module-level const below the require.main block is still
-// in its temporal dead zone at that point.
+// in its temporal dead zone at that point (same TDZ trap as background.ts's listener helpers).
 function endsOnQuestion(text) {
   const QTAIL = /\?[\s)*_"]*(\([^()]*\)[\s.*_"]*)?$/;
   if (QTAIL.test(text)) return { ends: true, via: 'qtail' };
@@ -461,6 +594,320 @@ async function postGrade(payloadJson) {
   };
   // Reuses titleLog's capped append; glyph/ring mirror what the fast path actually painted.
   titleLog(GLYPH.awaiting, p.title || '', true);
+}
+
+// Spawn the per-turn cancel watchdog (--turn-watch child). MUST be detached: on Windows a
+// non-detached node child sits in a kill-on-close job object and CANNOT outlive its parent — the
+// hook exits milliseconds later and the watchdog died before its first line ran (verified
+// 2026-07-12 with a probe child; same reason --post-grade detaches). Detaching costs the console,
+// so the watchdog cannot SetConsoleTitleW directly — it paints through the title-painter helper
+// (AttachConsole + SetConsoleTitleW; see ensurePainter). {sid}.watch carries a nonce: the NEXT
+// turn's UPS overwrites it, telling a stale watchdog to stand down.
+function spawnTurnWatch(data, dir, sid, file, cwd) {
+  try {
+    if (!data.transcript_path) return false;
+    const nonce = `${process.pid}-${Date.now()}`;
+    fs.writeFileSync(path.join(dir, `${sid}.watch`), nonce);
+    const payload = JSON.stringify({
+      sid, dir, file, cwd, nonce,
+      transcript: data.transcript_path,
+      ppid: process.ppid || 0,
+    });
+    require('child_process')
+      .spawn(process.execPath, [__filename, '--turn-watch', payload],
+        { detached: true, stdio: 'ignore' })
+      .unref();
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+// The watchdog's paint arm. A detached process has no console, so SetConsoleTitleW needs a
+// reattach: title-painter.exe (15 lines of C#, lazy-compiled ONCE into the .titles dir by the
+// in-box .NET Framework csc) does FreeConsole → AttachConsole(<claude pid>) → SetConsoleTitleW,
+// which ConPTY forwards to the VS Code tab exactly like the UPS fast-flip. `--get <file>` reads
+// the title back for self-tests. Falls back to a one-shot PowerShell Add-Type when csc is absent.
+const PAINTER_CS = [
+  'using System; using System.IO; using System.Diagnostics; using System.Globalization; using System.Runtime.InteropServices; using System.Text;',
+  'class P {',
+  '  [DllImport("kernel32.dll")] static extern bool FreeConsole();',
+  '  [DllImport("kernel32.dll")] static extern bool AttachConsole(uint pid);',
+  '  [DllImport("kernel32.dll", CharSet=CharSet.Unicode)] static extern bool SetConsoleTitle(string t);',
+  '  [DllImport("kernel32.dll", CharSet=CharSet.Unicode)] static extern uint GetConsoleTitle(StringBuilder sb, uint n);',
+  '  static int Main(string[] a) {',
+  '    if (a.Length < 2) return 2;',
+  '    if (a[1] == "--cpu" && a.Length >= 4) {',
+  '      try {',
+  '        var pr = Process.GetProcessById(int.Parse(a[0]));',
+  '        int ms = int.Parse(a[3]);',
+  '        var c0 = pr.TotalProcessorTime;',
+  '        System.Threading.Thread.Sleep(ms);',
+  '        pr.Refresh();',
+  '        double pct = (pr.TotalProcessorTime - c0).TotalMilliseconds / ms * 100.0;',
+  '        File.WriteAllText(a[2], pct.ToString("0.00", CultureInfo.InvariantCulture), new UTF8Encoding(false));',
+  '        return 0;',
+  '      } catch { try { File.WriteAllText(a[2], "-1", new UTF8Encoding(false)); } catch {} return 6; }',
+  '    }',
+  '    if (a.Length >= 4 && a[1] == "--find") {',
+  '      string needle = File.ReadAllText(a[3], Encoding.UTF8).Trim();',
+  '      var hits = new System.Collections.Generic.List<string>();',
+  '      for (int i = 4; i < a.Length; i++) {',
+  '        FreeConsole();',
+  '        uint pid; if (!uint.TryParse(a[i], out pid)) continue;',
+  '        if (!AttachConsole(pid)) continue;',
+  '        var t = new StringBuilder(2048); GetConsoleTitle(t, 2048);',
+  '        if (needle.Length > 0 && t.ToString().IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0) hits.Add(a[i]);',
+  '      }',
+  '      FreeConsole();',
+  '      File.WriteAllText(a[2], string.Join(" ", hits.ToArray()), new UTF8Encoding(false));',
+  '      return 0;',
+  '    }',
+  '    FreeConsole();',
+  '    if (!AttachConsole(uint.Parse(a[0]))) return 3;',
+  '    if (a.Length >= 3 && a[1] == "--get") {',
+  '      var sb = new StringBuilder(2048); GetConsoleTitle(sb, 2048);',
+  '      File.WriteAllText(a[2], sb.ToString(), new UTF8Encoding(false)); return 0;',
+  '    }',
+  '    return SetConsoleTitle(a[1]) ? 0 : 4;',
+  '  }',
+  '}',
+].join('\n');
+
+// Version in the name = source shape; a PAINTER_CS change MUST bump it so stale exes recompile
+// (ensurePainter early-returns when the exe exists). v3 = case-insensitive --find; v4 = --cpu mode.
+function painterPath(dir) { return path.join(dir, 'title-painter-v4.exe'); }
+
+// Kick off the one-time compile (async — the watchdog calls this at startup so the exe is warm
+// long before any rescue). Returns immediately; readiness = the exe existing.
+function ensurePainter(dir) {
+  try {
+    const exe = painterPath(dir);
+    if (fileExists(exe)) return;
+    const src = path.join(dir, 'title-painter-v4.cs');
+    fs.writeFileSync(src, PAINTER_CS);
+    const roots = [
+      path.join(process.env.WINDIR || 'C:\\Windows', 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe'),
+      path.join(process.env.WINDIR || 'C:\\Windows', 'Microsoft.NET', 'Framework', 'v4.0.30319', 'csc.exe'),
+    ];
+    const csc = roots.find(fileExists);
+    if (!csc) return; // PS fallback will carry the paint
+    require('child_process')
+      .spawn(csc, ['/nologo', '/target:exe', `/out:${exe}`, src], { stdio: 'ignore', windowsHide: true })
+      .unref();
+  } catch (_) { /* fallback covers it */ }
+}
+
+// On-demand CPU% of <pid> over a <ms> window, via painter --cpu (a TotalProcessorTime delta = % of
+// one core, same units as the old typeperf reading). Returns null on any failure (painter missing /
+// pid gone / parse). Blocks ~ms + spawn — the watchdog is a dedicated child, so that's fine.
+function sampleCpu(dir, sid, pid, ms) {
+  const exe = painterPath(dir);
+  if (!fileExists(exe)) return null;
+  const out = path.join(dir, `${sid}.cpu`);
+  try { fs.unlinkSync(out); } catch (_) { /* ignore */ }
+  try {
+    require('child_process').spawnSync(exe, [String(pid), '--cpu', out, String(ms)],
+      { windowsHide: true, timeout: ms + 4000 });
+    const v = parseFloat(fs.readFileSync(out, 'utf8'));
+    try { fs.unlinkSync(out); } catch (_) { /* ignore */ }
+    return Number.isFinite(v) && v >= 0 ? v : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Paint <text> onto the console owned by <ppid>. Returns a short result tag for the debug diag.
+function paintViaConsole(dir, ppid, text) {
+  const cp = require('child_process');
+  const exe = painterPath(dir);
+  if (fileExists(exe)) {
+    try {
+      const r = cp.spawnSync(exe, [String(ppid), text], { windowsHide: true, timeout: 5000 });
+      return `painter=${r.status}`;
+    } catch (_) { /* fall through */ }
+  }
+  // Fallback: no compiled painter → drive the same AttachConsole+SetConsoleTitleW from a one-shot
+  // PowerShell. Passed base64 via -EncodedCommand to sidestep the nested Node→PS quote-escaping that
+  // silently broke the old inline -Command form (the DllImport quotes never survived). The C# rides
+  // a PS single-quoted (multi-line) literal so its double-quotes are taken verbatim; the script
+  // exits 0 only when BOTH AttachConsole and SetConsoleTitle succeed, so ps-paint reports the real
+  // result instead of a false 0.
+  try {
+    const safe = String(text).replace(/'/g, "''");
+    const script = [
+      "Add-Type -Namespace K -Name W -MemberDefinition '",
+      '[DllImport("kernel32.dll")] public static extern bool FreeConsole();',
+      '[DllImport("kernel32.dll")] public static extern bool AttachConsole(uint p);',
+      '[DllImport("kernel32.dll", CharSet=CharSet.Unicode)] public static extern bool SetConsoleTitle(string t);',
+      "'",
+      '[K.W]::FreeConsole() | Out-Null',
+      `$ok = [K.W]::AttachConsole(${Number(ppid)}) -and [K.W]::SetConsoleTitle('${safe}')`,
+      'exit ([int](-not $ok))',
+    ].join('\n');
+    const b64 = Buffer.from(script, 'utf16le').toString('base64');
+    const r = cp.spawnSync('powershell', ['-NoProfile', '-EncodedCommand', b64], { windowsHide: true, timeout: 15000 });
+    return `ps-paint=${r.status}`;
+  } catch (_) {
+    return 'paint=failed';
+  }
+}
+
+// The watchdog itself. A canceled turn is invisible to hooks AND (for a thinking-phase cancel)
+// leaves the transcript untouched, so the watchdog triangulates liveness from the OUTSIDE:
+//   - marker tail ("[Request interrupted…]", flushed on tool-phase cancels) → rescue instantly.
+//   - bare-prompt tail (thinking phase): the session's CPU. A live turn always burns CPU —
+//     streaming parse + the ~10fps spinner — while a canceled REPL sits parked near 0%. Two 300ms
+//     samples < 6% of a core + an unmoved transcript + glyph still ⬤ = the turn died → rescue.
+//     (LIVE-measured 2026-07-12: idle claude ~0%, occasional single-scheduler-tick spike ≤ ~5.2% at
+//     300ms; active 9–19% — a 6% cutoff clears both. A double-tick idle blip reads busy → just
+//     delays a poll, never a false rescue.)
+//   - The CPU path applies ONLY to a prompt tail: an assistant/tool_use tail with quiet CPU is
+//     also what a long silent Bash tool or an open AskUserQuestion dialog looks like — never
+//     rescue those on CPU alone.
+// CPU is sampled ON DEMAND by painter --cpu (a TotalProcessorTime delta over 300ms) — no continuous
+// typeperf, no 1s cadence, no warmup: each poll gets a fresh reading, so a cancel flips in ~1.5s.
+// Stand-down: glyph concluded (✻ / ◐-from-Stop), nonce superseded, session gone, or a 30min deadline.
+async function turnWatch(payloadJson) {
+  let p;
+  try { p = JSON.parse(payloadJson); } catch (_) { return; }
+  const { sid, dir, file, cwd, nonce, transcript, ppid } = p;
+  logCtx = { event: 'TurnWatch', sid, dir, note: '' };
+  const glyphFile = path.join(dir, `${sid}.glyph`);
+  const watchFile = path.join(dir, `${sid}.watch`);
+
+  ensurePainter(dir); // warm the console-paint/find/cpu helper while the turn runs
+
+  // The session's REAL claude.exe pid. The hook's own parent is a SHORT-LIVED claude.exe shim —
+  // live trail 2026-07-12 showed parent-gone at the first poll, three turns straight — so ppid is
+  // only a log breadcrumb. The true session process is found by CONSOLE IDENTITY: painter --find
+  // attaches each claude.exe candidate and matches its console title against our own title file.
+  // Tests inject sessionPid directly (their fake parents own no matching console).
+  let sessionPid = Number(p.sessionPid) || 0;
+
+  // Lifecycle trail (CLAUDE_TITLE_DEBUG=1): start line, ~5s heartbeats, and an exit reason — so a
+  // watchdog that dies in the real CC context is distinguishable from one that is alive but
+  // silently ineligible (that ambiguity cost a full live-test round on 2026-07-12).
+  const watchLog = (note, diag) => {
+    if (!logCtx) return;
+    logCtx.note = note;
+    logCtx.diag = diag;
+    titleLog(GLYPH.working, normalize(readTitle(file) || folderName(cwd)), false);
+  };
+  watchLog('watch-start', `ppid=${ppid} session=${sessionPid || 'resolve'}`);
+
+  const CPU_MS = 300;   // sample window: idle claude ~0% (single-scheduler-tick spike ≤ ~5.2% at
+  const CPU_THRESH = 6.0; // 300ms — still < 6%); active 9–19% → 6% separates (LIVE-measured 2026-07-12).
+  const GRACE_MS = 150;   // 300ms window ×2 samples is the floor; smaller windows lose tick headroom.
+  const started = Date.now();
+  let lastSize = -1;
+  let quietStreak = 0;
+  let polls = 0;
+  try {
+    while (Date.now() - started < 30 * 60 * 1000) {
+      await delay(150);
+      polls++;
+      if (readTitle(watchFile) !== nonce) { watchLog('watch-exit', 'superseded'); return; }
+      const painted = readTitle(glyphFile).split('|');
+      if (painted[0] === 'idle' || (painted[0] === 'awaiting' && painted[1] !== 'Notification')) {
+        watchLog('watch-exit', `concluded glyph=${painted.join('|')}`);
+        return;
+      }
+      if (!sessionPid) {
+        sessionPid = resolveSessionPid(dir, sid, file, cwd);
+        if (sessionPid) watchLog('watch', `session resolved pid=${sessionPid}`);
+        else if (polls % 10 === 0) watchLog('watch', 'session unresolved (painter compiling / no console match)');
+        if (!sessionPid) continue;
+      }
+      try { process.kill(sessionPid, 0); } catch (_) { watchLog('watch-exit', `session-gone pid=${sessionPid}`); return; }
+
+      const tail = classifyTail(transcript);
+      const grew = tail.size !== lastSize;
+      const hadBaseline = lastSize !== -1;
+      lastSize = tail.size;
+
+      // Tool-phase cancel: the marker flushes at cancel time — no CPU evidence needed.
+      if (tail.kind === 'marker') {
+        rescueFromWatch('marker', dir, sid, file, cwd, sessionPid);
+        return;
+      }
+
+      const age = tail.ts ? Date.now() - Date.parse(tail.ts) : NaN;
+      // Eligibility: glyph still ⬤ AND a bare-prompt tail old enough to call stalled. Only sample
+      // CPU when eligible — the ~300ms sample is the loop's main cost, so an ineligible poll stays
+      // cheap (a fast Bash-tool / permission dialog never pays for it).
+      const eligible = painted[0] === 'working' && tail.kind === 'prompt' && age > 2500;
+      if (!eligible) {
+        quietStreak = 0;
+        if (polls % 12 === 0) watchLog('watch', `ineligible kind=${tail.kind} glyph=${painted[0] || '-'}`
+          + ` age=${Number.isFinite(age) ? Math.round(age / 1000) + 's' : '-'}`);
+        continue;
+      }
+      const cpu = sampleCpu(dir, sid, sessionPid, CPU_MS); // blocks ~CPU_MS
+      quietStreak = (cpu !== null && cpu < CPU_THRESH && !grew && hadBaseline) ? quietStreak + 1 : 0;
+      if (polls % 6 === 0 || quietStreak > 0) {
+        watchLog('watch', `cpu=${cpu === null ? 'null' : cpu.toFixed(1)} streak=${quietStreak}`
+          + ` age=${Math.round(age / 1000)}s`);
+      }
+      if (quietStreak >= 2) {
+        await delay(GRACE_MS); // grace: if the turn just concluded, let its Stop hook paint first
+        const g2 = readTitle(glyphFile).split('|')[0];
+        const t2 = classifyTail(transcript);
+        if (g2 === 'working' && t2.kind === 'prompt' && t2.size === lastSize) {
+          rescueFromWatch(`stalled-prompt cpu=${(cpu || 0).toFixed(1)}`, dir, sid, file, cwd, sessionPid);
+          return;
+        }
+        quietStreak = 0;
+      }
+    }
+    watchLog('watch-exit', 'deadline');
+  } finally {
+    try { fs.unlinkSync(path.join(dir, `${sid}.cpu`)); } catch (_) { /* usually already gone */ }
+  }
+}
+
+// Watchdog paint: the watchdog is detached (console-less — its own process.title is a no-op), so
+// the visible flip runs through paintViaConsole → title-painter.exe → AttachConsole(claude pid) +
+// SetConsoleTitleW → ConPTY → the VS Code tab. setTitle still records {sid}.glyph + the log line.
+// A cancel's leftover {sid}.ask is stale — clear it so it can't paint a false ◐ on the NEXT Stop.
+function rescueFromWatch(via, dir, sid, file, cwd, ppid) {
+  const askFlag = path.join(dir, `${sid}.ask`);
+  if (fileExists(askFlag)) { try { fs.unlinkSync(askFlag); } catch (_) { /* ignore */ } }
+  const title = normalize(readTitle(file) || folderName(cwd));
+  const paint = paintViaConsole(dir, ppid, `${GLYPH.idle} ${title}`);
+  if (logCtx) { logCtx.note = 'int-rescue'; logCtx.diag = `via=${via} ${paint}`; }
+  setTitle(GLYPH.idle, title);
+}
+
+// Find the session's claude.exe by console identity: painter --find attaches each claude.exe
+// candidate (from tasklist) and reports the ones whose console title CONTAINS our needle. The
+// needle is the NORMALIZED title — byte-identical to what setTitle paints (the raw title FILE is
+// lowercase/hyphen; the console shows the capitalized/em-dashed form), so it appears verbatim after
+// the glyph prefix. Match is case-insensitive as a further belt. First hit wins; ambiguity is
+// possible only when two tabs carry the identical title. Returns 0 while the painter is still
+// compiling or nothing matches — the caller retries each poll.
+function resolveSessionPid(dir, sid, file, cwd) {
+  try {
+    const exe = painterPath(dir);
+    if (!fileExists(exe)) return 0;
+    const cp = require('child_process');
+    const rows = cp.execSync('tasklist /FO CSV /NH /FI "IMAGENAME eq claude.exe"', { windowsHide: true }).toString();
+    const pids = rows.split('\n')
+      .map(l => (l.match(/^"[^"]+","(\d+)"/) || [])[1])
+      .filter(Boolean);
+    if (!pids.length) return 0;
+    const needleFile = path.join(dir, `${sid}.needle`);
+    const outFile = path.join(dir, `${sid}.found`);
+    fs.writeFileSync(needleFile, normalize(readTitle(file) || folderName(cwd)));
+    try { fs.unlinkSync(outFile); } catch (_) { /* ignore */ }
+    cp.spawnSync(exe, ['0', '--find', outFile, needleFile].concat(pids), { windowsHide: true, timeout: 8000 });
+    const found = readTitle(outFile).split(/\s+/).map(Number).filter(Boolean);
+    try { fs.unlinkSync(needleFile); } catch (_) { /* ignore */ }
+    try { fs.unlinkSync(outFile); } catch (_) { /* ignore */ }
+    return found[0] || 0;
+  } catch (_) {
+    return 0;
+  }
 }
 
 function readTitle(file) {

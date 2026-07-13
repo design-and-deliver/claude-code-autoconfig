@@ -63,6 +63,15 @@
             "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/arcade-beeps.js\""
           }
         ]
+      },
+      {
+        "matcher": "idle_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/terminal-title.js\" --idle-rescue"
+          }
+        ]
       }
     ],
     "PostToolUse": [
