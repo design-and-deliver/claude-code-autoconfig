@@ -90,7 +90,8 @@
  *   the one gate that saves one-shot money: the warn ships in the request that pays, the gate
  *   fires before it.  (skillBudgetWarnChars is read by the CCA auditor, not this hook)
  *   driftNudge true · driftPriorShareMin 0.6 · driftMinContextTokens 100000 — R6: the
- *   terminal-title trail as a RENT signal; nudges /eval-new-session, never runs it.
+ *   terminal-title trail as a RENT signal; fires only above /eval's STAY floor, so it hands the
+ *   user a paste-ready /migrate-new-session {slug(scope)} (never runs it); /eval is the escape hatch.
  * Per-session state in .claude/hooks/.token-guard/<sid>.json; usage log + meter cache beside it.
  *
  * Fail-safe like every hook in this family: any error -> exit 0, emit nothing, never break a turn.
@@ -326,6 +327,38 @@ function readScope(projectDir, sid) {
     const scope = raw.split('\n')[0].split(' — ')[0].trim();
     return scope && scope.length <= 80 ? scope : null;
   } catch (_) { return null; }
+}
+
+// Keyword form of a scope for the migrate command (and any handoff manifest): lowercase, every run
+// of non-alnum -> '-', trimmed, capped at 40. Deterministic + stable (same scope -> same slug) so the
+// once-per-scope nudge is idempotent and migrate can match the keyword back to a scopeLog entry.
+// Empty/degenerate scopes fall back to 'session' so the emitted command is always well-formed.
+function slug(scope) {
+  const s = String(scope || '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+    .replace(/-+$/g, '');
+  return s || 'session';
+}
+
+// The relay instruction the model turns into the standalone warm warning block. Pure + exported so a
+// fixture can assert the paste-ready command + escape hatch without an E2E. Follows the did/costs/out
+// shape (ux copy/warnings-name-the-trigger): moved scope + rent% + a SINGLE ready /migrate command,
+// with /eval as a one-clause escape hatch for the cross-scope-dependency case drift can't see.
+function driftNote(dominant, scope, priorPct) {
+  const kw = slug(scope);
+  return `scope-drift: this session's work has moved from "${dominant}" to "${scope}", and ` +
+    `the earlier scopes still make up ~${priorPct}% of the live context every turn ` +
+    `re-reads. Relay as a STANDALONE warning block, never woven into your answer: open ` +
+    `with "⚠️ Hey —" and keep a warm conversational voice (helpful friend, not system ` +
+    `log), 2-3 plain sentences: the session started on ${dominant}, has moved on to ` +
+    `${scope}, and every message still re-carries that earlier work (~${priorPct}% of ` +
+    `what each turn costs). Then give the ONE-step out as a paste-ready command: in a fresh ` +
+    `session, run \`/migrate-new-session ${kw}\` — it recovers this thread and picks up where ` +
+    `you left off (nothing to prep first). As a brief closing aside, note that if "${scope}" ` +
+    `actually builds on the earlier work, \`/eval-new-session\` instead will judge the cut ` +
+    `boundary. NEVER run either command yourself. Then a horizontal rule before the answer itself.`;
 }
 
 // Pure fire-rule (exported for fixtures, like meter). Token share per scope = watermark deltas
@@ -1055,9 +1088,13 @@ async function onUserPromptSubmit(data, projectDir) {
   }
 
   // R6 scope-drift nudge — when the dominant share of live context belongs to scopes the
-  // session has moved past, every turn pays rent on settled work. NUDGE /eval-new-session,
-  // never run it: drift can't see dependency between scopes (a build->article day reads as two
-  // scopes, but the article feeds on the build context). Once per scope (nudgedScope).
+  // session has moved past, every turn pays rent on settled work. The nudge fires ONLY above
+  // driftMinContextTokens (= /eval-new-session's own STAY floor), so at fire time the cut is a
+  // foregone conclusion by construction — hand the user a paste-ready /migrate-new-session
+  // {slug(scope)} as the ONE-step out (the keyword is the current scope; migrate self-packages
+  // from the scopeLog boundary, no prep). /eval stays the escape hatch for the dependency case
+  // drift can't see (a build->article day reads as two scopes, but the article feeds on the build
+  // context). Model relays the block; it NEVER runs either command. Once per scope (nudgedScope).
   if (cfg.driftNudge) {
     const scope = readScope(projectDir, sid);
     if (scope) {
@@ -1079,17 +1116,7 @@ async function onUserPromptSubmit(data, projectDir) {
         st.nudgedScope = scope;
         logLine(projectDir,
           `sid=${sid.slice(0, 8)} drift-nudge from="${v.dominant}" to="${scope}" prior=${v.priorPct}%`);
-        notes.push(
-          `scope-drift: this session's work has moved from "${v.dominant}" to "${scope}", and ` +
-          `the earlier scopes still make up ~${v.priorPct}% of the live context every turn ` +
-          `re-reads. Relay as a STANDALONE warning block, never woven into your answer: open ` +
-          `with "⚠️ Hey —" and keep a warm conversational voice (helpful friend, not system ` +
-          `log), 2-3 plain sentences: the session started on ${v.dominant}, has moved on to ` +
-          `${scope}, and every message still re-carries that earlier work (~${v.priorPct}% of ` +
-          `what each turn costs). If the earlier work is settled, suggest running ` +
-          `/eval-new-session — it judges whether a fresh session pays and preps the move — but ` +
-          `NEVER run it yourself. Then a horizontal rule before the answer itself.`
-        );
+        notes.push(driftNote(v.dominant, scope, v.priorPct));
       }
     }
   }
@@ -1760,4 +1787,4 @@ if (require.main === module) {
 
 module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, officialLines,
   analyzeSession, renderAnalysis, payloadVerdict, fanVerdict, workflowSource, skillSizes, recordObservedSkill,
-  generateBudgets };
+  generateBudgets, slug, driftNote };
