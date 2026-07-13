@@ -743,8 +743,10 @@ const feedbackSrc = path.join(packageDir, '.claude', 'feedback');
 const hooksSrc = path.join(packageDir, '.claude', 'hooks');
 const scriptsSrc = path.join(packageDir, '.claude', 'scripts');
 
-// Files that exist in the dev repo but should never be installed to user projects
-const DEV_ONLY_FILES = ['deploy-to-npmjs.md'];
+// Files that exist in the dev repo but should never be installed to user projects.
+// token-guard.js + its commands are staged in-repo (dogfooded via settings.local.json) but
+// gated OUT of user installs until R6/R8/R9/R10 are live-baked — see docs/cca-port-next-steps.md.
+const DEV_ONLY_FILES = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-session.md', 'eval-new-session.md', 'migrate-new-session.md', 'token-guard.js'];
 
 function copyDir(src, dest) {
   fs.mkdirSync(dest, { recursive: true });

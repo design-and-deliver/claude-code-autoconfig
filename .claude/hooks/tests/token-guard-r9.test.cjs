@@ -1,0 +1,135 @@
+// R9 mini-bomb accumulator — E2E against the live hook (PostToolUse has no pure half:
+// the rule is one comparison; the mechanics are all state). Run: node --test token-guard-r9.test.cjs
+const test = require('node:test');
+const assert = require('node:assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { spawnSync } = require('child_process');
+
+const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
+
+function mkProject(cfg) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tg9-'));
+  fs.mkdirSync(path.join(dir, '.claude'), { recursive: true });
+  if (cfg) fs.writeFileSync(path.join(dir, '.claude', 'cca.config.json'),
+    JSON.stringify({ tokenGuard: cfg }));
+  return dir;
+}
+
+function runHook(projectDir, data) {
+  const r = spawnSync('node', [HOOK], {
+    input: JSON.stringify(data), encoding: 'utf8',
+    env: Object.assign({}, process.env, { CLAUDE_PROJECT_DIR: projectDir }),
+    timeout: 20000,
+  });
+  return r.stdout || '';
+}
+
+function post(dir, sid, resp, transcript) {
+  return runHook(dir, { hook_event_name: 'PostToolUse', tool_name: 'Read',
+    tool_input: {}, tool_response: resp, session_id: sid,
+    transcript_path: transcript || path.join(dir, 'main.jsonl') });
+}
+
+function state(dir, sid) {
+  return JSON.parse(fs.readFileSync(
+    path.join(dir, '.claude', 'hooks', '.token-guard', `${sid}.json`), 'utf8'));
+}
+
+const BIG = 'x'.repeat(78000); // 30k tok at chars/2.6
+
+test('accumulates silently below threshold', () => {
+  const dir = mkProject();
+  assert.equal(post(dir, 's1', BIG), '');
+  const st = state(dir, 's1');
+  assert.equal(st.turnPayloadTok, 30000);
+  assert.equal(st.turnPayloadWarned, false);
+});
+
+test('crossing emits the mid-turn note once, then stays quiet', () => {
+  const dir = mkProject();
+  post(dir, 's2', BIG);
+  const out = post(dir, 's2', BIG); // 60k > 50k
+  const j = JSON.parse(out);
+  assert.match(j.hookSpecificOutput.additionalContext, /turn-payload/);
+  assert.match(j.hookSpecificOutput.additionalContext, /~60k tokens/);
+  assert.match(j.hookSpecificOutput.additionalContext, /disposable subagent/);
+  assert.equal(state(dir, 's2').turnPayloadWarned, true);
+  assert.equal(state(dir, 's2').miniBombGateArmed, false); // gate is opt-in
+  assert.equal(post(dir, 's2', BIG), ''); // once per turn
+});
+
+test('object tool_response counts via stringify', () => {
+  const dir = mkProject();
+  post(dir, 's3', { content: 'x'.repeat(78000) });
+  const out = post(dir, 's3', { content: 'x'.repeat(78000) });
+  assert.match(out, /turn-payload/);
+});
+
+test('UserPromptSubmit resets the accumulator', () => {
+  const dir = mkProject();
+  post(dir, 's4', BIG);
+  post(dir, 's4', BIG); // warned
+  const tp = path.join(dir, 'main.jsonl');
+  fs.writeFileSync(tp, JSON.stringify({ type: 'assistant',
+    message: { id: 'm1', model: 'claude-fable-5',
+      usage: { input_tokens: 1000, output_tokens: 10 } } }) + '\n');
+  runHook(dir, { hook_event_name: 'UserPromptSubmit', prompt: 'hi',
+    session_id: 's4', transcript_path: tp });
+  const st = state(dir, 's4');
+  assert.equal(st.turnPayloadTok, 0);
+  assert.equal(st.turnPayloadWarned, false);
+  const out = post(dir, 's4', BIG) + post(dir, 's4', BIG); // fresh turn re-accumulates
+  assert.match(out, /turn-payload/);
+});
+
+test('approvedPayloadHop suppresses the whole turn (one decision, one surface)', () => {
+  const dir = mkProject();
+  post(dir, 's5', 'seed'); // create state file
+  const stPath = path.join(dir, '.claude', 'hooks', '.token-guard', 's5.json');
+  const st = JSON.parse(fs.readFileSync(stPath, 'utf8'));
+  st.approvedPayloadHop = { est: 77000, ttl: 1 };
+  fs.writeFileSync(stPath, JSON.stringify(st));
+  assert.equal(post(dir, 's5', BIG), '');
+  assert.equal(post(dir, 's5', BIG), '');
+  assert.ok(state(dir, 's5').turnPayloadTok < 10); // only the seed landed, neither BIG counted
+});
+
+test('subagent tool calls are ignored (their context dies with the agent)', () => {
+  const dir = mkProject();
+  assert.equal(post(dir, 's6', BIG, path.join(dir, 'agent-abc123.jsonl')), '');
+  assert.throws(() => state(dir, 's6')); // no state was even created
+});
+
+test('mutating tools are skipped (their hook payload echoes what context never carries)', () => {
+  const dir = mkProject();
+  const out = runHook(dir, { hook_event_name: 'PostToolUse', tool_name: 'Edit',
+    tool_input: {}, tool_response: { originalFile: 'x'.repeat(400000) }, session_id: 's9',
+    transcript_path: path.join(dir, 'main.jsonl') });
+  assert.equal(out, '');
+  assert.throws(() => state(dir, 's9')); // not even counted
+});
+
+test('miniBombWarn:false + miniBombGate:false disables entirely', () => {
+  const dir = mkProject({ miniBombWarn: false, miniBombGate: false });
+  assert.equal(post(dir, 's7', BIG), '');
+  assert.equal(post(dir, 's7', BIG), '');
+  assert.throws(() => state(dir, 's7'));
+});
+
+test('miniBombGate:true arms a one-shot ask on the next tool call', () => {
+  const dir = mkProject({ miniBombGate: true });
+  post(dir, 's8', BIG);
+  const note = post(dir, 's8', BIG);
+  assert.match(note, /turn-payload/); // warn still ships
+  assert.equal(state(dir, 's8').miniBombGateArmed, true);
+  const out = runHook(dir, { hook_event_name: 'PreToolUse', tool_name: 'Grep',
+    tool_input: { pattern: 'x' }, session_id: 's8' });
+  const j = JSON.parse(out);
+  assert.equal(j.hookSpecificOutput.permissionDecision, 'ask');
+  assert.match(j.hookSpecificOutput.permissionDecisionReason, /~60k tokens/);
+  assert.equal(state(dir, 's8').miniBombGateArmed, false); // consumed
+  assert.equal(runHook(dir, { hook_event_name: 'PreToolUse', tool_name: 'Grep',
+    tool_input: { pattern: 'x' }, session_id: 's8' }), ''); // one-shot
+});

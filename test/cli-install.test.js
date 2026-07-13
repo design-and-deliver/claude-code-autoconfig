@@ -407,8 +407,14 @@ test('all shipped commands have info cards in docs', () => {
 });
 
 test('all shipped hooks appear in docs HTML file tree', () => {
+  const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
+  const devOnlyMatch = cliCode.match(/const DEV_ONLY_FILES = \[([^\]]+)\]/);
+  const devOnly = devOnlyMatch
+    ? devOnlyMatch[1].match(/'([^']+)'/g).map(s => s.replace(/'/g, ''))
+    : [];
+
   const hooksDir = path.join(PACKAGE_CLAUDE_DIR, 'hooks');
-  const hooks = fs.readdirSync(hooksDir).filter(f => f.endsWith('.js'));
+  const hooks = fs.readdirSync(hooksDir).filter(f => f.endsWith('.js') && !devOnly.includes(f));
 
   const docsHtml = fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'docs', 'autoconfig.docs.html'), 'utf8');
 

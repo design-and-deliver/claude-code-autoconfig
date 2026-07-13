@@ -38,6 +38,8 @@
     "!.claude/settings.local.json",
     "!.claude/hooks/.titles",
     "!.claude/hooks/.titles/**",
+    "!.claude/hooks/tests",
+    "!.claude/hooks/tests/**",
     "!.claude/cca.config.json",
     "!.claude/.autoconfig-version",
     "!.claude/.autoconfig-plugins.json",
