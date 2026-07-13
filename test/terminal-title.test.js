@@ -768,7 +768,10 @@ test('GUARDRAIL: user-level copy still paints after a cd INTO a copy-shipping re
   const owner = mkWorkspace();
   const cdTarget = copyShippingRepo();
   const sid = 'cd-into-repo';
-  writeTitle(owner, sid, 'Alpha — Beta');
+  // The user-level copy roots its title state in ~/.claude (fakeHome), not the owner project — it's a
+  // fallback for many projects and must not scatter .titles into them. Seed the title THERE so the
+  // PostToolUse refresh has something to repaint (a prior UPS would have created it in the same place).
+  writeTitle(fakeHome, sid, 'Alpha — Beta');
   const r = runHook(
     { hook_event_name: 'PostToolUse', session_id: sid, cwd: cdTarget },
     { CLAUDE_PROJECT_DIR: owner, USERPROFILE: fakeHome, HOME: fakeHome },
@@ -777,6 +780,28 @@ test('GUARDRAIL: user-level copy still paints after a cd INTO a copy-shipping re
   // Pre-fix keying (cwd) deferred here -> empty output and a permanently stale tab glyph.
   assert(r.raw !== '', 'the user-level copy must NOT stand down for a repo whose settings are not loaded');
   assert(leadsWithGlyph(r.codepoints, WORKING), `expected working glyph, got: ${r.shown}`);
+});
+test('ROOT SELECTION: user-level copy roots .titles in ~/.claude; project copy roots in the project', () => {
+  // Locks in the runtime tier-branch (isUserLevel ? os.homedir() : ownerDir) that replaced the old
+  // source fork. The user-level copy must keep its state under ~/.claude and never create .titles
+  // inside the project it's only a fallback for; the project copy must root in the project.
+  const { fakeHome, userCopy } = installFakeUserCopy();
+  const owner = mkWorkspace();
+  const upsFor = (hookPath) => runHook(
+    { hook_event_name: 'UserPromptSubmit', session_id: 'root-select', cwd: owner, prompt: 'hi' },
+    { CLAUDE_PROJECT_DIR: owner, USERPROFILE: fakeHome, HOME: fakeHome },
+    hookPath
+  );
+  // User-level copy → title dir under ~/.claude (fakeHome), NOT the owner project.
+  upsFor(userCopy);
+  assert(fs.existsSync(path.join(fakeHome, '.claude', 'hooks', '.titles')),
+    'user-level copy must create its .titles under ~/.claude');
+  assert(!fs.existsSync(path.join(owner, '.claude', 'hooks', '.titles')),
+    'user-level copy must NOT scatter .titles into the fallback project');
+  // Same code, project copy (repo HOOK) → title dir under the project root.
+  upsFor(HOOK);
+  assert(fs.existsSync(path.join(owner, '.claude', 'hooks', '.titles')),
+    'project copy must root .titles in the project');
 });
 test('user-level copy still defers when the OWNER project itself ships the managed copy', () => {
   const { fakeHome, userCopy } = installFakeUserCopy();

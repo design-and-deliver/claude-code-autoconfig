@@ -3,17 +3,18 @@
 /**
  * Live ↔ twin parity test — kills the silent-lag class.
  *
- * The live user-level hook (~/.claude/hooks/terminal-title.js) is edited first; the twin
- * (this repo's .claude/hooks/terminal-title.js) follows via the AUTOCONFIG-SYNC ledger.
- * That's a discipline, not a guarantee — and historically where divergence crept in.
+ * The live user-level hook (~/.claude/hooks/terminal-title.js) and the twin (this repo's
+ * .claude/hooks/terminal-title.js) are now the SAME file: the title-dir root is chosen at
+ * RUNTIME (project root vs ~/.claude) instead of forked in source, so the live copy is a
+ * byte-derived artifact of the twin. This test enforces that — it normalizes both (comments
+ * and blank lines stripped) and asserts the remaining code is IDENTICAL, zero divergence.
  *
- * This test normalizes both files (comments and blank lines stripped) and asserts the
- * remaining code is IDENTICAL except for the single whitelisted divergence: the .titles
- * state-dir line (live = os.homedir()-scoped; twin = ownerDir/project-scoped).
+ * (Historically ONE line was whitelisted: the .titles state-dir resolution, which used to
+ * differ live=os.homedir() vs twin=ownerDir. The runtime branch folded that difference into
+ * shared code, so the whitelist is now empty and ANY drift is a real failure.)
  *
  * Skips (passes) on machines without the live hook — it's a dev-box guard.
- * A failure means: run the "sync autoconfig" batch, or update the whitelist if a NEW
- * intentional divergence was introduced (document it in AUTOCONFIG-SYNC.md first).
+ * A failure means: re-sync the live copy from the twin (they must be identical).
  */
 
 const fs = require('fs');
@@ -46,11 +47,10 @@ function normalize(src) {
     .filter(l => l.length > 0);
 }
 
-// The ONLY allowed code divergence: the .titles dir resolution.
-const WHITELIST = [
-  /^const dir = path\.join\(os\.homedir\(\), '\.claude', 'hooks', '\.titles'\);$/, // live
-  /^const dir = path\.join\(ownerDir, '\.claude', 'hooks', '\.titles'\);$/,        // twin
-];
+// No allowed divergence: the live copy is a byte-derived artifact of the twin. The old
+// .titles-dir fork is now a runtime branch (isUserLevel ? os.homedir() : ownerDir) that lives
+// identically in both files, so nothing is whitelisted anymore.
+const WHITELIST = [];
 
 const live = normalize(fs.readFileSync(LIVE, 'utf8'));
 const twin = normalize(fs.readFileSync(TWIN, 'utf8'));
@@ -60,7 +60,7 @@ const twinOnly = twin.filter(l => !live.includes(l));
 const offenders = [...liveOnly, ...twinOnly].filter(l => !WHITELIST.some(re => re.test(l)));
 
 if (offenders.length === 0) {
-  console.log(`✓ live and twin are at parity (${live.length}/${twin.length} normalized lines; 1 whitelisted divergence)`);
+  console.log(`✓ live and twin are at full parity (${live.length}/${twin.length} normalized lines; 0 divergences)`);
   console.log();
   console.log('ALL TESTS PASSED (1 tests)');
 } else {

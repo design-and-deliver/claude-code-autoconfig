@@ -29,8 +29,10 @@
  * mechanism that flips the tab on UserPromptSubmit, where Claude Code drops `terminalSequence`) AND
  * `terminalSequence` (honored on the other events). node writes UTF-8 natively, so glyphs go out as-is.
  *
- * Title files are PROJECT-SCOPED at <cwd>/.claude/hooks/.titles/<session_id>.txt — the model authors
- * them; the directive injected each prompt tells it the path + format. Optional forensic log (one line
+ * Title files live at <root>/.claude/hooks/.titles/<session_id>.txt, where <root> is chosen at RUNTIME:
+ * the project root for a project copy, or ~/.claude for the user-level copy (so this ONE file serves
+ * both tiers with no source fork). The model authors the file; the directive injected each prompt tells
+ * it the path + format. Optional forensic log (one line
  * per paint, for tracing an out-of-sync tab) is gated behind CLAUDE_TITLE_DEBUG=1 — default OFF,
  * ~512KB-capped, written to .titles/_debug.log — so it never ships a growing log.
  *
@@ -95,14 +97,18 @@ async function handle(data) {
   // cwd: a mid-session `cd` into a copy-shipping repo (e.g. the CCA source repo) must not silence
   // this copy — that repo's settings aren't loaded, so its copy never runs and nobody would paint.
   const ownerDir = process.env.CLAUDE_PROJECT_DIR || cwd;
-  if (shouldDefer(ownerDir, __dirname, __filename, path.join(os.homedir(), '.claude', 'hooks'))) {
+  const homeHooksDir = path.join(os.homedir(), '.claude', 'hooks');
+  if (shouldDefer(ownerDir, __dirname, __filename, homeHooksDir)) {
     process.exit(0);
   }
-  // PROJECT-SCOPED title dir — anchored to the session's project root (CLAUDE_PROJECT_DIR, with cwd
-  // fallback on older Claude Code versions that don't set it) so a mid-session `cd` can't scatter
-  // title state across directories. (The live ~/.claude variant uses os.homedir() instead; that is
-  // the only difference between the two.)
-  const dir = path.join(ownerDir, '.claude', 'hooks', '.titles');
+  // Title-dir root — ONE file, both tiers, chosen at RUNTIME (no source fork between the shipped twin
+  // and the live user-level hook). The user-level copy (this file living in ~/.claude/hooks) keeps its
+  // title state in ~/.claude so it never scatters .titles dirs into the many projects it's only a
+  // FALLBACK for; the project copy anchors to the session's project root (CLAUDE_PROJECT_DIR, cwd
+  // fallback on older Claude Code) so a mid-session `cd` can't scatter state. The tier signal is the
+  // SAME "am I the user-level copy?" test shouldDefer uses (canonPath so an aliased HOME still matches).
+  const isUserLevel = canonPath(__dirname) === canonPath(homeHooksDir);
+  const dir = path.join(isUserLevel ? os.homedir() : ownerDir, '.claude', 'hooks', '.titles');
   const file = path.join(dir, `${sid}.txt`);
   logCtx = { event, sid, dir, note: '' };
 
