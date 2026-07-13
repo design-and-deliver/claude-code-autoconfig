@@ -92,6 +92,11 @@
  *   driftNudge true · driftPriorShareMin 0.6 · driftMinContextTokens 100000 — R6: the
  *   terminal-title trail as a RENT signal; fires only above /eval's STAY floor, so it hands the
  *   user a paste-ready /migrate-new-session {slug(scope)} (never runs it); /eval is the escape hatch.
+ *   driftAutoMigrate false · driftMigrateMarkerTTLmin 120 · driftMigrateMaxInjectTokens 40000 — R11:
+ *   arm-offer + SessionStart(source clear/startup) auto-migrate. A consent marker (hook-staged
+ *   candidate + model-written .armed flag) lets a single /clear rehydrate the drifted thread — the hook
+ *   recovers the pinned tail and injects it as additionalContext. Gated off; SessionStart-wired in the
+ *   dogfood workspace only.
  * Per-session state in .claude/hooks/.token-guard/<sid>.json; usage log + meter cache beside it.
  *
  * Fail-safe like every hook in this family: any error -> exit 0, emit nothing, never break a turn.
@@ -138,6 +143,9 @@ const DEFAULTS = {
   driftNudge: true,
   driftPriorShareMin: 0.6,
   driftMinContextTokens: 100000,
+  driftAutoMigrate: false,
+  driftMigrateMarkerTTLmin: 120,
+  driftMigrateMaxInjectTokens: 40000,
   planDetect: true,
   showDollars: 'auto',
   officialUsageFetch: true,
@@ -344,17 +352,31 @@ function slug(scope) {
 
 // The relay instruction the model turns into the standalone warm warning block. Pure + exported so a
 // fixture can assert the paste-ready command + escape hatch without an E2E. Follows the did/costs/out
-// shape (ux copy/warnings-name-the-trigger): moved scope + rent% + a SINGLE ready /migrate command,
-// with /eval as a one-clause escape hatch for the cross-scope-dependency case drift can't see.
-function driftNote(dominant, scope, priorPct) {
+// shape (ux copy/warnings-name-the-trigger): moved scope + rent% + a SINGLE ready out, with /eval as a
+// one-clause escape hatch for the cross-scope-dependency case drift can't see. R11: when autoMigrate is
+// on, the out becomes "arm it → one /clear" (the model writes the .armed consent flag); paste-/migrate
+// stays the manual fallback. The lead is identical in both modes.
+function driftNote(dominant, scope, priorPct, autoMigrate) {
   const kw = slug(scope);
-  return `scope-drift: this session's work has moved from "${dominant}" to "${scope}", and ` +
+  const lead = `scope-drift: this session's work has moved from "${dominant}" to "${scope}", and ` +
     `the earlier scopes still make up ~${priorPct}% of the live context every turn ` +
     `re-reads. Relay as a STANDALONE warning block, never woven into your answer: open ` +
     `with "⚠️ Hey —" and keep a warm conversational voice (helpful friend, not system ` +
     `log), 2-3 plain sentences: the session started on ${dominant}, has moved on to ` +
     `${scope}, and every message still re-carries that earlier work (~${priorPct}% of ` +
-    `what each turn costs). Then give the ONE-step out as a paste-ready command: in a fresh ` +
+    `what each turn costs). `;
+  if (autoMigrate) {
+    return lead +
+      `Then give the out as ONE armed keystroke: tell the user that if they reply "arm it", a single ` +
+      `\`/clear\` will recover this thread by itself — nothing to paste. If (and only if) they reply to ` +
+      `arm it, write the contentless flag file \`.claude/hooks/.token-guard/pending-migrate.armed\` (the ` +
+      `pointer is already staged) and tell them to hit \`/clear\`; if they'd rather do it by hand, ` +
+      `\`/migrate-new-session ${kw}\` in a fresh session is the manual out. As a brief closing aside, if ` +
+      `"${scope}" actually builds on the earlier work, \`/eval-new-session\` will judge the cut boundary ` +
+      `instead. NEVER run \`/clear\` or either command yourself. Then a horizontal rule before the answer itself.`;
+  }
+  return lead +
+    `Then give the ONE-step out as a paste-ready command: in a fresh ` +
     `session, run \`/migrate-new-session ${kw}\` — it recovers this thread and picks up where ` +
     `you left off (nothing to prep first). As a brief closing aside, note that if "${scope}" ` +
     `actually builds on the earlier work, \`/eval-new-session\` instead will judge the cut ` +
@@ -717,6 +739,54 @@ function saveState(projectDir, sid, st) {
     fs.mkdirSync(stateDir(projectDir), { recursive: true });
     fs.writeFileSync(path.join(stateDir(projectDir), `${sid}.json`), JSON.stringify(st));
   } catch (_) { /* state loss just re-warns — harmless */ }
+}
+
+// R11 auto-migrate consent marker (two files under stateDir): the CANDIDATE carries the deterministic
+// {keyword, sid, boundaryIso} the hook already knows at nudge time; the ARMED flag is contentless proof
+// the model wrote only after the user opted in. Both required to consume — the candidate alone is inert.
+const MIGRATE_CANDIDATE = 'pending-migrate.json';
+const MIGRATE_ARMED = 'pending-migrate.armed';
+
+// Stage the candidate when the drift nudge fires (best-effort; the paste-command out still works if it
+// fails). A candidate for a DIFFERENT scope invalidates any prior consent — re-arm must be explicit for
+// the thread you'd actually migrate now.
+function writeMigrateCandidate(projectDir, sid, scope, boundaryIso) {
+  const dir = stateDir(projectDir);
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const kw = slug(scope);
+    try {
+      const prev = JSON.parse(fs.readFileSync(path.join(dir, MIGRATE_CANDIDATE), 'utf8'));
+      if (prev.keyword !== kw) fs.unlinkSync(path.join(dir, MIGRATE_ARMED));
+    } catch (_) { /* no prior candidate/flag to invalidate */ }
+    const now = new Date().toISOString();
+    fs.writeFileSync(path.join(dir, MIGRATE_CANDIDATE), JSON.stringify({
+      keyword: kw, sid, boundaryIso: boundaryIso || now, scope, writtenIso: now,
+    }));
+  } catch (_) { /* staging is best-effort */ }
+}
+
+// Return the candidate iff consent (armed flag) exists, the SessionStart lands in a FRESH context
+// (clear/startup — never resume/compact, which retain context and would double-inject), and the arm is
+// within TTL (a forgotten arm can't hijack a much-later unrelated clear). Otherwise null. Pure-ish (reads).
+function resolveMarker(projectDir, source, cfg) {
+  if (source && source !== 'clear' && source !== 'startup') return null;
+  const dir = stateDir(projectDir);
+  let cand;
+  try { cand = JSON.parse(fs.readFileSync(path.join(dir, MIGRATE_CANDIDATE), 'utf8')); } catch (_) { return null; }
+  if (!fs.existsSync(path.join(dir, MIGRATE_ARMED))) return null; // no opt-in
+  if (!cand || !cand.sid || !cand.boundaryIso) return null;
+  const ttlMin = cfg.driftMigrateMarkerTTLmin || 120;
+  const ageMin = (Date.now() - (Date.parse(cand.writtenIso) || 0)) / 60000;
+  if (ageMin > ttlMin) return null; // stale arm — leave for reaping
+  return cand;
+}
+
+function clearMarker(projectDir) {
+  const dir = stateDir(projectDir);
+  for (const f of [MIGRATE_CANDIDATE, MIGRATE_ARMED]) {
+    try { fs.unlinkSync(path.join(dir, f)); } catch (_) { /* already gone */ }
+  }
 }
 
 // R2 history lives at project level, not session level — "what did the LAST fleet here cost"
@@ -1116,7 +1186,14 @@ async function onUserPromptSubmit(data, projectDir) {
         st.nudgedScope = scope;
         logLine(projectDir,
           `sid=${sid.slice(0, 8)} drift-nudge from="${v.dominant}" to="${scope}" prior=${v.priorPct}%`);
-        notes.push(driftNote(v.dominant, scope, v.priorPct));
+        notes.push(driftNote(v.dominant, scope, v.priorPct, cfg.driftAutoMigrate));
+        // R11: stage the consent candidate so a later "arm it" + /clear can self-migrate. The current
+        // scope entry's enteredIso is the exact recovery boundary; the marker PINS (sid, boundary) so
+        // the SessionStart consumer never has to re-resolve. No commitment until the model writes .armed.
+        if (cfg.driftAutoMigrate) {
+          const cur = st.scopeLog[st.scopeLog.length - 1];
+          writeMigrateCandidate(projectDir, sid, scope, cur && cur.enteredIso);
+        }
       }
     }
   }
@@ -1196,6 +1273,43 @@ async function onUserPromptSubmit(data, projectDir) {
       },
     }));
   }
+}
+
+// R11 consumer — on a /clear (or fresh tab) that carries an ARMED consent marker, do the migration in
+// the hook itself: recover the pinned tail and inject it + a synthesize-handoff directive as
+// additionalContext, then consume the one-shot marker. Never throws; any miss emits nothing so a fresh
+// session stays clean. The marker pins (sid, boundaryIso), so this is robust to /clear rotating the id.
+function onSessionStart(data, projectDir) {
+  const cfg = loadConfig(projectDir);
+  if (!cfg.driftAutoMigrate) return;
+  const cand = resolveMarker(projectDir, data.source || '', cfg);
+  if (!cand) return;
+  const r = resolveTranscript(cand.sid);
+  if (!r || !r.fp) { clearMarker(projectDir); return; } // old transcript gone -> nothing to recover
+  const tail = recoverTail(r.fp, cand.boundaryIso, cfg.driftMigrateMaxInjectTokens);
+  clearMarker(projectDir); // one-shot: consume regardless so a re-clear can't double-inject
+  if (!tail.messages) return;
+  const kw = cand.keyword || slug(cand.scope || '');
+  const sid8 = String(cand.sid).slice(0, 8);
+  logLine(projectDir,
+    `sid=${sid8} auto-migrate kw="${kw}" msgs=${tail.messages} tok=${fmtK(tail.tokens)}` +
+    `${tail.truncated ? ' (trunc)' : ''}`);
+  const directive =
+    `<token-guard-automigrate>\n` +
+    `You just ran /clear to migrate the "${cand.scope}" thread into this fresh context ` +
+    `(keyword "${kw}", from session ${sid8}${tail.truncated ? '; tail truncated to the most-recent slice' : ''}). ` +
+    `The recovered conversation tail is below — TREAT IT AS YOUR OWN MEMORY of what you were doing, not ` +
+    `as a document to summarize. From it, silently reconstruct: the active task + current state, ` +
+    `decisions not yet written to repo docs, files touched (cross-check \`git status --short\` — ` +
+    `deterministic), any temp-state gotchas, and the next actions. Then open your reply with ONE ` +
+    `confirmation line and nothing above it:\n` +
+    `"Migrated \`${kw}\` — ~${fmtK(tail.tokens)} recovered from session \`${sid8}\` (auto-migrated on ` +
+    `/clear). Next up: {top next-action}." Then WAIT for the user to direct you — do not start work unprompted.\n` +
+    `--- RECOVERED TAIL (${tail.messages} messages, oldest first) ---\n${tail.text}\n` +
+    `</token-guard-automigrate>`;
+  process.stdout.write(JSON.stringify({
+    hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: directive },
+  }));
 }
 
 function onStop(data, projectDir) {
@@ -1667,6 +1781,58 @@ function resolveTranscript(arg) {
   return { fp: hits[0].fp };
 }
 
+// R11: JS port of recover-context's extraction (Steps 3-4). One transcript JSONL -> the user/assistant
+// text at/after cutoffIso, as a compact labeled transcript. tool_result user rows are echoes, not
+// conversation, and are skipped. Over maxTokens (chars/4 proxy) it keeps the MOST-RECENT messages (the
+// boundary of the thread that matters) and flags truncated. Exported for fixtures + the migrate command.
+function recoverTail(transcriptPath, cutoffIso, maxTokens) {
+  const empty = { messages: 0, tokens: 0, truncated: false, text: '' };
+  const cutoff = Date.parse(cutoffIso) || 0;
+  let raw;
+  try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch (_) { return empty; }
+  const rows = [];
+  for (const line of raw.split('\n')) {
+    const s = line.trim();
+    if (!s) continue;
+    let o; try { o = JSON.parse(s); } catch (_) { continue; }
+    const t = o.type;
+    if (t !== 'user' && t !== 'assistant') continue;
+    const ts = o.timestamp;
+    if (!ts || (Date.parse(ts) || 0) < cutoff) continue;
+    const c = (o.message || {}).content;
+    let text = '';
+    if (t === 'user') {
+      if (typeof c === 'string') text = c;
+      else if (Array.isArray(c)) {
+        if (c.some(x => x && x.type === 'tool_result')) continue;
+        text = c.filter(x => x && x.type === 'text').map(x => x.text || '').join(' ');
+      }
+    } else if (Array.isArray(c)) {
+      text = c.filter(x => x && x.type === 'text').map(x => x.text || '').join('\n');
+    }
+    text = String(text || '').trim();
+    if (text) rows.push({ t, ts, text });
+  }
+  rows.sort((a, b) => (Date.parse(a.ts) || 0) - (Date.parse(b.ts) || 0));
+  const fmt = r => `### ${r.t.toUpperCase()} @ ${r.ts}\n${r.text}`;
+  const cap = maxTokens || 40000;
+  let kept = rows;
+  let truncated = false;
+  if (Math.ceil(rows.reduce((n, r) => n + fmt(r).length + 2, 0) / 4) > cap) {
+    truncated = true;
+    kept = [];
+    let acc = 0;
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const cost = Math.ceil((fmt(rows[i]).length + 2) / 4);
+      if (acc + cost > cap && kept.length) break;
+      kept.unshift(rows[i]);
+      acc += cost;
+    }
+  }
+  const text = kept.map(fmt).join('\n\n');
+  return { messages: kept.length, tokens: Math.ceil(text.length / 4), truncated, text };
+}
+
 // ---------------------------------------------------------------------------
 // --report: current session breakdown (main/agents split) + 5-hour cross-project rollup
 async function report(transcriptPath) {
@@ -1779,6 +1945,7 @@ if (require.main === module) {
         else if (ev === 'Stop') onStop(data, projectDir);
         else if (ev === 'PreToolUse') onPreToolUse(data, projectDir);
         else if (ev === 'PostToolUse') onPostToolUse(data, projectDir);
+        else if (ev === 'SessionStart') onSessionStart(data, projectDir);
       } catch (_) { /* fail-safe: emit nothing */ }
       process.exit(0);
     });
@@ -1787,4 +1954,4 @@ if (require.main === module) {
 
 module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, officialLines,
   analyzeSession, renderAnalysis, payloadVerdict, fanVerdict, workflowSource, skillSizes, recordObservedSkill,
-  generateBudgets, slug, driftNote };
+  generateBudgets, slug, driftNote, recoverTail, resolveMarker, writeMigrateCandidate, clearMarker };
