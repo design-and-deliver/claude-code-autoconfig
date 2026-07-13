@@ -21,6 +21,12 @@ tmpclaude-*
 # Terminal-title per-session state (runtime scratch, never distributed)
 .claude/hooks/.titles/
 
+# token-guard runtime cache (official-usage fetch, per-session accumulators — runtime scratch)
+.claude/hooks/.token-guard/
+
+# Session handoff notes (eval-new-session / migrate-new-session — local, never distributed)
+.claude/handoff/
+
 # Test temp directories
 test/.test-temp-*
 
