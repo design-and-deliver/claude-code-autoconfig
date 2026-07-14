@@ -7,7 +7,8 @@ const os = require('os');
 const path = require('path');
 
 const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
-const { driftNote, recoverTail, resolveMarker, writeMigrateCandidate, clearMarker } = require(HOOK);
+const { driftNote, recoverTail, resolveMarker, writeMigrateCandidate, clearMarker,
+  migrateReceipt } = require(HOOK);
 
 function tmpProject() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tg-r11-'));
@@ -19,14 +20,29 @@ const CFG = { driftMigrateMarkerTTLmin: 120, driftMigrateMaxInjectTokens: 40000 
 
 // ---------- driftNote(): the arm-offer branch, and the false-branch unchanged ----------
 
-test('driftNote autoMigrate=true offers the arm-it → /clear one-keystroke out', () => {
-  const note = driftNote('title hooks', 'CCA distribution', 90, true);
-  assert.match(note, /arm it/i);                         // the opt-in verb
-  assert.match(note, /pending-migrate\.armed/);          // the consent flag the model writes
-  assert.match(note, /\/clear/);                         // the single keystroke
-  assert.match(note, /\/migrate-new-session cca-distribution\b/); // manual fallback kept
-  assert.match(note, /NEVER run `\/clear` or either command yourself/); // extended never-run
-  assert.match(note, /STANDALONE/);                      // relay contract preserved
+test('driftNote autoMigrate=true renders the locked self-contained Token-bloat card', () => {
+  const note = driftNote('title hooks', 'CCA distribution', 90, true, 117000);
+  assert.match(note, /AskUserQuestion/);                 // clickable buttons instead of "type arm it"
+  assert.match(note, /pending-migrate\.armed/);          // the consent flag the primary pick writes
+  assert.match(note, /~117k of context/);                // total live context, verbatim copy
+  assert.match(note, /only needs ~12k/);                 // keep = 117k - round(117k*0.90) = 12k
+  assert.match(note, /reduce token cost/);               // "reduce", not "eliminate"
+  assert.match(note, /truncating the old ~105k/);        // truncate = round(117k*0.90) = 105k
+  assert.match(note, /Continue\?/);                      // the copy's closing question
+  assert.match(note, /Token bloat/);                     // header chip (was "Migrate?")
+  assert.match(note, /self-contained/);                  // warning lives IN the card, not as prose above
+  assert.match(note, /Yes — Please clean it up/);        // primary button label (verbatim)
+  assert.match(note, /"Cancel"/);                        // second button
+  assert.match(note, /TWO options/);                     // exactly two, not three
+  assert.match(note, /descriptions short and user-facing/); // options carry plain outcome copy, not narration
+  assert.match(note, /noise to the user/);               // and the mechanism jargon is explicitly banned
+  assert.match(note, /Now \/clear your session — your "CCA distribution" context will be restored/); // post-click line names the pinned scope
+  assert.doesNotMatch(note, /most recent context/i);     // the vague phrase (read as the whole session) is gone
+  assert.match(note, /NEVER run/);                       // never-run guard preserved
+  assert.doesNotMatch(note, /heads up/i);                // dropped — read as redundant
+  assert.doesNotMatch(note, /migrate-new-session/);      // manual-paste path dropped from the auto nudge
+  assert.doesNotMatch(note, /three options/i);           // no longer three
+  assert.doesNotMatch(note, /arm it/i);                  // the odd magic word is gone
 });
 
 test('driftNote autoMigrate=false is exactly the R6 paste-command copy (no drift)', () => {
@@ -166,4 +182,14 @@ test('clearMarker removes both files (one-shot consume)', () => {
   assert.ok(!fs.existsSync(path.join(markerDir(proj), 'pending-migrate.json')));
   assert.ok(!fs.existsSync(path.join(markerDir(proj), 'pending-migrate.armed')));
   clearMarker(proj); // idempotent, no throw
+});
+
+// ---------- migrateReceipt(): the deterministic visible (systemMessage) line ----------
+
+test('migrateReceipt names the pinned scope, no numbers', () => {
+  const r = migrateReceipt('migrate UX polish');
+  assert.equal(r, 'Your "migrate UX polish" context from last session has been preserved.');
+  assert.doesNotMatch(r, /\d/);                 // no token numbers — measured before→after was dropped
+  assert.doesNotMatch(r, /migrated|cleared/i);  // the before→after verbs are gone too
+  assert.doesNotMatch(r, /most recent context/i); // the vague phrase that read as the whole session is gone
 });

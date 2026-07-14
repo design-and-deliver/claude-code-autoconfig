@@ -102,6 +102,27 @@ test('subagent tool calls are ignored (their context dies with the agent)', () =
   assert.throws(() => state(dir, 's6')); // no state was even created
 });
 
+test('parent-side subagent calls are skipped (tool_response embeds disposable agent internals)', () => {
+  const dir = mkProject();
+  // A subagent's tool_response carries its FULL internal payload; only a compact summary lands
+  // in the parent transcript. R9 must not size the raw payload (measured 2026-07-14: ~50k counted
+  // vs ~3.5k actually carried). Both the "Agent" (this harness) and "Task" (stock) names skip.
+  for (const [sid, name] of [['s10', 'Agent'], ['s11', 'Task']]) {
+    const out = runHook(dir, { hook_event_name: 'PostToolUse', tool_name: name,
+      tool_input: {}, tool_response: { content: 'x'.repeat(400000) }, session_id: sid,
+      transcript_path: path.join(dir, 'main.jsonl') });
+    assert.equal(out, '');
+    assert.throws(() => state(dir, sid)); // not even counted
+  }
+  // Guard the anchor: the TaskCreate/TaskUpdate todo tools must NOT be swept in by SUBAGENT_TOOLS
+  // (they're skipped as mutating instead — the point is they never reach the accumulator).
+  const tc = runHook(dir, { hook_event_name: 'PostToolUse', tool_name: 'TaskCreate',
+    tool_input: {}, tool_response: { content: 'x'.repeat(400000) }, session_id: 's12',
+    transcript_path: path.join(dir, 'main.jsonl') });
+  assert.equal(tc, '');
+  assert.throws(() => state(dir, 's12'));
+});
+
 test('mutating tools are skipped (their hook payload echoes what context never carries)', () => {
   const dir = mkProject();
   const out = runHook(dir, { hook_event_name: 'PostToolUse', tool_name: 'Edit',

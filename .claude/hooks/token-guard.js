@@ -121,6 +121,7 @@ const WEB_SEARCH_USD_EACH = 0.01;
 const USD_PER_AGENT_RULE_OF_THUMB = 0.5; // forensic fleet: 1.05M writes / 45 agents ≈ 23k × $20/MTok
 
 const DEFAULTS = {
+  mode: 'standard',                 // Cost Control modes: interruption profile — token-saver | standard | flow
   contextWarnTokens: 150000,
   sessionWarnUSD: [5, 15, 30],
   windowBudgetUSD: null,
@@ -151,6 +152,53 @@ const DEFAULTS = {
   officialUsageFetch: true,
   analyzeHint: true,
 };
+
+// ---------------------------------------------------------------------------
+// Interruption modes (R-modes) — a static profile layer over the R-rule knobs.
+// One dial trading token-thrift <-> flow. A mode is a preset applied BETWEEN
+// DEFAULTS and the user's explicit config, so an explicitly-set key always wins
+// over its mode's value (the mode sets defaults; the user can still pin one knob).
+// INVARIANT: no profile touches fanHardCap (R10) or lowers a DENY floor — modes
+// quiet nags, never remove the seatbelt. MVP is static: 'standard' is the default
+// and its profile is intentionally empty, so an empty config == today's shipped
+// posture. (A future smart 'adaptive' mode — breakpoint deferral, budget-scaled
+// thresholds — is deferred until the levers exist; see the spec.)
+const MODE_PROFILES = {
+  'token-saver': {
+    // Maximum protection, maximum interruption: the shared bomb threshold gets
+    // more sensitive, wide-fan asks fire sooner, idle warns sooner, and the
+    // opt-in BLOCKS flip on. driftMinContextTokens is left at its principled
+    // 100k floor (below it /eval's CUT verdict isn't pre-determined — R6).
+    bombJumpTokens: 30000,
+    fanWarnAgents: 5,
+    idleWarnMinutes: 30,
+    bombGateWhenFat: true,
+    idleGate: true,
+    commandPayloadGate: true,
+    miniBombGate: true,
+  },
+  'standard': {}, // default — no static overrides; == the shipped defaults
+  'flow': {
+    // Wasteful on tokens by design, in exchange for never breaking flow. Raising
+    // the shared bombJumpTokens simultaneously quiets R3 warn / R8 gate / R9
+    // accumulator; the soft nudges (drift, mini-bomb) go silent. KEPT on purpose:
+    // the R4 idle re-write warn (a zero-downside free win) and fanHardCap (the
+    // catastrophe seatbelt) — both ride their unchanged defaults.
+    bombJumpTokens: 120000,
+    fanWarnAgents: 25,
+    driftNudge: false,
+    miniBombWarn: false,
+  },
+};
+
+// Layer DEFAULTS < mode profile < explicit user config. Pure + exported for
+// fixtures (like meter/driftVerdict). Unknown mode -> no profile (DEFAULTS+user).
+function resolveConfig(user) {
+  const u = user || {};
+  const mode = u.mode || DEFAULTS.mode;
+  const profile = MODE_PROFILES[mode] || {};
+  return Object.assign({}, DEFAULTS, profile, u);
+}
 
 function priceFor(model) {
   for (const p of PRICES) if (p.re.test(model || '')) return p;
@@ -351,13 +399,38 @@ function slug(scope) {
 }
 
 // The relay instruction the model turns into the standalone warm warning block. Pure + exported so a
-// fixture can assert the paste-ready command + escape hatch without an E2E. Follows the did/costs/out
-// shape (ux copy/warnings-name-the-trigger): moved scope + rent% + a SINGLE ready out, with /eval as a
-// one-clause escape hatch for the cross-scope-dependency case drift can't see. R11: when autoMigrate is
-// on, the out becomes "arm it → one /clear" (the model writes the .armed consent flag); paste-/migrate
-// stays the manual fallback. The lead is identical in both modes.
-function driftNote(dominant, scope, priorPct, autoMigrate) {
+// fixture can assert the out without an E2E. Follows the did/costs/out shape (ux copy/warnings-name-the-
+// trigger): moved scope + rent% + a SINGLE ready out, with /eval as a one-clause escape hatch for the
+// cross-scope-dependency case drift can't see. R11: when autoMigrate is on, the out is rendered as
+// clickable AskUserQuestion buttons ("Set it up → just /clear" writes the .armed consent flag; "I'll
+// paste it myself" = the /migrate fallback) — no typed magic word. The lead is identical in both modes.
+function driftNote(dominant, scope, priorPct, autoMigrate, liveContext) {
   const kw = slug(scope);
+  if (autoMigrate) {
+    // Fully self-contained card: the verbatim warning line IS the AskUserQuestion question (not prose
+    // above it), header chip "Token bloat". Fixed 3-part number line (total / keep / truncate): keep =
+    // the current scope's live share, truncate = the prior scopes we drop, both derived from priorPct.
+    const truncate = Math.round((liveContext || 0) * priorPct / 100);
+    const keep = Math.max(0, (liveContext || 0) - truncate);
+    return `scope-drift(auto-migrate): this session moved from "${dominant}" to "${scope}", and the ` +
+      `earlier scopes are ~${priorPct}% of the live context every turn re-reads. Present it as a SINGLE ` +
+      `self-contained AskUserQuestion card — do NOT render any warning prose above it. The card's ` +
+      `\`question\` field is this line VERBATIM (the agreed copy):\n` +
+      `"⚠️ Hey — this session has ~${fmtK(liveContext)} of context, but the current topic only needs ` +
+      `~${fmtK(keep)} of that. We can reduce token cost by truncating the old ~${fmtK(truncate)}. ` +
+      `Continue?"\n` +
+      `Header chip: "Token bloat". TWO options, primary first. Option 1 — label "Yes — Please clean it ` +
+      `up. I don't want to waste tokens.", description "Keeps this topic and trims the older ones, so the ` +
+      `thread runs leaner — you pick up right where you are." Option 2 — label "Cancel", description ` +
+      `"Leave everything as-is." Keep BOTH option descriptions short and user-facing — state the outcome ` +
+      `in plain words; NEVER narrate the internal mechanism (no armed flag, staged candidate, /clear ` +
+      `"keystroke" handoff, or "scope-named receipt" — that wiring is pure noise to the user). On the ` +
+      `Option 1 pick, write the contentless flag file ` +
+      `\`.claude/hooks/.token-guard/pending-migrate.armed\` (the pointer is already staged), then print ` +
+      `EXACTLY this one line and nothing else: "Now /clear your session — your \"${scope}\" context ` +
+      `will be restored." On Cancel, dismiss — nothing changes. NEVER run \`/clear\` yourself, and ` +
+      `write the flag ONLY after the user picks option 1.`;
+  }
   const lead = `scope-drift: this session's work has moved from "${dominant}" to "${scope}", and ` +
     `the earlier scopes still make up ~${priorPct}% of the live context every turn ` +
     `re-reads. Relay as a STANDALONE warning block, never woven into your answer: open ` +
@@ -365,16 +438,6 @@ function driftNote(dominant, scope, priorPct, autoMigrate) {
     `log), 2-3 plain sentences: the session started on ${dominant}, has moved on to ` +
     `${scope}, and every message still re-carries that earlier work (~${priorPct}% of ` +
     `what each turn costs). `;
-  if (autoMigrate) {
-    return lead +
-      `Then give the out as ONE armed keystroke: tell the user that if they reply "arm it", a single ` +
-      `\`/clear\` will recover this thread by itself — nothing to paste. If (and only if) they reply to ` +
-      `arm it, write the contentless flag file \`.claude/hooks/.token-guard/pending-migrate.armed\` (the ` +
-      `pointer is already staged) and tell them to hit \`/clear\`; if they'd rather do it by hand, ` +
-      `\`/migrate-new-session ${kw}\` in a fresh session is the manual out. As a brief closing aside, if ` +
-      `"${scope}" actually builds on the earlier work, \`/eval-new-session\` will judge the cut boundary ` +
-      `instead. NEVER run \`/clear\` or either command yourself. Then a horizontal rule before the answer itself.`;
-  }
   return lead +
     `Then give the ONE-step out as a paste-ready command: in a fresh ` +
     `session, run \`/migrate-new-session ${kw}\` — it recovers this thread and picks up where ` +
@@ -716,8 +779,8 @@ function generateBudgets(projectDir, cfg) {
 function loadConfig(projectDir) {
   try {
     const cfg = JSON.parse(fs.readFileSync(path.join(projectDir, '.claude', 'cca.config.json'), 'utf8'));
-    return Object.assign({}, DEFAULTS, (cfg && cfg.tokenGuard) || {});
-  } catch (_) { return Object.assign({}, DEFAULTS); }
+    return resolveConfig((cfg && cfg.tokenGuard) || {});
+  } catch (_) { return resolveConfig({}); }
 }
 
 function stateDir(projectDir) { return path.join(projectDir, '.claude', 'hooks', '.token-guard'); }
@@ -1186,7 +1249,7 @@ async function onUserPromptSubmit(data, projectDir) {
         st.nudgedScope = scope;
         logLine(projectDir,
           `sid=${sid.slice(0, 8)} drift-nudge from="${v.dominant}" to="${scope}" prior=${v.priorPct}%`);
-        notes.push(driftNote(v.dominant, scope, v.priorPct, cfg.driftAutoMigrate));
+        notes.push(driftNote(v.dominant, scope, v.priorPct, cfg.driftAutoMigrate, m.liveContext));
         // R11: stage the consent candidate so a later "arm it" + /clear can self-migrate. The current
         // scope entry's enteredIso is the exact recovery boundary; the marker PINS (sid, boundary) so
         // the SessionStart consumer never has to re-resolve. No commitment until the model writes .armed.
@@ -1275,6 +1338,13 @@ async function onUserPromptSubmit(data, projectDir) {
   }
 }
 
+// The visible receipt, printed straight to the user via the `systemMessage` channel on /clear.
+// User-chosen copy: names the pinned scope — the bare "most recent context" read as the whole
+// session, the opposite of what migrate keeps. No numbers. Pure + exported so a test can pin it.
+function migrateReceipt(scope) {
+  return `Your "${scope}" context from last session has been preserved.`;
+}
+
 // R11 consumer — on a /clear (or fresh tab) that carries an ARMED consent marker, do the migration in
 // the hook itself: recover the pinned tail and inject it + a synthesize-handoff directive as
 // additionalContext, then consume the one-shot marker. Never throws; any miss emits nothing so a fresh
@@ -1294,6 +1364,7 @@ function onSessionStart(data, projectDir) {
   logLine(projectDir,
     `sid=${sid8} auto-migrate kw="${kw}" msgs=${tail.messages} tok=${fmtK(tail.tokens)}` +
     `${tail.truncated ? ' (trunc)' : ''}`);
+  const receipt = migrateReceipt(cand.scope);
   const directive =
     `<token-guard-automigrate>\n` +
     `You just ran /clear to migrate the "${cand.scope}" thread into this fresh context ` +
@@ -1301,13 +1372,15 @@ function onSessionStart(data, projectDir) {
     `The recovered conversation tail is below — TREAT IT AS YOUR OWN MEMORY of what you were doing, not ` +
     `as a document to summarize. From it, silently reconstruct: the active task + current state, ` +
     `decisions not yet written to repo docs, files touched (cross-check \`git status --short\` — ` +
-    `deterministic), any temp-state gotchas, and the next actions. Then open your reply with ONE ` +
-    `confirmation line and nothing above it:\n` +
-    `"Migrated \`${kw}\` — ~${fmtK(tail.tokens)} recovered from session \`${sid8}\` (auto-migrated on ` +
-    `/clear). Next up: {top next-action}." Then WAIT for the user to direct you — do not start work unprompted.\n` +
+    `deterministic), any temp-state gotchas, and the next actions. The user has ALREADY seen a ` +
+    `standalone system-message receipt ("${receipt}") — do NOT restate it. Open your reply with ` +
+    `a SINGLE line naming the top next action and nothing above it, in a warm plain voice, e.g.:\n` +
+    `"Next up: {top next-action}." ` +
+    `Then WAIT for the user to direct you — do not start work unprompted.\n` +
     `--- RECOVERED TAIL (${tail.messages} messages, oldest first) ---\n${tail.text}\n` +
     `</token-guard-automigrate>`;
   process.stdout.write(JSON.stringify({
+    systemMessage: receipt,
     hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: directive },
   }));
 }
@@ -1495,6 +1568,9 @@ function deny(event, reason) {
 // ~58k reported, mostly three spec edits' echoes). The settings matcher already excludes
 // them here; this guard keeps a matcher-"" install (the CCA default posture) honest too.
 const MUTATING_TOOLS = /^(Edit|Write|MultiEdit|NotebookEdit|TodoWrite|TaskCreate|TaskUpdate)$/;
+// The subagent-spawning tool — "Task" in stock Claude Code, "Agent" in some harnesses. Anchored
+// exactly, so it never catches the TaskCreate/TaskUpdate todo tools handled by MUTATING_TOOLS.
+const SUBAGENT_TOOLS = /^(Task|Agent)$/;
 
 function onPostToolUse(data, projectDir) {
   const cfg = loadConfig(projectDir);
@@ -1503,6 +1579,14 @@ function onPostToolUse(data, projectDir) {
   // Subagent tool calls report agent-*.jsonl transcripts — their context dies with the agent
   // and adds nothing to the main conversation's rent.
   if (/^agent-/.test(path.basename(String(data.transcript_path || '')))) return;
+  // The PARENT side of a subagent call is the second over-count trap: its tool_response embeds
+  // the agent's FULL disposable payload (every internal tool output it ran), yet only a compact
+  // summary lands in the parent transcript. The hook can't isolate the carried summary from the
+  // raw payload, so ANY sizing over-reports — measured 2026-07-14: ~50k counted vs ~3.5k actually
+  // carried (~14x). Subagents exist precisely to keep bulk OUT of the main thread; counting their
+  // return against the turn's payload is backwards. Multi-agent cost is fleetMeter/R10's job, not
+  // R9's. Skip, same as the agent-internal case above.
+  if (SUBAGENT_TOOLS.test(String(data.tool_name || ''))) return;
   const resp = data.tool_response;
   if (resp == null) return;
   let chars = 0;
@@ -1954,4 +2038,5 @@ if (require.main === module) {
 
 module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, officialLines,
   analyzeSession, renderAnalysis, payloadVerdict, fanVerdict, workflowSource, skillSizes, recordObservedSkill,
-  generateBudgets, slug, driftNote, recoverTail, resolveMarker, writeMigrateCandidate, clearMarker };
+  generateBudgets, slug, driftNote, recoverTail, resolveMarker, writeMigrateCandidate, clearMarker,
+  migrateReceipt, resolveConfig, MODE_PROFILES };
