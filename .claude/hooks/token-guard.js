@@ -77,6 +77,11 @@
  *   between two prompts) ate >= N points of the 5h window. Reads the delta of Anthropic's own 5h
  *   meter %, so it SELF-CALIBRATES — no budget to set. When the meter is unreachable it falls back
  *   to the last turn's weighted $ vs windowBudgetUSD, and if that's unset too it simply stays quiet.
+ *   windowSpikeConfirm true — R12a escalation: render the spike as an interactive AskUserQuestion
+ *   card ("Keep going" / "Unpack to review") instead of the passive note. "Unpack" runs the
+ *   /analyze-session forensic digest and waits (does NOT answer the pending prompt). It is a SOFT
+ *   relay card, never a decision:'block', so it rides in EVERY mode — flow included — without
+ *   tripping flow's no-hard-block contract. Off -> the passive standalone warning note.
  *   windowThresholdWarn true · windowThresholdWarnPct 80 — R12b: flag once per window cycle when the
  *   tightest live window (5h OR weekly) crosses N% used. Re-arms when THAT window resets. The stake
  *   is a throttle, not a bill — the copy never carries a $ figure. Both ride the officialUsageFetch
@@ -164,6 +169,8 @@ const DEFAULTS = {
   officialUsageFetch: true,
   windowSpikeWarn: true,
   windowSpikeWarnPct: 20,
+  windowSpikeConfirm: true,      // R12a: render the spike flag as a two-option confirm card (keep going /
+                                 // unpack via /analyze-session), not a passive note. Fires in all 3 modes.
   windowThresholdWarn: true,
   windowThresholdWarnPct: 80,
   windowThresholdGate: false,
@@ -207,7 +214,9 @@ const MODE_PROFILES = {
     // KEPT on purpose: the R4 idle re-write warn (a zero-downside free win), the R12 window
     // spike/threshold flags (throttle-avoidance is a seatbelt, not a soft nudge — losing access
     // for hours is exactly what flow's big turns risk), and fanHardCap (the catastrophe seatbelt)
-    // — all ride their unchanged defaults.
+    // — all ride their unchanged defaults. windowSpikeConfirm rides its default ON here too: the
+    // spike's confirm card is a SOFT relay (an AskUserQuestion, not a decision:'block'), so it
+    // honors flow's no-hard-block contract while still catching a throttle-sized single-turn spike.
     bombJumpTokens: 120000,
     fanWarnAgents: 25,
     contextWarnTokens: 250000,     // loosen to match the bomb loosening; do NOT disable
@@ -1184,6 +1193,38 @@ function windowSpikeNote(sv, now5h) {
   );
 }
 
+// R12a confirm variant — when windowSpikeConfirm is on, the passive spike note becomes a two-option
+// AskUserQuestion card (mirrors driftNote's auto-migrate branch): "keep going" dismisses; "unpack it"
+// runs the /analyze-session forensic digest and waits. Same dollar-free throttle framing as the
+// passive note (window budget is a rate limit, not money). Because it's a relayed card and NOT a
+// `decision:'block'`, it stays a soft interrupt — it fires in flow without tripping flow's no-block
+// invariant (see MODE_PROFILES flow note / the r12 test). Pure + exported so a golden test pins it.
+function windowSpikeConfirmNote(sv, now5h, sid) {
+  const reset = now5h && now5h.resetsAt ? `, resets ${fmtReset(now5h.resetsAt)}` : '';
+  const magnitude = sv.estimated
+    ? `an estimated ~${Math.round(sv.spikePct)}% of your 5-hour usage window (calibrated from the ` +
+      `turn's weighted cost — the meter was unreachable, so it's estimated, not measured)`
+    : `~${Math.round(sv.spikePct)}% of your 5-hour usage window (it climbed from ~${sv.fromPct}% to ` +
+      `~${sv.toPct}% used${reset})`;
+  const analyze = sid ? `/analyze-session ${sid}` : '/analyze-session';
+  return (
+    `window-spike(confirm): since the user's last turn, one stretch of work used ${magnitude}. Present ` +
+    `it as a SINGLE self-contained AskUserQuestion card — do NOT render any warning prose above it. ` +
+    `The card's \`question\` field is this line VERBATIM (the agreed copy):\n` +
+    `"⚠️ Hey — that last turn used ${magnitude}. That's a big single bite out of your rate-limit ` +
+    `window — not a bill, but a throttle (lost access until it resets) if it runs out. Want to keep ` +
+    `going, or pause and see where the tokens went?"\n` +
+    `Header chip: "Window spike". TWO options, primary first. Option 1 — label "Keep going". Option 2 ` +
+    `— label "Unpack it — where did the tokens go?". BOTH options are bare labels with NO description ` +
+    `— the labels say it all, do NOT add subtext to either. NEVER narrate any internal mechanism (no ` +
+    `state file, meter cache, or budget wiring — that is pure noise to the user; the window % above IS ` +
+    `the trigger and stays). On the Option 1 pick, dismiss the card and answer the user's original ` +
+    `prompt normally, as if it had never appeared. On the Option 2 pick, run \`${analyze}\` to show the ` +
+    `forensic spend digest, then STOP and wait — do NOT answer the original prompt yet (the user is ` +
+    `reviewing first). NEVER run \`/analyze-session\` yourself before the user picks Option 2.`
+  );
+}
+
 function windowThresholdNote(tv, cfg) {
   const reset = tv.resetsAt ? ` and resets ${fmtReset(tv.resetsAt)}` : '';
   return (
@@ -1453,7 +1494,11 @@ async function onUserPromptSubmit(data, projectDir) {
       const prev = st.lastWindowPct != null
         ? { pct: st.lastWindowPct, resetsAt: st.lastWindowResetsAt } : null;
       const sv = windowSpikeVerdict(now5h, prev, st.lastTurnDeltaUsd || 0, cfg);
-      if (sv.fire) notes.push(windowSpikeNote(sv, now5h));
+      // windowSpikeConfirm upgrades the passive note to an interactive AskUserQuestion card — a SOFT
+      // relay, never a decision:'block', so it's allowed even in flow. Off -> the standalone note.
+      if (sv.fire) {
+        notes.push(cfg.windowSpikeConfirm ? windowSpikeConfirmNote(sv, now5h, sid) : windowSpikeNote(sv, now5h));
+      }
       // advance the baseline whenever the meter is live (fired or not) so the next delta is fresh
       if (now5h) { st.lastWindowPct = now5h.pct; st.lastWindowResetsAt = now5h.resetsAt; }
     }
@@ -2267,4 +2312,4 @@ module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, o
   generateBudgets, slug, driftNote, recoverTail, resolveMarker, writeMigrateCandidate, clearMarker,
   migrateReceipt, resolveConfig, MODE_PROFILES,
   fiveHourWindow, tightestWindow, windowSpikeVerdict, windowThresholdVerdict,
-  windowSpikeNote, windowThresholdNote, windowThresholdGateReason };
+  windowSpikeNote, windowSpikeConfirmNote, windowThresholdNote, windowThresholdGateReason };

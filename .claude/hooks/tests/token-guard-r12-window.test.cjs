@@ -12,7 +12,7 @@ const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
 const {
   resolveConfig, MODE_PROFILES,
   fiveHourWindow, tightestWindow, windowSpikeVerdict, windowThresholdVerdict,
-  windowSpikeNote, windowThresholdNote, windowThresholdGateReason,
+  windowSpikeNote, windowSpikeConfirmNote, windowThresholdNote, windowThresholdGateReason,
 } = require(HOOK);
 
 const CFG = resolveConfig({});                 // standard: spike 20, threshold 80
@@ -22,6 +22,7 @@ const CFG = resolveConfig({});                 // standard: spike 20, threshold 
 test('window guards ship ON with 20/80 thresholds in standard', () => {
   assert.equal(CFG.windowSpikeWarn, true);
   assert.equal(CFG.windowSpikeWarnPct, 20);
+  assert.equal(CFG.windowSpikeConfirm, true);      // spike renders as the interactive confirm card
   assert.equal(CFG.windowThresholdWarn, true);
   assert.equal(CFG.windowThresholdWarnPct, 80);
 });
@@ -31,16 +32,17 @@ test('the window gate is opt-in — off by default and in standard', () => {
   assert.equal(resolveConfig({ mode: 'standard' }).windowThresholdGate, false);
 });
 
-test('token-saver flags sooner (15/75) AND flips the gate on; flow keeps note-only', () => {
+test('token-saver flags sooner (15/75) AND flips the gate on; flow keeps the soft card but no hard block', () => {
   const ts = resolveConfig({ mode: 'token-saver' });
   assert.equal(ts.windowSpikeWarnPct, 15);
   assert.equal(ts.windowThresholdWarnPct, 75);
   assert.equal(ts.windowThresholdGate, true);      // max protection: hard-pause at the mark
   const flow = resolveConfig({ mode: 'flow' });
-  // throttle-avoidance is a seatbelt (note stays on), but a hard BLOCK contradicts "never break flow"
+  // throttle-avoidance is a seatbelt (warn + soft card stay on), but a hard BLOCK contradicts "never break flow"
   assert.equal(flow.windowSpikeWarn, true);
+  assert.equal(flow.windowSpikeConfirm, true);     // the SOFT confirm card is allowed in flow — it's a relay, not a block
   assert.equal(flow.windowThresholdWarn, true);
-  assert.equal(flow.windowThresholdGate, false);   // note yes, block no
+  assert.equal(flow.windowThresholdGate, false);   // note/card yes, hard block no
   assert.equal(flow.windowSpikeWarnPct, 20);
   assert.equal(flow.windowThresholdWarnPct, 80);
 });
@@ -52,6 +54,15 @@ test('a user can pin the gate on in any mode (explicit key beats the mode)', () 
 
 test('standard profile stays empty (window keys ride bare defaults there)', () => {
   assert.deepEqual(MODE_PROFILES.standard, {});
+});
+
+test('the spike confirm card ships ON in every mode (a SOFT relay, so flow keeps it too)', () => {
+  for (const mode of ['token-saver', 'standard', 'flow']) {
+    assert.equal(resolveConfig({ mode }).windowSpikeConfirm, true, `${mode} should show the confirm card`);
+  }
+  // it's a config default, not a profile override — a user can still turn it off explicitly in any mode
+  assert.equal(resolveConfig({ mode: 'flow', windowSpikeConfirm: false }).windowSpikeConfirm, false);
+  assert.deepEqual(MODE_PROFILES.standard, {});    // and no profile pins it (it rides DEFAULTS)
 });
 
 // ---------- fiveHourWindow(): flat field first, limits[] fallback, null-safe ----------
@@ -232,4 +243,35 @@ test('windowThresholdGateReason is USER-facing: ↑+Enter escape, throttle frami
   assert.match(reason, /throttle/);
   assert.ok(!/STANDALONE/.test(reason), 'user-facing text carries no relay instructions to the model');
   assert.ok(!/\$\d/.test(reason), 'must not contain a $ amount');
+});
+
+// ---------- R12a confirm-card copy: AskUserQuestion relay, two options, /analyze-session, dollar-free ----------
+
+test('windowSpikeConfirmNote relays a two-option AskUserQuestion card, dollar-free', () => {
+  const note = windowSpikeConfirmNote({ spikePct: 23, fromPct: 10, toPct: 33, estimated: false }, now(33), 'sid123');
+  assert.match(note, /AskUserQuestion/);
+  assert.match(note, /⚠️ Hey/);
+  assert.match(note, /23%/);                       // names the measured jump
+  assert.match(note, /Keep going/);                // option 1 (primary)
+  assert.match(note, /Unpack/);                    // option 2
+  assert.ok(!/\$\d/.test(note), 'window budget is a throttle, not money — never a $');
+});
+
+test('windowSpikeConfirmNote routes Unpack to /analyze-session for THIS session, and waits (no answer yet)', () => {
+  const note = windowSpikeConfirmNote({ spikePct: 40, fromPct: 5, toPct: 45, estimated: false }, now(45), 'abc987');
+  assert.match(note, /\/analyze-session abc987/);          // sid-scoped digest
+  assert.match(note, /do NOT answer the original prompt/i); // it pauses instead of answering
+});
+
+test('windowSpikeConfirmNote is a SOFT relay — carries no decision:block (that is what keeps it flow-safe)', () => {
+  const note = windowSpikeConfirmNote({ spikePct: 22, fromPct: 8, toPct: 30, estimated: false }, now(30), 'x');
+  assert.ok(!/decision.{0,4}block/i.test(note), 'the confirm card is a relay, not a hard block');
+});
+
+test('windowSpikeConfirmNote labels the estimate path and omits the sid when the session id is absent', () => {
+  const note = windowSpikeConfirmNote({ spikePct: 40, fromPct: null, toPct: null, estimated: true }, null, '');
+  assert.match(note, /estimated ~40%/);
+  assert.match(note, /not measured/);
+  assert.match(note, /\/analyze-session/);
+  assert.ok(!/\/analyze-session \w/.test(note), 'no sid to append when the session id is empty');
 });
