@@ -108,18 +108,59 @@ The `.claude/updates/` directory is for updates that **require Claude to execute
 
 ### Testing Requirements
 
-**CRITICAL: Before committing or outputting any changes to `bin/cli.js`, you MUST run tests and verify they pass:**
+**CRITICAL: Before committing any change to `bin/`, `scripts/`, or `.claude/hooks/*.js`, you
+MUST run tests and verify they pass:**
 
 ```bash
 npm test
 ```
 
-This runs tests which validate:
-1. All box-drawing lines have consistent visual width (accounting for ANSI escape codes)
-2. Box structure is valid (correct corner and border characters)
-3. CLI install files exist and are properly configured
+This runs the FULL suite (any older "box alignment + CLI install" description is stale):
+box alignment, CLI install, update system, plugin system, terminal-title behavior,
+golden endings, live-twin parity, update summary, changelog generation, **and the hook
+suites** (`npm run test:hooks` fans out to `.claude/hooks/tests/*.test.cjs` — token-guard
+lives there, and those tests do NOT run any other way).
 
 **DO NOT commit or present code changes if tests fail.** Fix the issues first.
+
+### Invariants & Landmines — read before editing
+
+Cross-file contracts that don't look like contracts. Each of these survives a naive read
+and a green feeling, then breaks something real:
+
+- **Generated files — never hand-edit.** `CHANGELOG.md` is rebuilt from git history by
+  `scripts/generate-changelog.js` on every `npm version` (reword bullets via `Changelog:`
+  trailers or its OVERRIDES map). `.claude/docs/autoconfig.docs.html` is rebuilt by
+  `node .claude/scripts/sync-docs.js`, which locates exact string markers inside that HTML —
+  reformatting the file breaks the next sync.
+- **`.claude/hooks/terminal-title.js` here is the canonical copy.** Edit only this one, then
+  run `node scripts/sync-terminal-title.js --write` to push it to `~/.claude` and the fleet.
+  Never edit a copy — the next sync clobbers it; drift fails `live-twin-parity.test.js` on
+  this machine (the test skips on CI, so CI green ≠ parity ok).
+- **Dev-only gating lives in `DEV_ONLY_FILES` (bin/cli.js), NOT package.json `files`.** The
+  npm `files` negations only shape the tarball; anything absent from `DEV_ONLY_FILES` is
+  installed into every user project. token-guard + its commands are deliberately gated —
+  do not "fix" that by shipping them.
+- **Commits about dev-gated work need a `Changelog: none` trailer.** feat/fix/perf/refactor
+  bullets surface verbatim on users' upgrade screens (`bin/update-summary.js`) — announcing
+  a feature users can't receive is a bug. Already-pushed leaks: add an OVERRIDES `null`.
+- **token-guard's `--analyze` digest wording is a machine interface.** `/analyze-session`
+  keys on the literal "live context at end" and the RENT/BOMBS/FLEETS/TTL headers; the
+  `scopeLog` state fields (`scope`, `enteredIso`, `ctxWatermark`, `prompts`) are read by
+  `/eval-new-session` and `/migrate-new-session`. Renaming labels or fields silently breaks
+  those commands.
+- **`.claude/updates/` numbers are append-only** — next is `005`; `002` is a retired
+  tombstone (see `.claude/updates/README.md`). A reused number is silently skipped by
+  installs that applied the original.
+- **`.claude/settings.json` details are load-bearing:** `CLAUDE_CODE_DISABLE_TERMINAL_TITLE`
+  stays `"1"` (else Claude Code's own title writer races the hook), the `--idle-rescue` arg
+  on the `idle_prompt` Notification entry selects a distinct code path (don't "dedupe" the
+  two Notification entries), and hook commands stay `${CLAUDE_PROJECT_DIR:-.}`-anchored.
+- **Hooks fail silent by design** (token-guard, terminal-title swallow errors and exit 0).
+  A regression won't crash anything — it quietly stops warning/painting. Run the hook
+  suites; "it didn't error" proves nothing.
+- **`test/golden-endings.json` is append-only** — never relabel or delete an entry without
+  explicit sign-off; each records a real incident.
 
 ### Box Drawing Guidelines
 

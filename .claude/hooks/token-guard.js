@@ -1430,6 +1430,8 @@ async function onUserPromptSubmit(data, projectDir) {
         // First entry claims the pre-title context (watermark 0): the model writes the title
         // DURING turn 1, so the guard first sees it on turn 2 — that gap belongs to the
         // baseline scope, else the shares wouldn't sum to liveContext.
+        // Field names are a cross-file contract: eval-new-session.md reads enteredIso,
+        // migrate-new-session.md reads scopeLog entries, driftVerdict reads scope/ctxWatermark.
         st.scopeLog.push({ scope, enteredIso: new Date().toISOString(),
           ctxWatermark: last ? m.liveContext : 0, prompts: 1 });
         if (last) logLine(projectDir,
@@ -1478,7 +1480,7 @@ async function onUserPromptSubmit(data, projectDir) {
         ? { pct: st.lastWindowPct, resetsAt: st.lastWindowResetsAt } : null;
       const sv = windowSpikeVerdict(now5h, prev, st.lastTurnDeltaUsd || 0, cfg);
       // windowSpikeConfirm upgrades the passive note to an interactive AskUserQuestion card — a SOFT
-      // relay, never a decision:'block', so it's allowed even in flow. Off -> the standalone note.
+      // relay, never a decision:'block', so it can't stall the turn. Off -> the standalone note.
       if (sv.fire) {
         notes.push(cfg.windowSpikeConfirm ? windowSpikeConfirmNote(sv, now5h, sid) : windowSpikeNote(sv, now5h));
       }
@@ -2043,6 +2045,9 @@ const fmtDur = ms => {
 };
 const estTok = chars => Math.round(chars / CHARS_PER_TOKEN);
 
+// The digest's wording is a machine interface, not just display text: /analyze-session
+// (analyze-session.md) interprets ONLY this output and keys on the literal phrase
+// "live context at end" and the RENT / BOMBS / FLEETS / TTL section headers.
 function renderAnalysis(a, usd$) {
   const lines = [];
   const t = a.totals;

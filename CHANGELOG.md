@@ -1,14 +1,14 @@
 # Changelog
 
+<!-- GENERATED FILE — do not edit by hand. scripts/generate-changelog.js rebuilds this
+     from git history on every `npm version`. Reword a published bullet via its
+     OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
+
 ## v1.0.211
 - feat(gls): /gls screenshots now use up to ~60% fewer tokens — large captures are auto-downscaled before display
-- feat(token-guard): Cost Control modes + R11 auto-migrate card + R9 subagent-skip
-- feat(token-guard): R11 auto-migrate — arm-it + /clear-triggered SessionStart rehydration
-- feat(token-guard): R6 drift nudge emits paste-ready /migrate-new-session {slug}
 - refactor(title-hooks): unify the user-level/project fork into one runtime-branched file
 - fix(title-hooks): canonicalize shouldDefer paths so the user-level copy stands down on CI
 - feat(title-hooks): port interrupt-rescue idle-glyph reset from job-agent-extension
-- feat(token-guard): stage session-spend meter in CCA as dev-only (gated pre-live-bake)
 
 ## v1.0.210
 - feat(status-beeps): Updating now also offers to turn on the status beeps — asked once, and your answer is remembered

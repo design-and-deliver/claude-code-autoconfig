@@ -48,6 +48,10 @@ your-project/
     │   ├── autoconfig.md              #   /autoconfig - self-configures
     │   ├── autoconfig-update.md       #   /autoconfig-update - install updates
     │   ├── commit-and-push.md         #   /commit-and-push - git workflow
+    │   ├── enable-status-beeps.md     #   /enable-status-beeps - tab status beeps on
+    │   ├── disable-status-beeps.md    #   /disable-status-beeps - tab status beeps off
+    │   ├── enable-arcade-beeps.md     #   (deprecated alias of /enable-status-beeps)
+    │   ├── disable-arcade-beeps.md    #   (deprecated alias of /disable-status-beeps)
     │   ├── extract-rules.md            #   /extract-rules - scan & extract rules
     │   ├── gls.md                     #   /gls - view latest screenshot
     │   ├── recover-context.md         #   /recover-context - restore context after compaction
@@ -62,7 +66,9 @@ your-project/
     │   ├── format.js                  #   Auto-format on Write/Edit
     │   ├── terminal-title.js          #   Use-case terminal tab titles + live state
     │   ├── terminal-title.directive.md # Injected title directive (tunable wording)
-    │   └── arcade-beeps.js            #   Optional Pole Position status beeps (opt-in)
+    │   ├── arcade-beeps.js            #   Optional Pole Position status beeps (opt-in)
+    │   ├── feedback-rule-check.js     #   Nudges FEEDBACK.md entries toward .claude/rules/
+    │   └── migrate-feedback.js        #   One-time FEEDBACK.md → Discoveries migration
     ├── docs/                          # Interactive documentation
     │   └── autoconfig.docs.html       #   Open with /show-docs
     ├── updates/                       # Pending config updates

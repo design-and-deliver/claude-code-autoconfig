@@ -21,6 +21,15 @@ const OVERRIDES = {
   // screenshots" — but that's token-guard, which is dev-gated (not installed/wired for users).
   // Trailer can't be reworded in the pushed commit, so correct it here to the /gls-only benefit.
   'ad2a136': "feat(gls): /gls screenshots now use up to ~60% fewer tokens — large captures are auto-downscaled before display",
+  // token-guard and /analyze-session are dev-gated (DEV_ONLY_FILES in bin/cli.js) — users
+  // never receive them, so their features must not be announced on the upgrade screen.
+  // These pushed commits predate that rule or lack a "Changelog: none" trailer:
+  'a17f267': null, // token-guard Cost Control modes — dev-gated
+  'a3927a9': null, // token-guard R11 auto-migrate — dev-gated
+  '43dd441': null, // token-guard R6 drift nudge — dev-gated
+  '629c11c': null, // token-guard dev-only staging — dev-gated
+  '0bf89e3': null, // token-guard R12a confirm card — trailer reads user-facing but the feature is dev-gated
+  '9f57ce4': null, // /analyze-session zero-token tip — the command is dev-only
 };
 
 // The changelog line for one commit, or null to omit it. Precedence:
@@ -61,7 +70,14 @@ function main() {
     return;
   }
 
-  const lines = ['# Changelog\n'];
+  const lines = [
+    '# Changelog',
+    '',
+    '<!-- GENERATED FILE — do not edit by hand. scripts/generate-changelog.js rebuilds this',
+    '     from git history on every `npm version`. Reword a published bullet via its',
+    '     OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->',
+    '',
+  ];
 
   for (let i = 0; i < tags.length - 1 && i < 50; i++) {
     const newer = tags[i];

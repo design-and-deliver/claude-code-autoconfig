@@ -136,6 +136,8 @@ test('update filename matches NNN-*.md pattern', () => {
   const files = fs.readdirSync(path.join(PACKAGE_CLAUDE_DIR, 'updates'));
   for (const file of files) {
     if (!file.endsWith('.md')) continue;
+    // README.md documents the numbering rules; pullUpdates ignores it (filters ^\d{3}-).
+    if (file === 'README.md') continue;
     assert(/^\d{3}-/.test(file), `"${file}" should match NNN-*.md pattern`);
   }
 });
@@ -163,9 +165,13 @@ test('CLI has parseAppliedUpdates function', () => {
   assert(content.includes('function parseAppliedUpdates('), 'CLI should have parseAppliedUpdates function');
 });
 
-test('CLI includes updates in AUTOCONFIG_FILES', () => {
+test('CLI deliberately excludes updates from AUTOCONFIG_FILES', () => {
   const content = fs.readFileSync(CLI_PATH, 'utf8');
-  assert(content.includes("'updates'"), 'AUTOCONFIG_FILES should include updates');
+  const m = content.match(/const AUTOCONFIG_FILES = \[([^\]]*)\]/);
+  assert(m, 'AUTOCONFIG_FILES array literal should exist on one line');
+  // 'updates' was removed on purpose (commit 05a567b: the updates dir is never copied to
+  // user projects — updates arrive only via --pull-updates). Do NOT re-add it.
+  assert(!m[1].includes("'updates'"), "AUTOCONFIG_FILES must NOT include 'updates' (deliberately removed in 05a567b)");
 });
 
 console.log();

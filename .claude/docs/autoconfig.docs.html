@@ -1313,7 +1313,7 @@
                 title: '.claude/ Directory',
                 desc: 'Commands, rules, settings, and these docs. Keeps configuration organized as your project grows.'
             },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    'rules': {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                'rules': {
                 title: 'rules/',
                 desc: 'Path-scoped context that loads when Claude works on matching files.'
             },
@@ -1669,7 +1669,7 @@ CRITICAL: A plausible-looking cause from code reading is NOT confirmed evidence.
 
 > Run \`/autoconfig\` to populate this based on your project.`
             },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    'analyze-session': {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                'analyze-session': {
                 filename: 'analyze-session.md',
                 content: `# Analyze Session
 
@@ -2350,7 +2350,8 @@ Pending-question signal -- END-OF-TURN TEST, apply it on every turn: does your f
  *   UserPromptSubmit -> meter the session (v2: INCLUDING subagent/workflow fleets); inject
  *                       compact additionalContext warnings: fat-context advisory, session-spend
  *                       steps, context-bomb tripwire (R3), idle-return TTL warning (R4),
- *                       workflow completion receipts (R2), scope-drift nudge (R6).
+ *                       workflow completion receipts (R2), scope-drift nudge (R6), window
+ *                       spike + threshold flags (R12).
  *   Stop             -> append one line to the bounded usage log (now with a main/agents split);
  *                       detect workflow cost growth and queue a receipt for the next prompt.
  *   PreToolUse       -> (a) R2 + R10: gate Workflow launches — R2 confirms the launch COST from a
@@ -2359,8 +2360,7 @@ Pending-question signal -- END-OF-TURN TEST, apply it on every turn: does your f
  *                           fan over run-time data). R10 asks (never blocks) and fires even with R2 off;
  *                       (b) R8: payload pre-gate — ask BEFORE a bomb-sized Skill/Read payload
  *                           lands (R3 warns after; this fires while the rent is avoidable);
- *                       (c) R9: one-shot ask once the turn's accumulator crossed (opt-in);
- *                       (d) R3: one-shot post-bomb gate when bombGateWhenFat is on;`
+ *                       (c) R9: one-shot ask once the turn's accumulator crossed (opt-in);`
             },
             'feedback-feedback': {
                 filename: 'FEEDBACK.md',

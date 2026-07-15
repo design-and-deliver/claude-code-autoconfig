@@ -1012,4 +1012,6 @@ function extractBlock(tpl, name) {
 }
 
 // Exported for tests (require()'d when require.main !== module). The hook itself never reads these.
+// Contract: terminal-title.test.js, golden-endings.test.js, and arcade-beeps.js (lazy-requires
+// inspectLastResponse) depend on these names — renaming one silently degrades the beeps hook.
 module.exports = { inspectLastResponse, endsOnQuestion, normalize, GLYPH, shouldDefer, solicitsReply };
