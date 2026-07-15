@@ -67,6 +67,29 @@ test('object tool_response counts via stringify', () => {
   assert.match(out, /turn-payload/);
 });
 
+test('image tool_response is charged a flat ceiling, not its base64 length', () => {
+  const dir = mkProject();
+  // ~490k base64 chars ≈ 188k tok at chars/2.6 — the phantom that used to trip the mini-bomb.
+  const IMG = [{ type: 'image', source: { type: 'base64', media_type: 'image/png',
+    data: 'A'.repeat(490000) } }];
+  const out = post(dir, 'img1', IMG);
+  assert.equal(out, ''); // a single screenshot must NOT trip the 50k warning
+  const st = state(dir, 'img1');
+  assert.ok(st.turnPayloadTok > 0 && st.turnPayloadTok < 5000,
+    `image sized ~flat (~2.5k), got ${st.turnPayloadTok}`);
+});
+
+test('images accumulate by count; a big fleet of them still crosses', () => {
+  const dir = mkProject();
+  // 30 screenshots in one turn ≈ 30 × 2500 = 75k > 50k — real cost worth warning about.
+  const many = Array.from({ length: 30 }, () => ({ type: 'image',
+    source: { type: 'base64', media_type: 'image/png', data: 'A'.repeat(20000) } }));
+  const out = post(dir, 'img2', many);
+  assert.match(out, /turn-payload/);
+  const tp = state(dir, 'img2').turnPayloadTok;
+  assert.ok(tp > 60000 && tp < 90000, `30 imgs ≈ 75k, got ${tp}`);
+});
+
 test('UserPromptSubmit resets the accumulator', () => {
   const dir = mkProject();
   post(dir, 's4', BIG);

@@ -1,5 +1,5 @@
 <!-- @description Get the latest screenshot(s) and display them. -->
-<!-- @version 4 -->
+<!-- @version 5 -->
 <!-- @param count | integer | optional | Number of screenshots to display. Use /gls-N syntax. Default: 1. Min: 1. -->
 <!-- @param path | string | optional | Screenshot directory path. Saved for future use. Auto-detected if omitted. -->
 <!-- @response success | Displays requested screenshot(s) from newest to oldest. -->
@@ -21,6 +21,8 @@ Usage:
 ## Step 1: Check for saved path
 
 Read `.claude/cca.config.json` in the project root. If it exists and contains a `gls.screenshotDir` value, use that path and skip to Step 3.
+
+Also note `gls.maxEdge` from the same file if present (default **1280**) — you'll use it in Step 4b to shrink oversized screenshots before Reading them. A value of `0` disables downscaling.
 
 If the file doesn't exist or the key is missing, continue to Step 2.
 
@@ -106,9 +108,21 @@ If no images are found, tell the user the directory exists but contains no scree
 - `/gls` → 1 most recent
 - `/gls-N` (e.g., `/gls-2`) → N most recent
 
+## Step 4b: Downscale to save tokens
+
+Claude bills images by **pixel area**, not file size — so shrinking an oversized screenshot below its ~1568px cap cuts real image tokens by roughly a third, with no legibility loss for ordinary text. Run the bundled helper once per selected screenshot to get the path you'll actually Read:
+
+```bash
+node "${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/gls-downscale.js" "$DIR/<filename>" <maxEdge>
+```
+
+- Use the `gls.maxEdge` value from Step 1 (default **1280**) as `<maxEdge>`.
+- **If `gls.maxEdge` is `0`, skip this step** and Read the originals in Step 5.
+- The helper prints exactly ONE line: the path to Read. It's a resized temp copy when the shot was larger than `maxEdge`, or the **original path unchanged** when the shot was already small or no resizer was available. It never breaks the flow — on any error it echoes the original path (diagnostics go to stderr). Carry each printed path into Step 5.
+
 ## Step 5: Display
 
-Use the **Read tool** to display each screenshot file. Display in order from newest to oldest.
+Use the **Read tool** to display each path from Step 4b (the downscaled copy when one was made, otherwise the original). Display in order from newest to oldest.
 
 IMPORTANT: Always use the Read tool — never use Bash cat/echo to display images.
 

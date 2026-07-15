@@ -34,9 +34,12 @@ test('driftNote autoMigrate=true renders the locked self-contained Token-bloat c
   assert.match(note, /Yes — Please clean it up/);        // primary button label (verbatim)
   assert.match(note, /"Cancel"/);                        // second button
   assert.match(note, /TWO options/);                     // exactly two, not three
-  assert.match(note, /descriptions short and user-facing/); // options carry plain outcome copy, not narration
+  assert.match(note, /BOTH options are bare labels with NO/); // both options are bare labels — no subtext on either
+  assert.doesNotMatch(note, /Keeps this topic/);         // dropped: the redundant Option-1 grey line
+  assert.doesNotMatch(note, /pick up right where you are/); // ...and its continuity phrase, now superfluous
+  assert.doesNotMatch(note, /Leave everything as-is/);   // Cancel's description dropped too — bare label
   assert.match(note, /noise to the user/);               // and the mechanism jargon is explicitly banned
-  assert.match(note, /Now \/clear your session — your "CCA distribution" context will be restored/); // post-click line names the pinned scope
+  assert.match(note, /Now \/clear your session — your current "CCA distribution" context will be preserved/); // post-click line names the pinned scope
   assert.doesNotMatch(note, /most recent context/i);     // the vague phrase (read as the whole session) is gone
   assert.match(note, /NEVER run/);                       // never-run guard preserved
   assert.doesNotMatch(note, /heads up/i);                // dropped — read as redundant

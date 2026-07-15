@@ -70,6 +70,7 @@ your-project/
     │   ├── deploy-approval.md         #   Require approval before publish
     │   └── readme-sync.md             #   Sync README & docs before publish
     ├── scripts/                       # Utility scripts
+    │   ├── gls-downscale.js           #   Shrink /gls screenshots to save image tokens
     │   └── sync-docs.js               #   Regenerate interactive HTML docs
     ├── sounds/                        # Status-cue audio for the status beeps
     │   ├── pp3-getready-G4.wav        #   Awaiting tone (get-ready tick)
@@ -111,7 +112,7 @@ Autoconfig is **self-configuring**. Run `/autoconfig` and Claude:
 | `/test` | Runs your test suite (auto-detects framework) |
 | `/commit-and-push` | Stages, commits with good message, and pushes |
 | `/recover-context` | Recovers conversation context after compaction |
-| `/gls` | Views latest screenshot for visual context |
+| `/gls` | Views latest screenshot (auto-downscaled to save tokens) |
 | `/validate-cca-install` | Validates installation against latest published version |
 | `/extract-rules` | Scan Claude artifacts and extract structured rules |
 | `/enable-status-beeps` | Turn on opt-in Pole Position status beeps |

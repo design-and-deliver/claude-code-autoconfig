@@ -420,15 +420,14 @@ function driftNote(dominant, scope, priorPct, autoMigrate, liveContext) {
       `~${fmtK(keep)} of that. We can reduce token cost by truncating the old ~${fmtK(truncate)}. ` +
       `Continue?"\n` +
       `Header chip: "Token bloat". TWO options, primary first. Option 1 — label "Yes — Please clean it ` +
-      `up. I don't want to waste tokens.", description "Keeps this topic and trims the older ones, so the ` +
-      `thread runs leaner — you pick up right where you are." Option 2 — label "Cancel", description ` +
-      `"Leave everything as-is." Keep BOTH option descriptions short and user-facing — state the outcome ` +
-      `in plain words; NEVER narrate the internal mechanism (no armed flag, staged candidate, /clear ` +
+      `up. I don't want to waste tokens." Option 2 — label "Cancel". BOTH options are bare labels with NO ` +
+      `description — the labels say it all, do NOT add subtext to either. NEVER narrate the internal ` +
+      `mechanism anywhere (no armed flag, staged candidate, /clear ` +
       `"keystroke" handoff, or "scope-named receipt" — that wiring is pure noise to the user). On the ` +
       `Option 1 pick, write the contentless flag file ` +
       `\`.claude/hooks/.token-guard/pending-migrate.armed\` (the pointer is already staged), then print ` +
-      `EXACTLY this one line and nothing else: "Now /clear your session — your \"${scope}\" context ` +
-      `will be restored." On Cancel, dismiss — nothing changes. NEVER run \`/clear\` yourself, and ` +
+      `EXACTLY this one line and nothing else: "Now /clear your session — your current \"${scope}\" context ` +
+      `will be preserved." On Cancel, dismiss — nothing changes. NEVER run \`/clear\` yourself, and ` +
       `write the flag ONLY after the user picks option 1.`;
   }
   const lead = `scope-drift: this session's work has moved from "${dominant}" to "${scope}", and ` +
@@ -1589,9 +1588,16 @@ function onPostToolUse(data, projectDir) {
   if (SUBAGENT_TOOLS.test(String(data.tool_name || ''))) return;
   const resp = data.tool_response;
   if (resp == null) return;
-  let chars = 0;
-  try { chars = (typeof resp === 'string' ? resp : JSON.stringify(resp)).length; } catch (_) { return; }
-  const tok = Math.round(chars / CHARS_PER_TOKEN);
+  let serialized;
+  try { serialized = typeof resp === 'string' ? resp : JSON.stringify(resp); } catch (_) { return; }
+  // Image reads (e.g. /gls screenshots) arrive as base64 blobs. The model bills them by pixel
+  // dimensions, NOT base64 length — so charge a flat per-image estimate (see IMAGE_TOK_EST) and size only
+  // the non-base64 remainder as text. Without this, one screenshot reads as ~189k phantom "tokens"
+  // and trips the mini-bomb warning. Mirrors the image discount the bomb-detector already applies.
+  const nImg = (serialized.match(/"type":"image"/g) || []).length;
+  let chars = serialized.length;
+  if (nImg) chars = serialized.replace(/"data":"[^"]*"/g, '""').length; // base64 has no '"' to escape
+  const tok = Math.round(chars / CHARS_PER_TOKEN) + nImg * IMAGE_TOK_EST;
   if (!tok) return;
   const sid = data.session_id || '';
   const st = loadState(projectDir, sid);
@@ -1664,6 +1670,14 @@ function scanWindow(cutoff) {
 // reuse the live guards' keys (bombJumpTokens, idleWarnMinutes, contextWarnTokens): the
 // post-mortem has to agree with the warnings it explains.
 const CHARS_PER_TOKEN = 2.6; // observed across the July forensics; R5 uses the same constant
+// Flat per-image token estimate. The model bills images by PIXEL DIMENSIONS, not bytes: cost is
+// ⌈w/28⌉ × ⌈h/28⌉ visual tokens (28px patches), after downscaling over-cap images. The per-image
+// cap is tier-dependent — 1568 tok (standard) up to 4784 tok (high-res: Opus 4.8, Sonnet 5,
+// Fable 5); a typical screenshot lands ~2–2.5k. Sizing a base64 blob as chars/2.6 instead over-
+// counts ~2 orders of magnitude (a ~370KB /gls PNG read as ~189k "tokens", 2026-07-15). One flat
+// figure can't match every tier, so this leans to the high-res typical: it won't under-warn on
+// standard tier and stays close to real on high-res. (Verified against the vision docs, 2026-07-15.)
+const IMAGE_TOK_EST = 2500;
 
 function analyzeSession(transcriptPath, cfg) {
   const m = meterSession(transcriptPath, {});
