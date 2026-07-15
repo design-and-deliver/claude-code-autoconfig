@@ -17,6 +17,10 @@ const OVERRIDES = {
   '82f27d6': "feat(terminal-title): More reliable 'awaiting your reply' tab indicator",
   '4d43ede': null, // folded into the indicator-reliability line above
   'e347106': "feat(cli): Clearer 'what's new' summary when updating",
+  // ad2a136's pushed trailer also promised "context/idle warnings no longer over-count
+  // screenshots" — but that's token-guard, which is dev-gated (not installed/wired for users).
+  // Trailer can't be reworded in the pushed commit, so correct it here to the /gls-only benefit.
+  'ad2a136': "feat(gls): /gls screenshots now use up to ~60% fewer tokens — large captures are auto-downscaled before display",
 };
 
 // The changelog line for one commit, or null to omit it. Precedence:

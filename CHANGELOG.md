@@ -1,7 +1,7 @@
 # Changelog
 
 ## v1.0.211
-- feat(gls): /gls screenshots now use up to ~60% fewer tokens, and context/idle warnings no longer over-count screenshots
+- feat(gls): /gls screenshots now use up to ~60% fewer tokens — large captures are auto-downscaled before display
 - feat(token-guard): Cost Control modes + R11 auto-migrate card + R9 subagent-skip
 - feat(token-guard): R11 auto-migrate — arm-it + /clear-triggered SessionStart rehydration
 - feat(token-guard): R6 drift nudge emits paste-ready /migrate-new-session {slug}
