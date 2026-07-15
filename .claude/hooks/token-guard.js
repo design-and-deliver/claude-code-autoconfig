@@ -17,7 +17,8 @@
  *   UserPromptSubmit -> meter the session (v2: INCLUDING subagent/workflow fleets); inject
  *                       compact additionalContext warnings: fat-context advisory, session-spend
  *                       steps, context-bomb tripwire (R3), idle-return TTL warning (R4),
- *                       workflow completion receipts (R2), scope-drift nudge (R6).
+ *                       workflow completion receipts (R2), scope-drift nudge (R6), window
+ *                       spike + threshold flags (R12).
  *   Stop             -> append one line to the bounded usage log (now with a main/agents split);
  *                       detect workflow cost growth and queue a receipt for the next prompt.
  *   PreToolUse       -> (a) R2 + R10: gate Workflow launches — R2 confirms the launch COST from a
@@ -72,6 +73,17 @@
  *   true/false forces. Internal metering stays $-weighted either way (it's the normalization).
  *   officialUsageFetch true — lead reports/check-ins with Anthropic's OWN window percentages
  *   (the /usage numbers) via the OAuth usage endpoint; cached 180s, 4s timeout, fail -> omit.
+ *   windowSpikeWarn true · windowSpikeWarnPct 20 — R12a: flag when a single turn (the interval
+ *   between two prompts) ate >= N points of the 5h window. Reads the delta of Anthropic's own 5h
+ *   meter %, so it SELF-CALIBRATES — no budget to set. When the meter is unreachable it falls back
+ *   to the last turn's weighted $ vs windowBudgetUSD, and if that's unset too it simply stays quiet.
+ *   windowThresholdWarn true · windowThresholdWarnPct 80 — R12b: flag once per window cycle when the
+ *   tightest live window (5h OR weekly) crosses N% used. Re-arms when THAT window resets. The stake
+ *   is a throttle, not a bill — the copy never carries a $ figure. Both ride the officialUsageFetch
+ *   meter; on an API key with no OAuth meter they're inert unless windowBudgetUSD supplies a proxy.
+ *   windowThresholdGate false — R12b escalation (mirrors idleGate): instead of a note, BLOCK the
+ *   submission once per cycle when the tightest window is past the mark. The one-shot key lets the
+ *   ↑+Enter re-send through (charge accepted). The block reason is user-facing (future tense, no $).
  *   fleetMeter true · workflowConfirm true · bombJumpTokens 50000 · bombGateWhenFat false
  *   workflowFanGuard true · fanWarnAgents 10 · fanHardCap 50 — R10: gate a Workflow whose agent
  *   fan looks disproportionate (SHAPE signals only — a fan constant >= fanWarnAgents, a
@@ -150,6 +162,11 @@ const DEFAULTS = {
   planDetect: true,
   showDollars: 'auto',
   officialUsageFetch: true,
+  windowSpikeWarn: true,
+  windowSpikeWarnPct: 20,
+  windowThresholdWarn: true,
+  windowThresholdWarnPct: 80,
+  windowThresholdGate: false,
   analyzeHint: true,
 };
 
@@ -177,6 +194,9 @@ const MODE_PROFILES = {
     idleGate: true,
     commandPayloadGate: true,
     miniBombGate: true,
+    windowSpikeWarnPct: 15,        // flag a smaller single-turn window bite than the 20 default
+    windowThresholdWarnPct: 75,    // warn approaching the throttle sooner than 80
+    windowThresholdGate: true,     // and hard-pause at the mark, like the other opt-in blocks here
   },
   'standard': {}, // default — no static overrides; == the shipped defaults
   'flow': {
@@ -184,8 +204,10 @@ const MODE_PROFILES = {
     // the shared bombJumpTokens simultaneously quiets R3 warn / R8 gate / R9
     // accumulator; the context warn loosens to match (raised, not disabled — the
     // seatbelt logic still applies); the soft nudges (drift, mini-bomb) go silent.
-    // KEPT on purpose: the R4 idle re-write warn (a zero-downside free win) and
-    // fanHardCap (the catastrophe seatbelt) — both ride their unchanged defaults.
+    // KEPT on purpose: the R4 idle re-write warn (a zero-downside free win), the R12 window
+    // spike/threshold flags (throttle-avoidance is a seatbelt, not a soft nudge — losing access
+    // for hours is exactly what flow's big turns risk), and fanHardCap (the catastrophe seatbelt)
+    // — all ride their unchanged defaults.
     bombJumpTokens: 120000,
     fanWarnAgents: 25,
     contextWarnTokens: 250000,     // loosen to match the bomb loosening; do NOT disable
@@ -792,7 +814,8 @@ function loadState(projectDir, sid) {
     lastLiveContext: null, scanOffset: 0, warnedIdleAt: 0, knownWf: {},
     pendingWfReceipt: null, bombGateArmed: false, scopeLog: [], nudgedScope: null,
     approvedPayloadHop: null, payloadGateOkOnce: null,
-    turnPayloadTok: 0, turnPayloadWarned: false, miniBombGateArmed: false };
+    turnPayloadTok: 0, turnPayloadWarned: false, miniBombGateArmed: false,
+    lastWindowPct: null, lastWindowResetsAt: null, warnedWindow: null, lastTurnDeltaUsd: 0 };
   try {
     return Object.assign(blank,
       JSON.parse(fs.readFileSync(path.join(stateDir(projectDir), `${sid}.json`), 'utf8')));
@@ -1045,6 +1068,148 @@ function officialLines(u) {
   return lines;
 }
 
+// ---------------------------------------------------------------------------
+// R12 window guards — two flags read straight off the official meter (Anthropic's own server-side
+// window percentages). The insight that makes them cheap: the meter already publishes % used, so
+// "% of the window" needs no token/dollar denominator — a subscription's opaque rate-limit cap
+// never has to be guessed. Pure + exported so fixtures pin the fire conditions (like driftVerdict).
+
+// A window's resets_at is a FIXED instant within a cycle, but the server recomputes it with
+// sub-second jitter each call (observed: 08:20:00.504765 vs 08:19:59.975486 for the same window).
+// So cycle identity must be a tolerance match, never string equality — otherwise the spike's
+// baseline never lines up (it would never fire) and the threshold one-shot re-nags every prompt.
+// A genuine reset moves resets_at by the whole window (5h / 7d), far past this tolerance.
+const WINDOW_CYCLE_TOL_MS = 2 * 60 * 1000;
+function sameWindowCycle(aIso, bIso) {
+  const a = Date.parse(aIso), b = Date.parse(bIso);
+  if (!a || !b) return aIso === bIso; // unparseable both sides -> exact match (both '' = same "no data")
+  return Math.abs(a - b) <= WINDOW_CYCLE_TOL_MS;
+}
+
+// The 5h window ("session" limit) as {pct, resetsAt} — flat five_hour first, limits[] fallback.
+// null when the meter carried no 5h figure (unreachable, or an account shape without one).
+function fiveHourWindow(u) {
+  if (!u) return null;
+  if (u.five_hour && typeof u.five_hour.utilization === 'number') {
+    return { pct: u.five_hour.utilization, resetsAt: u.five_hour.resets_at || '' };
+  }
+  if (Array.isArray(u.limits)) {
+    const s = u.limits.find(l => l && l.kind === 'session' && typeof l.percent === 'number');
+    if (s) return { pct: s.percent, resetsAt: s.resets_at || '' };
+  }
+  return null;
+}
+
+// The tightest live window across EVERY horizon (highest % used) as {pct, name, resetsAt}.
+// The threshold flag watches all of them because a throttle can come from the 5h OR the weekly cap.
+// null when no data.
+function tightestWindow(u) {
+  if (!u) return null;
+  const label = { session: '5h window', weekly_all: 'Weekly (all models)' };
+  const cands = [];
+  if (Array.isArray(u.limits) && u.limits.length) {
+    for (const l of u.limits) {
+      if (!l || typeof l.percent !== 'number') continue;
+      const name = l.kind === 'weekly_scoped'
+        ? `Weekly (${(l.scope && l.scope.model && l.scope.model.display_name) || 'scoped'})`
+        : (label[l.kind] || l.kind);
+      cands.push({ pct: l.percent, name, resetsAt: l.resets_at || '' });
+    }
+  } else {
+    if (u.five_hour && typeof u.five_hour.utilization === 'number') {
+      cands.push({ pct: u.five_hour.utilization, name: '5h window', resetsAt: u.five_hour.resets_at || '' });
+    }
+    if (u.seven_day && typeof u.seven_day.utilization === 'number') {
+      cands.push({ pct: u.seven_day.utilization, name: 'Weekly (all models)', resetsAt: u.seven_day.resets_at || '' });
+    }
+  }
+  if (!cands.length) return null;
+  cands.sort((a, b) => b.pct - a.pct);
+  const w = cands[0];
+  return { pct: w.pct, name: w.name, resetsAt: w.resetsAt };
+}
+
+// R12a verdict — did one interval eat >= windowSpikeWarnPct of the 5h window? Primary signal is the
+// meter's OWN % delta since the last prompt: self-calibrating, and naturally spike-shaped (a fast
+// small turn leaves the 180s-cached % unmoved → delta 0; a heavy turn outlasts the cache and the
+// jump shows). Fallback, only when the meter was unreachable this turn, is the Stop-stashed turn $
+// against windowBudgetUSD. The <=100 cap drops meter artifacts (a post-outage re-baseline reads as
+// a >full-window "jump" that no single turn could produce).
+function windowSpikeVerdict(now5h, prev, lastTurnUsd, cfg) {
+  const min = cfg.windowSpikeWarnPct;
+  if (now5h && prev && prev.pct != null && sameWindowCycle(prev.resetsAt, now5h.resetsAt) && now5h.pct >= prev.pct) {
+    const spikePct = now5h.pct - prev.pct;
+    if (spikePct >= min && spikePct <= 100) {
+      return { fire: true, spikePct, fromPct: prev.pct, toPct: now5h.pct, estimated: false };
+    }
+    return { fire: false };
+  }
+  if (!now5h && cfg.windowBudgetUSD > 0 && lastTurnUsd > 0) {
+    const spikePct = (lastTurnUsd / cfg.windowBudgetUSD) * 100;
+    if (spikePct >= min && spikePct <= 100) {
+      return { fire: true, spikePct, fromPct: null, toPct: null, estimated: true };
+    }
+  }
+  return { fire: false };
+}
+
+// R12b verdict — is the tightest window at/over windowThresholdWarnPct, and not already flagged
+// this cycle? `warned` is the last-fired {name, resetsAt}; a match on name + same-cycle resets_at
+// suppresses the repeat, so it fires once per window and re-arms when THAT window actually resets
+// (a different window, or the same one a cycle later, fires again).
+function windowThresholdVerdict(worst, warned, cfg) {
+  if (!worst || worst.pct < cfg.windowThresholdWarnPct) return { fire: false };
+  const already = warned && warned.name === worst.name && sameWindowCycle(warned.resetsAt, worst.resetsAt);
+  if (already) return { fire: false };
+  return { fire: true, pct: worst.pct, name: worst.name, resetsAt: worst.resetsAt };
+}
+
+// The relayed copy — instructions TO the model (mirrors the idle/bomb notes). NEVER a dollar
+// figure: window budget is rate-limit consumption, and on a subscription a $ reads as a phantom
+// charge. Pure + exported so a golden test can pin the contract.
+function windowSpikeNote(sv, now5h) {
+  const reset = now5h && now5h.resetsAt ? ` and resets ${fmtReset(now5h.resetsAt)}` : '';
+  const magnitude = sv.estimated
+    ? `an estimated ~${Math.round(sv.spikePct)}% of the 5-hour usage window (the meter was ` +
+      `unreachable, so this is calibrated from the turn's weighted cost, not measured)`
+    : `~${Math.round(sv.spikePct)} points of the 5-hour usage window (it climbed from ~` +
+      `${sv.fromPct}% to ~${sv.toPct}% used${reset})`;
+  return (
+    `window-spike: since the user's last turn, a single stretch of work ate ${magnitude}. Relay ` +
+    `this as a STANDALONE warning block, never woven into your answer: open with "⚠️ Hey —" and ` +
+    `keep a warm conversational voice (helpful friend, not system log), 2 plain sentences, NO ` +
+    `dollar figures (this is rate-limit budget, not money). Sentence 1 names the jump in window %; ` +
+    `sentence 2 the out — a lighter next turn, or /clear and a fresh session if that heavy work is ` +
+    `done. Then a horizontal rule before the answer itself.`
+  );
+}
+
+function windowThresholdNote(tv, cfg) {
+  const reset = tv.resetsAt ? ` and resets ${fmtReset(tv.resetsAt)}` : '';
+  return (
+    `window-threshold: the user's ${tv.name} is at ~${tv.pct}% used${reset} — past the ` +
+    `${cfg.windowThresholdWarnPct}% mark, so what's now at stake is a throttle (losing access ` +
+    `until the window resets), not a bill. Relay this as a STANDALONE warning block, never woven ` +
+    `into your answer: open with "⚠️ Hey —" and keep a warm conversational voice, 2 plain ` +
+    `sentences, NO dollar figures. Sentence 1 names the window, the % used, and when it resets; ` +
+    `sentence 2 the out — wrap up heavy work before the reset, or /clear and continue lighter. ` +
+    `Then a horizontal rule before the answer itself.`
+  );
+}
+
+// R12b gate reason — USER-facing text (Claude never sees it, so no relay instructions), future
+// tense (nothing paid yet), and the ↑+Enter escape hatch verbatim like idleGate's block. No $.
+function windowThresholdGateReason(tv) {
+  const reset = tv.resetsAt ? `, which resets ${fmtReset(tv.resetsAt)}` : '';
+  return (
+    `⚠️ Hey — your ${tv.name} is at ~${tv.pct}% used${reset}, and continuing here will eat further ` +
+    `into it. On a subscription the wall isn't a bill — it's a throttle, losing access until the ` +
+    `window resets.\n\n` +
+    `To continue anyway: press ↑ then Enter. To protect what's left of the window: wrap up here, or ` +
+    `/clear and pick the essential thread back up in a fresh, lighter session.`
+  );
+}
+
 const fmtUSD = v => `$${v.toFixed(2)}`;
 const fmtK = v => v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1000 ? `${Math.round(v / 1000)}k` : `${v}`;
 // total tokens PROCESSED (in + out + cache read/write) — the unit user-facing check-ins lead
@@ -1263,11 +1428,55 @@ async function onUserPromptSubmit(data, projectDir) {
     }
   }
 
+  const crossed = (cfg.sessionWarnUSD || []).filter(s => m.usd >= s && st.warnedUSD < s);
+
+  // Anthropic's own window meter — fetched at most ONCE per prompt (cached >=180s, so most prompts
+  // are cache-served; the network hit is only every few minutes). Shared by the two window flags
+  // below AND the spend-step check-in, so the fetch never happens twice in a turn.
+  let official = null;
+  if (cfg.officialUsageFetch &&
+      (cfg.windowSpikeWarn || cfg.windowThresholdWarn || cfg.windowThresholdGate || crossed.length)) {
+    const off = await fetchOfficialUsage(projectDir);
+    if (off && off.data) official = off.data;
+  }
+
+  // R12 — window guards, both grounded in that meter. The stake here is a THROTTLE (lost access
+  // until reset), which is unsayable in dollars, so the copy is always window-% and never $.
+  //   R12a window-spike: one turn ate a big slice of the 5h window (the delta of the meter's own
+  //     %, so it self-calibrates — no budget to set).
+  //   R12b window-threshold: the tightest live window (5h or weekly) crossed the high-water mark
+  //     — once per window cycle; re-arms when that window resets. windowThresholdGate escalates
+  //     that same one-shot from a note to a BLOCK (mirrors idleGate).
+  if (cfg.windowSpikeWarn || cfg.windowThresholdWarn || cfg.windowThresholdGate) {
+    const now5h = fiveHourWindow(official);
+    if (cfg.windowSpikeWarn) {
+      const prev = st.lastWindowPct != null
+        ? { pct: st.lastWindowPct, resetsAt: st.lastWindowResetsAt } : null;
+      const sv = windowSpikeVerdict(now5h, prev, st.lastTurnDeltaUsd || 0, cfg);
+      if (sv.fire) notes.push(windowSpikeNote(sv, now5h));
+      // advance the baseline whenever the meter is live (fired or not) so the next delta is fresh
+      if (now5h) { st.lastWindowPct = now5h.pct; st.lastWindowResetsAt = now5h.resetsAt; }
+    }
+    if (cfg.windowThresholdWarn || cfg.windowThresholdGate) {
+      const tv = windowThresholdVerdict(tightestWindow(official), st.warnedWindow, cfg);
+      if (tv.fire) {
+        st.warnedWindow = { name: tv.name, resetsAt: tv.resetsAt };
+        // Gate: pre-empt the turn before anything reaches the API. The one-shot key set above lets
+        // the ↑+Enter re-send pass through silently next time (charge accepted). Note is the fallback.
+        if (cfg.windowThresholdGate) {
+          saveState(projectDir, sid, st);
+          process.stdout.write(JSON.stringify({ decision: 'block', reason: windowThresholdGateReason(tv) }));
+          return;
+        }
+        if (cfg.windowThresholdWarn) notes.push(windowThresholdNote(tv, cfg));
+      }
+    }
+  }
+
   // Session-spend steps — announce once per crossed step. v2: total includes fleets.
   // The trigger stays dollar-weighted (cross-model normalization); the MESSAGE leads with
   // tokens, one metric per line. The 5h scan is fresh-parse (no cache) — acceptable only
   // because step crossings are rare by design.
-  const crossed = (cfg.sessionWarnUSD || []).filter(s => m.usd >= s && st.warnedUSD < s);
   if (crossed.length) {
     st.warnedUSD = Math.max(...crossed);
     const split = m.agents.files
@@ -1277,12 +1486,9 @@ async function onUserPromptSubmit(data, projectDir) {
     // after is supporting detail (Andrew 2026-07-12).
     const statLines = [];
     let haveOfficial = false;
-    if (cfg.officialUsageFetch) {
-      const off = await fetchOfficialUsage(projectDir);
-      if (off && off.data) {
-        const ol = officialLines(off.data);
-        if (ol.length) { statLines.push(...ol); haveOfficial = true; }
-      }
+    if (official) {
+      const ol = officialLines(official);
+      if (ol.length) { statLines.push(...ol); haveOfficial = true; }
     }
     statLines.push(
       `This session: ${fmtK(sessionTokens(m))} tokens${split}` +
@@ -1395,6 +1601,9 @@ function onStop(data, projectDir) {
   const st = loadState(projectDir, sid);
   const delta = m.usd - (st.lastUSD || 0);
   st.lastUSD = m.usd;
+  // Stash the turn's weighted spend so R12a's spike flag has a denominator when the live window
+  // meter is unreachable (its only fallback path; the primary path uses the meter's own % delta).
+  st.lastTurnDeltaUsd = Math.max(0, delta);
 
   // R2: workflow growth -> usage-log receipt + queue a one-line receipt for the next prompt +
   // update the project-level history the launch confirm quotes.
@@ -2056,4 +2265,6 @@ if (require.main === module) {
 module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, officialLines,
   analyzeSession, renderAnalysis, payloadVerdict, fanVerdict, workflowSource, skillSizes, recordObservedSkill,
   generateBudgets, slug, driftNote, recoverTail, resolveMarker, writeMigrateCandidate, clearMarker,
-  migrateReceipt, resolveConfig, MODE_PROFILES };
+  migrateReceipt, resolveConfig, MODE_PROFILES,
+  fiveHourWindow, tightestWindow, windowSpikeVerdict, windowThresholdVerdict,
+  windowSpikeNote, windowThresholdNote, windowThresholdGateReason };
