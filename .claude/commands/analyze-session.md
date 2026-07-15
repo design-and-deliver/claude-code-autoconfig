@@ -1,5 +1,5 @@
 <!-- @description Analyze one session's token spend — deterministic RENT/BOMBS/FLEETS/TTL digest plus an efficiency read-out: dominant cost category, named causes, and what to change in future sessions. -->
-<!-- @version 1 -->
+<!-- @version 2 -->
 <!-- @response success | Prints the digest verbatim, then interpretation: dominant category, top causes, forward recommendations. -->
 <!-- @example /analyze-session cf4d557d | Analyze that session's efficiency -->
 
@@ -41,3 +41,15 @@ Show the digest verbatim in a code block first. Then, in prose:
 
 Tokens lead; mention $ only where the digest itself shows dollar figures (API-billed
 sessions). Keep the interpretation to a few short paragraphs — the digest carries the numbers.
+
+## Step 3: zero-token tip (fat sessions only)
+
+If the digest's "live context at end" is ≥ 150k tokens, close with ONE extra line — the
+zero-token path for next time (this run was already paid for; the tip is for the next one):
+
+> Tip: in a session this fat, you can skip the model entirely — run
+> `node .claude/hooks/token-guard.js --analyze <sid8>` in a terminal (or prefix with `!` in
+> the prompt) to read the digest for zero tokens, or run `/analyze-session <sid8>` from a
+> fresh session to get interpretation without this session's per-turn context rent.
+
+Below 150k, omit the tip — the rent saving is too small to be worth the noise.
