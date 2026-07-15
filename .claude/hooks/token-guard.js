@@ -80,13 +80,13 @@
  *   windowSpikeConfirm true — R12a escalation: render the spike as an interactive AskUserQuestion
  *   card ("Keep going" / "Unpack to review") instead of the passive note. "Unpack" runs the
  *   /analyze-session forensic digest and waits (does NOT answer the pending prompt). It is a SOFT
- *   relay card, never a decision:'block', so it rides in EVERY mode — flow included — without
- *   tripping flow's no-hard-block contract. Off -> the passive standalone warning note.
+ *   relay card, never a decision:'block' — a soft interrupt safe even in the light default
+ *   posture, not only under token-saver. Off -> the passive standalone warning note.
  *   windowThresholdWarn true · windowThresholdWarnPct 80 — R12b: flag once per window cycle when the
  *   tightest live window (5h OR weekly) crosses N% used. Re-arms when THAT window resets. The stake
  *   is a throttle, not a bill — the copy never carries a $ figure. Both ride the officialUsageFetch
  *   meter; on an API key with no OAuth meter they're inert unless windowBudgetUSD supplies a proxy.
- *   windowThresholdGate false — R12b escalation (mirrors idleGate): instead of a note, BLOCK the
+ *   windowThresholdGate true — R12b escalation, ON by default: instead of a note, BLOCK the
  *   submission once per cycle when the tightest window is past the mark. The one-shot key lets the
  *   ↑+Enter re-send through (charge accepted). The block reason is user-facing (future tense, no $).
  *   fleetMeter true · workflowConfirm true · bombJumpTokens 50000 · bombGateWhenFat false
@@ -138,7 +138,8 @@ const WEB_SEARCH_USD_EACH = 0.01;
 const USD_PER_AGENT_RULE_OF_THUMB = 0.5; // forensic fleet: 1.05M writes / 45 agents ≈ 23k × $20/MTok
 
 const DEFAULTS = {
-  mode: 'standard',                 // Cost Control modes: interruption profile — token-saver | standard | flow
+  tokenSaver: false,                // Cost Control: single on/off toggle. Off = this light default posture;
+                                    // on overlays the aggressive TOKEN_SAVER preset (blocks + tighter thresholds).
   contextWarnTokens: 150000,
   sessionWarnUSD: [5, 15, 30],
   windowBudgetUSD: null,
@@ -170,67 +171,49 @@ const DEFAULTS = {
   windowSpikeWarn: true,
   windowSpikeWarnPct: 20,
   windowSpikeConfirm: true,      // R12a: render the spike flag as a two-option confirm card (keep going /
-                                 // unpack via /analyze-session), not a passive note. Fires in all 3 modes.
+                                 // unpack via /analyze-session), not a passive note. On regardless of the toggle.
   windowThresholdWarn: true,
   windowThresholdWarnPct: 80,
-  windowThresholdGate: false,
+  windowThresholdGate: true,     // R12b: the one hard block ON by default — a throttle (hours of lost
+                                 // access) is worse than a single ↑+Enter, so everyone gets the 80% stopgate.
   analyzeHint: true,
 };
 
 // ---------------------------------------------------------------------------
-// Interruption modes (R-modes) — a static profile layer over the R-rule knobs.
-// One dial trading token-thrift <-> flow. A mode is a preset applied BETWEEN
-// DEFAULTS and the user's explicit config, so an explicitly-set key always wins
-// over its mode's value (the mode sets defaults; the user can still pin one knob).
-// INVARIANT: no profile touches fanHardCap (R10) or lowers a DENY floor — modes
-// quiet nags, never remove the seatbelt. MVP is static: 'standard' is the default
-// and its profile is intentionally empty, so an empty config == today's shipped
-// posture. (A future smart 'adaptive' mode — breakpoint deferral, budget-scaled
-// thresholds — is deferred until the levers exist; see the spec.)
-const MODE_PROFILES = {
-  'token-saver': {
-    // Maximum protection, maximum interruption: the shared bomb threshold gets
-    // more sensitive, wide-fan asks fire sooner, idle + context warn sooner, and
-    // the opt-in BLOCKS flip on. driftMinContextTokens is left at its principled
-    // 100k floor (below it /eval's CUT verdict isn't pre-determined — R6).
-    bombJumpTokens: 30000,
-    fanWarnAgents: 5,
-    idleWarnMinutes: 30,
-    contextWarnTokens: 100000,     // flag context bloat earlier than the 150k default
-    bombGateWhenFat: true,
-    idleGate: true,
-    commandPayloadGate: true,
-    miniBombGate: true,
-    windowSpikeWarnPct: 15,        // flag a smaller single-turn window bite than the 20 default
-    windowThresholdWarnPct: 75,    // warn approaching the throttle sooner than 80
-    windowThresholdGate: true,     // and hard-pause at the mark, like the other opt-in blocks here
-  },
-  'standard': {}, // default — no static overrides; == the shipped defaults
-  'flow': {
-    // Wasteful on tokens by design, in exchange for never breaking flow. Raising
-    // the shared bombJumpTokens simultaneously quiets R3 warn / R8 gate / R9
-    // accumulator; the context warn loosens to match (raised, not disabled — the
-    // seatbelt logic still applies); the soft nudges (drift, mini-bomb) go silent.
-    // KEPT on purpose: the R4 idle re-write warn (a zero-downside free win), the R12 window
-    // spike/threshold flags (throttle-avoidance is a seatbelt, not a soft nudge — losing access
-    // for hours is exactly what flow's big turns risk), and fanHardCap (the catastrophe seatbelt)
-    // — all ride their unchanged defaults. windowSpikeConfirm rides its default ON here too: the
-    // spike's confirm card is a SOFT relay (an AskUserQuestion, not a decision:'block'), so it
-    // honors flow's no-hard-block contract while still catching a throttle-sized single-turn spike.
-    bombJumpTokens: 120000,
-    fanWarnAgents: 25,
-    contextWarnTokens: 250000,     // loosen to match the bomb loosening; do NOT disable
-    driftNudge: false,
-    miniBombWarn: false,
-  },
+// Cost Control — a SINGLE on/off toggle (`tokenSaver`), off by default. Off is the light
+// default posture above; on overlays the TOKEN_SAVER preset: maximum protection, maximum
+// interruption. The preset is applied BETWEEN DEFAULTS and the user's explicit config, so
+// an explicitly-set key always wins over the preset (the preset only sets defaults; the user
+// can still pin one knob). INVARIANT: the preset never touches fanHardCap (R10) or lowers a
+// DENY floor — token-saver only ADDS seatbelts, never removes one. (The retired three-mode
+// dial — token-saver / standard / flow — collapsed to this toggle on 2026-07-15; a future
+// budget-scaled 'adaptive' layer is deferred until the levers exist.)
+const TOKEN_SAVER = {
+  // Maximum protection, maximum interruption: the shared bomb threshold gets more sensitive,
+  // wide-fan asks fire sooner, idle + context warn sooner, the single-turn spike flags sooner,
+  // and the opt-in BLOCKS flip on — idle, command-payload, mini-bomb, bomb-when-fat. (The R12b
+  // 80% throttle gate is ON for everyone via DEFAULTS, so it isn't repeated here.)
+  // driftMinContextTokens is left at its principled 100k floor (below it /eval's CUT verdict
+  // isn't pre-determined — R6).
+  bombJumpTokens: 30000,
+  fanWarnAgents: 5,
+  idleWarnMinutes: 30,
+  contextWarnTokens: 100000,     // flag context bloat earlier than the 150k default
+  bombGateWhenFat: true,
+  idleGate: true,
+  commandPayloadGate: true,
+  miniBombGate: true,
+  windowSpikeWarnPct: 10,        // flag a smaller single-turn window bite than the 20 default
 };
 
-// Layer DEFAULTS < mode profile < explicit user config. Pure + exported for
-// fixtures (like meter/driftVerdict). Unknown mode -> no profile (DEFAULTS+user).
+// Layer DEFAULTS < TOKEN_SAVER (when on) < explicit user config. Pure + exported for
+// fixtures (like meter/driftVerdict). The toggle is `tokenSaver` (boolean); a legacy
+// `mode: 'token-saver'` still turns it on, and the retired 'standard'/'flow' resolve to
+// the light default (off).
 function resolveConfig(user) {
   const u = user || {};
-  const mode = u.mode || DEFAULTS.mode;
-  const profile = MODE_PROFILES[mode] || {};
+  const on = u.tokenSaver === true || u.mode === 'token-saver';
+  const profile = on ? TOKEN_SAVER : {};
   return Object.assign({}, DEFAULTS, profile, u);
 }
 
@@ -1197,8 +1180,8 @@ function windowSpikeNote(sv, now5h) {
 // AskUserQuestion card (mirrors driftNote's auto-migrate branch): "keep going" dismisses; "unpack it"
 // runs the /analyze-session forensic digest and waits. Same dollar-free throttle framing as the
 // passive note (window budget is a rate limit, not money). Because it's a relayed card and NOT a
-// `decision:'block'`, it stays a soft interrupt — it fires in flow without tripping flow's no-block
-// invariant (see MODE_PROFILES flow note / the r12 test). Pure + exported so a golden test pins it.
+// `decision:'block'`, it stays a soft interrupt — safe to ship on by default (it never hard-blocks
+// a turn, unlike the R12b throttle gate). Pure + exported so a golden test pins it.
 function windowSpikeConfirmNote(sv, now5h, sid) {
   const reset = now5h && now5h.resetsAt ? `, resets ${fmtReset(now5h.resetsAt)}` : '';
   const magnitude = sv.estimated
@@ -2310,6 +2293,6 @@ if (require.main === module) {
 module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, officialLines,
   analyzeSession, renderAnalysis, payloadVerdict, fanVerdict, workflowSource, skillSizes, recordObservedSkill,
   generateBudgets, slug, driftNote, recoverTail, resolveMarker, writeMigrateCandidate, clearMarker,
-  migrateReceipt, resolveConfig, MODE_PROFILES,
+  migrateReceipt, resolveConfig, TOKEN_SAVER,
   fiveHourWindow, tightestWindow, windowSpikeVerdict, windowThresholdVerdict,
   windowSpikeNote, windowSpikeConfirmNote, windowThresholdNote, windowThresholdGateReason };

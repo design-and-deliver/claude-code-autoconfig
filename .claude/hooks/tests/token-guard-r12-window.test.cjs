@@ -10,16 +10,16 @@ const path = require('path');
 
 const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
 const {
-  resolveConfig, MODE_PROFILES,
+  resolveConfig, TOKEN_SAVER,
   fiveHourWindow, tightestWindow, windowSpikeVerdict, windowThresholdVerdict,
   windowSpikeNote, windowSpikeConfirmNote, windowThresholdNote, windowThresholdGateReason,
 } = require(HOOK);
 
-const CFG = resolveConfig({});                 // standard: spike 20, threshold 80
+const CFG = resolveConfig({});                 // light default (token-saver off): spike 20, threshold 80
 
 // ---------- config surface: on by default, plan-agnostic thresholds ----------
 
-test('window guards ship ON with 20/80 thresholds in standard', () => {
+test('window guards ship ON with 20/80 thresholds by default', () => {
   assert.equal(CFG.windowSpikeWarn, true);
   assert.equal(CFG.windowSpikeWarnPct, 20);
   assert.equal(CFG.windowSpikeConfirm, true);      // spike renders as the interactive confirm card
@@ -27,42 +27,41 @@ test('window guards ship ON with 20/80 thresholds in standard', () => {
   assert.equal(CFG.windowThresholdWarnPct, 80);
 });
 
-test('the window gate is opt-in — off by default and in standard', () => {
-  assert.equal(CFG.windowThresholdGate, false);
-  assert.equal(resolveConfig({ mode: 'standard' }).windowThresholdGate, false);
+test('the throttle gate is ON by default — the one hard block everyone gets', () => {
+  assert.equal(CFG.windowThresholdGate, true);
+  assert.equal(resolveConfig({ tokenSaver: false }).windowThresholdGate, true);
+  assert.equal(resolveConfig({ tokenSaver: true }).windowThresholdGate, true);
+  assert.equal(resolveConfig({ windowThresholdGate: false }).windowThresholdGate, false); // a user can still pin it off
 });
 
-test('token-saver flags sooner (15/75) AND flips the gate on; flow keeps the soft card but no hard block', () => {
-  const ts = resolveConfig({ mode: 'token-saver' });
-  assert.equal(ts.windowSpikeWarnPct, 15);
-  assert.equal(ts.windowThresholdWarnPct, 75);
-  assert.equal(ts.windowThresholdGate, true);      // max protection: hard-pause at the mark
-  const flow = resolveConfig({ mode: 'flow' });
-  // throttle-avoidance is a seatbelt (warn + soft card stay on), but a hard BLOCK contradicts "never break flow"
-  assert.equal(flow.windowSpikeWarn, true);
-  assert.equal(flow.windowSpikeConfirm, true);     // the SOFT confirm card is allowed in flow — it's a relay, not a block
-  assert.equal(flow.windowThresholdWarn, true);
-  assert.equal(flow.windowThresholdGate, false);   // note/card yes, hard block no
-  assert.equal(flow.windowSpikeWarnPct, 20);
-  assert.equal(flow.windowThresholdWarnPct, 80);
+test('token-saver flags the spike sooner (10); threshold rides the 80 default; gate on for everyone', () => {
+  const ts = resolveConfig({ tokenSaver: true });
+  assert.equal(ts.windowSpikeWarnPct, 10);         // sooner than the 20 default
+  assert.equal(ts.windowThresholdWarnPct, 80);     // the bespoke 75 was dropped — rides the default
+  assert.equal(ts.windowThresholdGate, true);      // hard-pause at the mark
+  // the default (toggle off) keeps the lighter spike (20) + soft card, AND the 80% stopgate
+  assert.equal(CFG.windowSpikeWarn, true);
+  assert.equal(CFG.windowSpikeConfirm, true);
+  assert.equal(CFG.windowThresholdWarn, true);
+  assert.equal(CFG.windowThresholdGate, true);
+  assert.equal(CFG.windowSpikeWarnPct, 20);
 });
 
-test('a user can pin the gate on in any mode (explicit key beats the mode)', () => {
-  assert.equal(resolveConfig({ mode: 'flow', windowThresholdGate: true }).windowThresholdGate, true);
-  assert.equal(resolveConfig({ mode: 'token-saver', windowThresholdGate: false }).windowThresholdGate, false);
+test('a user can pin the gate off despite the on-by-default (explicit key beats it)', () => {
+  assert.equal(resolveConfig({ windowThresholdGate: false }).windowThresholdGate, false);       // off without token-saver
+  assert.equal(resolveConfig({ tokenSaver: true, windowThresholdGate: false }).windowThresholdGate, false); // off despite token-saver
 });
 
-test('standard profile stays empty (window keys ride bare defaults there)', () => {
-  assert.deepEqual(MODE_PROFILES.standard, {});
+test('toggle off resolves to the bare defaults (no preset overlaid)', () => {
+  assert.deepEqual(resolveConfig({ tokenSaver: false }), resolveConfig({}));
 });
 
-test('the spike confirm card ships ON in every mode (a SOFT relay, so flow keeps it too)', () => {
-  for (const mode of ['token-saver', 'standard', 'flow']) {
-    assert.equal(resolveConfig({ mode }).windowSpikeConfirm, true, `${mode} should show the confirm card`);
-  }
-  // it's a config default, not a profile override — a user can still turn it off explicitly in any mode
-  assert.equal(resolveConfig({ mode: 'flow', windowSpikeConfirm: false }).windowSpikeConfirm, false);
-  assert.deepEqual(MODE_PROFILES.standard, {});    // and no profile pins it (it rides DEFAULTS)
+test('the spike confirm card ships ON with the toggle both off and on (a SOFT relay, rides DEFAULTS)', () => {
+  assert.equal(resolveConfig({ tokenSaver: false }).windowSpikeConfirm, true);
+  assert.equal(resolveConfig({ tokenSaver: true }).windowSpikeConfirm, true);
+  // it's a config default, not a preset override — a user can still turn it off explicitly
+  assert.equal(resolveConfig({ windowSpikeConfirm: false }).windowSpikeConfirm, false);
+  assert.ok(!('windowSpikeConfirm' in TOKEN_SAVER));   // the preset doesn't pin it — it rides DEFAULTS
 });
 
 // ---------- fiveHourWindow(): flat field first, limits[] fallback, null-safe ----------

@@ -1,107 +1,96 @@
-// Cost Control modes: interruption profiles (Token Saver · Standard · Flow State).
-// Pure unit tests on resolveConfig / MODE_PROFILES — the static profile layer.
+// Cost Control — a single on/off toggle (`tokenSaver`), off by default. Off is the light
+// default posture; on overlays the TOKEN_SAVER preset (tighter thresholds + the opt-in blocks).
+// Pure unit tests on resolveConfig / TOKEN_SAVER — the static overlay layer.
 // Run: node --test token-guard-modes.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
 
 const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
-const { resolveConfig, MODE_PROFILES } = require(HOOK);
+const { resolveConfig, TOKEN_SAVER } = require(HOOK);
 
-// ---------- backward compat: empty config == today's standard posture ----------
+// ---------- default: toggle OFF == the light shipped posture ----------
 
-test('empty config resolves to standard with today\'s shipped posture', () => {
+test('empty config resolves to the light default (token-saver off)', () => {
   const c = resolveConfig({});
-  assert.equal(c.mode, 'standard');
-  // warns/asks on, opt-in blocks off — the pre-modes defaults, unchanged
+  assert.equal(c.tokenSaver, false);              // the toggle defaults to off
+  // warns/asks on, opt-in blocks off — the light default posture, unchanged
   assert.equal(c.bombJumpTokens, 50000);
-  assert.equal(c.contextWarnTokens, 150000);      // context warn rides the default in standard
+  assert.equal(c.contextWarnTokens, 150000);
   assert.equal(c.driftNudge, true);
   assert.equal(c.miniBombWarn, true);
   assert.equal(c.idleGate, false);
   assert.equal(c.commandPayloadGate, false);
   assert.equal(c.miniBombGate, false);
   assert.equal(c.bombGateWhenFat, false);
+  assert.equal(c.windowThresholdGate, true);      // the 80% stopgate — the one hard block on by default
 });
 
-test('standard has an intentionally empty static profile', () => {
-  assert.deepEqual(MODE_PROFILES.standard, {});
-  // so standard === bare defaults on every key it could touch
-  assert.deepEqual(resolveConfig({ mode: 'standard' }), resolveConfig({}));
+test('an explicit tokenSaver:false is identical to the empty (off) config', () => {
+  assert.deepEqual(resolveConfig({ tokenSaver: false }), resolveConfig({}));
 });
 
-test('resolveConfig tolerates null/undefined input (fail-safe)', () => {
-  assert.equal(resolveConfig(null).mode, 'standard');
-  assert.equal(resolveConfig(undefined).bombJumpTokens, 50000);
+test('resolveConfig tolerates null/undefined input (fail-safe → light default)', () => {
+  assert.equal(resolveConfig(null).bombJumpTokens, 50000);
+  assert.equal(resolveConfig(undefined).idleGate, false);
 });
 
-// ---------- token-saver: more sensitive, blocks flip on ----------
+// ---------- toggle ON: tighter thresholds, opt-in blocks flip on ----------
 
-test('token-saver tightens thresholds and turns opt-in blocks on', () => {
-  const c = resolveConfig({ mode: 'token-saver' });
+test('tokenSaver:true tightens thresholds and turns the opt-in blocks on', () => {
+  const c = resolveConfig({ tokenSaver: true });
   assert.equal(c.bombJumpTokens, 30000);          // more sensitive than 50k default
   assert.equal(c.fanWarnAgents, 5);               // wide-fan asks sooner than 10
   assert.equal(c.idleWarnMinutes, 30);            // idle warns sooner than 60
   assert.equal(c.contextWarnTokens, 100000);      // context warns sooner than 150k
+  assert.equal(c.windowSpikeWarnPct, 10);         // single-turn spike flags sooner than 20
   assert.equal(c.bombGateWhenFat, true);
   assert.equal(c.idleGate, true);
   assert.equal(c.commandPayloadGate, true);
   assert.equal(c.miniBombGate, true);
+  assert.equal(c.windowThresholdGate, true);      // stays on (it's a DEFAULT, on for everyone)
 });
 
-test('token-saver leaves the R6 drift floor at its principled 100k', () => {
-  // below 100k /eval's CUT verdict isn\'t pre-determined — modes must not move it
-  assert.equal(resolveConfig({ mode: 'token-saver' }).driftMinContextTokens, 100000);
+test('tokenSaver leaves the R6 drift floor at its principled 100k', () => {
+  // below 100k /eval's CUT verdict isn't pre-determined — the toggle must not move it
+  assert.equal(resolveConfig({ tokenSaver: true }).driftMinContextTokens, 100000);
 });
 
-// ---------- flow: quieter, but seatbelt + free-win stay ----------
+// ---------- retired modes: legacy compat + safe fallback ----------
 
-test('flow raises the shared bomb threshold and silences soft nudges', () => {
-  const c = resolveConfig({ mode: 'flow' });
-  assert.equal(c.bombJumpTokens, 120000);         // quiets R3 warn / R8 gate / R9 accumulator together
-  assert.equal(c.fanWarnAgents, 25);
-  assert.equal(c.contextWarnTokens, 250000);      // loosened to match, not disabled
-  assert.equal(c.driftNudge, false);              // soft migrate nudge off
-  assert.equal(c.miniBombWarn, false);            // soft mid-turn note off
+test('a legacy `mode: "token-saver"` string still turns the toggle on', () => {
+  assert.equal(resolveConfig({ mode: 'token-saver' }).idleGate, true);
+  assert.equal(resolveConfig({ mode: 'token-saver' }).windowThresholdGate, true);
 });
 
-test('flow KEEPS the R4 idle re-write warn — the zero-downside free win', () => {
-  const c = resolveConfig({ mode: 'flow' });
-  assert.equal(c.idleWarnMinutes, 60);            // unchanged: skipping it is pure loss
+test('the retired standard/flow modes resolve to the light default (no phantom suppression)', () => {
+  for (const mode of ['standard', 'flow', 'turbo']) {
+    const c = resolveConfig({ mode });
+    assert.equal(c.driftNudge, true);             // flow used to silence this — no longer
+    assert.equal(c.idleGate, false);              // no opt-in blocks leak in
+    assert.equal(c.windowThresholdGate, true);    // ...but the 80% stopgate rides DEFAULTS, so it's on here too
+    assert.equal(c.fanHardCap, 50);               // seatbelt intact
+  }
 });
 
 // ---------- the load-bearing invariant ----------
 
-test('INVARIANT: no mode lowers fanHardCap — the catastrophe DENY seatbelt', () => {
+test('INVARIANT: token-saver never lowers fanHardCap and never owns that knob', () => {
   const floor = resolveConfig({}).fanHardCap;     // default 50
-  for (const mode of Object.keys(MODE_PROFILES)) {
-    assert.ok(resolveConfig({ mode }).fanHardCap >= floor,
-      `${mode} must not lower fanHardCap below ${floor}`);
-    // and no profile sets fanHardCap at all — it is never a mode-owned knob
-    assert.ok(!(mode in MODE_PROFILES && 'fanHardCap' in MODE_PROFILES[mode]),
-      `${mode} profile must not touch fanHardCap`);
-  }
+  assert.ok(resolveConfig({ tokenSaver: true }).fanHardCap >= floor,
+    `token-saver must not lower fanHardCap below ${floor}`);
+  assert.ok(!('fanHardCap' in TOKEN_SAVER), 'fanHardCap is never a preset-owned knob');
 });
 
-// ---------- precedence: explicit user key beats the mode ----------
+// ---------- precedence: explicit user key beats the preset ----------
 
-test('an explicitly-set key overrides the mode preset for that key', () => {
-  // Flow silences drift, but a user can still pin it back on
-  assert.equal(resolveConfig({ mode: 'flow', driftNudge: true }).driftNudge, true);
-  // Token Saver turns idleGate on, but a user can veto just that block
-  assert.equal(resolveConfig({ mode: 'token-saver', idleGate: false }).idleGate, false);
-  // A pinned context warn beats the mode's preset in either direction
-  assert.equal(resolveConfig({ mode: 'token-saver', contextWarnTokens: 200000 }).contextWarnTokens, 200000);
-  assert.equal(resolveConfig({ mode: 'flow', contextWarnTokens: 120000 }).contextWarnTokens, 120000);
-  // untouched keys still follow the mode
-  assert.equal(resolveConfig({ mode: 'flow', driftNudge: true }).bombJumpTokens, 120000);
-});
-
-// ---------- unknown mode: safe fallback ----------
-
-test('unknown mode falls back to DEFAULTS + user (no profile applied)', () => {
-  const c = resolveConfig({ mode: 'turbo', bombJumpTokens: 99000 });
-  assert.equal(c.bombJumpTokens, 99000);          // user key honored
-  assert.equal(c.fanHardCap, 50);                 // defaults intact, seatbelt intact
-  assert.equal(c.driftNudge, true);               // no phantom flow-style suppression
+test('an explicitly-set key overrides the preset for that key', () => {
+  // token-saver turns idleGate on, but a user can veto just that block
+  assert.equal(resolveConfig({ tokenSaver: true, idleGate: false }).idleGate, false);
+  // a pinned context warn beats the preset in either direction
+  assert.equal(resolveConfig({ tokenSaver: true, contextWarnTokens: 200000 }).contextWarnTokens, 200000);
+  // and a user can pin a block ON without the toggle at all
+  assert.equal(resolveConfig({ windowThresholdGate: true }).windowThresholdGate, true);
+  // untouched keys still follow the preset
+  assert.equal(resolveConfig({ tokenSaver: true, idleGate: false }).bombJumpTokens, 30000);
 });
