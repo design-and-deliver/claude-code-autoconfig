@@ -166,12 +166,13 @@ const DEFAULTS = {
 const MODE_PROFILES = {
   'token-saver': {
     // Maximum protection, maximum interruption: the shared bomb threshold gets
-    // more sensitive, wide-fan asks fire sooner, idle warns sooner, and the
-    // opt-in BLOCKS flip on. driftMinContextTokens is left at its principled
+    // more sensitive, wide-fan asks fire sooner, idle + context warn sooner, and
+    // the opt-in BLOCKS flip on. driftMinContextTokens is left at its principled
     // 100k floor (below it /eval's CUT verdict isn't pre-determined — R6).
     bombJumpTokens: 30000,
     fanWarnAgents: 5,
     idleWarnMinutes: 30,
+    contextWarnTokens: 100000,     // flag context bloat earlier than the 150k default
     bombGateWhenFat: true,
     idleGate: true,
     commandPayloadGate: true,
@@ -181,11 +182,13 @@ const MODE_PROFILES = {
   'flow': {
     // Wasteful on tokens by design, in exchange for never breaking flow. Raising
     // the shared bombJumpTokens simultaneously quiets R3 warn / R8 gate / R9
-    // accumulator; the soft nudges (drift, mini-bomb) go silent. KEPT on purpose:
-    // the R4 idle re-write warn (a zero-downside free win) and fanHardCap (the
-    // catastrophe seatbelt) — both ride their unchanged defaults.
+    // accumulator; the context warn loosens to match (raised, not disabled — the
+    // seatbelt logic still applies); the soft nudges (drift, mini-bomb) go silent.
+    // KEPT on purpose: the R4 idle re-write warn (a zero-downside free win) and
+    // fanHardCap (the catastrophe seatbelt) — both ride their unchanged defaults.
     bombJumpTokens: 120000,
     fanWarnAgents: 25,
+    contextWarnTokens: 250000,     // loosen to match the bomb loosening; do NOT disable
     driftNudge: false,
     miniBombWarn: false,
   },

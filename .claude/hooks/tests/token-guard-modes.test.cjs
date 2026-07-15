@@ -15,6 +15,7 @@ test('empty config resolves to standard with today\'s shipped posture', () => {
   assert.equal(c.mode, 'standard');
   // warns/asks on, opt-in blocks off — the pre-modes defaults, unchanged
   assert.equal(c.bombJumpTokens, 50000);
+  assert.equal(c.contextWarnTokens, 150000);      // context warn rides the default in standard
   assert.equal(c.driftNudge, true);
   assert.equal(c.miniBombWarn, true);
   assert.equal(c.idleGate, false);
@@ -41,6 +42,7 @@ test('token-saver tightens thresholds and turns opt-in blocks on', () => {
   assert.equal(c.bombJumpTokens, 30000);          // more sensitive than 50k default
   assert.equal(c.fanWarnAgents, 5);               // wide-fan asks sooner than 10
   assert.equal(c.idleWarnMinutes, 30);            // idle warns sooner than 60
+  assert.equal(c.contextWarnTokens, 100000);      // context warns sooner than 150k
   assert.equal(c.bombGateWhenFat, true);
   assert.equal(c.idleGate, true);
   assert.equal(c.commandPayloadGate, true);
@@ -58,6 +60,7 @@ test('flow raises the shared bomb threshold and silences soft nudges', () => {
   const c = resolveConfig({ mode: 'flow' });
   assert.equal(c.bombJumpTokens, 120000);         // quiets R3 warn / R8 gate / R9 accumulator together
   assert.equal(c.fanWarnAgents, 25);
+  assert.equal(c.contextWarnTokens, 250000);      // loosened to match, not disabled
   assert.equal(c.driftNudge, false);              // soft migrate nudge off
   assert.equal(c.miniBombWarn, false);            // soft mid-turn note off
 });
@@ -87,6 +90,9 @@ test('an explicitly-set key overrides the mode preset for that key', () => {
   assert.equal(resolveConfig({ mode: 'flow', driftNudge: true }).driftNudge, true);
   // Token Saver turns idleGate on, but a user can veto just that block
   assert.equal(resolveConfig({ mode: 'token-saver', idleGate: false }).idleGate, false);
+  // A pinned context warn beats the mode's preset in either direction
+  assert.equal(resolveConfig({ mode: 'token-saver', contextWarnTokens: 200000 }).contextWarnTokens, 200000);
+  assert.equal(resolveConfig({ mode: 'flow', contextWarnTokens: 120000 }).contextWarnTokens, 120000);
   // untouched keys still follow the mode
   assert.equal(resolveConfig({ mode: 'flow', driftNudge: true }).bombJumpTokens, 120000);
 });
