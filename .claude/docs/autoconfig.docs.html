@@ -1313,7 +1313,7 @@
                 title: '.claude/ Directory',
                 desc: 'Commands, rules, settings, and these docs. Keeps configuration organized as your project grows.'
             },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            'rules': {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        'rules': {
                 title: 'rules/',
                 desc: 'Path-scoped context that loads when Claude works on matching files.'
             },
@@ -1669,7 +1669,7 @@ CRITICAL: A plausible-looking cause from code reading is NOT confirmed evidence.
 
 > Run \`/autoconfig\` to populate this based on your project.`
             },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            'analyze-session': {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        'analyze-session': {
                 filename: 'analyze-session.md',
                 content: `# Analyze Session
 
@@ -2306,7 +2306,8 @@ Pending-question signal -- END-OF-TURN TEST, apply it on every turn: does your f
  *                       title exists, +COMMAND on /slash turns) + clear any stale {sid}.ask flag
  *                       + spawn the --turn-watch cancel watchdog (a user interrupt fires NO hook,
  *                       so a detached per-turn child detects a dead turn via marker/screen-hint/CPU forensics
- *                       and repaints ✻ through title-painter.exe: AttachConsole+SetConsoleTitleW)
+ *                       and repaints ✻ through title-painter.exe: AttachConsole+SetConsoleTitleW —
+ *                       and flips ◐ early when a permission dialog opens, beating CC's ~6s notification)
  *   PostToolUse      -> ⬤ working  (refresh, so a mid-turn title flip shows live + clears a stale ◐)
  *   Notification     -> ◐ awaiting your approval (permission_prompt matcher) — or, invoked with
  *                       --idle-rescue (idle_prompt matcher), flip a tab left stuck by a user
@@ -2326,8 +2327,7 @@ Pending-question signal -- END-OF-TURN TEST, apply it on every turn: does your f
  * both hooks inject directives naming two different title files (double tokens, double Writes).
  *
  * The title is set TWO ways on every event: \`process.title\` (= SetConsoleTitleW on Windows — the ONLY
- * mechanism that flips the tab on UserPromptSubmit, where Claude Code drops \`terminalSequence\`) AND
- * \`terminalSequence\` (honored on the other events). node writes UTF-8 natively, so glyphs go out as-is.`
+ * mechanism that flips the tab on UserPromptSubmit, where Claude Code drops \`terminalSequence\`) AND`
             },
             'token-guard-hook': {
                 filename: 'token-guard.js',

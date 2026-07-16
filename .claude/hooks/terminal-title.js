@@ -6,7 +6,8 @@
  *                       title exists, +COMMAND on /slash turns) + clear any stale {sid}.ask flag
  *                       + spawn the --turn-watch cancel watchdog (a user interrupt fires NO hook,
  *                       so a detached per-turn child detects a dead turn via marker/screen-hint/CPU forensics
- *                       and repaints ✻ through title-painter.exe: AttachConsole+SetConsoleTitleW)
+ *                       and repaints ✻ through title-painter.exe: AttachConsole+SetConsoleTitleW —
+ *                       and flips ◐ early when a permission dialog opens, beating CC's ~6s notification)
  *   PostToolUse      -> ⬤ working  (refresh, so a mid-turn title flip shows live + clears a stale ◐)
  *   Notification     -> ◐ awaiting your approval (permission_prompt matcher) — or, invoked with
  *                       --idle-rescue (idle_prompt matcher), flip a tab left stuck by a user
@@ -696,6 +697,7 @@ const PAINTER_CS = [
   '    }',
   '    if (a.Length >= 3 && a[1] == "--live") {',
   '      string needle = a.Length >= 4 ? a[3] : "esc to interrupt";',
+  '      string dialog = a.Length >= 5 ? a[4] : "esc to cancel";',
   '      string res = "attach-fail";',
   '      FreeConsole();',
   '      if (AttachConsole(uint.Parse(a[0]))) {',
@@ -704,15 +706,18 @@ const PAINTER_CS = [
   '        if (h == new IntPtr(-1) || !GetConsoleScreenBufferInfo(h, out bi)) { res = "read-fail"; }',
   '        else {',
   '          res = "dead";',
-  '          for (short y = bi.win.T; y <= bi.win.B && res == "dead"; y++) {',
+  '          short zone = (short)(bi.win.B - 7 > bi.win.T ? bi.win.B - 7 : bi.win.T);',
+  '          for (short y = bi.win.T; y <= bi.win.B && res != "live"; y++) {',
   '            var buf = new char[bi.size.X]; uint rd; COORD c; c.X = 0; c.Y = y;',
   '            if (!ReadConsoleOutputCharacterW(h, buf, (uint)bi.size.X, c, out rd)) continue;',
-  '            if (new string(buf, 0, (int)rd).IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0) res = "live";',
+  '            string row = new string(buf, 0, (int)rd);',
+  '            if (row.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0) res = "live";',
+  '            else if (y >= zone && dialog.Length > 0 && row.IndexOf(dialog, StringComparison.OrdinalIgnoreCase) >= 0) res = "dialog";',
   '          }',
   '        }',
   '      }',
   '      File.WriteAllText(a[2], res, new UTF8Encoding(false));',
-  '      return (res == "live" || res == "dead") ? 0 : 5;',
+  '      return (res == "live" || res == "dead" || res == "dialog") ? 0 : 5;',
   '    }',
   '    FreeConsole();',
   '    if (!AttachConsole(uint.Parse(a[0]))) return 3;',
@@ -727,8 +732,10 @@ const PAINTER_CS = [
 
 // Version in the name = source shape; a PAINTER_CS change MUST bump it so stale exes recompile
 // (ensurePainter early-returns when the exe exists). v3 = case-insensitive --find; v4 = --cpu mode;
-// v5 = --live screen-buffer probe (reads the visible console rows for the "esc to interrupt" hint).
-function painterPath(dir) { return path.join(dir, 'title-painter-v5.exe'); }
+// v5 = --live screen-buffer probe (reads the visible console rows for the "esc to interrupt" hint);
+// v6 = --live also scans the BOTTOM 8 rows for the dialog hint ("esc to cancel") → "dialog", so an
+// open permission dialog is its own state instead of a false "dead" (the 2026-07-15 wifi-app bug).
+function painterPath(dir) { return path.join(dir, 'title-painter-v6.exe'); }
 
 // Kick off the one-time compile (async — the watchdog calls this at startup so the exe is warm
 // long before any rescue). Returns immediately; readiness = the exe existing.
@@ -736,7 +743,12 @@ function ensurePainter(dir) {
   try {
     const exe = painterPath(dir);
     if (fileExists(exe)) return;
-    const src = path.join(dir, 'title-painter-v5.cs');
+    // Best-effort sweep of superseded painter generations (an in-flight old watchdog that loses
+    // its exe mid-probe just degrades to a blind read — the safe direction).
+    for (const stale of ['title-painter-v5.exe', 'title-painter-v5.cs']) {
+      try { fs.unlinkSync(path.join(dir, stale)); } catch (_) { /* absent or locked — fine */ }
+    }
+    const src = path.join(dir, 'title-painter-v6.cs');
     fs.writeFileSync(src, PAINTER_CS);
     const roots = [
       path.join(process.env.WINDIR || 'C:\\Windows', 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe'),
@@ -773,27 +785,36 @@ function sampleCpu(dir, sid, pid, ms) {
 // "esc to interrupt" in CC's bottom status bar; an idle REPL doesn't (verified 2026-07-15 against
 // live + idle sessions — a thinking turn parks the client at ~0% CPU and otherwise looks exactly
 // like a cancel). painter --live attaches to <pid>'s console, reads the visible rows, and reports:
-//   true  → needle on screen (turn alive — NEVER rescue)
-//   false → attached, needle absent (REPL idle — cancel evidence)
-//   null  → can't tell (painter missing / attach or read failed) — treat as NO evidence.
-// CLAUDE_TITLE_TEST_LIVE ('1'|'0'|anything else) forces the result so tests can drive the real
-// watchdog loop deterministically; CLAUDE_TITLE_LIVE_NEEDLE overrides the needle if CC renames it.
+//   'live'   → liveness needle on screen (turn alive — NEVER rescue)
+//   'dialog' → liveness needle absent, but the BOTTOM rows show the dialog hint ("esc to cancel"):
+//              a permission dialog / question card is open — the turn is alive, parked on the user.
+//              The dialog REPLACES the bottom-bar hint, so without this state it reads as a false
+//              "dead" (live-traced 2026-07-15 in wifi-app: false ✻ rescue + a wrongly-set
+//              needle-distrust flag from a first-tool-call permission prompt).
+//   'dead'   → attached, neither needle found (REPL idle — cancel evidence)
+//   null     → can't tell (painter missing / attach or read failed) — treat as NO evidence.
+// Both needles are HARNESS CONTRACTS with CC's UI text, drift-guarded by the round-9 canary.
+// CLAUDE_TITLE_TEST_LIVE ('1'|'0'|'dialog'|anything else) forces the result so tests can drive the
+// real watchdog loop deterministically; CLAUDE_TITLE_LIVE_NEEDLE / CLAUDE_TITLE_DIALOG_NEEDLE
+// override the needles if CC renames its hints.
 function probeLive(dir, sid, pid) {
   const forced = process.env.CLAUDE_TITLE_TEST_LIVE;
-  if (forced === '1') return true;
-  if (forced === '0') return false;
+  if (forced === '1') return 'live';
+  if (forced === '0') return 'dead';
+  if (forced === 'dialog') return 'dialog';
   if (forced) return null;
   const exe = painterPath(dir);
   if (!fileExists(exe)) return null;
   const out = path.join(dir, `${sid}.live`);
   try { fs.unlinkSync(out); } catch (_) { /* ignore */ }
   try {
-    const args = [String(pid), '--live', out];
-    if (process.env.CLAUDE_TITLE_LIVE_NEEDLE) args.push(process.env.CLAUDE_TITLE_LIVE_NEEDLE);
+    const args = [String(pid), '--live', out,
+      process.env.CLAUDE_TITLE_LIVE_NEEDLE || 'esc to interrupt',
+      process.env.CLAUDE_TITLE_DIALOG_NEEDLE || 'esc to cancel'];
     require('child_process').spawnSync(exe, args, { windowsHide: true, timeout: 5000 });
     const v = fs.readFileSync(out, 'utf8').trim();
     try { fs.unlinkSync(out); } catch (_) { /* ignore */ }
-    return v === 'live' ? true : v === 'dead' ? false : null;
+    return v === 'live' || v === 'dead' || v === 'dialog' ? v : null;
   } catch (_) {
     return null;
   }
@@ -849,9 +870,13 @@ function paintViaConsole(dir, ppid, text) {
 //     grace beat → the turn died → rescue (~4s, as fast as before).
 //   - probe blind (no painter / attach denied) → degrade to the old CPU-quiet heuristic, but only
 //     past FALLBACK_AGE_MS — long past any plausible thinking phase; a slow rescue beats a wrong one.
-//   - Only a prompt tail is ever screen/CPU-judged: an assistant/tool_use tail with a quiet screen
-//     is also what a long silent Bash tool or an open AskUserQuestion dialog looks like — never
-//     rescue those without a marker.
+//   - probe 'dialog' (bottom rows show "esc to cancel"): a permission dialog / question card is
+//     open — the turn is alive, parked on the user. Flip ◐ immediately (beats CC's ~6s
+//     permission_prompt notification) and record awaiting|Notification; never dead evidence.
+//   - Only a prompt tail is ever RESCUE-judged by screen/CPU: an assistant/tool_use tail with a
+//     quiet screen is also what a long silent Bash tool looks like — never rescue those without a
+//     marker. Assistant tails DO get a gentle ~2s dialog-only scan (mid-turn permission dialogs),
+//     whose dead/blind reads carry no evidence.
 // Stand-down: glyph concluded (✻ / ◐-from-Stop), nonce superseded, session gone, or a 30min deadline.
 async function turnWatch(payloadJson) {
   let p;
@@ -922,27 +947,53 @@ async function turnWatch(payloadJson) {
 
       const age = tail.ts ? Date.now() - Date.parse(tail.ts) : NaN;
       // Eligibility: glyph still ⬤ AND a bare-prompt tail old enough to call stalled. Only probe
-      // when eligible, and at most every ~500ms — an ineligible poll stays cheap (a fast Bash-tool /
-      // permission dialog never pays for it).
+      // at full pace when eligible (~500ms); an ineligible poll stays cheap (a fast Bash tool
+      // never pays for it). NOTE: a turn's FIRST tool call opens its permission dialog while the
+      // tail still reads 'prompt' — that case IS eligible, which is why an open dialog must be its
+      // own probe state ('dialog' below) and never dead evidence (the 2026-07-15 wifi-app bug:
+      // false ✻ rescue + a wrongly-set needle-distrust flag).
       const eligible = painted[0] === 'working' && tail.kind === 'prompt' && age > 2500;
-      if (!eligible) {
+      // Dialog scan: a permission dialog / question card can also open MID-turn (assistant/tool
+      // tail). Probe those phases too, at a gentler ~2s pace, but use the result ONLY to flip ◐
+      // or note liveness — a dead/blind read here carries NO rescue evidence, because an
+      // assistant tail with a quiet screen is also what a long silent Bash tool looks like, and
+      // those stay marker-only rescue territory.
+      const dialogScan = !eligible && painted[0] === 'working' && tail.kind === 'assistant' && age > 2500;
+      if (!eligible && !dialogScan) {
         quietStreak = 0;
         deadStreak = 0;
         if (polls % 12 === 0) watchLog('watch', `ineligible kind=${tail.kind} glyph=${painted[0] || '-'}`
           + ` age=${Number.isFinite(age) ? Math.round(age / 1000) + 's' : '-'}`);
         continue;
       }
-      if (Date.now() - lastProbe < 500) continue; // pace the screen probes (~2/s max)
+      if (dialogScan) { quietStreak = 0; deadStreak = 0; } // rescue evidence never spans phases
+      if (Date.now() - lastProbe < (eligible ? 500 : 2000)) continue; // pace the screen probes
       lastProbe = Date.now();
       let live = probeLive(dir, sid, sessionPid);
-      if (live === false && fileExists(path.join(dir, 'needle-distrust'))) {
+      if (live === 'dead' && fileExists(path.join(dir, 'needle-distrust'))) {
         // A PostToolUse once PROVED a dead read on a live turn (CC renamed the bottom-bar hint) —
         // dead reads can't be trusted, so demote to blind: the 120s CPU fallback still rescues
         // real cancels, slowly. Retracted the moment any probe reads live again.
         if (polls % 40 === 0) watchLog('watch', 'probe-distrusted (needle drift flagged) — dead treated as blind');
         live = null;
       }
-      if (live === true) {
+      if (live === 'dialog') {
+        // A dialog is open: the turn is ALIVE, parked on the user's approval/answer. Flip ◐ NOW
+        // instead of waiting ~6s for CC's permission_prompt notification. The glyph records
+        // awaiting|Notification — byte-identical to the real notification's paint — so the
+        // concluded check and idle-rescue treat both flips by one rule; the next poll then sees
+        // glyph≠working → ineligible, so this paints at most once per dialog. No breadcrumb, no
+        // distrust: a hidden liveness hint is the dialog's doing, not needle drift.
+        quietStreak = 0;
+        deadStreak = 0;
+        const dt = normalize(readTitle(file) || folderName(cwd));
+        const paint = paintViaConsole(dir, sessionPid, `${GLYPH.awaiting} ${dt}`);
+        try { fs.writeFileSync(glyphFile, 'awaiting|Notification'); } catch (_) { /* best-effort */ }
+        if (logCtx) { logCtx.note = 'dialog-flip'; logCtx.diag = `via=esc-to-cancel ${paint}`; }
+        titleLog(GLYPH.awaiting, dt, false);
+        continue;
+      }
+      if (live === 'live') {
         // The bottom bar says the turn is running (thinking/streaming). Positive liveness beats any
         // amount of CPU quiet — this is the 2026-07-15 thinking-false-fire fix.
         quietStreak = 0;
@@ -955,7 +1006,14 @@ async function turnWatch(payloadJson) {
         if (polls % 24 === 0) watchLog('watch', `live-turn age=${Math.round(age / 1000)}s`);
         continue;
       }
-      if (live === false) {
+      if (dialogScan) {
+        // Assistant-tail phase: dead/blind reads are NOT evidence (a long silent Bash tool reads
+        // exactly the same) — no breadcrumb, no streaks, no CPU fallback. Marker-only territory.
+        if (polls % 40 === 0) watchLog('watch', `dialog-scan ${live === 'dead' ? 'no-dialog' : 'blind'}`
+          + ` age=${Math.round(age / 1000)}s`);
+        continue;
+      }
+      if (live === 'dead') {
         // Breadcrumb for the needle-drift canary: if a PostToolUse fires later in THIS turn (same
         // nonce), the turn was provably alive during this dead read → the needle is wrong. NOT
         // cleaned in the finally block — it must outlive the watchdog to reach that PostToolUse;

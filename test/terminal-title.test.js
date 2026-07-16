@@ -954,9 +954,10 @@ if (process.platform !== 'win32') {
   }
   // Spawn the detached watchdog with sessionPid injected (skips --find console resolution).
   // `live` forces the screen probe via the CLAUDE_TITLE_TEST_LIVE seam: '1' = needle on
-  // screen (live turn), '0' = attached-but-absent (cancelled), 'blind' = no determination
+  // screen (live turn), '0' = attached-but-absent (cancelled), 'dialog' = bottom rows show
+  // "esc to cancel" (permission dialog / question card open), 'blind' = no determination
   // (painter missing / attach denied). A fake node parent has no CC console to read, so
-  // every probing case must force one of the three.
+  // every probing case must force one of the four.
   function runWatch(transcript, pid, nonce, live) {
     const payload = JSON.stringify({
       sid: wsid, dir: wdir, file: path.join(wdir, `${wsid}.txt`), cwd: wcwd,
@@ -1063,6 +1064,46 @@ if (process.platform !== 'win32') {
     drivePostToolUse();
     assert(!fs.existsSync(path.join(wdir, 'needle-distrust')), "a real cancel's leftover breadcrumb must not flag drift");
     assert(!fs.existsSync(path.join(wdir, `${wsid}.probe`)), 'the stale breadcrumb is still consumed');
+  });
+
+  // --- 2g. an open dialog reads 'dialog', not dead: a turn's FIRST tool call opens its
+  // permission prompt while the tail still reads 'prompt' (live-traced 2026-07-15 in wifi-app:
+  // v5 read it dead -> false ✻ rescue + a wrongly-set needle-distrust flag). The dialog state
+  // must flip ◐ as awaiting|Notification (the real notification's exact paint), leave no
+  // dead-read breadcrumb, and keep watching. FAILS on v5 code. ---
+  let wd2g = null;
+  test('watchdog: dialog probe on a prompt tail -> flips ◐, no false rescue, no drift flag', () => {
+    setState({ glyph: 'working|UserPromptSubmit', watch: 'n2g' });
+    wd2g = runWatch(mkWTranscript('t2g', 'prompt'), wIdlePid, 'n2g', 'dialog');
+    assert(waitWGlyph('awaiting|Notification', 15), `an open dialog must flip ◐ awaiting|Notification, glyph="${wglyph()}"`);
+    assert(!fs.existsSync(path.join(wdir, `${wsid}.probe`)), 'a dialog read must not drop a dead-read breadcrumb');
+    assert(!fs.existsSync(path.join(wdir, 'needle-distrust')), 'a dialog read must never set the distrust flag');
+  });
+  test('watchdog: keeps watching after the dialog flip (an approval resumes the turn)', () => {
+    assert(!waitDead(wd2g.pid, 2500), 'the watchdog must keep running while the dialog is open');
+    setState({ watch: 'n2g-superseded' });
+    assert(waitDead(wd2g.pid, 4000), 'the watchdog should stand down when superseded');
+  });
+
+  // --- 2h. mid-turn dialogs (assistant tail): the gentle ~2s dialog-only scan must flip ◐ too —
+  // this is the "6 seconds to go ◐" case from 2026-07-15. FAILS on v5 code (assistant tails
+  // were never probed at all). ---
+  test('watchdog: dialog probe on an assistant tail -> flips ◐ (mid-turn permission prompt)', () => {
+    setState({ glyph: 'working|PostToolUse', watch: 'n2h' });
+    runWatch(mkWTranscript('t2h', 'assistant'), wIdlePid, 'n2h', 'dialog');
+    assert(waitWGlyph('awaiting|Notification', 15), `a mid-turn dialog must flip ◐, glyph="${wglyph()}"`);
+    setState({ watch: 'n2h-superseded' });
+  });
+
+  // --- 2i. the dialog scan is flip-only: a DEAD read on an assistant tail is what a long
+  // silent Bash tool looks like -> no rescue, and NO drift breadcrumb either. ---
+  test('watchdog: dead probe on an assistant tail -> no rescue, no breadcrumb (flip-only scan)', () => {
+    setState({ glyph: 'working|PostToolUse', watch: 'n2i' });
+    runWatch(mkWTranscript('t2i', 'assistant'), wIdlePid, 'n2i', '0');
+    sleepSync(9000);
+    assert(wglyph() === 'working|PostToolUse', `an assistant-tail dead read must never rescue, glyph="${wglyph()}"`);
+    assert(!fs.existsSync(path.join(wdir, `${wsid}.probe`)), 'an assistant-tail dead read must not drop a breadcrumb');
+    setState({ watch: 'n2i-superseded' });
   });
 
   // --- 3. stalled prompt + probe dead + BUSY parent -> NO rescue. The rename-belt: if CC
