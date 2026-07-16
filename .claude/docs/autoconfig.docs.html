@@ -1313,7 +1313,7 @@
                 title: '.claude/ Directory',
                 desc: 'Commands, rules, settings, and these docs. Keeps configuration organized as your project grows.'
             },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                'rules': {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            'rules': {
                 title: 'rules/',
                 desc: 'Path-scoped context that loads when Claude works on matching files.'
             },
@@ -1669,7 +1669,7 @@ CRITICAL: A plausible-looking cause from code reading is NOT confirmed evidence.
 
 > Run \`/autoconfig\` to populate this based on your project.`
             },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                'analyze-session': {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            'analyze-session': {
                 filename: 'analyze-session.md',
                 content: `# Analyze Session
 
@@ -2305,7 +2305,7 @@ Pending-question signal -- END-OF-TURN TEST, apply it on every turn: does your f
  *   UserPromptSubmit -> ⬤ working  + inject the per-prompt REMINDER one-liner (+BASELINE while no
  *                       title exists, +COMMAND on /slash turns) + clear any stale {sid}.ask flag
  *                       + spawn the --turn-watch cancel watchdog (a user interrupt fires NO hook,
- *                       so a detached per-turn child detects a dead turn via marker/CPU forensics
+ *                       so a detached per-turn child detects a dead turn via marker/screen-hint/CPU forensics
  *                       and repaints ✻ through title-painter.exe: AttachConsole+SetConsoleTitleW)
  *   PostToolUse      -> ⬤ working  (refresh, so a mid-turn title flip shows live + clears a stale ◐)
  *   Notification     -> ◐ awaiting your approval (permission_prompt matcher) — or, invoked with
