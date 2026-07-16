@@ -114,9 +114,14 @@ async function main(input) {
 
   // awaiting (question) vs complete — same signals terminal-title.js uses, so the tone matches the glyph.
   const sid = data.session_id || '';
-  const askFile = path.join(os.homedir(), '.claude', 'hooks', '.titles', `${sid}.ask`);
-  let pending = false;
-  try { pending = fs.existsSync(askFile); } catch (_) { /* ignore */ }
+  // The ask flag lives under the PROJECT root for a project-tier install and under ~/.claude for the
+  // user-level tier (terminal-title.js's runtime title-dir split). Check both roots — sid-keyed, so a
+  // wrong-tier probe can't false-positive on another session.
+  const titleRoots = [process.env.CLAUDE_PROJECT_DIR || data.cwd || process.cwd(), os.homedir()];
+  let pending = titleRoots.some(root => {
+    try { return fs.existsSync(path.join(root, '.claude', 'hooks', '.titles', `${sid}.ask`)); }
+    catch (_) { return false; }
+  });
 
   if (!pending) {
     let inspect = null;
