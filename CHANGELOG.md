@@ -4,6 +4,11 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.212
+- feat(terminal-title): Tab status stays reliable even if a Claude Code update renames the 'esc to interrupt' hint
+- fix(terminal-title): Tab status no longer flips to 'done' while Claude is still thinking on long turns
+- fix(install): Upgrades no longer show a false "Backed up existing config" warning, and status beeps pick the "awaiting your reply" tone more reliably
+
 ## v1.0.211
 - feat(gls): /gls screenshots now use up to ~60% fewer tokens — large captures are auto-downscaled before display
 - refactor(title-hooks): unify the user-level/project fork into one runtime-branched file
@@ -153,7 +158,4 @@
 
 ## v1.0.163
 - fix: correct AUTOCONFIG_FILES list (guide→docs, add rules)
-
-## v1.0.162
-- feat: show changelog on upgrade
 
