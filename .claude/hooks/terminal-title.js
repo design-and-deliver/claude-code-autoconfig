@@ -149,6 +149,25 @@ async function handle(data) {
     // Only refresh once a real title exists; don't stamp the bare folder over what UPS showed.
     const raw = readTitle(file);
     if (!raw) process.exit(0);
+    // Needle-drift canary: a PostToolUse is PROOF the turn is alive. If the watchdog read the
+    // screen as "dead" earlier in THIS turn (breadcrumb nonce == this turn's watch nonce), the
+    // probe needle no longer matches CC's bottom-bar hint — a false-dead that would re-open the
+    // thinking false-fire the moment CPU goes quiet. Flag the dir so dead reads demote to the
+    // blind 120s fallback (slow beats wrong); a future LIVE read retracts the flag. A nonce
+    // MISMATCH is just a real cancel's leftover breadcrumb — consumed without flagging.
+    try {
+      const probeFile = path.join(dir, `${sid}.probe`);
+      if (fileExists(probeFile)) {
+        const probeNonce = fs.readFileSync(probeFile, 'utf8').split('|')[0];
+        let curNonce = '';
+        try { curNonce = fs.readFileSync(path.join(dir, `${sid}.watch`), 'utf8').trim(); } catch (_) { /* no watch */ }
+        fs.unlinkSync(probeFile); // one-shot either way
+        if (probeNonce && probeNonce === curNonce) {
+          fs.writeFileSync(path.join(dir, 'needle-distrust'), `${new Date().toISOString()} sid=${sid}`);
+          if (logCtx) { logCtx.note = 'needle-drift'; logCtx.diag = `dead-read on a live turn nonce=${probeNonce}`; }
+        }
+      }
+    } catch (_) { /* the canary is best-effort — never block the repaint */ }
     emit(setTitle(GLYPH.working, normalize(raw)));
     return;
   }
@@ -915,16 +934,33 @@ async function turnWatch(payloadJson) {
       }
       if (Date.now() - lastProbe < 500) continue; // pace the screen probes (~2/s max)
       lastProbe = Date.now();
-      const live = probeLive(dir, sid, sessionPid);
+      let live = probeLive(dir, sid, sessionPid);
+      if (live === false && fileExists(path.join(dir, 'needle-distrust'))) {
+        // A PostToolUse once PROVED a dead read on a live turn (CC renamed the bottom-bar hint) —
+        // dead reads can't be trusted, so demote to blind: the 120s CPU fallback still rescues
+        // real cancels, slowly. Retracted the moment any probe reads live again.
+        if (polls % 40 === 0) watchLog('watch', 'probe-distrusted (needle drift flagged) — dead treated as blind');
+        live = null;
+      }
       if (live === true) {
         // The bottom bar says the turn is running (thinking/streaming). Positive liveness beats any
         // amount of CPU quiet — this is the 2026-07-15 thinking-false-fire fix.
         quietStreak = 0;
         deadStreak = 0;
+        // A live read proves the needle still matches CC's UI — retract any drift flag, and drop
+        // this turn's dead-read breadcrumb (it was a fluke, not drift; don't let a later
+        // PostToolUse read it as proof).
+        try { fs.unlinkSync(path.join(dir, 'needle-distrust')); } catch (_) { /* not flagged */ }
+        try { fs.unlinkSync(path.join(dir, `${sid}.probe`)); } catch (_) { /* none */ }
         if (polls % 24 === 0) watchLog('watch', `live-turn age=${Math.round(age / 1000)}s`);
         continue;
       }
       if (live === false) {
+        // Breadcrumb for the needle-drift canary: if a PostToolUse fires later in THIS turn (same
+        // nonce), the turn was provably alive during this dead read → the needle is wrong. NOT
+        // cleaned in the finally block — it must outlive the watchdog to reach that PostToolUse;
+        // consumption is one-shot there (a superseding turn's mismatched nonce reads as inert).
+        try { fs.writeFileSync(path.join(dir, `${sid}.probe`), `${nonce}|${Date.now()}`); } catch (_) { /* best-effort */ }
         deadStreak++;
         if (deadStreak < 2) continue; // two independent screen reads ≥500ms apart
         const cpu = sampleCpu(dir, sid, sessionPid, CPU_MS); // rename-belt: busy client = alive

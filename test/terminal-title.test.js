@@ -1017,6 +1017,54 @@ if (process.platform !== 'win32') {
     setState({ watch: 'n2c-superseded' });
   });
 
+  // --- 2d. needle-distrust flag -> dead reads demote to blind (no rescue before the 120s
+  // fallback). This is the self-healing half of the needle-drift canary: once a false-dead is
+  // proven, a renamed hint can't resurrect the thinking false-fire. ---
+  test('watchdog: needle-distrust flag demotes dead probes to the 120s fallback', () => {
+    fs.writeFileSync(path.join(wdir, 'needle-distrust'), 'planted-by-test');
+    setState({ glyph: 'working|UserPromptSubmit', watch: 'n2d' });
+    runWatch(mkWTranscript('t2d', 'prompt'), wIdlePid, 'n2d', '0');
+    sleepSync(12000);
+    assert(wglyph() === 'working|UserPromptSubmit', `a distrusted dead probe must not rescue before FALLBACK_AGE_MS, glyph="${wglyph()}"`);
+    setState({ watch: 'n2d-superseded' });
+  });
+
+  // --- 2e. a LIVE read retracts the distrust flag (the needle is proven good again) ---
+  test('watchdog: a LIVE probe retracts the needle-distrust flag', () => {
+    // flag still present from 2d
+    setState({ glyph: 'working|UserPromptSubmit', watch: 'n2e' });
+    runWatch(mkWTranscript('t2e', 'prompt'), wIdlePid, 'n2e', '1');
+    const d = Date.now() + 8000;
+    while (Date.now() < d && fs.existsSync(path.join(wdir, 'needle-distrust'))) sleepSync(300);
+    assert(!fs.existsSync(path.join(wdir, 'needle-distrust')), 'a live read should clear the distrust flag');
+    setState({ watch: 'n2e-superseded' });
+  });
+
+  // --- 2f. the canary itself: PostToolUse + a SAME-nonce dead-read breadcrumb = the turn was
+  // provably alive when the probe said dead -> flag drift. A MISMATCHED nonce is a real cancel's
+  // leftover -> consumed silently, never flagged. ---
+  function drivePostToolUse() {
+    execFileSync(process.execPath, [HOOK], {
+      input: JSON.stringify({ hook_event_name: 'PostToolUse', session_id: wsid, cwd: wcwd, tool_name: 'Bash' }),
+      encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: wcwd },
+    });
+  }
+  test('watchdog: PostToolUse flags needle drift on a same-turn dead read', () => {
+    fs.writeFileSync(path.join(wdir, `${wsid}.probe`), 'nX|123');
+    setState({ watch: 'nX' });
+    drivePostToolUse();
+    assert(fs.existsSync(path.join(wdir, 'needle-distrust')), 'a same-nonce dead-read breadcrumb must write the distrust flag');
+    assert(!fs.existsSync(path.join(wdir, `${wsid}.probe`)), 'the breadcrumb is consumed one-shot');
+    fs.unlinkSync(path.join(wdir, 'needle-distrust')); // don't leak the flag into later cases
+  });
+  test("watchdog: PostToolUse ignores a PRIOR turn's breadcrumb (nonce mismatch)", () => {
+    fs.writeFileSync(path.join(wdir, `${wsid}.probe`), 'old-turn-nonce|123');
+    setState({ watch: 'current-turn-nonce' });
+    drivePostToolUse();
+    assert(!fs.existsSync(path.join(wdir, 'needle-distrust')), "a real cancel's leftover breadcrumb must not flag drift");
+    assert(!fs.existsSync(path.join(wdir, `${wsid}.probe`)), 'the stale breadcrumb is still consumed');
+  });
+
   // --- 3. stalled prompt + probe dead + BUSY parent -> NO rescue. The rename-belt: if CC
   // ever renames the bottom-bar hint, live turns read "dead" — but a streaming client burns
   // CPU, so the sample still blocks the rescue. ---
