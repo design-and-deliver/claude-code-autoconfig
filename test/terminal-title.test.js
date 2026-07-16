@@ -868,10 +868,18 @@ console.log();
 // identity) — that path is only reachable against a real claude.exe and is
 // covered by the live e2e probe (e2e-live-idle.js), not here.
 //
-// WINDOWS-ONLY: the CPU-idle rescue samples via title-painter-v4.exe (a .NET
-// AttachConsole/TotalProcessorTime helper the watchdog lazy-compiles with the
-// in-box csc). Off win32 there is no painter, so `sampleCpu` returns null and
-// the CPU path can't fire — the suite is skipped there.
+// WINDOWS-ONLY: the rescue paths lean on title-painter-v5.exe (a .NET
+// AttachConsole helper the watchdog lazy-compiles with the in-box csc) for
+// --cpu sampling and the --live screen probe. Off win32 there is no painter,
+// so neither path can fire — the suite is skipped there.
+//
+// The screen probe's needle ("esc to interrupt", CC's bottom-bar hint) is a
+// HARNESS CONTRACT with Claude Code's UI: if CC renames the hint, live turns
+// read "dead" — the sampleCpu rename-belt keeps streaming turns from
+// false-firing and thinking turns degrade to the 120s CPU fallback;
+// CLAUDE_TITLE_LIVE_NEEDLE is the no-code-change fix. Tests force the probe
+// via CLAUDE_TITLE_TEST_LIVE ('1'/'0'/other = live/dead/blind) and still
+// drive the REAL watchdog loop.
 //
 // TRAP 1 (co-tenancy): a session can't be tested from within itself. We sidestep
 // it entirely by injecting a FAKE isolated node process as sessionPid.
@@ -919,8 +927,13 @@ if (process.platform !== 'win32') {
   }
   function spawnFake(kind) {
     const code = kind === 'busy'
-      ? 'setInterval(()=>{const t=Date.now();while(Date.now()-t<15){}},100)' // continuous ~15% of a core
-      : 'setTimeout(()=>{},600000)';                                          // parked/idle (~0%)
+      // Continuous ~50% of a core. Real streaming claude reads 9–19%, but this fake exists to
+      // exercise the busy BRANCH, not calibrate the 6% threshold — and under full-suite load a
+      // ~15% fake can get descheduled below 6% for one 300ms sample, which is all the rename-belt
+      // needs to false-rescue (observed 2026-07-15). 50% keeps it unambiguous; still continuous
+      // per TRAP 2 (never a periodic burst a short window can miss).
+      ? 'setInterval(()=>{const t=Date.now();while(Date.now()-t<50){}},100)'
+      : 'setTimeout(()=>{},600000)'; // parked/idle (~0%)
     const c = spawn(process.execPath, ['-e', code], { stdio: 'ignore' });
     watchProcs.push(c);
     return c.pid;
@@ -940,12 +953,17 @@ if (process.platform !== 'win32') {
     return tp;
   }
   // Spawn the detached watchdog with sessionPid injected (skips --find console resolution).
-  function runWatch(transcript, pid, nonce) {
+  // `live` forces the screen probe via the CLAUDE_TITLE_TEST_LIVE seam: '1' = needle on
+  // screen (live turn), '0' = attached-but-absent (cancelled), 'blind' = no determination
+  // (painter missing / attach denied). A fake node parent has no CC console to read, so
+  // every probing case must force one of the three.
+  function runWatch(transcript, pid, nonce, live) {
     const payload = JSON.stringify({
       sid: wsid, dir: wdir, file: path.join(wdir, `${wsid}.txt`), cwd: wcwd,
       nonce, transcript, ppid: pid, sessionPid: pid,
     });
-    const c = spawn(process.execPath, [HOOK, '--turn-watch', payload], { detached: true, stdio: 'ignore' });
+    const env = live === undefined ? process.env : { ...process.env, CLAUDE_TITLE_TEST_LIVE: live };
+    const c = spawn(process.execPath, [HOOK, '--turn-watch', payload], { detached: true, stdio: 'ignore', env });
     watchProcs.push(c);
     return c;
   }
@@ -966,19 +984,47 @@ if (process.platform !== 'win32') {
     assert(waitDead(wd1.pid, 4000), 'the watchdog should self-exit once it has rescued');
   });
 
-  // --- 2. stalled prompt + IDLE parent -> CPU-idle rescue ---
-  test('watchdog: stalled prompt + idle parent -> CPU-idle rescue (thinking-phase cancel)', () => {
+  // --- 2. stalled prompt + probe DEAD + idle parent -> no-esc-hint rescue (a real cancel) ---
+  test('watchdog: stalled prompt + dead screen probe -> rescued (thinking-phase cancel)', () => {
     setState({ glyph: 'working|UserPromptSubmit', watch: 'n2' });
-    runWatch(mkWTranscript('t2', 'prompt'), wIdlePid, 'n2');
-    assert(waitWGlyph('idle|TurnWatch', 25), `an idle parent under a stalled prompt should rescue via CPU, glyph="${wglyph()}"`);
+    runWatch(mkWTranscript('t2', 'prompt'), wIdlePid, 'n2', '0');
+    assert(waitWGlyph('idle|TurnWatch', 25), `a dead probe + idle parent under a stalled prompt should rescue, glyph="${wglyph()}"`);
   });
 
-  // --- 3. stalled prompt + BUSY parent (live thinking) -> NO rescue; exits on conclude ---
-  test('watchdog: stalled prompt + BUSY parent -> never rescued (a live turn burns CPU)', () => {
+  // --- 2b. stalled prompt + probe LIVE -> NEVER rescued. The 2026-07-15 thinking false-fire
+  // guard: server-side thinking parks the client at ~0% CPU with an unmoved transcript —
+  // indistinguishable from a cancel by CPU alone. Positive screen liveness must block the
+  // rescue outright. FAILS on round-7 code (which rescued on CPU quiet in ~2.3s). ---
+  let wd2b = null;
+  test('watchdog: LIVE screen probe -> never rescued (thinking turn, ~0% CPU)', () => {
+    setState({ glyph: 'working|UserPromptSubmit', watch: 'n2b' });
+    wd2b = runWatch(mkWTranscript('t2b', 'prompt'), wIdlePid, 'n2b', '1');
+    sleepSync(12000);
+    assert(wglyph() === 'working|UserPromptSubmit', `a live probe must block the rescue no matter how quiet the CPU, glyph="${wglyph()}"`);
+  });
+  test('watchdog: live-probe watchdog stands down on a superseded nonce', () => {
+    setState({ watch: 'n2b-superseded' });
+    assert(waitDead(wd2b.pid, 4000), 'the live-probe watchdog should stand down when superseded');
+  });
+
+  // --- 2c. stalled prompt + BLIND probe -> no rescue before the 120s CPU fallback age
+  // (quiet CPU alone cannot tell thinking from cancelled; slow beats wrong) ---
+  test('watchdog: BLIND probe -> no CPU rescue before the 120s fallback age', () => {
+    setState({ glyph: 'working|UserPromptSubmit', watch: 'n2c' });
+    runWatch(mkWTranscript('t2c', 'prompt'), wIdlePid, 'n2c', 'blind');
+    sleepSync(12000);
+    assert(wglyph() === 'working|UserPromptSubmit', `a blind probe must not CPU-rescue before FALLBACK_AGE_MS, glyph="${wglyph()}"`);
+    setState({ watch: 'n2c-superseded' });
+  });
+
+  // --- 3. stalled prompt + probe dead + BUSY parent -> NO rescue. The rename-belt: if CC
+  // ever renames the bottom-bar hint, live turns read "dead" — but a streaming client burns
+  // CPU, so the sample still blocks the rescue. ---
+  test('watchdog: dead probe + BUSY parent -> never rescued (CPU rename-belt)', () => {
     wBusyPid = spawnFake('busy');
     sleepSync(300);
     setState({ glyph: 'working|UserPromptSubmit', watch: 'n3' });
-    wd3 = runWatch(mkWTranscript('t3', 'prompt'), wBusyPid, 'n3');
+    wd3 = runWatch(mkWTranscript('t3', 'prompt'), wBusyPid, 'n3', '0');
     sleepSync(15000);
     assert(wglyph() === 'working|UserPromptSubmit', `a busy parent must not be rescued, glyph="${wglyph()}"`);
   });

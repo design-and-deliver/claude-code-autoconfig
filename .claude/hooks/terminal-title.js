@@ -5,7 +5,7 @@
  *   UserPromptSubmit -> ⬤ working  + inject the per-prompt REMINDER one-liner (+BASELINE while no
  *                       title exists, +COMMAND on /slash turns) + clear any stale {sid}.ask flag
  *                       + spawn the --turn-watch cancel watchdog (a user interrupt fires NO hook,
- *                       so a detached per-turn child detects a dead turn via marker/CPU forensics
+ *                       so a detached per-turn child detects a dead turn via marker/screen-hint/CPU forensics
  *                       and repaints ✻ through title-painter.exe: AttachConsole+SetConsoleTitleW)
  *   PostToolUse      -> ⬤ working  (refresh, so a mid-turn title flip shows live + clears a stale ◐)
  *   Notification     -> ◐ awaiting your approval (permission_prompt matcher) — or, invoked with
@@ -641,6 +641,12 @@ const PAINTER_CS = [
   '  [DllImport("kernel32.dll")] static extern bool AttachConsole(uint pid);',
   '  [DllImport("kernel32.dll", CharSet=CharSet.Unicode)] static extern bool SetConsoleTitle(string t);',
   '  [DllImport("kernel32.dll", CharSet=CharSet.Unicode)] static extern uint GetConsoleTitle(StringBuilder sb, uint n);',
+  '  [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern IntPtr CreateFileW(string n, uint ac, uint sh, IntPtr sa, uint d, uint f, IntPtr t);',
+  '  [DllImport("kernel32.dll")] static extern bool GetConsoleScreenBufferInfo(IntPtr h, out CSBI i);',
+  '  [DllImport("kernel32.dll", CharSet=CharSet.Unicode)] static extern bool ReadConsoleOutputCharacterW(IntPtr h, [Out] char[] b, uint n, COORD c, out uint r);',
+  '  struct COORD { public short X, Y; }',
+  '  struct SMALL_RECT { public short L, T, R, B; }',
+  '  struct CSBI { public COORD size; public COORD pos; public ushort attr; public SMALL_RECT win; public COORD max; }',
   '  static int Main(string[] a) {',
   '    if (a.Length < 2) return 2;',
   '    if (a[1] == "--cpu" && a.Length >= 4) {',
@@ -669,6 +675,26 @@ const PAINTER_CS = [
   '      File.WriteAllText(a[2], string.Join(" ", hits.ToArray()), new UTF8Encoding(false));',
   '      return 0;',
   '    }',
+  '    if (a.Length >= 3 && a[1] == "--live") {',
+  '      string needle = a.Length >= 4 ? a[3] : "esc to interrupt";',
+  '      string res = "attach-fail";',
+  '      FreeConsole();',
+  '      if (AttachConsole(uint.Parse(a[0]))) {',
+  '        IntPtr h = CreateFileW("CONOUT$", 0xC0000000, 3, IntPtr.Zero, 3, 0, IntPtr.Zero);',
+  '        CSBI bi;',
+  '        if (h == new IntPtr(-1) || !GetConsoleScreenBufferInfo(h, out bi)) { res = "read-fail"; }',
+  '        else {',
+  '          res = "dead";',
+  '          for (short y = bi.win.T; y <= bi.win.B && res == "dead"; y++) {',
+  '            var buf = new char[bi.size.X]; uint rd; COORD c; c.X = 0; c.Y = y;',
+  '            if (!ReadConsoleOutputCharacterW(h, buf, (uint)bi.size.X, c, out rd)) continue;',
+  '            if (new string(buf, 0, (int)rd).IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0) res = "live";',
+  '          }',
+  '        }',
+  '      }',
+  '      File.WriteAllText(a[2], res, new UTF8Encoding(false));',
+  '      return (res == "live" || res == "dead") ? 0 : 5;',
+  '    }',
   '    FreeConsole();',
   '    if (!AttachConsole(uint.Parse(a[0]))) return 3;',
   '    if (a.Length >= 3 && a[1] == "--get") {',
@@ -681,8 +707,9 @@ const PAINTER_CS = [
 ].join('\n');
 
 // Version in the name = source shape; a PAINTER_CS change MUST bump it so stale exes recompile
-// (ensurePainter early-returns when the exe exists). v3 = case-insensitive --find; v4 = --cpu mode.
-function painterPath(dir) { return path.join(dir, 'title-painter-v4.exe'); }
+// (ensurePainter early-returns when the exe exists). v3 = case-insensitive --find; v4 = --cpu mode;
+// v5 = --live screen-buffer probe (reads the visible console rows for the "esc to interrupt" hint).
+function painterPath(dir) { return path.join(dir, 'title-painter-v5.exe'); }
 
 // Kick off the one-time compile (async — the watchdog calls this at startup so the exe is warm
 // long before any rescue). Returns immediately; readiness = the exe existing.
@@ -690,7 +717,7 @@ function ensurePainter(dir) {
   try {
     const exe = painterPath(dir);
     if (fileExists(exe)) return;
-    const src = path.join(dir, 'title-painter-v4.cs');
+    const src = path.join(dir, 'title-painter-v5.cs');
     fs.writeFileSync(src, PAINTER_CS);
     const roots = [
       path.join(process.env.WINDIR || 'C:\\Windows', 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe'),
@@ -718,6 +745,36 @@ function sampleCpu(dir, sid, pid, ms) {
     const v = parseFloat(fs.readFileSync(out, 'utf8'));
     try { fs.unlinkSync(out); } catch (_) { /* ignore */ }
     return Number.isFinite(v) && v >= 0 ? v : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Screen-buffer liveness probe — the discriminator CPU can't provide. A LIVE turn renders
+// "esc to interrupt" in CC's bottom status bar; an idle REPL doesn't (verified 2026-07-15 against
+// live + idle sessions — a thinking turn parks the client at ~0% CPU and otherwise looks exactly
+// like a cancel). painter --live attaches to <pid>'s console, reads the visible rows, and reports:
+//   true  → needle on screen (turn alive — NEVER rescue)
+//   false → attached, needle absent (REPL idle — cancel evidence)
+//   null  → can't tell (painter missing / attach or read failed) — treat as NO evidence.
+// CLAUDE_TITLE_TEST_LIVE ('1'|'0'|anything else) forces the result so tests can drive the real
+// watchdog loop deterministically; CLAUDE_TITLE_LIVE_NEEDLE overrides the needle if CC renames it.
+function probeLive(dir, sid, pid) {
+  const forced = process.env.CLAUDE_TITLE_TEST_LIVE;
+  if (forced === '1') return true;
+  if (forced === '0') return false;
+  if (forced) return null;
+  const exe = painterPath(dir);
+  if (!fileExists(exe)) return null;
+  const out = path.join(dir, `${sid}.live`);
+  try { fs.unlinkSync(out); } catch (_) { /* ignore */ }
+  try {
+    const args = [String(pid), '--live', out];
+    if (process.env.CLAUDE_TITLE_LIVE_NEEDLE) args.push(process.env.CLAUDE_TITLE_LIVE_NEEDLE);
+    require('child_process').spawnSync(exe, args, { windowsHide: true, timeout: 5000 });
+    const v = fs.readFileSync(out, 'utf8').trim();
+    try { fs.unlinkSync(out); } catch (_) { /* ignore */ }
+    return v === 'live' ? true : v === 'dead' ? false : null;
   } catch (_) {
     return null;
   }
@@ -762,17 +819,20 @@ function paintViaConsole(dir, ppid, text) {
 // The watchdog itself. A canceled turn is invisible to hooks AND (for a thinking-phase cancel)
 // leaves the transcript untouched, so the watchdog triangulates liveness from the OUTSIDE:
 //   - marker tail ("[Request interrupted…]", flushed on tool-phase cancels) → rescue instantly.
-//   - bare-prompt tail (thinking phase): the session's CPU. A live turn always burns CPU —
-//     streaming parse + the ~10fps spinner — while a canceled REPL sits parked near 0%. Two 300ms
-//     samples < 6% of a core + an unmoved transcript + glyph still ⬤ = the turn died → rescue.
-//     (LIVE-measured 2026-07-12: idle claude ~0%, occasional single-scheduler-tick spike ≤ ~5.2% at
-//     300ms; active 9–19% — a 6% cutoff clears both. A double-tick idle blip reads busy → just
-//     delays a poll, never a false rescue.)
-//   - The CPU path applies ONLY to a prompt tail: an assistant/tool_use tail with quiet CPU is
-//     also what a long silent Bash tool or an open AskUserQuestion dialog looks like — never
-//     rescue those on CPU alone.
-// CPU is sampled ON DEMAND by painter --cpu (a TotalProcessorTime delta over 300ms) — no continuous
-// typeperf, no 1s cadence, no warmup: each poll gets a fresh reading, so a cancel flips in ~1.5s.
+//   - bare-prompt tail (thinking phase): the SCREEN, not CPU. Server-side thinking parks the client
+//     at ~0% CPU with an unmoved transcript — byte-identical to a cancel from here — which made the
+//     old CPU-quiet heuristic false-fire ~6s into EVERY long-thinking turn (found 2026-07-15 under
+//     alwaysThinking+xhigh; the 2026-07-12 "active 9–19%" measurement was streaming, not thinking).
+//     The discriminator that works: a live turn renders "esc to interrupt" in CC's bottom bar; an
+//     idle REPL doesn't (live-verified 2026-07-15). probeLive reads the visible console buffer:
+//     needle present → never rescue; absent ×2 (≥500ms apart) + CPU not busy (rename-belt: if CC
+//     ever drops the hint text, a busy client still blocks the rescue) + glyph/tail unmoved after a
+//     grace beat → the turn died → rescue (~4s, as fast as before).
+//   - probe blind (no painter / attach denied) → degrade to the old CPU-quiet heuristic, but only
+//     past FALLBACK_AGE_MS — long past any plausible thinking phase; a slow rescue beats a wrong one.
+//   - Only a prompt tail is ever screen/CPU-judged: an assistant/tool_use tail with a quiet screen
+//     is also what a long silent Bash tool or an open AskUserQuestion dialog looks like — never
+//     rescue those without a marker.
 // Stand-down: glyph concluded (✻ / ◐-from-Stop), nonce superseded, session gone, or a 30min deadline.
 async function turnWatch(payloadJson) {
   let p;
@@ -805,9 +865,12 @@ async function turnWatch(payloadJson) {
   const CPU_MS = 300;   // sample window: idle claude ~0% (single-scheduler-tick spike ≤ ~5.2% at
   const CPU_THRESH = 6.0; // 300ms — still < 6%); active 9–19% → 6% separates (LIVE-measured 2026-07-12).
   const GRACE_MS = 150;   // 300ms window ×2 samples is the floor; smaller windows lose tick headroom.
+  const FALLBACK_AGE_MS = 120 * 1000; // probe-blind: no CPU-only rescue before this (thinking runs minutes)
   const started = Date.now();
   let lastSize = -1;
   let quietStreak = 0;
+  let deadStreak = 0;
+  let lastProbe = 0;
   let polls = 0;
   try {
     while (Date.now() - started < 30 * 60 * 1000) {
@@ -839,14 +902,51 @@ async function turnWatch(payloadJson) {
       }
 
       const age = tail.ts ? Date.now() - Date.parse(tail.ts) : NaN;
-      // Eligibility: glyph still ⬤ AND a bare-prompt tail old enough to call stalled. Only sample
-      // CPU when eligible — the ~300ms sample is the loop's main cost, so an ineligible poll stays
-      // cheap (a fast Bash-tool / permission dialog never pays for it).
+      // Eligibility: glyph still ⬤ AND a bare-prompt tail old enough to call stalled. Only probe
+      // when eligible, and at most every ~500ms — an ineligible poll stays cheap (a fast Bash-tool /
+      // permission dialog never pays for it).
       const eligible = painted[0] === 'working' && tail.kind === 'prompt' && age > 2500;
       if (!eligible) {
         quietStreak = 0;
+        deadStreak = 0;
         if (polls % 12 === 0) watchLog('watch', `ineligible kind=${tail.kind} glyph=${painted[0] || '-'}`
           + ` age=${Number.isFinite(age) ? Math.round(age / 1000) + 's' : '-'}`);
+        continue;
+      }
+      if (Date.now() - lastProbe < 500) continue; // pace the screen probes (~2/s max)
+      lastProbe = Date.now();
+      const live = probeLive(dir, sid, sessionPid);
+      if (live === true) {
+        // The bottom bar says the turn is running (thinking/streaming). Positive liveness beats any
+        // amount of CPU quiet — this is the 2026-07-15 thinking-false-fire fix.
+        quietStreak = 0;
+        deadStreak = 0;
+        if (polls % 24 === 0) watchLog('watch', `live-turn age=${Math.round(age / 1000)}s`);
+        continue;
+      }
+      if (live === false) {
+        deadStreak++;
+        if (deadStreak < 2) continue; // two independent screen reads ≥500ms apart
+        const cpu = sampleCpu(dir, sid, sessionPid, CPU_MS); // rename-belt: busy client = alive
+        watchLog('watch', `no-esc-hint streak=${deadStreak} cpu=${cpu === null ? 'null' : cpu.toFixed(1)}`
+          + ` age=${Math.round(age / 1000)}s`);
+        if (cpu !== null && cpu >= CPU_THRESH) { deadStreak = 0; continue; }
+        await delay(GRACE_MS); // grace: if the turn just concluded, let its Stop hook paint first
+        const g2 = readTitle(glyphFile).split('|')[0];
+        const t2 = classifyTail(transcript);
+        if (g2 === 'working' && t2.kind === 'prompt' && t2.size === lastSize) {
+          rescueFromWatch(`no-esc-hint cpu=${cpu === null ? '-' : cpu.toFixed(1)}`, dir, sid, file, cwd, sessionPid);
+          return;
+        }
+        deadStreak = 0;
+        continue;
+      }
+      // live === null — the probe is blind (painter missing / attach denied). Degrade to the CPU-quiet
+      // heuristic, but ONLY past FALLBACK_AGE_MS: quiet CPU alone cannot tell thinking from cancelled.
+      if (age < FALLBACK_AGE_MS) {
+        quietStreak = 0;
+        if (polls % 40 === 0) watchLog('watch', `probe-null age=${Math.round(age / 1000)}s`
+          + ` (CPU fallback at ${FALLBACK_AGE_MS / 1000}s)`);
         continue;
       }
       const cpu = sampleCpu(dir, sid, sessionPid, CPU_MS); // blocks ~CPU_MS
@@ -869,6 +969,7 @@ async function turnWatch(payloadJson) {
     watchLog('watch-exit', 'deadline');
   } finally {
     try { fs.unlinkSync(path.join(dir, `${sid}.cpu`)); } catch (_) { /* usually already gone */ }
+    try { fs.unlinkSync(path.join(dir, `${sid}.live`)); } catch (_) { /* ignore */ }
   }
 }
 
