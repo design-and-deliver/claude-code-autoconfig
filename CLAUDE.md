@@ -13,7 +13,7 @@ CLI tool that auto-configures Claude Code for any project. One command analyzes 
 ## Commands
 
 ```bash
-npm test          # Run all tests (box alignment + CLI install)
+npm test          # Run ALL tests (full suite — see Testing Requirements below)
 npm run test:box  # Run box alignment tests only
 npm run test:install # Run CLI install tests only
 ```
@@ -115,7 +115,7 @@ MUST run tests and verify they pass:**
 npm test
 ```
 
-This runs the FULL suite (any older "box alignment + CLI install" description is stale):
+This runs the FULL suite:
 box alignment, CLI install, update system, plugin system, terminal-title behavior,
 golden endings, live-twin parity, update summary, changelog generation, **and the hook
 suites** (`npm run test:hooks` fans out to `.claude/hooks/tests/*.test.cjs` — token-guard

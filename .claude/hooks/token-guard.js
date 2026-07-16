@@ -234,7 +234,7 @@ function meter(transcriptPath, sinceMs) {
 
   const byId = new Map(); // message.id -> {model, usage} — last occurrence wins
   let last = null;        // last assistant usage in file order = live context source
-  for (const line of raw.split('\n')) {
+  for (const line of raw.split(/\r?\n/)) {
     if (!line.trim()) continue;
     let o; try { o = JSON.parse(line); } catch (_) { continue; }
     if (!o || o.type !== 'assistant' || !o.message || !o.message.usage) continue;
@@ -364,7 +364,7 @@ function attributeJump(transcriptPath, fromChar) {
   let raw; try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch (_) { return null; }
   const toolNames = {}; // tool_use_id -> "Tool(detail)"
   let best = null;
-  for (const line of raw.slice(Math.max(0, fromChar)).split('\n')) {
+  for (const line of raw.slice(Math.max(0, fromChar)).split(/\r?\n/)) {
     if (!line.trim()) continue;
     let o; try { o = JSON.parse(line); } catch (_) { continue; }
     const msg = o && o.message;
@@ -1949,7 +1949,7 @@ function analyzeSession(transcriptPath, cfg) {
   let regionBest = null;  // largest context payload since the previous API request
   const payloads = [];    // every candidate, for the top-payloads table
 
-  for (const line of raw.split('\n')) {
+  for (const line of raw.split(/\r?\n/)) {
     if (!line.trim()) continue;
     let o; try { o = JSON.parse(line); } catch (_) { continue; }
     const msg = o && o.message;
@@ -1986,7 +1986,7 @@ function analyzeSession(transcriptPath, cfg) {
     }
     // base64 image payloads tokenize ~2 orders of magnitude below chars/2.6 — flag them so
     // the render never prints a fake 260k-token estimate for a 1.6k-token screenshot.
-    const cand = { chars: line.length, label, isImage: line.indexOf('"type":"image"') !== -1,
+    const cand = { chars: line.length, label, isImage: /"type"\s*:\s*"image"/.test(line),
       ts: o.timestamp ? Date.parse(o.timestamp) || 0 : 0 };
     payloads.push(cand);
     if (!regionBest || cand.chars > regionBest.chars) regionBest = cand;
@@ -2134,7 +2134,7 @@ function recoverTail(transcriptPath, cutoffIso, maxTokens) {
   let raw;
   try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch (_) { return empty; }
   const rows = [];
-  for (const line of raw.split('\n')) {
+  for (const line of raw.split(/\r?\n/)) {
     const s = line.trim();
     if (!s) continue;
     let o; try { o = JSON.parse(s); } catch (_) { continue; }

@@ -113,6 +113,14 @@ function main() {
   if (postversion) {
     const version = require(path.join(__dirname, '..', 'package.json')).version;
     run('git add CHANGELOG.md');
+    // A regenerated changelog can be byte-identical (every commit since the last tag hidden
+    // by trailers/OVERRIDES). `git commit` would then exit non-zero and abort `npm version`
+    // AFTER the bump commit+tag exist — half-versioned repo. Nothing staged → the tag npm
+    // just created already points at the right commit; skip the commit and re-tag.
+    if (!run('git diff --cached --name-only -- CHANGELOG.md')) {
+      console.log('CHANGELOG.md unchanged — skipping changelog commit/re-tag');
+      return;
+    }
     run('git commit -m "chore: update changelog"');
     run(`git tag -f v${version}`);
     console.log(`Re-tagged v${version} to include changelog`);
