@@ -219,6 +219,27 @@ test('already-normalized title is left stable (idempotent)', () => {
 });
 console.log();
 
+console.log('Title history:');
+test('every title change appends one {sid}.history.jsonl line; repeats do not', () => {
+  const cwd = mkWorkspace();
+  const sid = 'hist';
+  const histFile = path.join(cwd, '.claude', 'hooks', '.titles', `${sid}.history.jsonl`);
+  writeTitle(cwd, sid, 'Alpha — First context');
+  runHook({ hook_event_name: 'PostToolUse', session_id: sid, cwd, tool_name: 'Edit' });
+  runHook({ hook_event_name: 'PostToolUse', session_id: sid, cwd, tool_name: 'Edit' });
+  let lines = fs.readFileSync(histFile, 'utf8').trim().split('\n');
+  assert(lines.length === 1, `unchanged title must not re-append (got ${lines.length} lines)`);
+  writeTitle(cwd, sid, 'Alpha — Second context');
+  runHook({ hook_event_name: 'PostToolUse', session_id: sid, cwd, tool_name: 'Edit' });
+  lines = fs.readFileSync(histFile, 'utf8').trim().split('\n');
+  assert(lines.length === 2, `changed title must append (got ${lines.length} lines)`);
+  const entries = lines.map(l => JSON.parse(l));
+  assert(entries[0].title === 'Alpha — First context', `got "${entries[0].title}"`);
+  assert(entries[1].title === 'Alpha — Second context', `got "${entries[1].title}"`);
+  assert(entries.every(e => !Number.isNaN(Date.parse(e.ts))), 'each entry needs a parseable ts');
+});
+console.log();
+
 console.log('State glyphs per event:');
 function withTitle(event, extra) {
   const cwd = mkWorkspace();

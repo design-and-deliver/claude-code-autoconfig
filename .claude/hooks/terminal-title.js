@@ -83,6 +83,7 @@ if (require.main === module) {
       try {
         await handle(JSON.parse(input));
       } catch (err) {
+        if (process.env.TITLE_ERR_DEBUG === '1') console.error(err);
         process.exit(0); // never break the turn on a title error — emit nothing
       }
     });
@@ -327,6 +328,19 @@ function setTitle(glyph, title, ring) {
   if (logCtx && logCtx.sid && logCtx.dir) {
     const name = glyph === GLYPH.working ? 'working' : glyph === GLYPH.awaiting ? 'awaiting' : 'idle';
     try { fs.writeFileSync(path.join(logCtx.dir, `${logCtx.sid}.glyph`), `${name}|${logCtx.event}`); } catch (_) { /* ignore */ }
+    // Durable per-session title timeline ({sid}.history.jsonl) — merged by the
+    // /terminal-title-history reader, so a session's context outline survives after _debug.log
+    // (debug-gated AND size-rotated) ages out. Append-on-change only: the file stays a handful of
+    // lines, one per context shift. Best-effort like the glyph file.
+    try {
+      const hf = path.join(logCtx.dir, `${logCtx.sid}.history.jsonl`);
+      let last = '';
+      try {
+        const lines = fs.readFileSync(hf, 'utf8').trim().split('\n');
+        last = JSON.parse(lines[lines.length - 1]).title || '';
+      } catch (_) { /* no history yet */ }
+      if (title !== last) fs.appendFileSync(hf, `${JSON.stringify({ ts: new Date().toISOString(), title })}\n`);
+    } catch (_) { /* history must never block a paint */ }
   }
   let seq = `${ESC}]0;${text}${BEL}`;
   if (ring) seq += BEL;
