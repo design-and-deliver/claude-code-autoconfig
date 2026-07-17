@@ -4,6 +4,9 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.213
+- fix(terminal-title): Tab status flips to 'awaiting your approval' in a couple of seconds when Claude asks permission (was ~6s), and no longer briefly shows a false 'done' on some permission prompts
+
 ## v1.0.212
 - feat(terminal-title): Tab status stays reliable even if a Claude Code update renames the 'esc to interrupt' hint
 - fix(terminal-title): Tab status no longer flips to 'done' while Claude is still thinking on long turns
@@ -155,7 +158,4 @@
 
 ## v1.0.164
 - fix: use postversion hook so changelog includes current version
-
-## v1.0.163
-- fix: correct AUTOCONFIG_FILES list (guide→docs, add rules)
 
