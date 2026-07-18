@@ -145,10 +145,11 @@ and a green feeling, then breaks something real:
   bullets surface verbatim on users' upgrade screens (`bin/update-summary.js`) — announcing
   a feature users can't receive is a bug. Already-pushed leaks: add an OVERRIDES `null`.
 - **token-guard's `--analyze` digest wording is a machine interface.** `/analyze-session`
-  keys on the literal "live context at end" and the RENT/BOMBS/FLEETS/TTL headers; the
-  `scopeLog` state fields (`scope`, `enteredIso`, `ctxWatermark`, `prompts`) are read by
-  `/eval-new-session` and `/migrate-new-session`. Renaming labels or fields silently breaks
-  those commands.
+  keys on the literal "live context at end" and the RENT/BOMBS/FLEETS/TTL headers. R6 scope
+  data comes from terminal-title's per-title ledger (`.titles/{sid}.history.jsonl`: `ts`,
+  `title`, optional `tokens`), parsed by `ledgerScopes()` and read by `/eval-new-session`
+  and `/migrate-new-session` too. Renaming those ledger fields (they're written by
+  terminal-title.js) silently breaks token-guard drift + both commands.
 - **`.claude/updates/` numbers are append-only** — next is `005`; `002` is a retired
   tombstone (see `.claude/updates/README.md`). A reused number is silently skipped by
   installs that applied the original.

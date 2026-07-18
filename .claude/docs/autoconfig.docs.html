@@ -1313,7 +1313,7 @@
                 title: '.claude/ Directory',
                 desc: 'Commands, rules, settings, and these docs. Keeps configuration organized as your project grows.'
             },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        'rules': {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    'rules': {
                 title: 'rules/',
                 desc: 'Path-scoped context that loads when Claude works on matching files.'
             },
@@ -1390,7 +1390,7 @@
             },
             'migrate-new-session': {
                 title: 'migrate-new-session.md',
-                desc: 'Completes a session migration — recovers the old session\'s conversation tail and its handoff, from one keyword. Works with an /eval-new-session manifest OR self-packages from a bare scope keyword (e.g. one a scope-drift nudge printed).<div style="margin-top: 12px;"><strong>Parameters</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Name</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Type</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>keyword</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>string</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">required</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Migration name from /eval-new-session, OR the scope slug a /migrate-new-session {slug} drift-nudge printed.</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Migrated {keyword}: ~{tokens} tokens recovered + handoff internalized.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>self-packaged</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">No manifest for {keyword} — self-packaged from the scope-log boundary of session {sid8}.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Reads .claude/handoff/*.manifest.json OR .claude/hooks/.token-guard/*.json (scopeLog); runs the recover-context extraction</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/migrate-new-session guard-ux</code> <span style="opacity: 0.6;">— Manifest prepped by /eval-new-session</span></div><div><code>/migrate-new-session cca-distribution</code> <span style="opacity: 0.6;">— No manifest — self-package from the scope keyword a drift nudge printed</span></div></div></div>',
+                desc: 'Completes a session migration — recovers the old session\'s conversation tail and its handoff, from one keyword. Works with an /eval-new-session manifest OR self-packages from a bare scope keyword (e.g. one a scope-drift nudge printed).<div style="margin-top: 12px;"><strong>Parameters</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Name</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Type</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>keyword</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>string</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">required</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Migration name from /eval-new-session, OR the scope slug a /migrate-new-session {slug} drift-nudge printed.</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Migrated {keyword}: ~{tokens} tokens recovered + handoff internalized.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>self-packaged</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">No manifest for {keyword} — self-packaged from the title-ledger boundary of session {sid8}.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Reads .claude/handoff/*.manifest.json OR .claude/hooks/.titles/*.history.jsonl (terminal-title ledger); runs the recover-context extraction</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/migrate-new-session guard-ux</code> <span style="opacity: 0.6;">— Manifest prepped by /eval-new-session</span></div><div><code>/migrate-new-session cca-distribution</code> <span style="opacity: 0.6;">— No manifest — self-package from the scope keyword a drift nudge printed</span></div></div></div>',
                 trigger: '/migrate-new-session'
             },
             'recover-context': {
@@ -1669,7 +1669,7 @@ CRITICAL: A plausible-looking cause from code reading is NOT confirmed evidence.
 
 > Run \`/autoconfig\` to populate this based on your project.`
             },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        'analyze-session': {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    'analyze-session': {
                 filename: 'analyze-session.md',
                 content: `# Analyze Session
 
@@ -1961,26 +1961,26 @@ The keyword is: $ARGUMENTS (trim whitespace/flags). Look for \`.claude/handoff/<
 - **It exists → MANIFEST MODE.** Read its fields (\`sid8\`, \`boundaryIso\`, \`handoffFile\`) and use them
   for Steps 2–4 exactly as written.
 - **It doesn't → SELF-PACKAGE MODE.** The keyword is a scope slug (e.g. the one a scope-drift nudge
-  printed). There is no pre-written prep — derive it from the old session's token-guard scope log. Run
-  this to find the source session + boundary (matches the keyword against every session's \`scopeLog\`,
-  slugified the same way the guard emits it; the CURRENT session won't match because its scope log
-  doesn't hold that scope yet, so a match is the OLD session):
+  printed). There is no pre-written prep — derive it from the old session's terminal-title ledger
+  (\`.titles/{sid}.history.jsonl\`, one line per title change). Run this to find the source session +
+  boundary (collapses each ledger into scope tenures — scope = segment 1 of the title — and matches
+  the keyword against them, slugified the same way the guard emits it; a just-born session whose
+  first ledger line is under 10 minutes old is skipped, so the session you're running this in never
+  matches its own baseline title):
 
   \`\`\`bash
   node -e "
   const fs=require('fs'),path=require('path');
   const kw=process.argv[1];
   const slug=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+\\$/g,'').slice(0,40).replace(/-+\\$/g,'')||'session';
-  const dir=path.join(process.cwd(),'.claude','hooks','.token-guard');
+  const dir=path.join(process.cwd(),'.claude','hooks','.titles');
   let out=[];
-  try{for(const f of fs.readdirSync(dir).filter(f=>f.endsWith('.json'))){
-    let st;try{st=JSON.parse(fs.readFileSync(path.join(dir,f),'utf8'))}catch(_){continue}
-    const log=Array.isArray(st.scopeLog)?st.scopeLog:[];
-    const hit=[...log].reverse().find(e=>slug(e.scope)===kw);
-    if(hit)out.push({sid8:f.slice(0,8),boundaryIso:hit.enteredIso,scope:hit.scope,mtime:fs.statSync(path.join(dir,f)).mtimeMs});
-  }}catch(_){}
-  out.sort((a,b)=>b.mtime-a.mtime);
-  console.log(JSON.stringify(out,null,2));`
+  try{for(const f of fs.readdirSync(dir).filter(f=>f.endsWith('.history.jsonl'))){
+    const tenures=[];
+    for(const line of fs.readFileSync(path.join(dir,f),'utf8').split(/\\r?\\n/)){
+      if(!line.trim())continue;
+      let e;try{e=JSON.parse(line)}catch(_){continue}
+      const scope=String(e.title||'').split(' — ')[0].trim();`
             },
             'recover-context': {
                 filename: 'recover-context.md',
@@ -2317,17 +2317,17 @@ Pending-question signal -- END-OF-TURN TEST, apply it on every turn: does your f
  *                       on a question (last visible response text ends in '?', or a {sid}.ask flag;
  *                       flag turns hand the skipped grade to a detached --post-grade child that logs
  *                       a StopDiag line when CLAUDE_TITLE_DEBUG=1 — paint-first, diagnostics after)
+ *                       + the /clear ADVISOR: each history line carries a context-size watermark
+ *                       (tokens, read from the transcript's usage), and Stop surfaces a one-shot
+ *                       systemMessage when the topics buried behind the current one outweigh 2× the
+ *                       session's fixed overhead — the point where a /clear pays for itself in a
+ *                       handful of turns (see clearAdvice)
  *   SessionStart     -> ✻ idle "Claude Code — New session" (or an existing title on resume/compact)
  *                       + inject the FULL RULES block — once per session instead of every prompt
  *                       (~90% less directive overhead); resume/compact re-inject so a squeezed
  *                       context re-learns the rules.
  *
- * Dedupe: when this file is the USER-LEVEL copy (~/.claude/hooks) and the project ships its own
- * managed copy (<cwd>/.claude/hooks/terminal-title.js), this copy stands down entirely — otherwise
- * both hooks inject directives naming two different title files (double tokens, double Writes).
- *
- * The title is set TWO ways on every event: \`process.title\` (= SetConsoleTitleW on Windows — the ONLY
- * mechanism that flips the tab on UserPromptSubmit, where Claude Code drops \`terminalSequence\`) AND`
+ * Dedupe: when this file is the USER-LEVEL copy (~/.claude/hooks) and the project ships its own`
             },
             'token-guard-hook': {
                 filename: 'token-guard.js',

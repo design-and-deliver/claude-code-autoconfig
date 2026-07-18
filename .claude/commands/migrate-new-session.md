@@ -1,9 +1,9 @@
 <!-- @description Completes a session migration — recovers the old session's conversation tail and its handoff, from one keyword. Works with an /eval-new-session manifest OR self-packages from a bare scope keyword (e.g. one a scope-drift nudge printed). -->
-<!-- @version 2 -->
+<!-- @version 3 -->
 <!-- @param keyword | string | required | Migration name from /eval-new-session, OR the scope slug a /migrate-new-session {slug} drift-nudge printed. -->
 <!-- @response success | Migrated {keyword}: ~{tokens} tokens recovered + handoff internalized. -->
-<!-- @response self-packaged | No manifest for {keyword} — self-packaged from the scope-log boundary of session {sid8}. -->
-<!-- @sideeffect Reads .claude/handoff/*.manifest.json OR .claude/hooks/.token-guard/*.json (scopeLog); runs the recover-context extraction -->
+<!-- @response self-packaged | No manifest for {keyword} — self-packaged from the title-ledger boundary of session {sid8}. -->
+<!-- @sideeffect Reads .claude/handoff/*.manifest.json OR .claude/hooks/.titles/*.history.jsonl (terminal-title ledger); runs the recover-context extraction -->
 <!-- @example /migrate-new-session guard-ux | Manifest prepped by /eval-new-session -->
 <!-- @example /migrate-new-session cca-distribution | No manifest — self-package from the scope keyword a drift nudge printed -->
 
@@ -17,22 +17,32 @@ The keyword is: $ARGUMENTS (trim whitespace/flags). Look for `.claude/handoff/<k
 - **It exists → MANIFEST MODE.** Read its fields (`sid8`, `boundaryIso`, `handoffFile`) and use them
   for Steps 2–4 exactly as written.
 - **It doesn't → SELF-PACKAGE MODE.** The keyword is a scope slug (e.g. the one a scope-drift nudge
-  printed). There is no pre-written prep — derive it from the old session's token-guard scope log. Run
-  this to find the source session + boundary (matches the keyword against every session's `scopeLog`,
-  slugified the same way the guard emits it; the CURRENT session won't match because its scope log
-  doesn't hold that scope yet, so a match is the OLD session):
+  printed). There is no pre-written prep — derive it from the old session's terminal-title ledger
+  (`.titles/{sid}.history.jsonl`, one line per title change). Run this to find the source session +
+  boundary (collapses each ledger into scope tenures — scope = segment 1 of the title — and matches
+  the keyword against them, slugified the same way the guard emits it; a just-born session whose
+  first ledger line is under 10 minutes old is skipped, so the session you're running this in never
+  matches its own baseline title):
 
   ```bash
   node -e "
   const fs=require('fs'),path=require('path');
   const kw=process.argv[1];
   const slug=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+\$/g,'').slice(0,40).replace(/-+\$/g,'')||'session';
-  const dir=path.join(process.cwd(),'.claude','hooks','.token-guard');
+  const dir=path.join(process.cwd(),'.claude','hooks','.titles');
   let out=[];
-  try{for(const f of fs.readdirSync(dir).filter(f=>f.endsWith('.json'))){
-    let st;try{st=JSON.parse(fs.readFileSync(path.join(dir,f),'utf8'))}catch(_){continue}
-    const log=Array.isArray(st.scopeLog)?st.scopeLog:[];
-    const hit=[...log].reverse().find(e=>slug(e.scope)===kw);
+  try{for(const f of fs.readdirSync(dir).filter(f=>f.endsWith('.history.jsonl'))){
+    const tenures=[];
+    for(const line of fs.readFileSync(path.join(dir,f),'utf8').split(/\r?\n/)){
+      if(!line.trim())continue;
+      let e;try{e=JSON.parse(line)}catch(_){continue}
+      const scope=String(e.title||'').split(' — ')[0].trim();
+      if(!scope)continue;
+      const last=tenures[tenures.length-1];
+      if(!last||last.scope!==scope)tenures.push({scope,enteredIso:e.ts});
+    }
+    if(!tenures.length||Date.now()-Date.parse(tenures[0].enteredIso)<10*60000)continue;
+    const hit=[...tenures].reverse().find(t=>slug(t.scope)===kw);
     if(hit)out.push({sid8:f.slice(0,8),boundaryIso:hit.enteredIso,scope:hit.scope,mtime:fs.statSync(path.join(dir,f)).mtimeMs});
   }}catch(_){}
   out.sort((a,b)=>b.mtime-a.mtime);
@@ -40,9 +50,9 @@ The keyword is: $ARGUMENTS (trim whitespace/flags). Look for `.claude/handoff/<k
   " "<keyword>"
   ```
 
-  - **One match** → that's `sid8` and `boundaryIso` (the matched `enteredIso`). Continue.
+  - **One match** → that's `sid8` and `boundaryIso` (the matched tenure's first title write). Continue.
   - **Several matches** → list them (`sid8` + `scope` + recency) and ask which to migrate; stop.
-  - **No match / no `.token-guard` dir** (guard off or scope log absent) → fall back: take the newest
+  - **No match / no `.titles` dir** (terminal-title module off or ledger absent) → fall back: take the newest
     `*.jsonl` in `~/.claude/projects/<cwd-slug>/` that isn't this session as `sid8`, leave `boundaryIso`
     unset, and use recover-context's own 15-min window. Note the degraded mode in Step 4.
 
@@ -67,6 +77,6 @@ Read `.claude/commands/recover-context.md` and execute its Steps 2–5 with `$MI
 ## Step 4: Confirm and hand back
 
 > **Migrated `{keyword}`** — ~{tokens} tokens recovered from session `{sid8}`
-> ({manifest handoff internalized | self-packaged from the scope-log boundary}). Next up: {top next-action}.
+> ({manifest handoff internalized | self-packaged from the title-ledger boundary}). Next up: {top next-action}.
 
 Then wait for the user to direct you — do not start work unprompted.

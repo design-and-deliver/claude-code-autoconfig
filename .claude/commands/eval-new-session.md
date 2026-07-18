@@ -1,5 +1,5 @@
 <!-- @description Evaluates the merit of spinning the current conversation out into a fresh session, and if worth it, preps the spinout: recovery window + handoff notes + a one-command /migrate-new-session manifest. -->
-<!-- @version 4 -->
+<!-- @version 5 -->
 <!-- @param --cut | flag | optional | Skip the merit verdict and go straight to handoff prep. -->
 <!-- @response cut | Verdict CUT — handoff file written; exact recover commands printed. -->
 <!-- @response stay | Verdict STAY — reason plus what would flip it. -->
@@ -58,9 +58,10 @@ If STAY: print one line — verdict, reason, and what would flip it — and stop
 
 ## Step 3: Pick the recovery window
 
-Deterministic source first (@v4): read `.claude/hooks/.token-guard/<full-session-id>.json` →
-`scopeLog` — token-guard (R6) keeps one entry per design-scope change. The LAST entry's
-`enteredIso` is the moment the session's current scope began; when it plausibly matches your
+Deterministic source first (@v5): read `.claude/hooks/.titles/<full-session-id>.history.jsonl`
+— terminal-title appends one line per tab-title change; scope = segment 1 of each `title`
+(before the first ` — `). The `ts` of the last line whose scope segment DIFFERS from the line
+before it is the moment the session's current scope began; when it plausibly matches your
 judged thread start, that timestamp IS the boundary. Otherwise prefer your judged thread
 boundary, expressed as wall-clock minutes back from now, rounded up to the nearest 5. Fall back
 to `recoverMinFallback` (the ~15-min-of-interaction walk) when the boundary is fuzzy. Call it

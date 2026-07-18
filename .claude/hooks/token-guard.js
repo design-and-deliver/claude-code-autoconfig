@@ -390,21 +390,44 @@ function attributeJump(transcriptPath, fromChar) {
 }
 
 // ---------------------------------------------------------------------------
-// R6 scope-drift: the terminal-title file (terminal-title module; the model maintains it) as a
-// RENT signal. Scope = segment 1 of "{scope} — {use-case}". File absent (module not installed,
-// model not maintaining it) -> null -> feature silently off: absence, not a broken state.
-function readScope(projectDir, sid) {
+// R6 scope-drift: the terminal-title per-title LEDGER ({sid}.history.jsonl — one line per title
+// change, each carrying the context watermark when that topic began) as the RENT signal. The same
+// watermarks terminal-title's /clear advisor reads, so there is ONE topic-cost ledger, not two.
+// Scope = segment 1 of "{scope} — {use-case}". File absent (module not installed, model not
+// maintaining it) -> [] -> feature silently off: absence, not a broken state.
+function readLedgerTenures(projectDir, sid) {
   try {
-    const raw = fs.readFileSync(
-      path.join(projectDir, '.claude', 'hooks', '.titles', `${sid}.txt`), 'utf8');
-    const scope = raw.split('\n')[0].split(' — ')[0].trim();
-    return scope && scope.length <= 80 ? scope : null;
-  } catch (_) { return null; }
+    return ledgerScopes(fs.readFileSync(
+      path.join(projectDir, '.claude', 'hooks', '.titles', `${sid}.history.jsonl`), 'utf8'));
+  } catch (_) { return []; }
+}
+
+// Pure: ledger text -> scope TENURES [{scope, enteredIso, ctxWatermark?}]. Consecutive lines with
+// the same scope collapse into one tenure (use-case/sub-function shifts inside a scope are not
+// boundaries). A tenure's enteredIso is its first line's ts; its watermark is its first line that
+// carries `tokens` (the field is optional in the ledger — a late watermark beats none).
+function ledgerScopes(text) {
+  const tenures = [];
+  for (const line of String(text || '').split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    let e; try { e = JSON.parse(line); } catch (_) { continue; }
+    const scope = String((e && e.title) || '').split(' — ')[0].trim();
+    if (!scope || scope.length > 80) continue;
+    const last = tenures[tenures.length - 1];
+    if (!last || last.scope !== scope) {
+      const t = { scope, enteredIso: e.ts };
+      if (e.tokens > 0) t.ctxWatermark = e.tokens;
+      tenures.push(t);
+    } else if (last.ctxWatermark == null && e.tokens > 0) {
+      last.ctxWatermark = e.tokens;
+    }
+  }
+  return tenures;
 }
 
 // Keyword form of a scope for the migrate command (and any handoff manifest): lowercase, every run
 // of non-alnum -> '-', trimmed, capped at 40. Deterministic + stable (same scope -> same slug) so the
-// once-per-scope nudge is idempotent and migrate can match the keyword back to a scopeLog entry.
+// once-per-scope nudge is idempotent and migrate can match the keyword back to a ledger tenure.
 // Empty/degenerate scopes fall back to 'session' so the emitted command is always well-formed.
 function slug(scope) {
   const s = String(scope || '').toLowerCase()
@@ -462,34 +485,47 @@ function driftNote(dominant, scope, priorPct, autoMigrate, liveContext) {
     `boundary. NEVER run either command yourself. Then a horizontal rule before the answer itself.`;
 }
 
-// Pure fire-rule (exported for fixtures, like meter). Token share per scope = watermark deltas
-// (entry i owns [its watermark, next entry's watermark)); the last entry runs to liveContext.
-// Post-compaction liveContext can fall below the watermarks — deltas clamp to 0 and the verdict
-// degrades to "don't fire", the safe direction. Fires only when ALL hold:
+// Pure fire-rule (exported for fixtures, like meter). Input = ledgerScopes() tenures, the LAST one
+// stamped with `prompts` by the caller. Token share per scope = watermark deltas (tenure i owns
+// [its watermark, next tenure's watermark)); the last tenure runs to liveContext; the window's
+// FIRST tenure starts at 0 (it claims the pre-title baseline, so shares sum to liveContext). The
+// window RE-BASES after any watermark SHRINK (auto-compact replaced the context; earlier
+// watermarks describe a context that no longer exists — same rule as terminal-title's /clear
+// advisor). Fires only when ALL hold:
 //   - live context ≥ driftMinContextTokens (below /eval-new-session's own STAY floor the
 //     eval's verdict is known in advance — nudging is pointless by construction)
 //   - the current scope has held ≥2 prompts (a one-prompt title blip is a detour, not a move —
 //     and the transition turn itself is the fat-ctx advisory's beat, not ours)
 //   - the current scope is a FIRST appearance (a return to an earlier scope = multiplexing or
 //     coming back from a detour — never drift; dominance math alone can't tell A<->B apart)
+//   - the current tenure has a measured watermark (an unmeasured current scope can't be scored)
 //   - the current scope is not the dominant-by-token-share scope
 //   - prior scopes hold ≥ driftPriorShareMin of live context
 // The once-per-scope one-shot (nudgedScope) is the CALLER's job — this stays pure.
-function driftVerdict(scopeLog, liveContext, cfg) {
+function driftVerdict(tenures, liveContext, cfg) {
   const none = { fire: false };
-  if (!Array.isArray(scopeLog) || scopeLog.length < 2) return none;
+  if (!Array.isArray(tenures) || tenures.length < 2) return none;
   if (liveContext < cfg.driftMinContextTokens) return none;
-  const cur = scopeLog[scopeLog.length - 1];
+  const cur = tenures[tenures.length - 1];
   if ((cur.prompts || 0) < 2) return none;
-  if (scopeLog.findIndex(e => e.scope === cur.scope) !== scopeLog.length - 1) return none;
+  if (tenures.findIndex(e => e.scope === cur.scope) !== tenures.length - 1) return none;
+  const known = tenures.filter(e => typeof e.ctxWatermark === 'number');
+  if (known[known.length - 1] !== cur) return none;
+  let base = 0;
+  for (let i = 1; i < known.length; i++) {
+    if (known[i].ctxWatermark < known[i - 1].ctxWatermark) base = i; // shrink → re-base
+  }
+  const win = known.slice(base);
+  if (win.length < 2) return none;
   const share = {};
-  for (let i = 0; i < scopeLog.length; i++) {
-    const end = i + 1 < scopeLog.length ? scopeLog[i + 1].ctxWatermark : liveContext;
-    share[scopeLog[i].scope] = (share[scopeLog[i].scope] || 0) +
-      Math.max(0, end - scopeLog[i].ctxWatermark);
+  for (let i = 0; i < win.length; i++) {
+    const start = i === 0 ? 0 : win[i].ctxWatermark;
+    const end = i + 1 < win.length ? win[i + 1].ctxWatermark : liveContext;
+    share[win[i].scope] = (share[win[i].scope] || 0) + Math.max(0, end - start);
   }
   const dominant = Object.keys(share).sort((a, b) => share[b] - share[a])[0];
-  const priorShare = liveContext ? Math.max(0, liveContext - share[cur.scope]) / liveContext : 0;
+  const priorShare = liveContext
+    ? Math.max(0, liveContext - (share[cur.scope] || 0)) / liveContext : 0;
   if (dominant === cur.scope || priorShare < cfg.driftPriorShareMin) return none;
   return { fire: true, dominant, priorPct: Math.round(priorShare * 100) };
 }
@@ -804,7 +840,8 @@ function stateDir(projectDir) { return path.join(projectDir, '.claude', 'hooks',
 function loadState(projectDir, sid) {
   const blank = { warnedUSD: 0, warnedCtx: false, gateArmedAt: null, lastUSD: 0,
     lastLiveContext: null, scanOffset: 0, warnedIdleAt: 0, knownWf: {},
-    pendingWfReceipt: null, bombGateArmed: false, scopeLog: [], nudgedScope: null,
+    pendingWfReceipt: null, bombGateArmed: false, curScope: null, curScopePrompts: 0,
+    nudgedScope: null,
     approvedPayloadHop: null, payloadGateOkOnce: null,
     turnPayloadTok: 0, turnPayloadWarned: false, miniBombGateArmed: false,
     lastWindowPct: null, lastWindowResetsAt: null, warnedWindow: null, lastTurnDeltaUsd: 0 };
@@ -1412,44 +1449,43 @@ async function onUserPromptSubmit(data, projectDir) {
   }
 
   // R6 scope-drift nudge — when the dominant share of live context belongs to scopes the
-  // session has moved past, every turn pays rent on settled work. The nudge fires ONLY above
-  // driftMinContextTokens (= /eval-new-session's own STAY floor), so at fire time the cut is a
-  // foregone conclusion by construction — hand the user a paste-ready /migrate-new-session
-  // {slug(scope)} as the ONE-step out (the keyword is the current scope; migrate self-packages
-  // from the scopeLog boundary, no prep). /eval stays the escape hatch for the dependency case
-  // drift can't see (a build->article day reads as two scopes, but the article feeds on the build
-  // context). Model relays the block; it NEVER runs either command. Once per scope (nudgedScope).
+  // session has moved past, every turn pays rent on settled work. Scope data comes from the
+  // terminal-title per-title ledger ({sid}.history.jsonl) — the same watermarks its /clear
+  // advisor reads — so drift and advisor can never disagree about what a topic cost. The nudge
+  // fires ONLY above driftMinContextTokens (= /eval-new-session's own STAY floor), so at fire
+  // time the cut is a foregone conclusion by construction — hand the user a paste-ready
+  // /migrate-new-session {slug(scope)} as the ONE-step out (the keyword is the current scope;
+  // migrate self-packages from the ledger boundary, no prep). /eval stays the escape hatch for
+  // the dependency case drift can't see (a build->article day reads as two scopes, but the
+  // article feeds on the build context). Model relays the block; it NEVER runs either command.
+  // Once per scope (nudgedScope).
   if (cfg.driftNudge) {
-    const scope = readScope(projectDir, sid);
-    if (scope) {
-      st.scopeLog = Array.isArray(st.scopeLog) ? st.scopeLog : [];
-      const last = st.scopeLog[st.scopeLog.length - 1];
-      if (last && last.scope === scope) {
-        last.prompts = (last.prompts || 0) + 1;
+    const tenures = readLedgerTenures(projectDir, sid);
+    const cur = tenures[tenures.length - 1];
+    if (cur) {
+      // Prompt residency is the one thing the ledger can't carry — counted here in state. The
+      // ledger gains the new-scope line at the shift turn's first paint after the title write,
+      // so this counter starts on the guard's next prompt — the same "first seen on turn 2"
+      // beat the old scopeLog had.
+      if (st.curScope === cur.scope) {
+        st.curScopePrompts = (st.curScopePrompts || 0) + 1;
       } else {
-        // First entry claims the pre-title context (watermark 0): the model writes the title
-        // DURING turn 1, so the guard first sees it on turn 2 — that gap belongs to the
-        // baseline scope, else the shares wouldn't sum to liveContext.
-        // Field names are a cross-file contract: eval-new-session.md reads enteredIso,
-        // migrate-new-session.md reads scopeLog entries, driftVerdict reads scope/ctxWatermark.
-        st.scopeLog.push({ scope, enteredIso: new Date().toISOString(),
-          ctxWatermark: last ? m.liveContext : 0, prompts: 1 });
-        if (last) logLine(projectDir,
-          `sid=${sid.slice(0, 8)} scope="${scope}" ctx=${fmtK(m.liveContext)}`);
+        st.curScope = cur.scope; st.curScopePrompts = 1;
+        if (tenures.length > 1) logLine(projectDir,
+          `sid=${sid.slice(0, 8)} scope="${cur.scope}" ctx=${fmtK(m.liveContext)}`);
       }
-      const v = driftVerdict(st.scopeLog, m.liveContext, cfg);
-      if (v.fire && st.nudgedScope !== scope) {
-        st.nudgedScope = scope;
+      cur.prompts = st.curScopePrompts;
+      const v = driftVerdict(tenures, m.liveContext, cfg);
+      if (v.fire && st.nudgedScope !== cur.scope) {
+        st.nudgedScope = cur.scope;
         logLine(projectDir,
-          `sid=${sid.slice(0, 8)} drift-nudge from="${v.dominant}" to="${scope}" prior=${v.priorPct}%`);
-        notes.push(driftNote(v.dominant, scope, v.priorPct, cfg.driftAutoMigrate, m.liveContext));
-        // R11: stage the consent candidate so a later "arm it" + /clear can self-migrate. The current
-        // scope entry's enteredIso is the exact recovery boundary; the marker PINS (sid, boundary) so
-        // the SessionStart consumer never has to re-resolve. No commitment until the model writes .armed.
-        if (cfg.driftAutoMigrate) {
-          const cur = st.scopeLog[st.scopeLog.length - 1];
-          writeMigrateCandidate(projectDir, sid, scope, cur && cur.enteredIso);
-        }
+          `sid=${sid.slice(0, 8)} drift-nudge from="${v.dominant}" to="${cur.scope}" prior=${v.priorPct}%`);
+        notes.push(driftNote(v.dominant, cur.scope, v.priorPct, cfg.driftAutoMigrate, m.liveContext));
+        // R11: stage the consent candidate so a later "arm it" + /clear can self-migrate. The
+        // current tenure's enteredIso (its first ledger line) is the exact recovery boundary; the
+        // marker PINS (sid, boundary) so the SessionStart consumer never has to re-resolve. No
+        // commitment until the model writes .armed.
+        if (cfg.driftAutoMigrate) writeMigrateCandidate(projectDir, sid, cur.scope, cur.enteredIso);
       }
     }
   }
@@ -2295,7 +2331,7 @@ if (require.main === module) {
   }
 }
 
-module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, officialLines,
+module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, ledgerScopes, officialLines,
   analyzeSession, renderAnalysis, payloadVerdict, fanVerdict, workflowSource, skillSizes, recordObservedSkill,
   generateBudgets, slug, driftNote, recoverTail, resolveMarker, writeMigrateCandidate, clearMarker,
   migrateReceipt, resolveConfig, TOKEN_SAVER,
