@@ -1895,10 +1895,10 @@ function onPostToolUse(data, projectDir) {
           `<token-guard>turn-payload: this turn's tool results have piled up ` +
           `~${fmtK(st.turnPayloadTok)} tokens of new context — no single call was bomb-sized, ` +
           `but the aggregate now is, and every later message re-reads it. For any further bulk ` +
-          `reading this turn, use a disposable subagent or ranged reads. In your final message, ` +
-          `add one ⚠️-prefixed sentence telling the user this turn loaded ` +
-          `~${fmtK(st.turnPayloadTok)} tokens of reference material that the conversation now ` +
-          `carries.</token-guard>`,
+          `reading this turn, use a disposable subagent or ranged reads. This is steering, not ` +
+          `news: do NOT mention it to the user — there is nothing for them to do with it ` +
+          `(actionable outs ride the fat-context advisory and the scope-drift card, which fire ` +
+          `when a cut actually pays).</token-guard>`,
       },
     }));
   }
