@@ -23,7 +23,7 @@ test('empty config resolves to the light default (token-saver off)', () => {
   assert.equal(c.commandPayloadGate, false);
   assert.equal(c.miniBombGate, false);
   assert.equal(c.bombGateWhenFat, false);
-  assert.equal(c.windowThresholdGate, true);      // the 80% stopgate — the one hard block on by default
+  assert.equal(c.windowThresholdGate, false);     // 80% stopgate demoted to opt-in 2026-07-18 — the note is the default
 });
 
 test('an explicit tokenSaver:false is identical to the empty (off) config', () => {
@@ -48,7 +48,7 @@ test('tokenSaver:true tightens thresholds and turns the opt-in blocks on', () =>
   assert.equal(c.idleGate, true);
   assert.equal(c.commandPayloadGate, true);
   assert.equal(c.miniBombGate, true);
-  assert.equal(c.windowThresholdGate, true);      // stays on (it's a DEFAULT, on for everyone)
+  assert.equal(c.windowThresholdGate, true);      // flips on with the other opt-in blocks (demoted from DEFAULTS 2026-07-18)
 });
 
 test('tokenSaver leaves the R6 drift floor at its principled 100k', () => {
@@ -68,7 +68,7 @@ test('the retired standard/flow modes resolve to the light default (no phantom s
     const c = resolveConfig({ mode });
     assert.equal(c.driftNudge, true);             // flow used to silence this — no longer
     assert.equal(c.idleGate, false);              // no opt-in blocks leak in
-    assert.equal(c.windowThresholdGate, true);    // ...but the 80% stopgate rides DEFAULTS, so it's on here too
+    assert.equal(c.windowThresholdGate, false);   // the 80% gate is opt-in now — retired modes don't arm it
     assert.equal(c.fanHardCap, 50);               // seatbelt intact
   }
 });

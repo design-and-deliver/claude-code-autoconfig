@@ -27,28 +27,28 @@ test('window guards ship ON with 20/80 thresholds by default', () => {
   assert.equal(CFG.windowThresholdWarnPct, 80);
 });
 
-test('the throttle gate is ON by default — the one hard block everyone gets', () => {
-  assert.equal(CFG.windowThresholdGate, true);
-  assert.equal(resolveConfig({ tokenSaver: false }).windowThresholdGate, true);
-  assert.equal(resolveConfig({ tokenSaver: true }).windowThresholdGate, true);
-  assert.equal(resolveConfig({ windowThresholdGate: false }).windowThresholdGate, false); // a user can still pin it off
+test('the throttle gate is OPT-IN — the light default is the end-of-response note', () => {
+  assert.equal(CFG.windowThresholdGate, false);
+  assert.equal(resolveConfig({ tokenSaver: false }).windowThresholdGate, false);
+  assert.equal(resolveConfig({ tokenSaver: true }).windowThresholdGate, true);   // token-saver arms it
+  assert.equal(resolveConfig({ windowThresholdGate: true }).windowThresholdGate, true); // a user can pin it on solo
 });
 
-test('token-saver flags the spike sooner (10); threshold rides the 80 default; gate on for everyone', () => {
+test('token-saver flags the spike sooner (10); threshold rides the 80 default; gate armed by the preset', () => {
   const ts = resolveConfig({ tokenSaver: true });
   assert.equal(ts.windowSpikeWarnPct, 10);         // sooner than the 20 default
   assert.equal(ts.windowThresholdWarnPct, 80);     // the bespoke 75 was dropped — rides the default
   assert.equal(ts.windowThresholdGate, true);      // hard-pause at the mark
-  // the default (toggle off) keeps the lighter spike (20) + soft card, AND the 80% stopgate
+  // the default (toggle off) keeps the lighter spike (20) + soft card, and the NOTE (no gate)
   assert.equal(CFG.windowSpikeWarn, true);
   assert.equal(CFG.windowSpikeConfirm, true);
   assert.equal(CFG.windowThresholdWarn, true);
-  assert.equal(CFG.windowThresholdGate, true);
+  assert.equal(CFG.windowThresholdGate, false);
   assert.equal(CFG.windowSpikeWarnPct, 20);
 });
 
-test('a user can pin the gate off despite the on-by-default (explicit key beats it)', () => {
-  assert.equal(resolveConfig({ windowThresholdGate: false }).windowThresholdGate, false);       // off without token-saver
+test('an explicit gate key beats the preset in both directions', () => {
+  assert.equal(resolveConfig({ windowThresholdGate: true }).windowThresholdGate, true);         // on without token-saver
   assert.equal(resolveConfig({ tokenSaver: true, windowThresholdGate: false }).windowThresholdGate, false); // off despite token-saver
 });
 
@@ -224,9 +224,12 @@ test('windowSpikeNote labels the estimate path as calibrated, not measured', () 
   assert.match(note, /not measured/);
 });
 
-test('windowThresholdNote names window/%/reset, frames it as a throttle not a bill, dollar-free', () => {
+test('windowThresholdNote is an end-of-response one-line checkpoint — heads-up copy, dollar-free', () => {
   const note = windowThresholdNote({ pct: 82, name: '5h window', resetsAt: R }, CFG);
   assert.match(note, /STANDALONE/);
+  assert.match(note, /close the response/);        // placement: AFTER the answer, not before it
+  assert.match(note, /heads up/);
+  assert.match(note, /ONE sentence/);              // checkpoint, not coaching
   assert.match(note, /5h window/);
   assert.match(note, /82% used/);
   assert.match(note, /throttle/);
@@ -234,12 +237,12 @@ test('windowThresholdNote names window/%/reset, frames it as a throttle not a bi
   assert.ok(!/\$\d/.test(note), 'must not contain a $ amount');
 });
 
-test('windowThresholdGateReason is USER-facing: ↑+Enter escape, throttle framing, no relay/no $', () => {
+test('windowThresholdGateReason is USER-facing and tight: state + ↑+Enter escape, no lecture/no $', () => {
   const reason = windowThresholdGateReason({ pct: 82, name: '5h window', resetsAt: R });
   assert.match(reason, /⚠️ Hey/);
   assert.match(reason, /82% used/);
   assert.match(reason, /↑ then Enter/);          // the escape hatch, verbatim like idleGate
-  assert.match(reason, /throttle/);
+  assert.ok(!/throttle/.test(reason), 'the throttle explainer was deliberately cut (2026-07-18)');
   assert.ok(!/STANDALONE/.test(reason), 'user-facing text carries no relay instructions to the model');
   assert.ok(!/\$\d/.test(reason), 'must not contain a $ amount');
 });

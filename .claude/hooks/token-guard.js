@@ -86,9 +86,14 @@
  *   tightest live window (5h OR weekly) crosses N% used. Re-arms when THAT window resets. The stake
  *   is a throttle, not a bill — the copy never carries a $ figure. Both ride the officialUsageFetch
  *   meter; on an API key with no OAuth meter they're inert unless windowBudgetUSD supplies a proxy.
- *   windowThresholdGate true — R12b escalation, ON by default: instead of a note, BLOCK the
- *   submission once per cycle when the tightest window is past the mark. The one-shot key lets the
- *   ↑+Enter re-send through (charge accepted). The block reason is user-facing (future tense, no $).
+ *   The flag is a one-line heads-up CHECKPOINT appended at the END of the response — 80% still
+ *   leaves ~an hour of runway, so no coaching and no swallowed prompt (Andrew 2026-07-18). It rides
+ *   the NEXT submit (the meter reads pre-turn); exact-turn delivery would cost a per-turn Stop-hook
+ *   fetch and was judged not worth it.
+ *   windowThresholdGate false — R12b escalation, OPT-IN (token-saver arms it): BLOCK the submission
+ *   once per cycle instead of the note. The one-shot key lets the ↑+Enter re-send through (charge
+ *   accepted). The block reason is user-facing (no relay prose, no $). Demoted from default-on
+ *   2026-07-18 — a swallowed prompt is too heavy for a checkpoint.
  *   fleetMeter true · workflowConfirm true · bombJumpTokens 50000 · bombGateWhenFat false
  *   workflowFanGuard true · fanWarnAgents 10 · fanHardCap 50 — R10: gate a Workflow whose agent
  *   fan looks disproportionate (SHAPE signals only — a fan constant >= fanWarnAgents, a
@@ -174,8 +179,8 @@ const DEFAULTS = {
                                  // unpack via /analyze-session), not a passive note. On regardless of the toggle.
   windowThresholdWarn: true,
   windowThresholdWarnPct: 80,
-  windowThresholdGate: true,     // R12b: the one hard block ON by default — a throttle (hours of lost
-                                 // access) is worse than a single ↑+Enter, so everyone gets the 80% stopgate.
+  windowThresholdGate: false,    // R12b gate demoted to opt-in 2026-07-18 — 80% is a checkpoint, not an
+                                 // emergency, so the default is the end-of-response note. Token-saver arms it.
   analyzeHint: true,
 };
 
@@ -191,8 +196,8 @@ const DEFAULTS = {
 const TOKEN_SAVER = {
   // Maximum protection, maximum interruption: the shared bomb threshold gets more sensitive,
   // wide-fan asks fire sooner, idle + context warn sooner, the single-turn spike flags sooner,
-  // and the opt-in BLOCKS flip on — idle, command-payload, mini-bomb, bomb-when-fat. (The R12b
-  // 80% throttle gate is ON for everyone via DEFAULTS, so it isn't repeated here.)
+  // and the opt-in BLOCKS flip on — idle, command-payload, mini-bomb, bomb-when-fat, and the
+  // R12b 80% throttle gate (demoted from DEFAULTS to this preset 2026-07-18).
   // driftMinContextTokens is left at its principled 100k floor (below it /eval's CUT verdict
   // isn't pre-determined — R6).
   bombJumpTokens: 30000,
@@ -203,6 +208,7 @@ const TOKEN_SAVER = {
   idleGate: true,
   commandPayloadGate: true,
   miniBombGate: true,
+  windowThresholdGate: true,     // hard-pause at the 80% mark — max-protection posture keeps the stopgate
   windowSpikeWarnPct: 10,        // flag a smaller single-turn window bite than the 20 default
 };
 
@@ -1246,28 +1252,25 @@ function windowSpikeConfirmNote(sv, now5h, sid) {
 }
 
 function windowThresholdNote(tv, cfg) {
-  const reset = tv.resetsAt ? ` and resets ${fmtReset(tv.resetsAt)}` : '';
+  const reset = tv.resetsAt ? `, resets ${fmtReset(tv.resetsAt)}` : '';
   return (
     `window-threshold: the user's ${tv.name} is at ~${tv.pct}% used${reset} — past the ` +
-    `${cfg.windowThresholdWarnPct}% mark, so what's now at stake is a throttle (losing access ` +
-    `until the window resets), not a bill. Relay this as a STANDALONE warning block, never woven ` +
-    `into your answer: open with "⚠️ Hey —" and keep a warm conversational voice, 2 plain ` +
-    `sentences, NO dollar figures. Sentence 1 names the window, the % used, and when it resets; ` +
-    `sentence 2 the out — wrap up heavy work before the reset, or /clear and continue lighter. ` +
-    `Then a horizontal rule before the answer itself.`
+    `${cfg.windowThresholdWarnPct}% checkpoint. The stake is a throttle (losing access until the ` +
+    `window resets), not a bill — never quote a $ figure. Answer the prompt normally, then close ` +
+    `the response with a STANDALONE one-line heads-up — a horizontal rule, then exactly: ` +
+    `"⚠️ Hey — heads up: your ${tv.name} is at ~${tv.pct}% used${reset}." ` +
+    `ONE sentence, nothing appended after it — it's a checkpoint, not an emergency.`
   );
 }
 
-// R12b gate reason — USER-facing text (Claude never sees it, so no relay instructions), future
-// tense (nothing paid yet), and the ↑+Enter escape hatch verbatim like idleGate's block. No $.
+// R12b gate reason — USER-facing text (Claude never sees it, so no relay instructions) with the
+// ↑+Enter escape hatch verbatim like idleGate's block. Tightened 2026-07-18: state + escape hatch
+// only — the throttle explainer and the wrap-up coaching were deliberately cut. No $.
 function windowThresholdGateReason(tv) {
-  const reset = tv.resetsAt ? `, which resets ${fmtReset(tv.resetsAt)}` : '';
+  const reset = tv.resetsAt ? `, resets ${fmtReset(tv.resetsAt)}` : '';
   return (
-    `⚠️ Hey — your ${tv.name} is at ~${tv.pct}% used${reset}, and continuing here will eat further ` +
-    `into it. On a subscription the wall isn't a bill — it's a throttle, losing access until the ` +
-    `window resets.\n\n` +
-    `To continue anyway: press ↑ then Enter. To protect what's left of the window: wrap up here, or ` +
-    `/clear and pick the essential thread back up in a fresh, lighter session.`
+    `⚠️ Hey — your ${tv.name} is at ~${tv.pct}% used${reset}.\n\n` +
+    `To continue anyway: press ↑ then Enter.`
   );
 }
 
@@ -1507,8 +1510,8 @@ async function onUserPromptSubmit(data, projectDir) {
   //   R12a window-spike: one turn ate a big slice of the 5h window (the delta of the meter's own
   //     %, so it self-calibrates — no budget to set).
   //   R12b window-threshold: the tightest live window (5h or weekly) crossed the high-water mark
-  //     — once per window cycle; re-arms when that window resets. windowThresholdGate escalates
-  //     that same one-shot from a note to a BLOCK (mirrors idleGate).
+  //     — once per window cycle; re-arms when that window resets. windowThresholdGate (opt-in)
+  //     escalates that same one-shot from a note to a BLOCK (mirrors idleGate).
   if (cfg.windowSpikeWarn || cfg.windowThresholdWarn || cfg.windowThresholdGate) {
     const now5h = fiveHourWindow(official);
     if (cfg.windowSpikeWarn) {
