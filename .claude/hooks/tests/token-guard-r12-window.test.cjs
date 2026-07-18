@@ -24,7 +24,7 @@ test('window guards ship ON with 20/80 thresholds by default', () => {
   assert.equal(CFG.windowSpikeWarnPct, 20);
   assert.equal(CFG.windowSpikeConfirm, true);      // spike renders as the interactive confirm card
   assert.equal(CFG.windowThresholdWarn, true);
-  assert.equal(CFG.windowThresholdWarnPct, 80);
+  assert.deepEqual(CFG.windowThresholdWarnPct, [50, 80]);  // warn ladder since 2026-07-18
 });
 
 test('the throttle gate is OPT-IN — the light default is the end-of-response note', () => {
@@ -37,7 +37,7 @@ test('the throttle gate is OPT-IN — the light default is the end-of-response n
 test('token-saver flags the spike sooner (10); threshold rides the 80 default; gate armed by the preset', () => {
   const ts = resolveConfig({ tokenSaver: true });
   assert.equal(ts.windowSpikeWarnPct, 10);         // sooner than the 20 default
-  assert.equal(ts.windowThresholdWarnPct, 80);     // the bespoke 75 was dropped — rides the default
+  assert.deepEqual(ts.windowThresholdWarnPct, [50, 80]);  // rides the default ladder
   assert.equal(ts.windowThresholdGate, true);      // hard-pause at the mark
   // the default (toggle off) keeps the lighter spike (20) + soft card, and the NOTE (no gate)
   assert.equal(CFG.windowSpikeWarn, true);
@@ -166,24 +166,57 @@ test('spike stays silent when the meter is down AND no windowBudgetUSD proxy is 
   assert.equal(windowSpikeVerdict(null, { pct: 10, resetsAt: R }, 8, CFG).fire, false);
 });
 
-// ---------- R12b windowThresholdVerdict(): one-shot per window cycle ----------
+// ---------- R12b windowThresholdVerdict(): one-shot per rung per window cycle ----------
 
 const HOT = { pct: 82, name: '5h window', resetsAt: R };
-const WARNED = { name: '5h window', resetsAt: R };   // what state stashes after a fire
+const WARNED = { name: '5h window', resetsAt: R, rung: 80 };   // what state stashes after a top-rung fire
 
-test('threshold fires when the tightest window is at/over the mark', () => {
+test('threshold fires the top rung when the tightest window is at/over it', () => {
   const v = windowThresholdVerdict(HOT, null, CFG);
   assert.equal(v.fire, true);
   assert.equal(v.pct, 82);
   assert.equal(v.name, '5h window');
+  assert.equal(v.rung, 80);
+  assert.equal(v.topRung, 80);
 });
 
-test('threshold stays quiet below the mark', () => {
-  assert.equal(windowThresholdVerdict({ ...HOT, pct: 79 }, null, CFG).fire, false);
+test('threshold fires the 50 rung between the marks (a quiet bearing)', () => {
+  const v = windowThresholdVerdict({ ...HOT, pct: 63 }, null, CFG);
+  assert.equal(v.fire, true);
+  assert.equal(v.rung, 50);
+  assert.equal(v.topRung, 80);
 });
 
-test('threshold is one-shot per cycle — the same window this cycle does not re-fire', () => {
-  assert.equal(windowThresholdVerdict(HOT, WARNED, CFG).fire, false);
+test('threshold stays quiet below the lowest rung', () => {
+  assert.equal(windowThresholdVerdict({ ...HOT, pct: 49 }, null, CFG).fire, false);
+});
+
+test('threshold is one-shot per rung — the same window/rung this cycle does not re-fire', () => {
+  assert.equal(windowThresholdVerdict(HOT, WARNED, CFG).fire, false);                       // 80 fired, still 80s
+  const warned50 = { name: '5h window', resetsAt: R, rung: 50 };
+  assert.equal(windowThresholdVerdict({ ...HOT, pct: 63 }, warned50, CFG).fire, false);     // 50 fired, still 50s
+});
+
+test('escalating to a higher rung mid-cycle fires again', () => {
+  const warned50 = { name: '5h window', resetsAt: R, rung: 50 };
+  const v = windowThresholdVerdict(HOT, warned50, CFG);   // 50 fired earlier, now at 82
+  assert.equal(v.fire, true);
+  assert.equal(v.rung, 80);
+});
+
+test('BACK-COMPAT: pre-ladder warned state (no rung) suppresses everything this cycle', () => {
+  const legacy = { name: '5h window', resetsAt: R };      // old shape — treated as top-rung-fired
+  assert.equal(windowThresholdVerdict(HOT, legacy, CFG).fire, false);
+  assert.equal(windowThresholdVerdict({ ...HOT, pct: 63 }, legacy, CFG).fire, false);
+});
+
+test('BACK-COMPAT: a pinned single number still works as a one-rung ladder', () => {
+  const cfg = resolveConfig({ windowThresholdWarnPct: 80 });
+  assert.equal(windowThresholdVerdict({ ...HOT, pct: 63 }, null, cfg).fire, false);  // no 50 rung
+  const v = windowThresholdVerdict(HOT, null, cfg);
+  assert.equal(v.fire, true);
+  assert.equal(v.rung, 80);
+  assert.equal(v.topRung, 80);
 });
 
 test('REGRESSION: threshold does NOT re-nag on sub-second resets_at jitter (still same cycle)', () => {
@@ -224,8 +257,17 @@ test('windowSpikeNote labels the estimate path as calibrated, not measured', () 
   assert.match(note, /not measured/);
 });
 
-test('windowThresholdNote is an end-of-response one-line checkpoint — heads-up copy, dollar-free', () => {
-  const note = windowThresholdNote({ pct: 82, name: '5h window', resetsAt: R }, CFG);
+test('windowThresholdNote (below top rung) is a quiet ⚠️-free FYI bearing', () => {
+  const note = windowThresholdNote({ pct: 63, name: '5h window', resetsAt: R, rung: 50, topRung: 80 }, CFG);
+  assert.match(note, /STANDALONE/);
+  assert.match(note, /close the response/);        // placement: AFTER the answer
+  assert.match(note, /FYI: your 5h window is at ~63% used/);
+  assert.ok(!/⚠️/.test(note), 'the 50 rung must not carry the alarm glyph — it would wallpaper the 80');
+  assert.ok(!/\$\d/.test(note), 'must not contain a $ amount');
+});
+
+test('windowThresholdNote (top rung) is an end-of-response one-line checkpoint — heads-up copy, dollar-free', () => {
+  const note = windowThresholdNote({ pct: 82, name: '5h window', resetsAt: R, rung: 80, topRung: 80 }, CFG);
   assert.match(note, /STANDALONE/);
   assert.match(note, /close the response/);        // placement: AFTER the answer, not before it
   assert.match(note, /heads up/);

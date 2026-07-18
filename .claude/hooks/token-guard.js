@@ -62,6 +62,9 @@
  *
  * Config (.claude/cca.config.json -> tokenGuard), all optional:
  *   contextWarnTokens 150000 · sessionWarnUSD [5,15,30] · hardGateUSD null · gateStepUSD 5
+ *   (sessionWarnUSD check-ins fire on API-billed sessions ONLY since 2026-07-18 — on a
+ *   subscription the $-equivalent steps map to nothing the user experiences; the R12 window
+ *   flags carry the plan-meter story there. billingKind() is the cheap per-prompt read.)
  *   windowBudgetUSD null — your 5h-window budget in WEIGHTED $-equivalent, the mix-robust proxy
  *   for Max metering (Anthropic confirms cached content is discounted and model choice affects
  *   depletion, but publishes no multipliers — support.claude.com 9797557 / 14552983). Set an
@@ -82,18 +85,21 @@
  *   /analyze-session forensic digest and waits (does NOT answer the pending prompt). It is a SOFT
  *   relay card, never a decision:'block' — a soft interrupt safe even in the light default
  *   posture, not only under token-saver. Off -> the passive standalone warning note.
- *   windowThresholdWarn true · windowThresholdWarnPct 80 — R12b: flag once per window cycle when the
- *   tightest live window (5h OR weekly) crosses N% used. Re-arms when THAT window resets. The stake
- *   is a throttle, not a bill — the copy never carries a $ figure. Both ride the officialUsageFetch
- *   meter; on an API key with no OAuth meter they're inert unless windowBudgetUSD supplies a proxy.
- *   The flag is a one-line heads-up CHECKPOINT appended at the END of the response — 80% still
- *   leaves ~an hour of runway, so no coaching and no swallowed prompt (Andrew 2026-07-18). It rides
- *   the NEXT submit (the meter reads pre-turn); exact-turn delivery would cost a per-turn Stop-hook
- *   fetch and was judged not worth it.
+ *   windowThresholdWarn true · windowThresholdWarnPct [50, 80] — R12b: a warn LADDER (a single
+ *   number still works). Fires once per RUNG per window cycle as the tightest live window (5h OR
+ *   weekly) climbs past each mark; an escalation to a higher rung mid-cycle fires again; re-arms
+ *   when THAT window resets. The stake is a throttle, not a bill — the copy never carries a $
+ *   figure. Both ride the officialUsageFetch meter; on an API key with no OAuth meter they're
+ *   inert unless windowBudgetUSD supplies a proxy.
+ *   Each firing is a one-line note appended at the END of the response. Rungs below the top are a
+ *   quiet "FYI:" line (a bearing, not an alarm — wallpaper-proofing the real one); the TOP rung
+ *   keeps the "⚠️ Hey —" checkpoint styling (80% still leaves ~an hour of runway, so no coaching
+ *   and no swallowed prompt; Andrew 2026-07-18). Notes ride the NEXT submit (the meter reads
+ *   pre-turn); exact-turn delivery would cost a per-turn Stop-hook fetch and was judged not worth it.
  *   windowThresholdGate false — R12b escalation, OPT-IN (token-saver arms it): BLOCK the submission
- *   once per cycle instead of the note. The one-shot key lets the ↑+Enter re-send through (charge
- *   accepted). The block reason is user-facing (no relay prose, no $). Demoted from default-on
- *   2026-07-18 — a swallowed prompt is too heavy for a checkpoint.
+ *   instead of the note at the TOP rung only (lower rungs never block). The one-shot key lets the
+ *   ↑+Enter re-send through (charge accepted). The block reason is user-facing (no relay prose,
+ *   no $). Demoted from default-on 2026-07-18 — a swallowed prompt is too heavy for a checkpoint.
  *   fleetMeter true · workflowConfirm true · bombJumpTokens 50000 · bombGateWhenFat false
  *   workflowFanGuard true · fanWarnAgents 10 · fanHardCap 50 — R10: gate a Workflow whose agent
  *   fan looks disproportionate (SHAPE signals only — a fan constant >= fanWarnAgents, a
@@ -178,7 +184,8 @@ const DEFAULTS = {
   windowSpikeConfirm: true,      // R12a: render the spike flag as a two-option confirm card (keep going /
                                  // unpack via /analyze-session), not a passive note. On regardless of the toggle.
   windowThresholdWarn: true,
-  windowThresholdWarnPct: 80,
+  windowThresholdWarnPct: [50, 80],  // warn ladder (number or array): 50 = quiet FYI bearing,
+                                     // top rung = ⚠️ checkpoint. One-shot per rung per cycle.
   windowThresholdGate: false,    // R12b gate demoted to opt-in 2026-07-18 — 80% is a checkpoint, not an
                                  // emergency, so the default is the end-of-response note. Token-saver arms it.
   analyzeHint: true,
@@ -1188,15 +1195,23 @@ function windowSpikeVerdict(now5h, prev, lastTurnUsd, cfg) {
   return { fire: false };
 }
 
-// R12b verdict — is the tightest window at/over windowThresholdWarnPct, and not already flagged
-// this cycle? `warned` is the last-fired {name, resetsAt}; a match on name + same-cycle resets_at
-// suppresses the repeat, so it fires once per window and re-arms when THAT window actually resets
-// (a different window, or the same one a cycle later, fires again).
+// R12b verdict — has the tightest window crossed a NEW rung of the warn ladder this cycle?
+// windowThresholdWarnPct is a ladder (array) or a single number — both normalize here, so a
+// user's pinned `80` keeps working. `warned` is the last-fired {name, resetsAt, rung}: the same
+// window in the same cycle suppresses rungs at/below the fired one, but an ESCALATION to a
+// higher rung still fires; a different window, or the same one a cycle later, starts fresh.
+// Pre-ladder state (no .rung) counts as top-rung-fired so an upgrade never double-fires mid-cycle.
 function windowThresholdVerdict(worst, warned, cfg) {
-  if (!worst || worst.pct < cfg.windowThresholdWarnPct) return { fire: false };
-  const already = warned && warned.name === worst.name && sameWindowCycle(warned.resetsAt, worst.resetsAt);
-  if (already) return { fire: false };
-  return { fire: true, pct: worst.pct, name: worst.name, resetsAt: worst.resetsAt };
+  if (!worst) return { fire: false };
+  const ladder = [].concat(cfg.windowThresholdWarnPct || [])
+    .map(Number).filter(n => Number.isFinite(n) && n > 0).sort((a, b) => a - b);
+  if (!ladder.length) return { fire: false };
+  const rung = ladder.filter(r => worst.pct >= r).pop();
+  if (rung === undefined) return { fire: false };
+  const sameCycle = warned && warned.name === worst.name && sameWindowCycle(warned.resetsAt, worst.resetsAt);
+  const firedRung = sameCycle ? (typeof warned.rung === 'number' ? warned.rung : Infinity) : -Infinity;
+  if (rung <= firedRung) return { fire: false };
+  return { fire: true, pct: worst.pct, name: worst.name, resetsAt: worst.resetsAt, rung, topRung: ladder[ladder.length - 1] };
 }
 
 // The relayed copy — instructions TO the model (mirrors the idle/bomb notes). NEVER a dollar
@@ -1253,12 +1268,18 @@ function windowSpikeConfirmNote(sv, now5h, sid) {
 
 function windowThresholdNote(tv, cfg) {
   const reset = tv.resetsAt ? `, resets ${fmtReset(tv.resetsAt)}` : '';
+  // Below the top rung: a quiet bearing, deliberately ⚠️-free so the top rung's alarm keeps its
+  // punch (wallpaper-proofing). Top rung: the checkpoint styling.
+  const quiet = typeof tv.topRung === 'number' && tv.rung < tv.topRung;
+  const line = quiet
+    ? `"FYI: your ${tv.name} is at ~${tv.pct}% used${reset}."`
+    : `"⚠️ Hey — heads up: your ${tv.name} is at ~${tv.pct}% used${reset}."`;
   return (
     `window-threshold: the user's ${tv.name} is at ~${tv.pct}% used${reset} — past the ` +
-    `${cfg.windowThresholdWarnPct}% checkpoint. The stake is a throttle (losing access until the ` +
-    `window resets), not a bill — never quote a $ figure. Answer the prompt normally, then close ` +
-    `the response with a STANDALONE one-line heads-up — a horizontal rule, then exactly: ` +
-    `"⚠️ Hey — heads up: your ${tv.name} is at ~${tv.pct}% used${reset}." ` +
+    `${tv.rung}% ${quiet ? 'rung (informational bearing)' : 'checkpoint'}. The stake is a throttle ` +
+    `(losing access until the window resets), not a bill — never quote a $ figure. Answer the ` +
+    `prompt normally, then close the response with a STANDALONE one-line heads-up — a horizontal ` +
+    `rule, then exactly: ` + line + ` ` +
     `ONE sentence, nothing appended after it — it's a checkpoint, not an emergency.`
   );
 }
@@ -1493,7 +1514,11 @@ async function onUserPromptSubmit(data, projectDir) {
     }
   }
 
-  const crossed = (cfg.sessionWarnUSD || []).filter(s => m.usd >= s && st.warnedUSD < s);
+  // Spend-step check-ins are API-billed-only (2026-07-18): on a subscription the $-equivalent
+  // steps map to nothing the user experiences — the R12 window flags below carry the plan-meter
+  // story there. Unknown billing keeps the check-ins (the dollars may be real).
+  const crossed = billingKind() === 'subscription' ? []
+    : (cfg.sessionWarnUSD || []).filter(s => m.usd >= s && st.warnedUSD < s);
 
   // Anthropic's own window meter — fetched at most ONCE per prompt (cached >=180s, so most prompts
   // are cache-served; the network hit is only every few minutes). Shared by the two window flags
@@ -1529,10 +1554,11 @@ async function onUserPromptSubmit(data, projectDir) {
     if (cfg.windowThresholdWarn || cfg.windowThresholdGate) {
       const tv = windowThresholdVerdict(tightestWindow(official), st.warnedWindow, cfg);
       if (tv.fire) {
-        st.warnedWindow = { name: tv.name, resetsAt: tv.resetsAt };
-        // Gate: pre-empt the turn before anything reaches the API. The one-shot key set above lets
-        // the ↑+Enter re-send pass through silently next time (charge accepted). Note is the fallback.
-        if (cfg.windowThresholdGate) {
+        st.warnedWindow = { name: tv.name, resetsAt: tv.resetsAt, rung: tv.rung };
+        // Gate: pre-empt the turn before anything reaches the API — TOP rung only (lower rungs
+        // are FYI bearings and never block). The one-shot key set above lets the ↑+Enter re-send
+        // pass through silently next time (charge accepted). Note is the fallback.
+        if (cfg.windowThresholdGate && tv.rung === tv.topRung) {
           saveState(projectDir, sid, st);
           process.stdout.write(JSON.stringify({ decision: 'block', reason: windowThresholdGateReason(tv) }));
           return;
