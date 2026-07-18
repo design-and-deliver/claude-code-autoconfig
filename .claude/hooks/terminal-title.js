@@ -17,6 +17,11 @@
  *                       on a question (last visible response text ends in '?', or a {sid}.ask flag;
  *                       flag turns hand the skipped grade to a detached --post-grade child that logs
  *                       a StopDiag line when CLAUDE_TITLE_DEBUG=1 — paint-first, diagnostics after)
+ *                       + the /clear ADVISOR: each history line carries a context-size watermark
+ *                       (tokens, read from the transcript's usage), and Stop surfaces a one-shot
+ *                       systemMessage when the topics buried behind the current one outweigh 2× the
+ *                       session's fixed overhead — the point where a /clear pays for itself in a
+ *                       handful of turns (see clearAdvice)
  *   SessionStart     -> ✻ idle "Claude Code — New session" (or an existing title on resume/compact)
  *                       + inject the FULL RULES block — once per session instead of every prompt
  *                       (~90% less directive overhead); resume/compact re-inject so a squeezed
@@ -112,7 +117,7 @@ async function handle(data) {
   const isUserLevel = canonPath(__dirname) === canonPath(homeHooksDir);
   const dir = path.join(isUserLevel ? os.homedir() : ownerDir, '.claude', 'hooks', '.titles');
   const file = path.join(dir, `${sid}.txt`);
-  logCtx = { event, sid, dir, note: '' };
+  logCtx = { event, sid, dir, note: '', transcript: data.transcript_path || '' };
 
   // HARNESS-CONTRACT CANARY (debug-only surface): if Claude Code stops supplying a field the
   // keying depends on, every fix above silently degrades to its fallback. Record the gap so the
@@ -284,7 +289,13 @@ async function handle(data) {
       logCtx.note = 'ask-flag';
       logCtx.diag = `ask=1 fast-path (${deferred ? 'grade deferred to StopDiag' : 'grade skipped'})`;
     }
-    emit(setTitle(GLYPH.awaiting, normalize(readTitle(file) || folderName(cwd)), true));
+    const out = setTitle(GLYPH.awaiting, normalize(readTitle(file) || folderName(cwd)), true);
+    // Advisor AFTER the paint (setTitle may append this turn's history line) and bounded (one
+    // tiny ledger read + one 64KB tail read) — it can never re-open the kill window this fast
+    // path exists to close.
+    const advice = clearAdvice(dir, sid, data.transcript_path);
+    if (advice) out.systemMessage = advice;
+    emit(out);
     return; // emit() exits; the return keeps control flow honest if that ever changes
   }
 
@@ -313,7 +324,10 @@ async function handle(data) {
     logCtx.diag = `ask=0 qmark=${q.ends ? 1 : 0} via=${lex ? 'lex' : (q.via || '-')} found=${q.found ? 1 : 0} reread=${reread} model=${q.model || '-'} tail="${q.tail}"`;
   }
   const glyph = pending ? GLYPH.awaiting : GLYPH.idle;
-  emit(setTitle(glyph, normalize(readTitle(file) || folderName(cwd)), pending));
+  const out = setTitle(glyph, normalize(readTitle(file) || folderName(cwd)), pending);
+  const advice = clearAdvice(dir, sid, data.transcript_path);
+  if (advice) out.systemMessage = advice;
+  emit(out);
 }
 
 // Set the tab title two ways and return the hook payload. `process.title` is the instant flip and the
@@ -339,7 +353,15 @@ function setTitle(glyph, title, ring) {
         const lines = fs.readFileSync(hf, 'utf8').trim().split('\n');
         last = JSON.parse(lines[lines.length - 1]).title || '';
       } catch (_) { /* no history yet */ }
-      if (title !== last) fs.appendFileSync(hf, `${JSON.stringify({ ts: new Date().toISOString(), title })}\n`);
+      if (title !== last) {
+        // Context-size WATERMARK: what the session carried when this topic began — the ledger the
+        // /clear advisor reads. Optional field (absent when the transcript has no flushed usage
+        // yet, e.g. the very first UPS paint); history readers must tolerate both shapes.
+        const entry = { ts: new Date().toISOString(), title };
+        const tokens = readContextTokens(logCtx.transcript || '');
+        if (tokens > 0) entry.tokens = tokens;
+        fs.appendFileSync(hf, `${JSON.stringify(entry)}\n`);
+      }
     } catch (_) { /* history must never block a paint */ }
   }
   let seq = `${ESC}]0;${text}${BEL}`;
@@ -534,6 +556,93 @@ function endsOnQuestion(text) {
     if (isSignoff && QTAIL.test(lines[lines.length - 2])) return { ends: true, via: 'signoff' };
   }
   return { ends: false, via: '' };
+}
+
+// ---- /clear advisor ------------------------------------------------------------------------
+// The watermarked title history is a per-use-case cost ledger: each history line's `tokens` is
+// the context size the session carried when that topic began, so the latest entry's watermark is
+// exactly the candidate-dead history buried behind the current topic. clearAdvice applies the
+// cache break-even rule to that ledger; readContextTokens supplies the measurements.
+
+// Current context size — input + cache_read + cache_creation of the NEWEST main-loop assistant
+// message, from a bounded 64KB tail read (same shape as classifyTail, so it stays fast on a
+// multi-MB transcript). Sidechain (subagent) entries are skipped: their usage is not the main
+// loop's context. Returns 0 for "no data" (missing/unflushed transcript) — callers must treat 0
+// as unknown, never stamp or advise on it.
+function readContextTokens(transcriptPath) {
+  if (!transcriptPath) return 0;
+  let content;
+  try {
+    const TAIL_BYTES = 64 * 1024;
+    const size = fs.statSync(transcriptPath).size;
+    const fd = fs.openSync(transcriptPath, 'r');
+    try {
+      const len = Math.min(TAIL_BYTES, size);
+      const buf = Buffer.alloc(len);
+      fs.readSync(fd, buf, 0, len, size - len);
+      content = buf.toString('utf8');
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch (_) {
+    return 0;
+  }
+  const lines = content.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    let obj;
+    try { obj = JSON.parse(line); } catch (_) { continue; } // includes the tail window's partial first line
+    if (!obj || obj.type !== 'assistant' || obj.isSidechain) continue;
+    const u = obj.message && obj.message.usage;
+    if (!u) continue;
+    const total = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+    if (total > 0) return total;
+  }
+  return 0;
+}
+
+// Should the user be advised to /clear? Break-even rule over the ledger: with F = the session's
+// fixed overhead (≈ the smallest watermark in the window) and dead = the current topic's starting
+// watermark − F (everything buried behind it), cache reads bill dead at 0.1× every turn while a
+// post-/clear re-write of F costs 1.25–2× once — so at dead ≥ 2×F a /clear pays for itself within
+// a handful of turns, faster as dead grows. Advise at that point, at most ONCE per topic
+// ({sid}.advice pins the advised entry's ts; the next qualifying title shift re-arms it).
+// HONEST-NUMBERS CONTRACT: every figure in the line is measured from the ledger/transcript —
+// too few watermarks or an unreadable transcript means NO advisory, never an estimated one.
+// The window re-bases after any watermark SHRINK (auto-compact replaced the context; earlier
+// watermarks describe a context that no longer exists). Relevance is the one thing the math
+// cannot see, so the wording stays conditional ("if they're done") and the user decides.
+function clearAdvice(dir, sid, transcriptPath) {
+  try {
+    const ADVICE_FLOOR = 40000; // below this much dead history a /clear isn't worth a nudge in any repo
+    const hf = path.join(dir, `${sid}.history.jsonl`);
+    const entries = fs.readFileSync(hf, 'utf8').trim().split('\n')
+      .map(l => { try { return JSON.parse(l); } catch (_) { return null; } })
+      .filter(e => e && e.tokens > 0);
+    if (entries.length < 2) return '';
+    let start = 0;
+    for (let i = 1; i < entries.length; i++) {
+      if (entries[i].tokens < entries[i - 1].tokens) start = i; // shrink → re-base the window
+    }
+    const win = entries.slice(start);
+    if (win.length < 2) return '';
+    const latest = win[win.length - 1];
+    const fixed = Math.min.apply(null, win.map(e => e.tokens));
+    const dead = latest.tokens - fixed;
+    if (dead < 2 * fixed || dead < ADVICE_FLOOR) return '';
+    const adviceFile = path.join(dir, `${sid}.advice`);
+    if (readTitle(adviceFile) === latest.ts) return ''; // already advised for this topic
+    const current = readContextTokens(transcriptPath) || latest.tokens;
+    const pct = Math.min(99, Math.round((dead / current) * 100));
+    const topics = win.length - 1;
+    try { fs.writeFileSync(adviceFile, latest.ts); } catch (_) { /* best-effort one-shot */ }
+    const k = n => `${Math.round(n / 1000)}k`;
+    return `\u{1F4A1} ~${k(dead)} tokens of ${topics} earlier topic${topics === 1 ? '' : 's'} still ride in context `
+      + `${EMDASH} if ${topics === 1 ? "it's" : "they're"} done, /clear cuts per-turn input cost ~${pct}%`;
+  } catch (_) {
+    return ''; // no ledger — never advise on guesses
+  }
 }
 
 // A genuine human prompt (real text) vs a tool_result-carrier user message (content is only
@@ -896,7 +1005,7 @@ async function turnWatch(payloadJson) {
   let p;
   try { p = JSON.parse(payloadJson); } catch (_) { return; }
   const { sid, dir, file, cwd, nonce, transcript, ppid } = p;
-  logCtx = { event: 'TurnWatch', sid, dir, note: '' };
+  logCtx = { event: 'TurnWatch', sid, dir, note: '', transcript: transcript || '' };
   const glyphFile = path.join(dir, `${sid}.glyph`);
   const watchFile = path.join(dir, `${sid}.watch`);
 
@@ -1223,4 +1332,4 @@ function extractBlock(tpl, name) {
 // Exported for tests (require()'d when require.main !== module). The hook itself never reads these.
 // Contract: terminal-title.test.js, golden-endings.test.js, and arcade-beeps.js (lazy-requires
 // inspectLastResponse) depend on these names — renaming one silently degrades the beeps hook.
-module.exports = { inspectLastResponse, endsOnQuestion, normalize, GLYPH, shouldDefer, solicitsReply };
+module.exports = { inspectLastResponse, endsOnQuestion, normalize, GLYPH, shouldDefer, solicitsReply, readContextTokens, clearAdvice };

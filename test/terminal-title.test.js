@@ -237,6 +237,112 @@ test('every title change appends one {sid}.history.jsonl line; repeats do not', 
   assert(entries[0].title === 'Alpha — First context', `got "${entries[0].title}"`);
   assert(entries[1].title === 'Alpha — Second context', `got "${entries[1].title}"`);
   assert(entries.every(e => !Number.isNaN(Date.parse(e.ts))), 'each entry needs a parseable ts');
+  // No transcript_path in these payloads → the optional tokens watermark must be ABSENT, not 0.
+  assert(entries.every(e => !('tokens' in e)), 'no-transcript paints must not stamp a tokens field');
+});
+console.log();
+
+console.log('/clear advisor (context-size watermarks + break-even advisory):');
+
+// A main-loop assistant transcript entry whose usage sums to exactly `ctx` context tokens.
+function usageAsst(ctx, text, extra) {
+  return Object.assign({
+    type: 'assistant',
+    timestamp: new Date().toISOString(),
+    message: {
+      role: 'assistant', model: 'claude-test',
+      content: [{ type: 'text', text: text || 'All set.' }],
+      usage: { input_tokens: 10, cache_read_input_tokens: ctx - 10, cache_creation_input_tokens: 0, output_tokens: 5 },
+    },
+  }, extra || {});
+}
+
+function writeUsageTranscript(cwd, name, entries) {
+  const file = path.join(cwd, `${name}.jsonl`);
+  fs.writeFileSync(file, entries.map(e => JSON.stringify(e)).join('\n') + '\n');
+  return file;
+}
+
+function seedHistory(cwd, sid, rows) {
+  const hf = path.join(cwd, '.claude', 'hooks', '.titles', `${sid}.history.jsonl`);
+  fs.mkdirSync(path.dirname(hf), { recursive: true });
+  fs.writeFileSync(hf, rows.map(r => JSON.stringify(r)).join('\n') + '\n');
+  return hf;
+}
+
+test('readContextTokens: newest MAIN-LOOP usage wins; sidechains are skipped', () => {
+  const { readContextTokens } = require(HOOK);
+  const cwd = mkWorkspace();
+  const tp = writeUsageTranscript(cwd, 'ctx', [
+    { type: 'user', message: { role: 'user', content: 'hi' } },
+    usageAsst(50000),
+    usageAsst(900000, 'subagent noise', { isSidechain: true }), // newer but not the main loop
+  ]);
+  assert(readContextTokens(tp) === 50000, `expected 50000, got ${readContextTokens(tp)}`);
+  assert(readContextTokens(path.join(cwd, 'missing.jsonl')) === 0, 'missing transcript must read 0');
+});
+
+test('a title change stamps the tokens watermark from the transcript', () => {
+  const cwd = mkWorkspace();
+  const sid = 'stamp';
+  const tp = writeUsageTranscript(cwd, 'stamp', [usageAsst(60000)]);
+  writeTitle(cwd, sid, 'Alpha — Ledger');
+  runHook({ hook_event_name: 'PostToolUse', session_id: sid, cwd, tool_name: 'Edit', transcript_path: tp });
+  const lines = fs.readFileSync(path.join(cwd, '.claude', 'hooks', '.titles', `${sid}.history.jsonl`), 'utf8')
+    .trim().split('\n').map(l => JSON.parse(l));
+  assert(lines.length === 1 && lines[0].tokens === 60000, `expected tokens=60000, got ${JSON.stringify(lines)}`);
+});
+
+test('Stop advises /clear once when buried topics exceed 2x fixed overhead', () => {
+  const cwd = mkWorkspace();
+  const sid = 'adv1';
+  writeTitle(cwd, sid, 'Alpha — Three');
+  seedHistory(cwd, sid, [
+    { ts: '2026-07-18T10:00:00.000Z', title: 'Alpha — One', tokens: 20000 },
+    { ts: '2026-07-18T10:20:00.000Z', title: 'Alpha — Two', tokens: 60000 },
+    { ts: '2026-07-18T10:40:00.000Z', title: 'Alpha — Three', tokens: 130000 },
+  ]);
+  const tp = writeUsageTranscript(cwd, 'adv1', [
+    { type: 'user', timestamp: new Date().toISOString(), message: { role: 'user', content: 'go' } },
+    usageAsst(150000),
+  ]);
+  const r = runHook({ hook_event_name: 'Stop', session_id: sid, cwd, transcript_path: tp });
+  const msg = r.json.systemMessage || '';
+  // dead = 130k − 20k = 110k; pct = 110k/150k ≈ 73%; 2 buried topics — all measured, none guessed.
+  assert(msg.includes('/clear'), `advisory missing (systemMessage="${msg}")`);
+  assert(msg.includes('~110k'), `dead-tokens figure wrong: "${msg}"`);
+  assert(msg.includes('2 earlier topics'), `topic count wrong: "${msg}"`);
+  assert(msg.includes('~73%'), `savings pct wrong: "${msg}"`);
+  const again = runHook({ hook_event_name: 'Stop', session_id: sid, cwd, transcript_path: tp });
+  assert(!again.json.systemMessage, 'the advisory must be one-shot per topic segment');
+});
+
+test('Stop stays silent below the 2x threshold', () => {
+  const cwd = mkWorkspace();
+  const sid = 'adv2';
+  writeTitle(cwd, sid, 'Alpha — Two');
+  seedHistory(cwd, sid, [
+    { ts: '2026-07-18T11:00:00.000Z', title: 'Alpha — One', tokens: 50000 },
+    { ts: '2026-07-18T11:20:00.000Z', title: 'Alpha — Two', tokens: 130000 }, // dead 80k ≥ floor, < 2×F
+  ]);
+  const tp = writeUsageTranscript(cwd, 'adv2', [usageAsst(140000)]);
+  const r = runHook({ hook_event_name: 'Stop', session_id: sid, cwd, transcript_path: tp });
+  assert(!r.json.systemMessage, `must stay silent below 2x overhead, got "${r.json.systemMessage}"`);
+});
+
+test('a watermark shrink (auto-compact) re-bases the advisory window', () => {
+  const cwd = mkWorkspace();
+  const sid = 'adv3';
+  writeTitle(cwd, sid, 'Alpha — Four');
+  seedHistory(cwd, sid, [
+    { ts: '2026-07-18T12:00:00.000Z', title: 'Alpha — One', tokens: 20000 },
+    { ts: '2026-07-18T12:20:00.000Z', title: 'Alpha — Two', tokens: 150000 },
+    { ts: '2026-07-18T12:40:00.000Z', title: 'Alpha — Three', tokens: 40000 }, // compact happened
+    { ts: '2026-07-18T12:50:00.000Z', title: 'Alpha — Four', tokens: 90000 }, // dead 50k < 2×40k
+  ]);
+  const tp = writeUsageTranscript(cwd, 'adv3', [usageAsst(100000)]);
+  const r = runHook({ hook_event_name: 'Stop', session_id: sid, cwd, transcript_path: tp });
+  assert(!r.json.systemMessage, `pre-compact watermarks must not count, got "${r.json.systemMessage}"`);
 });
 console.log();
 
