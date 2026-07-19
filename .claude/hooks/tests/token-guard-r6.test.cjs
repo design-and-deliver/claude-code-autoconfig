@@ -6,7 +6,7 @@ const assert = require('node:assert');
 const path = require('path');
 
 const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
-const { slug, driftNote, driftVerdict, ledgerScopes } = require(HOOK);
+const { slug, driftNote, driftVerdict, ledgerScopes, driftDeferralTick } = require(HOOK);
 
 // ---------- slug(): stable, filesystem/keyword-safe, capped ----------
 
@@ -171,6 +171,63 @@ test('ledgerScopes tolerates malformed lines, blank lines, and titleless entries
 test('ledgerScopes on empty/absent text returns [] (feature silently off)', () => {
   assert.deepEqual(ledgerScopes(''), []);
   assert.deepEqual(ledgerScopes(null), []);
+});
+
+// ---------- the in-turn judge: arithmetic stages, the model holds the render gate ----------
+
+test('driftNote stages the two judged tests AHEAD of the card copy', () => {
+  const note = driftNote('title hooks', 'CCA distribution', 90);
+  assert.match(note, /RELATEDNESS/);
+  assert.match(note, /RESOLUTION/);
+  assert.match(note, /drift-deferred/);           // the defer out is a concrete flag file
+  assert.match(note, /render NOTHING/);           // suppression must be total, not softened
+  // judge first, relay second — the gate precedes the relay contract
+  assert.ok(note.indexOf('RELATEDNESS') < note.indexOf('STANDALONE'));
+});
+
+test('driftNote plain branch gates on relatedness ONLY; resolution picks the framing', () => {
+  const note = driftNote('title hooks', 'CCA distribution', 90);
+  assert.match(note, /Relay ONLY if this prompt is UNRELATED/);
+  assert.match(note, /RESOLUTION does not gate the relay/);
+  // both framings the copy must be able to name
+  assert.match(note, /safe to leave behind/);
+  assert.match(note, /never quite wrapped up/);
+});
+
+test('driftNote auto-migrate branch demands BOTH tests (a click truncates context)', () => {
+  const note = driftNote('title hooks', 'CCA distribution', 90, true, 117000);
+  assert.match(note, /UNRELATED to that earlier work AND its threads are RESOLVED/);
+  assert.match(note, /any doubt defers/);
+  assert.match(note, /drift-deferred/);
+});
+
+// ---------- driftDeferralTick(): the defer loop's pure state transitions ----------
+
+test('a deferral converts the burnt one-shot into a snooze, then re-arms on expiry', () => {
+  const st = { nudgedScope: 'CCA distribution', curScopePrompts: 5, driftSnooze: null };
+  driftDeferralTick(st, true, 4);
+  assert.deepEqual(st.driftSnooze, { scope: 'CCA distribution', retryAtPrompts: 9 });
+  assert.equal(st.nudgedScope, 'CCA distribution'); // still one-shot-blocked while snoozing
+  st.curScopePrompts = 8; driftDeferralTick(st, false, 4);
+  assert.equal(st.nudgedScope, 'CCA distribution'); // not yet
+  st.curScopePrompts = 9; driftDeferralTick(st, false, 4);
+  assert.equal(st.nudgedScope, null);               // re-armed: driftVerdict may stage again
+  assert.equal(st.driftSnooze, null);
+});
+
+test('an orphan flag (nothing staged) is consumed without creating a snooze', () => {
+  const st = { nudgedScope: null, curScopePrompts: 3, driftSnooze: null };
+  driftDeferralTick(st, true, 4);
+  assert.equal(st.driftSnooze, null);
+  assert.equal(st.nudgedScope, null);
+});
+
+test('a snooze for a scope that is no longer the nudged one is dropped as stale', () => {
+  const st = { nudgedScope: 'new scope', curScopePrompts: 2,
+    driftSnooze: { scope: 'old scope', retryAtPrompts: 9 } };
+  driftDeferralTick(st, false, 4);
+  assert.equal(st.driftSnooze, null);
+  assert.equal(st.nudgedScope, 'new scope');        // the newer stage's one-shot is untouched
 });
 
 test('ledger text end-to-end: drifted session fires with ledger-derived tenures', () => {

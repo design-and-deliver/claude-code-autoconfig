@@ -117,9 +117,14 @@
  *   idleWarnMinutes 60 · idleGate false — block (pre-empt) instead of warn on idle-return;
  *   the one gate that saves one-shot money: the warn ships in the request that pays, the gate
  *   fires before it.  (skillBudgetWarnChars is read by the CCA auditor, not this hook)
- *   driftNudge true · driftPriorShareMin 0.6 · driftMinContextTokens 100000 — R6: the
- *   terminal-title trail as a RENT signal; fires only above /eval's STAY floor, so it hands the
- *   user a paste-ready /migrate-new-session {slug(scope)} (never runs it); /eval is the escape hatch.
+ *   driftNudge true · driftPriorShareMin 0.6 · driftMinContextTokens 100000 · driftRetryPrompts 4
+ *   — R6: the terminal-title trail as a RENT signal; fires only above /eval's STAY floor, so it hands
+ *   the user a paste-ready /migrate-new-session {slug(scope)} (never runs it); /eval is the escape
+ *   hatch. The hook's arithmetic only STAGES the card (2026-07-18) — the in-turn model holds the
+ *   render gate: it judges RELATEDNESS (current prompt returns to the earlier work → stale premise)
+ *   and RESOLUTION (earlier threads actually closed → picks the copy's framing) against the live
+ *   conversation, and defers by writing .token-guard/drift-deferred; the guard snoozes
+ *   driftRetryPrompts prompts, then re-arms the one-shot so the card re-offers with a fresh premise.
  *   driftAutoMigrate false · driftMigrateMarkerTTLmin 120 · driftMigrateMaxInjectTokens 40000 — R11:
  *   arm-offer + SessionStart(source clear/startup) auto-migrate. A consent marker (hook-staged
  *   candidate + model-written .armed flag) lets a single /clear rehydrate the drifted thread — the hook
@@ -173,6 +178,8 @@ const DEFAULTS = {
   driftNudge: true,
   driftPriorShareMin: 0.6,
   driftMinContextTokens: 100000,
+  driftRetryPrompts: 4,             // R6 defer loop: prompts to snooze after a model-judged deferral
+                                    // before the one-shot re-arms and the card may re-stage
   driftAutoMigrate: false,
   driftMigrateMarkerTTLmin: 120,
   driftMigrateMaxInjectTokens: 40000,
@@ -457,6 +464,31 @@ function slug(scope) {
 // cross-scope-dependency case drift can't see. R11: when autoMigrate is on, the out is rendered as
 // clickable AskUserQuestion buttons ("Set it up → just /clear" writes the .armed consent flag; "I'll
 // paste it myself" = the /migrate fallback) — no typed magic word. The lead is identical in both modes.
+// 2026-07-18: the arithmetic only STAGES the card — the in-turn model holds the render gate, because
+// it sees meaning where the hook sees sizes. Two judged tests: RELATEDNESS gates the render (a
+// current prompt that returns to the earlier work = stale premise — the failure we watched live was
+// the card claiming a topic change in the very turn the user pivoted back); RESOLUTION picks the
+// copy's framing (settled-and-safe vs never-closed-but-moved-on). The auto-migrate card demands BOTH
+// (a click there truncates context, so the destructive path stays conservative). A refusal is not a
+// kill: the model writes the drift-deferred flag and the caller snoozes, then re-offers.
+function driftJudge(dominant, autoMigrate) {
+  const gate = autoMigrate
+    ? `Proceed ONLY if this prompt is UNRELATED to that earlier work AND its threads are RESOLVED ` +
+      `(shipped, committed, answered, user-confirmed — nothing still open); a click on this card ` +
+      `truncates the old context, so any doubt defers. `
+    : `Relay ONLY if this prompt is UNRELATED to that earlier work; RESOLUTION does not gate the ` +
+      `relay — it picks the framing below (an unresolved thread the user has moved past still ` +
+      `deserves the card). `;
+  return `The numbers here are ARITHMETIC — you hold the render gate, because you can see what the ` +
+    `hook cannot: meaning. Before relaying anything, judge two tests against the conversation and ` +
+    `the user's CURRENT prompt: (1) RELATEDNESS — does this very prompt return to, build on, or ask ` +
+    `about the earlier "${dominant}" work? (2) RESOLUTION — were the "${dominant}" threads actually ` +
+    `closed (shipped, committed, answered, user-confirmed), or is something still open? ${gate}` +
+    `To DEFER instead: write the contentless flag file ` +
+    `".claude/hooks/.token-guard/drift-deferred" (the guard snoozes and re-offers in a few ` +
+    `prompts) and render NOTHING about drift this turn — no card, no aside. `;
+}
+
 function driftNote(dominant, scope, priorPct, autoMigrate, liveContext) {
   const kw = slug(scope);
   if (autoMigrate) {
@@ -465,8 +497,10 @@ function driftNote(dominant, scope, priorPct, autoMigrate, liveContext) {
     // the current scope's live share, truncate = the prior scopes we drop, both derived from priorPct.
     const truncate = Math.round((liveContext || 0) * priorPct / 100);
     const keep = Math.max(0, (liveContext || 0) - truncate);
-    return `scope-drift(auto-migrate): this session moved from "${dominant}" to "${scope}", and the ` +
-      `earlier scopes are ~${priorPct}% of the live context every turn re-reads. Present it as a SINGLE ` +
+    return `scope-drift(auto-migrate, staged): this session moved from "${dominant}" to "${scope}", and the ` +
+      `earlier scopes are ~${priorPct}% of the live context every turn re-reads. ` +
+      driftJudge(dominant, true) +
+      `If proceeding: present it as a SINGLE ` +
       `self-contained AskUserQuestion card — do NOT render any warning prose above it. The card's ` +
       `\`question\` field is this line VERBATIM (the agreed copy):\n` +
       `"⚠️ Hey — this session has ~${fmtK(liveContext)} of context, but the current topic only needs ` +
@@ -483,13 +517,17 @@ function driftNote(dominant, scope, priorPct, autoMigrate, liveContext) {
       `will be preserved." On Cancel, dismiss — nothing changes. NEVER run \`/clear\` yourself, and ` +
       `write the flag ONLY after the user picks option 1.`;
   }
-  const lead = `scope-drift: this session's work has moved from "${dominant}" to "${scope}", and ` +
+  const lead = `scope-drift(staged): this session's work has moved from "${dominant}" to "${scope}", and ` +
     `the earlier scopes still make up ~${priorPct}% of the live context every turn ` +
-    `re-reads. Relay as a STANDALONE warning block, never woven into your answer: open ` +
+    `re-reads. ` +
+    driftJudge(dominant, false) +
+    `If relaying: a STANDALONE warning block, never woven into your answer: open ` +
     `with "⚠️ Hey —" and keep a warm conversational voice (helpful friend, not system ` +
     `log), 2-3 plain sentences: the session started on ${dominant}, has moved on to ` +
     `${scope}, and every message still re-carries that earlier work (~${priorPct}% of ` +
-    `what each turn costs). `;
+    `what each turn costs). Name the RESOLUTION case in one of those clauses: settled → that ` +
+    `earlier work shipped and is safe to leave behind; never-closed → the ${dominant} thread ` +
+    `never quite wrapped up, so migrating only makes sense if they don't plan to come back to it. `;
   return lead +
     `Then give the ONE-step out as a paste-ready command: in a fresh ` +
     `session, run \`/migrate-new-session ${kw}\` — it recovers this thread and picks up where ` +
@@ -541,6 +579,34 @@ function driftVerdict(tenures, liveContext, cfg) {
     ? Math.max(0, liveContext - (share[cur.scope] || 0)) / liveContext : 0;
   if (dominant === cur.scope || priorShare < cfg.driftPriorShareMin) return none;
   return { fire: true, dominant, priorPct: Math.round(priorShare * 100) };
+}
+
+// R6 defer loop (2026-07-18). The staged card's render gate lives in the in-turn model (see
+// driftJudge); a refusal comes back as the model-written drift-deferred flag. One flag per project,
+// not per sid — same posture as the migrate candidate; a cross-session collision costs at worst one
+// early or lost re-offer, never a wrong render (every render re-passes the model's gate anyway).
+const DRIFT_DEFERRED = 'drift-deferred';
+function consumeDriftDeferred(projectDir) {
+  try { fs.unlinkSync(path.join(stateDir(projectDir), DRIFT_DEFERRED)); return true; }
+  catch (_) { return false; }
+}
+
+// Pure state-transition half of the defer loop (exported for fixtures, like driftVerdict). A
+// consumed flag converts the burnt one-shot into a snooze (re-offer after retryPrompts more prompts
+// in the nudged scope); an expired snooze re-arms the one-shot so driftVerdict may stage the card
+// again with a fresh premise. Clearing nudgedScope can only ever ALLOW a re-offer the model
+// re-judges — never force a render — so every path here is fail-soft. A snooze whose scope is no
+// longer the nudged one is stale (a newer scope fired since): drop it.
+function driftDeferralTick(st, flagConsumed, retryPrompts) {
+  if (flagConsumed && st.nudgedScope) {
+    st.driftSnooze = { scope: st.nudgedScope,
+      retryAtPrompts: (st.curScopePrompts || 0) + (retryPrompts || 4) };
+  }
+  if (st.driftSnooze && st.driftSnooze.scope !== st.nudgedScope) st.driftSnooze = null;
+  if (st.driftSnooze && (st.curScopePrompts || 0) >= st.driftSnooze.retryAtPrompts) {
+    st.nudgedScope = null;
+    st.driftSnooze = null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -854,7 +920,7 @@ function loadState(projectDir, sid) {
   const blank = { warnedUSD: 0, warnedCtx: false, gateArmedAt: null, lastUSD: 0,
     lastLiveContext: null, scanOffset: 0, warnedIdleAt: 0, knownWf: {},
     pendingWfReceipt: null, bombGateArmed: false, curScope: null, curScopePrompts: 0,
-    nudgedScope: null,
+    nudgedScope: null, driftSnooze: null,
     approvedPayloadHop: null, payloadGateOkOnce: null,
     turnPayloadTok: 0, turnPayloadWarned: false, miniBombGateArmed: false,
     lastWindowPct: null, lastWindowResetsAt: null, warnedWindow: null, lastTurnDeltaUsd: 0 };
@@ -1499,9 +1565,17 @@ async function onUserPromptSubmit(data, projectDir) {
           `sid=${sid.slice(0, 8)} scope="${cur.scope}" ctx=${fmtK(m.liveContext)}`);
       }
       cur.prompts = st.curScopePrompts;
+      // Defer loop: consume a model-written drift-deferred flag (the in-turn judge refused the
+      // staged card — stale premise or open threads), snooze, and re-arm the one-shot when the
+      // snooze expires; driftVerdict then re-stages and the model re-judges with a fresh premise.
+      const deferred = consumeDriftDeferred(projectDir);
+      driftDeferralTick(st, deferred, cfg.driftRetryPrompts);
+      if (deferred && st.driftSnooze) logLine(projectDir,
+        `sid=${sid.slice(0, 8)} drift-deferred scope="${st.driftSnooze.scope}" retry@${st.driftSnooze.retryAtPrompts}p`);
       const v = driftVerdict(tenures, m.liveContext, cfg);
       if (v.fire && st.nudgedScope !== cur.scope) {
         st.nudgedScope = cur.scope;
+        st.driftSnooze = null;
         logLine(projectDir,
           `sid=${sid.slice(0, 8)} drift-nudge from="${v.dominant}" to="${cur.scope}" prior=${v.priorPct}%`);
         notes.push(driftNote(v.dominant, cur.scope, v.priorPct, cfg.driftAutoMigrate, m.liveContext));
@@ -2362,7 +2436,8 @@ if (require.main === module) {
 
 module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, ledgerScopes, officialLines,
   analyzeSession, renderAnalysis, payloadVerdict, fanVerdict, workflowSource, skillSizes, recordObservedSkill,
-  generateBudgets, slug, driftNote, recoverTail, resolveMarker, writeMigrateCandidate, clearMarker,
+  generateBudgets, slug, driftNote, driftDeferralTick, recoverTail, resolveMarker,
+  writeMigrateCandidate, clearMarker,
   migrateReceipt, resolveConfig, TOKEN_SAVER,
   fiveHourWindow, tightestWindow, windowSpikeVerdict, windowThresholdVerdict,
   windowSpikeNote, windowSpikeConfirmNote, windowThresholdNote, windowThresholdGateReason };
