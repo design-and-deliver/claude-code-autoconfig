@@ -1,5 +1,5 @@
 <!-- @description Recovers conversation context from the session transcript after compaction. -->
-<!-- @version 6 -->
+<!-- @version 7 -->
 <!-- @param minutes | integer | optional | How far back to recover, in minutes. Leading dash optional. Min: 1. Bare invocation auto-recovers the last session instead. -->
 <!-- @param pid | integer | optional | Recovery-pointer id from token-guard's idle warning (e.g. pid=3). Resolves the exact session + cutoff from .claude/hooks/.token-guard/recover.json. -->
 <!-- @param --show | flag | optional | Opens the extracted transcript in your default editor. -->
@@ -22,7 +22,7 @@ Usage:
 - `/recover-context -60 --show` — same as minutes mode, but also opens the transcript in your editor
 
 Three modes:
-- **Auto mode** (no arguments): finds this project's previous session by itself — the current session's transcript is the newest `.jsonl` in the project's transcript directory (it is being written right now), so the previous session is the second-newest. The cutoff comes from a matching token-guard pointer when one exists (frozen at fire time, interaction-aware), otherwise from the same ~15-minutes-of-real-interaction walk-back over the transcript's own timestamps.
+- **Auto mode** (no arguments): recovers the session that ran in THIS terminal before the current one. The terminal-title hook maintains a terminal-lineage registry: on every SessionStart (including /clear) it records which session this terminal held, and stamps the outgoing session as the incoming one's predecessor in `.claude/hooks/.titles/{sid}.lineage.json`. Auto mode reads its own lineage file (keyed by `$CLAUDE_CODE_SESSION_ID`), falling back to the newest-other-transcript heuristic when no lineage exists. The cutoff ladder: a matching token-guard pointer (frozen at fire time) → the start of the previous session's final use-case thread per its title history (`{sid}.history.jsonl`), floored at ~15 min of real interaction and capped at 60 wall-clock minutes → the plain ~15-min walk-back.
 - **Minutes mode**: the number means "go back N minutes from now." The leading dash is optional.
 - **Pointer mode** (`pid=N`): token-guard's idle-return warning writes a numbered recovery pointer to `.claude/hooks/.token-guard/recover.json` in the project it fired in. The pid encapsulates the stale session's id and the recovery cutoff (frozen at fire time), so this mode recovers the right window no matter how long ago the warning fired — even if other sessions happened in between (which would fool auto mode).
 
@@ -84,59 +84,106 @@ python3 -c "
 import glob, json, os, re, sys
 from datetime import datetime, timedelta
 
-proj = re.sub(r'[^A-Za-z0-9]', '-', os.getcwd())
-tdir = os.path.expanduser('~/.claude/projects/' + proj)
-files = sorted(glob.glob(os.path.join(tdir, '*.jsonl')), key=os.path.getmtime, reverse=True)
-if len(files) < 2:
+def iso(s):
+    return datetime.fromisoformat(s.replace('Z', '+00:00'))
+
+titles_dirs = ['.claude/hooks/.titles', os.path.expanduser('~/.claude/hooks/.titles')]
+
+# 1. Terminal lineage — the explicit record of which session THIS terminal held before
+#    the current one (written by the terminal-title hook on every SessionStart/clear).
+sid_now = os.environ.get('CLAUDE_CODE_SESSION_ID', '')
+prev = None; how = None
+if sid_now:
+    for d in titles_dirs:
+        f = os.path.join(d, sid_now + '.lineage.json')
+        if os.path.exists(f):
+            try:
+                prev = json.load(open(f, encoding='utf-8')).get('prevSid')
+            except Exception:
+                prev = None
+            if prev:
+                how = 'terminal lineage'
+            break
+
+# 2. Fallback heuristic — this project's newest transcript that isn't the current
+#    session's (the current one is being written right now, so it sorts first).
+file = None
+if prev:
+    hits = glob.glob(os.path.expanduser('~/.claude/projects/*/' + prev + '.jsonl'))
+    file = hits[0] if hits else None
+if not file:
+    proj = re.sub(r'[^A-Za-z0-9]', '-', os.getcwd())
+    tdir = os.path.expanduser('~/.claude/projects/' + proj)
+    files = sorted(glob.glob(os.path.join(tdir, '*.jsonl')), key=os.path.getmtime, reverse=True)
+    files = [p for p in files if os.path.splitext(os.path.basename(p))[0] != sid_now]
+    if not files:
+        print('NO_PREVIOUS_SESSION'); sys.exit(0)
+    file = files[1] if (not sid_now and len(files) > 1) else files[0]
+    prev = os.path.splitext(os.path.basename(file))[0]
+    how = 'newest-other transcript'
+
+ts = []
+with open(file, encoding='utf-8', errors='replace') as f:
+    for line in f:
+        try:
+            obj = json.loads(line)
+        except Exception:
+            continue
+        t = obj.get('timestamp')
+        if t:
+            ts.append(iso(t))
+if not ts:
     print('NO_PREVIOUS_SESSION'); sys.exit(0)
 
-# files[0] is THIS session (its transcript is being written right now);
-# files[1] is the previous session.
-prev = files[1]
-sid = os.path.splitext(os.path.basename(prev))[0]
+# --- cutoff ladder ---
+cutoff = None; via = None
 
-# Prefer a matching token-guard pointer: its cutoff was frozen at fire time and
-# weighted by real interaction, so it beats a recomputed one.
-cutoff = None; via = 'walk-back'
+# a. A token-guard pointer for this sid: frozen at idle-fire time, interaction-aware.
 try:
     rec = json.load(open('.claude/hooks/.token-guard/recover.json', encoding='utf-8'))
     for e in [rec] + rec.get('history', []):
-        if e.get('sid') == sid and e.get('cutoffIso'):
-            cutoff = e['cutoffIso']; via = 'pointer pid=%s' % e.get('pid'); break
+        if e.get('sid') == prev and e.get('cutoffIso'):
+            cutoff = iso(e['cutoffIso']); via = 'pointer pid=%s' % e.get('pid'); break
 except Exception:
     pass
 
 if cutoff is None:
-    # Same walk-back token-guard uses: cover ~15min of real interaction, counting
-    # any gap as at most 5min so idle stretches don't eat the budget.
-    ts = []
-    with open(prev, encoding='utf-8', errors='replace') as f:
-        for line in f:
-            try:
-                obj = json.loads(line)
-            except Exception:
-                continue
-            t = obj.get('timestamp')
-            if t:
-                ts.append(datetime.fromisoformat(t.replace('Z', '+00:00')))
-    if not ts:
-        print('NO_PREVIOUS_SESSION'); sys.exit(0)
+    # b/c. Walk-back: >=15min of real interaction (gaps counted at most 5min)...
     i = len(ts) - 1; acc = timedelta()
     while i > 0 and acc < timedelta(minutes=15):
         acc += min(ts[i] - ts[i-1], timedelta(minutes=5)); i -= 1
-    cutoff = ts[i].isoformat()
+    wb = ts[i]
+    # ...widened to the start of the session's FINAL use-case thread when the title
+    # history knows it (the last title write marks where that thread began).
+    tb = None
+    for d in titles_dirs:
+        h = os.path.join(d, prev + '.history.jsonl')
+        if os.path.exists(h):
+            lines = [l for l in open(h, encoding='utf-8', errors='replace') if l.strip()]
+            if lines:
+                try:
+                    tb = iso(json.loads(lines[-1])['ts'])
+                except Exception:
+                    tb = None
+            break
+    cutoff = min(tb, wb) if tb else wb
+    via = 'title-thread' if (tb and tb < wb) else 'walk-back'
+    # Cap the tail at 60 wall-clock minutes so a single-title marathon can't flood context.
+    floor = ts[-1] - timedelta(minutes=60)
+    if cutoff < floor:
+        cutoff = floor; via += ', capped at 60min'
 
-print('SID=' + sid)
-print('FILE=' + prev)
-print('CUTOFF_ISO=' + cutoff)
-print('VIA=' + via)
+print('SID=' + prev)
+print('FILE=' + file)
+print('CUTOFF_ISO=' + cutoff.isoformat())
+print('VIA=' + via + ' (' + how + ')')
 "
 ```
 
 - `NO_PREVIOUS_SESSION` → tell the user no previous session exists for this project and stop (offer minutes mode if they meant a different project's work).
 - Otherwise store `$SID`, `$CUTOFF_ISO`, set `$FILES_TO_PARSE` to the `FILE=` path, note `VIA` for the confirmation, and skip to Step 4.
 
-Caveat: if ANOTHER Claude session is live in this project right now, it may be the second-newest file and auto mode would pick it up instead — in that case rerun with `pid=N` or minutes mode.
+Caveat: the lineage registry makes auto mode terminal-accurate. Only the fallback heuristic can be fooled by ANOTHER live Claude session in the same project — if the result looks like the wrong session, rerun with `pid=N` or minutes mode.
 
 ## Step 2b: Minutes mode — list candidate transcript files
 

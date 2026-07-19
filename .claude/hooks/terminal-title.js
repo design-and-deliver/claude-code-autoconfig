@@ -183,6 +183,9 @@ async function handle(data) {
     // Fresh-session placeholder; on resume/compact an existing model-authored title is preferred.
     const title = normalize(readTitle(file) || 'Claude Code - New session');
     const out = setTitle(GLYPH.idle, title);
+    // Terminal lineage registry (see recordLineage): on a /clear this stamps the cleared
+    // sid as the new session's "previous", which is what bare /recover-context recovers.
+    recordLineage(dir, sid, data.source || '');
     // Inject the FULL rulebook here — once per session — instead of on every prompt. All sources
     // get it: startup/clear teach a fresh context, resume/compact re-teach a squeezed one.
     const rules = buildBlocks(['RULES'], file, cwd, '');
@@ -743,6 +746,101 @@ async function postGrade(payloadJson) {
   };
   // Reuses titleLog's capped append; glyph/ring mirror what the fast path actually painted.
   titleLog(GLYPH.awaiting, p.title || '', true);
+}
+
+// Terminal lineage — an explicit "which session ran in THIS terminal before me" registry
+// (config over convention: /recover-context's auto mode reads it instead of guessing by
+// transcript mtime). The terminal's identity is anchored to the process that LAUNCHED
+// claude — the tab's shell — which outlives both /clear (same claude process) and a claude
+// exit+relaunch in the same tab. Found by walking the process ancestry: scanning from the
+// TOP of the chain down, the first claude/node entry is the claude process itself (anything
+// below it is hook plumbing — node self, cmd /c wrappers); its parent is the anchor.
+// Windows pays one ~1s PowerShell spawn — SessionStart-only, never on a turn. Fail-safe
+// like the rest of the family: any miss records nothing and /recover-context falls back to
+// its newest-other-transcript heuristic.
+function ancestryChain(fromPid) {
+  const cp = require('child_process');
+  try {
+    if (process.platform === 'win32') {
+      const script =
+        `$id=${fromPid}; for($i=0; $i -lt 10 -and $id; $i++){` +
+        `$p=Get-CimInstance Win32_Process -Filter "ProcessId=$id" -ErrorAction SilentlyContinue;` +
+        `if(-not $p){break}; Write-Output "$($p.ProcessId)|$($p.CreationDate.ToFileTimeUtc())|$($p.Name)";` +
+        `$id=$p.ParentProcessId}`;
+      const r = cp.spawnSync('powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-Command', script],
+        { encoding: 'utf8', timeout: 4000, windowsHide: true });
+      return String(r.stdout || '').trim().split('\n').map(l => {
+        const [pid, created, ...name] = l.trim().split('|');
+        return { pid: Number(pid), created: created || '', name: name.join('|') };
+      }).filter(e => e.pid);
+    }
+    // POSIX: one cheap ps per hop. lstart (not etimes) so the value is byte-stable across
+    // reads — the tid must reproduce identically on every SessionStart in the same terminal.
+    const chain = [];
+    let pid = fromPid;
+    for (let i = 0; i < 10 && pid && pid > 1; i++) {
+      const r = cp.spawnSync('ps', ['-p', String(pid), '-o', 'ppid=,lstart=,comm='],
+        { encoding: 'utf8', timeout: 2000 });
+      const m = String(r.stdout || '').trim().match(/^\s*(\d+)\s+(\S+\s+\S+\s+\d+\s+[\d:]+\s+\d+)\s+(.*)$/);
+      if (!m) break;
+      chain.push({ pid, created: String(Date.parse(m[2]) || m[2]), name: m[3] });
+      pid = Number(m[1]);
+    }
+    return chain;
+  } catch (_) { return []; }
+}
+
+function recordLineage(dir, sid, source) {
+  try {
+    if (!sid) return;
+    const tdir = path.join(dir, 'terminals');
+    fs.mkdirSync(tdir, { recursive: true });
+    // The ancestry walk costs ~3s on Windows (PowerShell spin-up), so its result is cached
+    // keyed by CLAUDE_CODE_SSE_PORT — stable for the life of the claude process, i.e. across
+    // every /clear. Only a relaunch (new port) re-walks. A recycled port matching a stale
+    // cache would mislabel the terminal — ephemeral-port odds, and the cost is a wrong
+    // "previous session" suggestion, so accepted.
+    const port = process.env.CLAUDE_CODE_SSE_PORT || '';
+    const cacheFile = path.join(tdir, '.anchor-cache.json');
+    let tid = null;
+    if (port) {
+      try {
+        const c = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+        if (c.key === port && c.tid) tid = c.tid;
+      } catch (_) { /* no cache yet */ }
+    }
+    if (!tid) {
+      const chain = ancestryChain(process.pid);
+      let anchor = null;
+      for (let i = chain.length - 1; i >= 0; i--) {
+        if (/^(claude|node)/i.test(chain[i].name || '')) { anchor = chain[i + 1] || null; break; }
+      }
+      if (!anchor) return;
+      tid = `${anchor.pid}-${String(anchor.created).replace(/[^0-9]/g, '')}`;
+      if (port) {
+        try { fs.writeFileSync(cacheFile, JSON.stringify({ key: port, tid })); } catch (_) { /* best-effort */ }
+      }
+    }
+    const tf = path.join(tdir, `${tid}.json`);
+    let occupant = null;
+    try { occupant = JSON.parse(fs.readFileSync(tf, 'utf8')); } catch (_) { /* fresh terminal */ }
+    if (occupant && occupant.sid && occupant.sid !== sid) {
+      // Rotation observed (a /clear, or a relaunch in the same tab): the outgoing occupant
+      // becomes the incoming session's "previous" — keyed by the NEW sid so /recover-context
+      // finds it via its own CLAUDE_CODE_SESSION_ID, no process-walking on the read side.
+      fs.writeFileSync(path.join(dir, `${sid}.lineage.json`), JSON.stringify({
+        prevSid: occupant.sid, tid, source: source || '', ts: new Date().toISOString(),
+      }, null, 2));
+    }
+    fs.writeFileSync(tf, JSON.stringify({ tid, sid, updatedAt: Date.now() }, null, 2));
+    for (const f of fs.readdirSync(tdir)) {
+      try {
+        const fp = path.join(tdir, f);
+        if (Date.now() - fs.statSync(fp).mtimeMs > 30 * 86400000) fs.unlinkSync(fp);
+      } catch (_) { /* prune is best-effort */ }
+    }
+  } catch (_) { /* lineage is a convenience — never break SessionStart */ }
 }
 
 // Spawn the per-turn cancel watchdog (--turn-watch child). MUST be detached: on Windows a
@@ -1332,4 +1430,4 @@ function extractBlock(tpl, name) {
 // Exported for tests (require()'d when require.main !== module). The hook itself never reads these.
 // Contract: terminal-title.test.js, golden-endings.test.js, and arcade-beeps.js (lazy-requires
 // inspectLastResponse) depend on these names — renaming one silently degrades the beeps hook.
-module.exports = { inspectLastResponse, endsOnQuestion, normalize, GLYPH, shouldDefer, solicitsReply, readContextTokens, clearAdvice };
+module.exports = { inspectLastResponse, endsOnQuestion, normalize, GLYPH, shouldDefer, solicitsReply, readContextTokens, clearAdvice, ancestryChain, recordLineage };
