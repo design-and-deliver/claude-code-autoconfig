@@ -8,7 +8,12 @@
  * fires; ccr, run from that same project directory, reads it and relaunches
  * Claude Code on the same work in a fresh, cheap context:
  *
- *   claude "/recover-context -<min> --session <sid>"
+ *   claude "/recover-context pid=<N>"
+ *
+ * LEGACY since 2026-07-18: the guard's warnings no longer advertise ccr (the
+ * new-terminal handoff was too hacky) — they show the /recover-context pid=N
+ * command to run in a fresh session instead. ccr keeps working off the same
+ * pointer for anyone in the habit.
  *
  * Flags:
  *   --dry-run   print the command that would run, don't launch (used by tests)

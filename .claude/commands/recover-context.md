@@ -1,33 +1,88 @@
 <!-- @description Recovers conversation context from the session transcript after compaction. -->
-<!-- @version 4 -->
-<!-- @param minutes | integer | required | How far back to recover, in minutes. Leading dash optional. Min: 1. -->
+<!-- @version 5 -->
+<!-- @param minutes | integer | optional | How far back to recover, in minutes. Leading dash optional. Min: 1. Required unless pid= is given. -->
+<!-- @param pid | integer | optional | Recovery-pointer id from token-guard's idle warning (e.g. pid=3). Resolves the exact session + cutoff from .claude/hooks/.token-guard/recover.json. -->
 <!-- @param --show | flag | optional | Opens the extracted transcript in your default editor. -->
-<!-- @response success | ~{tokens} tokens recovered ({N} messages across {sessions} session(s), last {minutes} min). -->
+<!-- @response success | ~{tokens} tokens recovered ({N} messages across {sessions} session(s)). -->
 <!-- @response no-transcript | No transcript files found. -->
 <!-- @response no-messages | No messages found in the requested time range. -->
+<!-- @response no-pointer | No recovery pointer found (or that pid is not in it). -->
 <!-- @sideeffect Reads .jsonl transcripts from ~/.claude/projects/, writes temp file -->
 <!-- @example /recover-context -60 | Last 60 minutes of conversation -->
-<!-- @example /recover-context 120 | Last 2 hours (dash optional) -->
+<!-- @example /recover-context pid=3 | Recover exactly what token-guard's idle warning pointed at -->
 <!-- @example /recover-context -60 --show | Last 60 min + open transcript file -->
 Recover recent conversation context from the raw session transcript on disk.
 
 Usage:
-- `/recover-context -60` — last 60 minutes of conversation
-- `/recover-context -60 --show` — same, but also opens the transcript in your editor
+- `/recover-context -60` — last 60 minutes of conversation (any recent session)
+- `/recover-context pid=3` — recover via a token-guard pointer: the exact stale session and cutoff its idle warning computed
+- `/recover-context -60 --show` — same as minutes mode, but also opens the transcript in your editor
 
-The number means "go back N minutes from now." The leading dash is optional. The minutes argument is **required**.
+Two modes:
+- **Minutes mode**: the number means "go back N minutes from now." The leading dash is optional.
+- **Pointer mode** (`pid=N`): token-guard's idle-return warning writes a numbered recovery pointer to `.claude/hooks/.token-guard/recover.json` in the project it fired in. The pid encapsulates the stale session's id and the recovery cutoff (frozen at fire time), so this mode recovers the right window no matter how long ago the warning fired.
 
 ## Step 1: Parse the arguments
 
 The arguments are: $ARGUMENTS
 
-- If empty or missing, ask the user: "How many minutes back? (e.g., -60)"
-- Strip the leading `-` from the number and treat it as the number of minutes to look back
-- Check if `--show` flag is present
+- If they match `pid=N` (also accept `pid N` or `--pid N`) → **pointer mode**, `$PID` = N. Go to Step 2a.
+- Otherwise, strip the leading `-` from the number and treat it as minutes to look back → **minutes mode**. Go to Step 2b.
+- If empty or missing, ask the user: "How many minutes back? (e.g., -60) — or pid=N if token-guard gave you a pointer."
+- Check if `--show` flag is present (either mode).
 
-## Step 2: List candidate transcript files
+## Step 2a: Pointer mode — resolve the pid
 
-List all `.jsonl` transcript files sorted by most recently modified:
+From the project root (the directory you were launched in), run:
+
+```bash
+python3 -c "
+import json, sys
+from datetime import datetime, timezone, timedelta
+
+want = int('$PID')
+try:
+    rec = json.load(open('.claude/hooks/.token-guard/recover.json', encoding='utf-8'))
+except Exception:
+    print('NO_POINTER_FILE'); sys.exit(0)
+
+entries = [rec] + rec.get('history', [])
+hit = next((e for e in entries if e.get('pid') == want), None)
+if hit is None:
+    print('NOT_FOUND available=' + ','.join(str(e.get('pid')) for e in entries if e.get('pid')))
+    sys.exit(0)
+
+cutoff = hit.get('cutoffIso')
+if not cutoff:
+    written = datetime.fromtimestamp(hit.get('writtenAt', 0) / 1000, tz=timezone.utc)
+    cutoff = (written - timedelta(minutes=hit.get('minutes', 15))).isoformat()
+print('SID=' + hit['sid'])
+print('CUTOFF_ISO=' + cutoff)
+"
+```
+
+- `NO_POINTER_FILE` → tell the user no recovery pointer exists in this project (token-guard writes it when its idle warning fires) and stop.
+- `NOT_FOUND available=…` → tell the user that pid isn't in the pointer file and list the available pids, then stop.
+- Otherwise store `$SID` and `$CUTOFF_ISO`, then find that session's transcript:
+
+```bash
+ls ~/.claude/projects/*/$SID.jsonl 2>/dev/null
+```
+
+If it's gone, tell the user the transcript no longer exists and stop. Otherwise store the single path as `$FILES_TO_PARSE` and skip to Step 4.
+
+## Step 2b: Minutes mode — list candidate transcript files
+
+Compute the cutoff:
+
+```bash
+python3 -c "
+from datetime import datetime, timezone, timedelta
+print((datetime.now(timezone.utc) - timedelta(minutes=int('$MINUTES'))).isoformat())
+"
+```
+
+Store it as `$CUTOFF_ISO`. Then list all `.jsonl` transcript files sorted by most recently modified:
 
 ```bash
 ls -t ~/.claude/projects/*/*.jsonl 2>/dev/null | head -20
@@ -35,17 +90,16 @@ ls -t ~/.claude/projects/*/*.jsonl 2>/dev/null | head -20
 
 If no transcripts are found, tell the user and stop. Store the list as `$TRANSCRIPT_FILES` (one path per line).
 
-## Step 3: Identify which files to parse (lazy probing)
+## Step 3: Minutes mode — identify which files to parse (lazy probing)
 
-For each file in `$TRANSCRIPT_FILES` (starting from most recent), probe its time range by reading only the **first and last timestamp** — do NOT parse the full file yet. Run this script, substituting `$MINUTES` and `$TRANSCRIPT_FILES`:
+For each file in `$TRANSCRIPT_FILES` (starting from most recent), probe its time range by reading only the **first and last timestamp** — do NOT parse the full file yet. Run this script, substituting `$CUTOFF_ISO` and `$TRANSCRIPT_FILES`:
 
 ```bash
 python3 -c "
 import json, sys
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 
-minutes = int('$MINUTES')
-cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+cutoff = datetime.fromisoformat('$CUTOFF_ISO')
 
 files = '''$TRANSCRIPT_FILES'''.strip().splitlines()
 
@@ -90,17 +144,16 @@ for p in needed:
 
 Store the output as `$FILES_TO_PARSE` — these are the only files that need full parsing.
 
-## Step 4: Extract conversation context
+## Step 4: Extract conversation context (both modes)
 
-Run this Python script to extract messages from only the identified files. Substitute `$MINUTES` and `$FILES_TO_PARSE`:
+Run this Python script to extract messages from only the identified files. Substitute `$CUTOFF_ISO` and `$FILES_TO_PARSE`:
 
 ```bash
 python3 -c "
 import json, os, sys, tempfile
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 
-minutes = int('$MINUTES')
-cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+cutoff = datetime.fromisoformat('$CUTOFF_ISO')
 
 files = '''$FILES_TO_PARSE'''.strip().splitlines()
 
@@ -182,7 +235,8 @@ Read the temp file to internalize the recovered context. **Treat the recovered e
 
 Then display a confirmation message:
 
-> **~{tokens} tokens recovered and persisted into context ({N} messages across {sessions} session(s), last {minutes} minutes).**
+- Minutes mode: **~{tokens} tokens recovered and persisted into context ({N} messages across {sessions} session(s), last {minutes} minutes).**
+- Pointer mode: **~{tokens} tokens recovered and persisted into context ({N} messages from session {first 8 chars of SID}, pointer pid={PID}).**
 
 ## Step 6: Open transcript (if --show flag)
 

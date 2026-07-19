@@ -937,58 +937,55 @@ function saveState(projectDir, sid, st) {
   } catch (_) { /* state loss just re-warns — harmless */ }
 }
 
-// R4 idle-return new-terminal pointer: `ccr` (CCA's companion bin) reads recover.json from
-// the project it's run in and execs `claude "<recoverCmd>"` — one word instead of retyping
-// the recovery invocation after exiting a stale session. Refreshed on every idle fire.
-function writeRecoverPointer(projectDir, sid, recoverCmd) {
+// R4 idle-return recovery pointer: each idle fire writes a numbered pointer that
+// `/recover-context pid=N` resolves from a fresh session back to (sid + absolute cutoff) —
+// the short command replaces retyping `-<min> --session <sid>` by hand. pid is monotonic
+// per project so an older warning's "run /recover-context pid=3" stays valid after later
+// fires; the previous 4 fires ride along under history[]. Top level stays flat (sid,
+// recoverCmd, writtenAt) so the legacy ccr bin still round-trips. cutoffIso is the
+// recovery boundary frozen at fire time — minutes-from-now would drift if the user runs
+// the command an hour later.
+function writeRecoverPointer(projectDir, sid, minutes) {
   try {
     fs.mkdirSync(stateDir(projectDir), { recursive: true });
-    fs.writeFileSync(path.join(stateDir(projectDir), 'recover.json'),
-      JSON.stringify({ sid, recoverCmd, projectDir, writtenAt: Date.now() }, null, 2));
-    return true;
-  } catch (_) { return false; /* pointer is a convenience — the pasteable command still shows */ }
+    const file = path.join(stateDir(projectDir), 'recover.json');
+    let prior = null;
+    try { prior = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) { /* first fire */ }
+    const pid = ((prior && prior.pid) || 0) + 1;
+    const rec = {
+      pid, sid, recoverCmd: `/recover-context pid=${pid}`, minutes,
+      cutoffIso: new Date(Date.now() - minutes * 60000).toISOString(),
+      projectDir, writtenAt: Date.now(),
+      history: prior && prior.pid
+        ? [{ pid: prior.pid, sid: prior.sid, minutes: prior.minutes, cutoffIso: prior.cutoffIso,
+             writtenAt: prior.writtenAt }, ...(prior.history || [])].slice(0, 4)
+        : [],
+    };
+    fs.writeFileSync(file, JSON.stringify(rec, null, 2));
+    return rec;
+  } catch (_) { return null; /* pointer is a convenience — the fallback command still shows */ }
 }
 
 // R4 idle-return relay copy (warn mode — the re-upload already landed when the user returned).
-// With a ccr pointer on disk the model answers the prompt, then ENDS on a Yes/No recovery card
-// whose Yes-pick opens `ccr` in a new terminal window; without a pointer it falls back to the
-// prose warning. Same copy rules as the gate: trigger named, ~20x comparison, never a dollar
-// figure, never the exact idle duration.
-function idleReturnNote(liveContext, recoverCmd, projectDir, hasCcr) {
-  if (!hasCcr) {
-    return (
-      `idle-return: this session sat untouched for over an hour, longer than the API keeps a ` +
-      `conversation cached. Claude Code just re-uploaded all ~${fmtK(liveContext)} tokens ` +
-      `of it at full price, ~20x what the same turn costs while cached. Relay this as a ` +
-      `STANDALONE warning block, never woven into your answer: open with "⚠️ Hey —" and keep ` +
-      `a warm conversational voice (helpful friend, not system log). Sentence 1 names the ` +
-      `trigger and ENDS on the word "cached" — say "over an hour", never the exact duration ` +
-      `(that's TMI). Sentence 2, short and separate: Claude Code (by name — the behavior is ` +
-      `Claude Code's, not this guard's/CCA's) re-uploaded it all, ending on the ~20x ` +
-      `comparison — NEVER a dollar figure (subscription users would read it as a real ` +
-      `charge). Then, on its own line, the out: to continue THIS work cheaply, start a new ` +
-      `session and run "${recoverCmd}" (reloads the last ~15min of this conversation). Then ` +
-      `a horizontal rule before the answer itself.`
-    );
-  }
+// Prose warning ending on the recovery out: a fresh session + the short `/recover-context
+// pid=N` command (the pointer on disk carries sid + cutoff). The earlier ccr new-terminal
+// Yes/No card was retired 2026-07-18 — spawning a terminal from the model was too hacky.
+// Copy rules: trigger named, ~20x comparison, never a dollar figure, never the exact idle
+// duration.
+function idleReturnNote(liveContext, recoverCmd) {
   return (
     `idle-return: this session sat untouched for over an hour, longer than the API keeps a ` +
-    `conversation cached, and Claude Code just re-uploaded all ~${fmtK(liveContext)} tokens ` +
-    `of it at full price, ~20x what the same turn costs while cached. Answer the user's ` +
-    `prompt normally FIRST — no warning prose woven into it — then END the reply with ONE ` +
-    `self-contained AskUserQuestion card, header chip "Idle return". The question field, ` +
-    `verbatim: "⚠️ Hey — this session sat idle past the API's cache window, so coming back ` +
-    `re-uploaded all ~${fmtK(liveContext)} tokens at full price (~20x a cached turn). Open a ` +
-    `fresh session in a new terminal window, preloaded with the last ~15 minutes of this ` +
-    `work?" Two options, bare labels, NO descriptions: 1) "Yes — open a recovered session" ` +
-    `2) "No — keep working here". NEVER a dollar figure anywhere. On Yes: open a NEW ` +
-    `terminal window at "${projectDir}" running the ccr bin — Windows: ` +
-    `cmd /c start "" /D "${projectDir}" cmd /k ccr (from Git Bash: cmd //c … //k) · macOS: ` +
-    `osascript -e 'tell application "Terminal" to do script "cd ${projectDir} && ccr"' · ` +
-    `Linux: gnome-terminal --working-directory="${projectDir}" -- ccr (or the ` +
-    `x-terminal-emulator equivalent) — then one closing line: the recovered session is ` +
-    `opening in a new window (via "${recoverCmd}") and this window can be closed. On No: ` +
-    `say nothing more about it.`
+    `conversation cached. Claude Code just re-uploaded all ~${fmtK(liveContext)} tokens ` +
+    `of it at full price, ~20x what the same turn costs while cached. Relay this as a ` +
+    `STANDALONE warning block, never woven into your answer: open with "⚠️ Hey —" and keep ` +
+    `a warm conversational voice (helpful friend, not system log). Sentence 1 names the ` +
+    `trigger and ENDS on the word "cached" — say "over an hour", never the exact duration ` +
+    `(that's TMI). Sentence 2, short and separate: Claude Code (by name — the behavior is ` +
+    `Claude Code's, not this guard's/CCA's) re-uploaded it all, ending on the ~20x ` +
+    `comparison — NEVER a dollar figure (subscription users would read it as a real ` +
+    `charge). Then, on its own line, the out: to continue THIS work cheaply, start a new ` +
+    `session and run "${recoverCmd}" (reloads the last ~15min of this conversation). Then ` +
+    `a horizontal rule before the answer itself.`
   );
 }
 
@@ -1534,16 +1531,18 @@ async function onUserPromptSubmit(data, projectDir) {
     const gapMin = (Date.now() - m.lastTs) / 60000;
     if (gapMin > cfg.idleWarnMinutes && st.warnedIdleAt !== m.lastTs) {
       st.warnedIdleAt = m.lastTs;
-      // Copy-paste recovery arg: walk back until ~15min of real interaction is covered (gaps
+      // Recovery window: walk back until ~15min of real interaction is covered (gaps
       // count at most 5min so idle stretches don't eat the budget), then round the wall-clock
-      // offset up to the nearest 5min. --session pins recovery to THIS session's transcript.
+      // offset up to the nearest 5min.
       const ts = m.main.tsList || [];
       let i = ts.length - 1;
       for (let acc = 0; i > 0 && acc < 15 * 60000; i--) acc += Math.min(ts[i] - ts[i - 1], 5 * 60000);
       const recoverMin = Math.max(5, Math.ceil((Date.now() - (ts[i] || m.lastTs)) / 300000) * 5);
-      const recoverCmd = `/recover-context -${recoverMin}${sid ? ` --session ${sid.slice(0, 8)}` : ''}`;
-      const hasCcr = writeRecoverPointer(projectDir, sid, recoverCmd);
-      const ccrPart = hasCcr ? `exit and type "ccr" — or ` : '';
+      // Pointer written -> the short pid form; write failed -> self-contained fallback
+      // (--session pins recovery to THIS session's transcript, minutes relative to now).
+      const rec = writeRecoverPointer(projectDir, sid, recoverMin);
+      const recoverCmd = rec ? rec.recoverCmd
+        : `/recover-context -${recoverMin}${sid ? ` --session ${sid.slice(0, 8)}` : ''}`;
       // idleGate: pre-empt the charge — block THIS submission before anything reaches the API.
       // The message stays in the CLI input history (up-arrow + Enter re-sends), and the
       // one-shot key set above lets that second send pass through silently: charge accepted.
@@ -1558,12 +1557,12 @@ async function onUserPromptSubmit(data, projectDir) {
             `keeps a conversation cached. If you continue here, Claude Code will re-upload ` +
             `all ~${fmtK(m.liveContext)} tokens of it at full price.\n\n` +
             `To continue anyway: press ↑ then Enter. To pick this work up cheaply instead: ` +
-            `${ccrPart}start a new session and run "${recoverCmd}" — reloads the last ` +
+            `start a new session and run "${recoverCmd}" — reloads the last ` +
             `~15 minutes of this conversation.`,
         }));
         return;
       }
-      notes.push(idleReturnNote(m.liveContext, recoverCmd, projectDir, hasCcr));
+      notes.push(idleReturnNote(m.liveContext, recoverCmd));
     }
   }
 
