@@ -937,6 +937,18 @@ function saveState(projectDir, sid, st) {
   } catch (_) { /* state loss just re-warns — harmless */ }
 }
 
+// R4 idle-return new-terminal pointer: `ccr` (CCA's companion bin) reads recover.json from
+// the project it's run in and execs `claude "<recoverCmd>"` — one word instead of retyping
+// the recovery invocation after exiting a stale session. Refreshed on every idle fire.
+function writeRecoverPointer(projectDir, sid, recoverCmd) {
+  try {
+    fs.mkdirSync(stateDir(projectDir), { recursive: true });
+    fs.writeFileSync(path.join(stateDir(projectDir), 'recover.json'),
+      JSON.stringify({ sid, recoverCmd, projectDir, writtenAt: Date.now() }, null, 2));
+    return true;
+  } catch (_) { return false; /* pointer is a convenience — the pasteable command still shows */ }
+}
+
 // R11 auto-migrate consent marker (two files under stateDir): the CANDIDATE carries the deterministic
 // {keyword, sid, boundaryIso} the hook already knows at nudge time; the ARMED flag is contentless proof
 // the model wrote only after the user opted in. Both required to consume — the candidate alone is inert.
@@ -1487,6 +1499,8 @@ async function onUserPromptSubmit(data, projectDir) {
       for (let acc = 0; i > 0 && acc < 15 * 60000; i--) acc += Math.min(ts[i] - ts[i - 1], 5 * 60000);
       const recoverMin = Math.max(5, Math.ceil((Date.now() - (ts[i] || m.lastTs)) / 300000) * 5);
       const recoverCmd = `/recover-context -${recoverMin}${sid ? ` --session ${sid.slice(0, 8)}` : ''}`;
+      const hasCcr = writeRecoverPointer(projectDir, sid, recoverCmd);
+      const ccrPart = hasCcr ? `exit and type "ccr" — or ` : '';
       // idleGate: pre-empt the charge — block THIS submission before anything reaches the API.
       // The message stays in the CLI input history (up-arrow + Enter re-sends), and the
       // one-shot key set above lets that second send pass through silently: charge accepted.
@@ -1501,8 +1515,8 @@ async function onUserPromptSubmit(data, projectDir) {
             `keeps a conversation cached. If you continue here, Claude Code will re-upload ` +
             `all ~${fmtK(m.liveContext)} tokens of it at full price.\n\n` +
             `To continue anyway: press ↑ then Enter. To pick this work up cheaply instead: ` +
-            `start a new session and run "${recoverCmd}" — reloads the last ~15 minutes of ` +
-            `this conversation.`,
+            `${ccrPart}start a new session and run "${recoverCmd}" — reloads the last ` +
+            `~15 minutes of this conversation.`,
         }));
         return;
       }
@@ -1516,8 +1530,9 @@ async function onUserPromptSubmit(data, projectDir) {
         `(that's TMI). Sentence 2, short and separate: Claude Code (by name — the behavior is ` +
         `Claude Code's, not this guard's/CCA's) re-uploaded it all, ending on the ~20x ` +
         `comparison — NEVER a dollar figure (subscription users would read it as a real ` +
-        `charge). Then, on its own line, the out: to continue THIS work cheaply, start a new ` +
-        `session and run "${recoverCmd}" (reloads the last ~15min of this conversation). Then ` +
+        `charge). Then, on its own line, the out: to continue THIS work cheaply, ` +
+        `${hasCcr ? 'exit and type "ccr", or ' : ''}start a new session and run ` +
+        `"${recoverCmd}" (reloads the last ~15min of this conversation). Then ` +
         `a horizontal rule before the answer itself.`
       );
     }
@@ -2437,7 +2452,7 @@ if (require.main === module) {
 module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, ledgerScopes, officialLines,
   analyzeSession, renderAnalysis, payloadVerdict, fanVerdict, workflowSource, skillSizes, recordObservedSkill,
   generateBudgets, slug, driftNote, driftDeferralTick, recoverTail, resolveMarker,
-  writeMigrateCandidate, clearMarker,
+  writeMigrateCandidate, clearMarker, writeRecoverPointer,
   migrateReceipt, resolveConfig, TOKEN_SAVER,
   fiveHourWindow, tightestWindow, windowSpikeVerdict, windowThresholdVerdict,
   windowSpikeNote, windowSpikeConfirmNote, windowThresholdNote, windowThresholdGateReason };

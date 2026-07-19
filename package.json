@@ -31,13 +31,16 @@
     "postversion": "node scripts/generate-changelog.js --postversion"
   },
   "bin": {
-    "claude-code-autoconfig": "bin/cli.js"
+    "claude-code-autoconfig": "bin/cli.js",
+    "ccr": "bin/ccr.js"
   },
   "files": [
     "bin",
     ".claude",
     "!.claude/settings.local.json",
     "!.claude/hooks/.titles",
+    "!.claude/hooks/.token-guard",
+    "!.claude/hooks/.token-guard/**",
     "!.claude/hooks/.titles/**",
     "!.claude/hooks/tests",
     "!.claude/hooks/tests/**",
