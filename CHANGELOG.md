@@ -4,6 +4,14 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.214
+- feat(token-guard): New ccr command — when the token-guard blocks a stale idle session, just exit and type ccr to pick the same work up in a fresh, cheap session, no retyping the recovery command.
+- feat(token-guard): The "this session has drifted" nudge now checks whether your current message actually returns to the earlier topic (and whether that earlier work ever finished) before speaking up — and if the moment is wrong it quietly retries a few prompts later instead of never offering again.
+- feat(token-guard): Subscription users no longer get dollar-step usage check-ins (those are for API-billed sessions, where dollars are real). Instead you get a quiet one-line FYI when a usage window passes 50%, and the ⚠️ heads-up at 80%.
+- refactor(token-guard): The 80% usage heads-up no longer blocks your prompt — it now appears as one short line at the end of the reply. Want the hard stop back? Turn on token-saver or set tokenGuard.windowThresholdGate to true.
+- feat(terminal-title): Your tab-title hook now tells you when /clear would actually save
+- feat(terminal-title): Terminal tab titles are now remembered per session, so you can look back at how a session's work shifted over time.
+
 ## v1.0.213
 - fix(terminal-title): Tab status flips to 'awaiting your approval' in a couple of seconds when Claude asks permission (was ~6s), and no longer briefly shows a false 'done' on some permission prompts
 
@@ -155,7 +163,4 @@
 
 ## v1.0.165
 - debug: add temporary changelog debug logging
-
-## v1.0.164
-- fix: use postversion hook so changelog includes current version
 
