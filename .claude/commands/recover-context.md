@@ -1,35 +1,39 @@
 <!-- @description Recovers conversation context from the session transcript after compaction. -->
-<!-- @version 5 -->
-<!-- @param minutes | integer | optional | How far back to recover, in minutes. Leading dash optional. Min: 1. Required unless pid= is given. -->
+<!-- @version 6 -->
+<!-- @param minutes | integer | optional | How far back to recover, in minutes. Leading dash optional. Min: 1. Bare invocation auto-recovers the last session instead. -->
 <!-- @param pid | integer | optional | Recovery-pointer id from token-guard's idle warning (e.g. pid=3). Resolves the exact session + cutoff from .claude/hooks/.token-guard/recover.json. -->
 <!-- @param --show | flag | optional | Opens the extracted transcript in your default editor. -->
 <!-- @response success | ~{tokens} tokens recovered ({N} messages across {sessions} session(s)). -->
 <!-- @response no-transcript | No transcript files found. -->
 <!-- @response no-messages | No messages found in the requested time range. -->
 <!-- @response no-pointer | No recovery pointer found (or that pid is not in it). -->
+<!-- @response no-previous | No previous session found in this project. -->
 <!-- @sideeffect Reads .jsonl transcripts from ~/.claude/projects/, writes temp file -->
+<!-- @example /recover-context | Auto: last ~15 min of this project's previous session -->
 <!-- @example /recover-context -60 | Last 60 minutes of conversation -->
 <!-- @example /recover-context pid=3 | Recover exactly what token-guard's idle warning pointed at -->
 <!-- @example /recover-context -60 --show | Last 60 min + open transcript file -->
 Recover recent conversation context from the raw session transcript on disk.
 
 Usage:
+- `/recover-context` — auto: recover the last session in this project (after a /clear or in a fresh terminal), no arguments needed
 - `/recover-context -60` — last 60 minutes of conversation (any recent session)
 - `/recover-context pid=3` — recover via a token-guard pointer: the exact stale session and cutoff its idle warning computed
 - `/recover-context -60 --show` — same as minutes mode, but also opens the transcript in your editor
 
-Two modes:
+Three modes:
+- **Auto mode** (no arguments): finds this project's previous session by itself — the current session's transcript is the newest `.jsonl` in the project's transcript directory (it is being written right now), so the previous session is the second-newest. The cutoff comes from a matching token-guard pointer when one exists (frozen at fire time, interaction-aware), otherwise from the same ~15-minutes-of-real-interaction walk-back over the transcript's own timestamps.
 - **Minutes mode**: the number means "go back N minutes from now." The leading dash is optional.
-- **Pointer mode** (`pid=N`): token-guard's idle-return warning writes a numbered recovery pointer to `.claude/hooks/.token-guard/recover.json` in the project it fired in. The pid encapsulates the stale session's id and the recovery cutoff (frozen at fire time), so this mode recovers the right window no matter how long ago the warning fired.
+- **Pointer mode** (`pid=N`): token-guard's idle-return warning writes a numbered recovery pointer to `.claude/hooks/.token-guard/recover.json` in the project it fired in. The pid encapsulates the stale session's id and the recovery cutoff (frozen at fire time), so this mode recovers the right window no matter how long ago the warning fired — even if other sessions happened in between (which would fool auto mode).
 
 ## Step 1: Parse the arguments
 
 The arguments are: $ARGUMENTS
 
+- If empty (no arguments beyond flags) → **auto mode**. Go to Step 2c.
 - If they match `pid=N` (also accept `pid N` or `--pid N`) → **pointer mode**, `$PID` = N. Go to Step 2a.
 - Otherwise, strip the leading `-` from the number and treat it as minutes to look back → **minutes mode**. Go to Step 2b.
-- If empty or missing, ask the user: "How many minutes back? (e.g., -60) — or pid=N if token-guard gave you a pointer."
-- Check if `--show` flag is present (either mode).
+- Check if `--show` flag is present (any mode).
 
 ## Step 2a: Pointer mode — resolve the pid
 
@@ -70,6 +74,69 @@ ls ~/.claude/projects/*/$SID.jsonl 2>/dev/null
 ```
 
 If it's gone, tell the user the transcript no longer exists and stop. Otherwise store the single path as `$FILES_TO_PARSE` and skip to Step 4.
+
+## Step 2c: Auto mode — resolve the previous session
+
+From the project root (the directory you were launched in), run:
+
+```bash
+python3 -c "
+import glob, json, os, re, sys
+from datetime import datetime, timedelta
+
+proj = re.sub(r'[^A-Za-z0-9]', '-', os.getcwd())
+tdir = os.path.expanduser('~/.claude/projects/' + proj)
+files = sorted(glob.glob(os.path.join(tdir, '*.jsonl')), key=os.path.getmtime, reverse=True)
+if len(files) < 2:
+    print('NO_PREVIOUS_SESSION'); sys.exit(0)
+
+# files[0] is THIS session (its transcript is being written right now);
+# files[1] is the previous session.
+prev = files[1]
+sid = os.path.splitext(os.path.basename(prev))[0]
+
+# Prefer a matching token-guard pointer: its cutoff was frozen at fire time and
+# weighted by real interaction, so it beats a recomputed one.
+cutoff = None; via = 'walk-back'
+try:
+    rec = json.load(open('.claude/hooks/.token-guard/recover.json', encoding='utf-8'))
+    for e in [rec] + rec.get('history', []):
+        if e.get('sid') == sid and e.get('cutoffIso'):
+            cutoff = e['cutoffIso']; via = 'pointer pid=%s' % e.get('pid'); break
+except Exception:
+    pass
+
+if cutoff is None:
+    # Same walk-back token-guard uses: cover ~15min of real interaction, counting
+    # any gap as at most 5min so idle stretches don't eat the budget.
+    ts = []
+    with open(prev, encoding='utf-8', errors='replace') as f:
+        for line in f:
+            try:
+                obj = json.loads(line)
+            except Exception:
+                continue
+            t = obj.get('timestamp')
+            if t:
+                ts.append(datetime.fromisoformat(t.replace('Z', '+00:00')))
+    if not ts:
+        print('NO_PREVIOUS_SESSION'); sys.exit(0)
+    i = len(ts) - 1; acc = timedelta()
+    while i > 0 and acc < timedelta(minutes=15):
+        acc += min(ts[i] - ts[i-1], timedelta(minutes=5)); i -= 1
+    cutoff = ts[i].isoformat()
+
+print('SID=' + sid)
+print('FILE=' + prev)
+print('CUTOFF_ISO=' + cutoff)
+print('VIA=' + via)
+"
+```
+
+- `NO_PREVIOUS_SESSION` → tell the user no previous session exists for this project and stop (offer minutes mode if they meant a different project's work).
+- Otherwise store `$SID`, `$CUTOFF_ISO`, set `$FILES_TO_PARSE` to the `FILE=` path, note `VIA` for the confirmation, and skip to Step 4.
+
+Caveat: if ANOTHER Claude session is live in this project right now, it may be the second-newest file and auto mode would pick it up instead — in that case rerun with `pid=N` or minutes mode.
 
 ## Step 2b: Minutes mode — list candidate transcript files
 
@@ -235,6 +302,7 @@ Read the temp file to internalize the recovered context. **Treat the recovered e
 
 Then display a confirmation message:
 
+- Auto mode: **~{tokens} tokens recovered and persisted into context ({N} messages from your last session, {first 8 chars of SID}, via {VIA}).**
 - Minutes mode: **~{tokens} tokens recovered and persisted into context ({N} messages across {sessions} session(s), last {minutes} minutes).**
 - Pointer mode: **~{tokens} tokens recovered and persisted into context ({N} messages from session {first 8 chars of SID}, pointer pid={PID}).**
 
