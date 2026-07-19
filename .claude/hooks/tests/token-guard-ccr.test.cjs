@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const { writeRecoverPointer } = require(path.resolve(__dirname, '..', 'token-guard.js'));
+const { writeRecoverPointer, idleReturnNote } = require(path.resolve(__dirname, '..', 'token-guard.js'));
 const CCR = path.resolve(__dirname, '..', '..', '..', 'bin', 'ccr.js');
 const { readPointer, buildLaunch } = require(CCR);
 
@@ -63,6 +63,30 @@ test('readPointer rejects missing, malformed, and non-slash payloads', () => {
 test('buildLaunch wraps the slash command for the shell', () => {
   assert.equal(buildLaunch('/recover-context -150 --session b26aaa76'),
     'claude "/recover-context -150 --session b26aaa76"');
+});
+
+// ---------- idleReturnNote (warn-mode relay copy) ----------
+
+test('idleReturnNote with ccr renders the answer-first Yes/No recovery card', () => {
+  const note = idleReturnNote(178000, '/recover-context -20 --session abcd1234', 'C:\\proj', true);
+  assert.match(note, /AskUserQuestion/);
+  assert.match(note, /Idle return/);                        // header chip
+  assert.match(note, /~178k tokens at full price/);         // measured evidence in the card
+  assert.match(note, /Yes — open a recovered session/);
+  assert.match(note, /No — keep working here/);
+  assert.match(note, /normally FIRST/);                     // answer before the card
+  assert.match(note, /start "" \/D "C:\\proj" cmd \/k ccr/); // Windows spawn, project cwd
+  assert.match(note, /--working-directory="C:\\proj" -- ccr/); // Linux spawn
+  assert.match(note, /\/recover-context -20 --session abcd1234/);
+  assert.ok(!note.includes('$'), 'never a dollar figure');
+});
+
+test('idleReturnNote without ccr falls back to the prose warning', () => {
+  const note = idleReturnNote(178000, '/recover-context -20 --session abcd1234', 'C:\\proj', false);
+  assert.match(note, /STANDALONE warning block/);
+  assert.match(note, /\/recover-context -20 --session abcd1234/);
+  assert.ok(!note.includes('AskUserQuestion'));
+  assert.ok(!note.includes('ccr'));
 });
 
 test('ccr --dry-run prints the launch command; exits 1 with no pointer', () => {

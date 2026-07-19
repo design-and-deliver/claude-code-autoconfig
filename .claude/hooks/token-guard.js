@@ -949,6 +949,49 @@ function writeRecoverPointer(projectDir, sid, recoverCmd) {
   } catch (_) { return false; /* pointer is a convenience — the pasteable command still shows */ }
 }
 
+// R4 idle-return relay copy (warn mode — the re-upload already landed when the user returned).
+// With a ccr pointer on disk the model answers the prompt, then ENDS on a Yes/No recovery card
+// whose Yes-pick opens `ccr` in a new terminal window; without a pointer it falls back to the
+// prose warning. Same copy rules as the gate: trigger named, ~20x comparison, never a dollar
+// figure, never the exact idle duration.
+function idleReturnNote(liveContext, recoverCmd, projectDir, hasCcr) {
+  if (!hasCcr) {
+    return (
+      `idle-return: this session sat untouched for over an hour, longer than the API keeps a ` +
+      `conversation cached. Claude Code just re-uploaded all ~${fmtK(liveContext)} tokens ` +
+      `of it at full price, ~20x what the same turn costs while cached. Relay this as a ` +
+      `STANDALONE warning block, never woven into your answer: open with "⚠️ Hey —" and keep ` +
+      `a warm conversational voice (helpful friend, not system log). Sentence 1 names the ` +
+      `trigger and ENDS on the word "cached" — say "over an hour", never the exact duration ` +
+      `(that's TMI). Sentence 2, short and separate: Claude Code (by name — the behavior is ` +
+      `Claude Code's, not this guard's/CCA's) re-uploaded it all, ending on the ~20x ` +
+      `comparison — NEVER a dollar figure (subscription users would read it as a real ` +
+      `charge). Then, on its own line, the out: to continue THIS work cheaply, start a new ` +
+      `session and run "${recoverCmd}" (reloads the last ~15min of this conversation). Then ` +
+      `a horizontal rule before the answer itself.`
+    );
+  }
+  return (
+    `idle-return: this session sat untouched for over an hour, longer than the API keeps a ` +
+    `conversation cached, and Claude Code just re-uploaded all ~${fmtK(liveContext)} tokens ` +
+    `of it at full price, ~20x what the same turn costs while cached. Answer the user's ` +
+    `prompt normally FIRST — no warning prose woven into it — then END the reply with ONE ` +
+    `self-contained AskUserQuestion card, header chip "Idle return". The question field, ` +
+    `verbatim: "⚠️ Hey — this session sat idle past the API's cache window, so coming back ` +
+    `re-uploaded all ~${fmtK(liveContext)} tokens at full price (~20x a cached turn). Open a ` +
+    `fresh session in a new terminal window, preloaded with the last ~15 minutes of this ` +
+    `work?" Two options, bare labels, NO descriptions: 1) "Yes — open a recovered session" ` +
+    `2) "No — keep working here". NEVER a dollar figure anywhere. On Yes: open a NEW ` +
+    `terminal window at "${projectDir}" running the ccr bin — Windows: ` +
+    `cmd /c start "" /D "${projectDir}" cmd /k ccr (from Git Bash: cmd //c … //k) · macOS: ` +
+    `osascript -e 'tell application "Terminal" to do script "cd ${projectDir} && ccr"' · ` +
+    `Linux: gnome-terminal --working-directory="${projectDir}" -- ccr (or the ` +
+    `x-terminal-emulator equivalent) — then one closing line: the recovered session is ` +
+    `opening in a new window (via "${recoverCmd}") and this window can be closed. On No: ` +
+    `say nothing more about it.`
+  );
+}
+
 // R11 auto-migrate consent marker (two files under stateDir): the CANDIDATE carries the deterministic
 // {keyword, sid, boundaryIso} the hook already knows at nudge time; the ARMED flag is contentless proof
 // the model wrote only after the user opted in. Both required to consume — the candidate alone is inert.
@@ -1520,21 +1563,7 @@ async function onUserPromptSubmit(data, projectDir) {
         }));
         return;
       }
-      notes.push(
-        `idle-return: this session sat untouched for over an hour, longer than the API keeps a ` +
-        `conversation cached. Claude Code just re-uploaded all ~${fmtK(m.liveContext)} tokens ` +
-        `of it at full price, ~20x what the same turn costs while cached. Relay this as a ` +
-        `STANDALONE warning block, never woven into your answer: open with "⚠️ Hey —" and keep ` +
-        `a warm conversational voice (helpful friend, not system log). Sentence 1 names the ` +
-        `trigger and ENDS on the word "cached" — say "over an hour", never the exact duration ` +
-        `(that's TMI). Sentence 2, short and separate: Claude Code (by name — the behavior is ` +
-        `Claude Code's, not this guard's/CCA's) re-uploaded it all, ending on the ~20x ` +
-        `comparison — NEVER a dollar figure (subscription users would read it as a real ` +
-        `charge). Then, on its own line, the out: to continue THIS work cheaply, ` +
-        `${hasCcr ? 'exit and type "ccr", or ' : ''}start a new session and run ` +
-        `"${recoverCmd}" (reloads the last ~15min of this conversation). Then ` +
-        `a horizontal rule before the answer itself.`
-      );
+      notes.push(idleReturnNote(m.liveContext, recoverCmd, projectDir, hasCcr));
     }
   }
 
@@ -2452,7 +2481,7 @@ if (require.main === module) {
 module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, ledgerScopes, officialLines,
   analyzeSession, renderAnalysis, payloadVerdict, fanVerdict, workflowSource, skillSizes, recordObservedSkill,
   generateBudgets, slug, driftNote, driftDeferralTick, recoverTail, resolveMarker,
-  writeMigrateCandidate, clearMarker, writeRecoverPointer,
+  writeMigrateCandidate, clearMarker, writeRecoverPointer, idleReturnNote,
   migrateReceipt, resolveConfig, TOKEN_SAVER,
   fiveHourWindow, tightestWindow, windowSpikeVerdict, windowThresholdVerdict,
   windowSpikeNote, windowSpikeConfirmNote, windowThresholdNote, windowThresholdGateReason };
