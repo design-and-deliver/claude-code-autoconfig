@@ -139,7 +139,7 @@ async function handle(data) {
     // leftover flag can't paint a false ◐ on this turn's end. The flag must reflect ONLY this turn.
     const askFile = path.join(dir, `${sid}.ask`);
     if (fileExists(askFile)) { try { fs.unlinkSync(askFile); } catch (_) { /* ignore */ } }
-    const title = normalize(readTitle(file) || folderName(cwd));
+    const title = normalize(displayTitle(file, dir, sid, cwd));
     const out = setTitle(GLYPH.working, title);
     out.hookSpecificOutput = {
       hookEventName: 'UserPromptSubmit',
@@ -180,12 +180,15 @@ async function handle(data) {
   }
 
   if (event === 'SessionStart') {
-    // Fresh-session placeholder; on resume/compact an existing model-authored title is preferred.
-    const title = normalize(readTitle(file) || 'Claude Code - New session');
-    const out = setTitle(GLYPH.idle, title);
-    // Terminal lineage registry (see recordLineage): on a /clear this stamps the cleared
-    // sid as the new session's "previous", which is what bare /recover-context recovers.
+    // Stamp the terminal lineage FIRST (see recordLineage): on a /clear or same-tab relaunch this
+    // records the cleared sid as this session's "previous" — what bare /recover-context recovers,
+    // and what carriedTitle() reads just below to carry the last title onto the tab.
     recordLineage(dir, sid, data.source || '');
+    // Fresh-session title: this session's own (preferred on resume/compact), else the previous
+    // session's last title carried over so a /clear + /continue keeps showing the work instead of
+    // the bare folder name (the first turn's BASELINE authoring supersedes it), else the placeholder.
+    const title = normalize(readTitle(file) || carriedTitle(dir, sid) || 'Claude Code - New session');
+    const out = setTitle(GLYPH.idle, title);
     // Inject the FULL rulebook here — once per session — instead of on every prompt. All sources
     // get it: startup/clear teach a fresh context, resume/compact re-teach a squeezed one.
     const rules = buildBlocks(['RULES'], file, cwd, '');
@@ -217,7 +220,7 @@ async function handle(data) {
       const lastGlyph = painted[0];
       const decline = (why) => {
         if (logCtx) { logCtx.note = 'int-decline'; logCtx.diag = why; }
-        titleLog(GLYPH[lastGlyph] || GLYPH.idle, normalize(readTitle(file) || folderName(cwd)), false);
+        titleLog(GLYPH[lastGlyph] || GLYPH.idle, normalize(displayTitle(file, dir, sid, cwd)), false);
         process.exit(0);
       };
       if (lastGlyph === 'idle') decline('already-idle');
@@ -254,11 +257,11 @@ async function handle(data) {
       const honorAsk = via === 'no-stop' && fileExists(askFlag);
       if (fileExists(askFlag)) { try { fs.unlinkSync(askFlag); } catch (_) { /* ignore */ } }
       if (logCtx) { logCtx.note = 'int-rescue'; logCtx.diag = `via=${via} ask=${honorAsk ? 1 : 0}`; }
-      emit(setTitle(honorAsk ? GLYPH.awaiting : GLYPH.idle, normalize(readTitle(file) || folderName(cwd)), honorAsk));
+      emit(setTitle(honorAsk ? GLYPH.awaiting : GLYPH.idle, normalize(displayTitle(file, dir, sid, cwd)), honorAsk));
       return;
     }
     // A permission prompt is open. Single BEL only — CC already rings its own bell here (tab already gold).
-    emit(setTitle(GLYPH.awaiting, normalize(readTitle(file) || folderName(cwd))));
+    emit(setTitle(GLYPH.awaiting, normalize(displayTitle(file, dir, sid, cwd))));
     return;
   }
 
@@ -273,7 +276,7 @@ async function handle(data) {
   // after exit, so the tab is correct even if we die below. Idle is the default Stop outcome; the grade
   // only ever UPGRADES it to ◐ awaiting (worst case: a <1s ✻ flash before ◐ on a question turn, and the
   // {sid}.ask flag already backstops that case).
-  try { process.title = `${GLYPH.idle} ${normalize(readTitle(file) || folderName(cwd))}`; } catch (_) { /* ignore */ }
+  try { process.title = `${GLYPH.idle} ${normalize(displayTitle(file, dir, sid, cwd))}`; } catch (_) { /* ignore */ }
 
   const askFile = path.join(dir, `${sid}.ask`);
   const askPresent = fileExists(askFile);
@@ -292,7 +295,7 @@ async function handle(data) {
       logCtx.note = 'ask-flag';
       logCtx.diag = `ask=1 fast-path (${deferred ? 'grade deferred to StopDiag' : 'grade skipped'})`;
     }
-    const out = setTitle(GLYPH.awaiting, normalize(readTitle(file) || folderName(cwd)), true);
+    const out = setTitle(GLYPH.awaiting, normalize(displayTitle(file, dir, sid, cwd)), true);
     // Advisor AFTER the paint (setTitle may append this turn's history line) and bounded (one
     // tiny ledger read + one 64KB tail read) — it can never re-open the kill window this fast
     // path exists to close.
@@ -327,7 +330,7 @@ async function handle(data) {
     logCtx.diag = `ask=0 qmark=${q.ends ? 1 : 0} via=${lex ? 'lex' : (q.via || '-')} found=${q.found ? 1 : 0} reread=${reread} model=${q.model || '-'} tail="${q.tail}"`;
   }
   const glyph = pending ? GLYPH.awaiting : GLYPH.idle;
-  const out = setTitle(glyph, normalize(readTitle(file) || folderName(cwd)), pending);
+  const out = setTitle(glyph, normalize(displayTitle(file, dir, sid, cwd)), pending);
   const advice = clearAdvice(dir, sid, data.transcript_path);
   if (advice) out.systemMessage = advice;
   emit(out);
@@ -710,7 +713,7 @@ function spawnDeferredGrade(data, dir, sid, file, cwd) {
     const payload = JSON.stringify({
       sid, dir,
       transcriptPath: data.transcript_path || '',
-      title: normalize(readTitle(file) || folderName(cwd)),
+      title: normalize(displayTitle(file, dir, sid, cwd)),
     });
     const { spawn } = require('child_process');
     spawn(process.execPath, [__filename, '--post-grade', payload], {
@@ -1123,7 +1126,7 @@ async function turnWatch(payloadJson) {
     if (!logCtx) return;
     logCtx.note = note;
     logCtx.diag = diag;
-    titleLog(GLYPH.working, normalize(readTitle(file) || folderName(cwd)), false);
+    titleLog(GLYPH.working, normalize(displayTitle(file, dir, sid, cwd)), false);
   };
   watchLog('watch-start', `ppid=${ppid} session=${sessionPid || 'resolve'}`);
 
@@ -1207,7 +1210,7 @@ async function turnWatch(payloadJson) {
         // distrust: a hidden liveness hint is the dialog's doing, not needle drift.
         quietStreak = 0;
         deadStreak = 0;
-        const dt = normalize(readTitle(file) || folderName(cwd));
+        const dt = normalize(displayTitle(file, dir, sid, cwd));
         const paint = paintViaConsole(dir, sessionPid, `${GLYPH.awaiting} ${dt}`);
         try { fs.writeFileSync(glyphFile, 'awaiting|Notification'); } catch (_) { /* best-effort */ }
         if (logCtx) { logCtx.note = 'dialog-flip'; logCtx.diag = `via=esc-to-cancel ${paint}`; }
@@ -1295,7 +1298,7 @@ async function turnWatch(payloadJson) {
 function rescueFromWatch(via, dir, sid, file, cwd, ppid) {
   const askFlag = path.join(dir, `${sid}.ask`);
   if (fileExists(askFlag)) { try { fs.unlinkSync(askFlag); } catch (_) { /* ignore */ } }
-  const title = normalize(readTitle(file) || folderName(cwd));
+  const title = normalize(displayTitle(file, dir, sid, cwd));
   const paint = paintViaConsole(dir, ppid, `${GLYPH.idle} ${title}`);
   if (logCtx) { logCtx.note = 'int-rescue'; logCtx.diag = `via=${via} ${paint}`; }
   setTitle(GLYPH.idle, title);
@@ -1320,7 +1323,7 @@ function resolveSessionPid(dir, sid, file, cwd) {
     if (!pids.length) return 0;
     const needleFile = path.join(dir, `${sid}.needle`);
     const outFile = path.join(dir, `${sid}.found`);
-    fs.writeFileSync(needleFile, normalize(readTitle(file) || folderName(cwd)));
+    fs.writeFileSync(needleFile, normalize(displayTitle(file, dir, sid, cwd)));
     try { fs.unlinkSync(outFile); } catch (_) { /* ignore */ }
     cp.spawnSync(exe, ['0', '--find', outFile, needleFile].concat(pids), { windowsHide: true, timeout: 8000 });
     const found = readTitle(outFile).split(/\s+/).map(Number).filter(Boolean);
@@ -1342,6 +1345,29 @@ function readTitle(file) {
 function folderName(cwd) {
   const base = cwd ? path.basename(cwd) : '';
   return base || 'Claude Code';
+}
+
+// The last title the PREVIOUS session in THIS terminal showed. SessionStart's recordLineage stamps
+// {sid}.lineage.json with prevSid on a /clear or same-tab relaunch; that session's persisted title
+// file ({prevSid}.txt) still holds its final title (title files aren't pruned). Returns '' when there
+// is no predecessor (a brand-new terminal) or its file is gone. Deterministic for the life of the
+// session — both inputs are frozen once written — so every paint AND the byte-identical console-match
+// needle (resolveSessionPid) agree on it.
+function carriedTitle(dir, sid) {
+  try {
+    if (!sid) return '';
+    const lin = JSON.parse(fs.readFileSync(path.join(dir, `${sid}.lineage.json`), 'utf8'));
+    if (!lin || !lin.prevSid) return '';
+    return readTitle(path.join(dir, `${lin.prevSid}.txt`));
+  } catch (_) { return ''; }
+}
+
+// The title to paint/needle before this session has authored its own: its own file, else the title
+// carried over from the previous session in this terminal (above), else the folder name. Centralized
+// so every resolution site — paints, debug logs, and the console-match needle — stays in agreement;
+// once the session authors a title readTitle(file) short-circuits and carriedTitle is never read.
+function displayTitle(file, dir, sid, cwd) {
+  return readTitle(file) || carriedTitle(dir, sid) || folderName(cwd);
 }
 
 // Normalize ' - ' to ' — ' and capitalize the first letter of each segment.
@@ -1430,4 +1456,4 @@ function extractBlock(tpl, name) {
 // Exported for tests (require()'d when require.main !== module). The hook itself never reads these.
 // Contract: terminal-title.test.js, golden-endings.test.js, and arcade-beeps.js (lazy-requires
 // inspectLastResponse) depend on these names — renaming one silently degrades the beeps hook.
-module.exports = { inspectLastResponse, endsOnQuestion, normalize, GLYPH, shouldDefer, solicitsReply, readContextTokens, clearAdvice, ancestryChain, recordLineage };
+module.exports = { inspectLastResponse, endsOnQuestion, normalize, GLYPH, shouldDefer, solicitsReply, readContextTokens, clearAdvice, ancestryChain, recordLineage, carriedTitle, displayTitle };

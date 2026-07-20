@@ -519,6 +519,73 @@ test('compact source re-injects the FULL rules (a squeezed context re-learns the
 });
 console.log();
 
+// ---- Title carry-over across a /clear (lineage -> previous session's last title) ----
+// recordLineage stamps {sid}.lineage.json{prevSid} on a rotation; a fresh session with no title of
+// its own paints the PREVIOUS session's last title ({prevSid}.txt) instead of the bare folder name,
+// so /clear + /continue keeps showing the work. carriedTitle/displayTitle centralize this, and the
+// carried title must NOT seed the file (else BASELINE stops firing and the model can't re-author).
+console.log('Title carry-over (lineage):');
+
+function writeLineage(cwd, sid, prevSid) {
+  const file = path.join(cwd, '.claude', 'hooks', '.titles', `${sid}.lineage.json`);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(
+    { prevSid, tid: 't-test', source: 'clear', ts: '2026-07-20T00:00:00.000Z' }));
+}
+
+test('fresh session with a predecessor -> carries the previous session\'s last title (not the folder name)', () => {
+  const cwd = mkWorkspace();
+  const sid = 'carry-1', prevSid = 'carry-prev-1';
+  writeTitle(cwd, prevSid, 'Title Hooks — Carry Last Title');   // the previous session's final title
+  writeLineage(cwd, sid, prevSid);
+  const r = runHook({ hook_event_name: 'UserPromptSubmit', session_id: sid, cwd, prompt: '/continue' });
+  assert(titleText(r.shown) === 'Title Hooks — Carry Last Title',
+    `expected the carried title, got "${titleText(r.shown)}"`);
+});
+
+test('SessionStart with a predecessor -> idle glyph + carried title (kills the folder-name flicker)', () => {
+  const cwd = mkWorkspace();
+  const sid = 'carry-2', prevSid = 'carry-prev-2';
+  writeTitle(cwd, prevSid, 'Journal Modal — Fix Overflow');
+  writeLineage(cwd, sid, prevSid);
+  const r = runHook({ hook_event_name: 'SessionStart', session_id: sid, cwd, source: 'startup' });
+  assert(leadsWithGlyph(r.codepoints, IDLE), `expected idle glyph, got ${r.shown}`);
+  assert(titleText(r.shown) === 'Journal Modal — Fix Overflow',
+    `expected the carried title over the placeholder, got "${titleText(r.shown)}"`);
+});
+
+test('carry-over does NOT seed the title file -> BASELINE still fires (model re-authors)', () => {
+  const cwd = mkWorkspace();
+  const sid = 'carry-3', prevSid = 'carry-prev-3';
+  writeTitle(cwd, prevSid, 'Old Scope — Old Goal');
+  writeLineage(cwd, sid, prevSid);
+  const r = runHook({ hook_event_name: 'UserPromptSubmit', session_id: sid, cwd, prompt: 'start a new thing' });
+  assert(!fs.existsSync(titleFileFor(cwd, sid)), 'carry-over must not pre-create the title file');
+  assert(r.directive && r.directive.length > 0, 'the first-turn directive must still be injected');
+});
+
+test('the session\'s own authored title wins over a carried title', () => {
+  const cwd = mkWorkspace();
+  const sid = 'carry-4', prevSid = 'carry-prev-4';
+  writeTitle(cwd, prevSid, 'Carried — Should Lose');
+  writeLineage(cwd, sid, prevSid);
+  writeTitle(cwd, sid, 'Authored — Should Win');                // this session already authored one
+  const r = runHook({ hook_event_name: 'UserPromptSubmit', session_id: sid, cwd, prompt: 'hi' });
+  assert(titleText(r.shown) === 'Authored — Should Win', `own title must win, got "${titleText(r.shown)}"`);
+});
+
+test('carriedTitle() unit: no lineage -> empty; lineage + prev file -> that title', () => {
+  const { carriedTitle } = require(HOOK);
+  const cwd = mkWorkspace();
+  const dir = path.join(cwd, '.claude', 'hooks', '.titles');
+  fs.mkdirSync(dir, { recursive: true });
+  assert(carriedTitle(dir, 'orphan') === '', 'no lineage file must yield an empty carried title');
+  fs.writeFileSync(path.join(dir, 'orphan.lineage.json'), JSON.stringify({ prevSid: 'p' }));
+  fs.writeFileSync(path.join(dir, 'p.txt'), 'Prev — Title');
+  assert(carriedTitle(dir, 'orphan') === 'Prev — Title', 'carriedTitle should read {prevSid}.txt');
+});
+console.log();
+
 console.log('Dedupe (user-level copy stands down when a project copy exists):');
 const { shouldDefer } = require(HOOK);
 
