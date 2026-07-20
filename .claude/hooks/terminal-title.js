@@ -139,12 +139,22 @@ async function handle(data) {
     // leftover flag can't paint a false ◐ on this turn's end. The flag must reflect ONLY this turn.
     const askFile = path.join(dir, `${sid}.ask`);
     if (fileExists(askFile)) { try { fs.unlinkSync(askFile); } catch (_) { /* ignore */ } }
+    ensureStartedAt(dir, sid); // belt for sessions that predate the guard (no SessionStart stamp)
     const title = normalize(displayTitle(file, dir, sid, cwd));
+    // Duplicate-session guard: is another tab already live on this exact work? (see dupeGuardResult)
+    const guard = dupeGuardResult(dir, sid, title, cwd);
+    if (guard && guard.block) {
+      try { process.title = `${GLYPH.awaiting} ${title}`; } catch (_) { /* ignore */ }
+      if (logCtx) { logCtx.note = 'dupe-block'; logCtx.diag = guard.diag; }
+      emit({ decision: 'block', reason: guard.reason });
+      return;
+    }
     const out = setTitle(GLYPH.working, title);
     out.hookSpecificOutput = {
       hookEventName: 'UserPromptSubmit',
       additionalContext: buildDirective(data, file, cwd),
     };
+    if (guard && guard.systemMessage) out.systemMessage = guard.systemMessage;
     // A user interrupt fires NO hook and CC's idle_prompt notification is not delivered after one
     // (verified 2026-07-11), so each turn gets a watchdog child that notices a dead turn itself.
     spawnTurnWatch(data, dir, sid, file, cwd);
@@ -184,6 +194,8 @@ async function handle(data) {
     // records the cleared sid as this session's "previous" — what bare /recover-context recovers,
     // and what carriedTitle() reads just below to carry the last title onto the tab.
     recordLineage(dir, sid, data.source || '');
+    // Stamp this session's birth time (ordering token for the duplicate-session guard's kill mode).
+    ensureStartedAt(dir, sid);
     // Fresh-session title: this session's own (preferred on resume/compact), else the previous
     // session's last title carried over so a /clear + /continue keeps showing the work instead of
     // the bare folder name (the first turn's BASELINE authoring supersedes it), else the placeholder.
@@ -1370,6 +1382,151 @@ function displayTitle(file, dir, sid, cwd) {
   return readTitle(file) || carriedTitle(dir, sid) || folderName(cwd);
 }
 
+// ─── Duplicate-session guard ─────────────────────────────────────────────────────────────────
+// Two terminals grinding on the SAME task clobber each other's edits (observed 2026-07-20: two tabs
+// both on "Journal open-to-all — …guest-journaling server (Phase A)"). On every UserPromptSubmit —
+// the moment a session is actively working — scan sibling sessions for a LIVE one carrying a
+// near-identical title. Liveness = a fresh {sid}.glyph: setTitle rewrites it on every paint, so its
+// mtime is the per-turn heartbeat, and a closed tab's glyph simply ages out of the window. Modes
+// (env CLAUDE_TITLE_DUPE): 'off' disables; 'warn' (DEFAULT) surfaces a one-shot systemMessage and
+// lets the turn proceed; 'kill' stands the NEWER session down (blocks its prompt with a reason).
+// We BLOCK, never taskkill, on purpose: a session's claude.exe pid can only be resolved by console
+// title (resolveSessionPid), which is ambiguous EXACTLY when two tabs share a title — a hard kill
+// could take out the wrong tab (the standing review finding #1). Blocking loses no work and
+// self-releases the instant the other tab goes stale. Set the mode persistently via settings.json
+// "env": { "CLAUDE_TITLE_DUPE": "kill" }.
+const DUPE_WINDOW_MS = 180000; // a sibling counts as "live" if it painted within 3 min
+
+function dupeMode() {
+  const m = (process.env.CLAUDE_TITLE_DUPE || 'warn').toLowerCase();
+  return (m === 'off' || m === 'kill' || m === 'warn') ? m : 'warn';
+}
+
+// A newborn tab shows its folder name / the new-session placeholder until the model authors a real
+// title; two such tabs in one repo are NOT duplicate work, so they must never collide.
+function isPlaceholderTitle(title, cwd) {
+  const t = (title || '').trim().toLowerCase();
+  if (!t) return true;
+  if (t === 'claude code' || t === 'claude code - new session') return true;
+  return t === folderName(cwd).toLowerCase();
+}
+
+// Break a title into a comparison key: glyph stripped, lowercased, split on the em-dash separator.
+function collideKey(title) {
+  const bare = normalize(title || '')
+    .replace(/^[^\p{L}\p{N}]+/u, '') // drop any leading state glyph + space
+    .toLowerCase().trim();
+  const segs = bare.split(` ${EMDASH} `).map(s => s.trim()).filter(Boolean);
+  const words = bare.split(/[^\p{L}\p{N}]+/u).filter(w => w.length > 1);
+  return { full: bare, scope: segs[0] || '', rest: segs.slice(1).join(' '), words };
+}
+
+function jaccard(a, b) {
+  const A = new Set(a), B = new Set(b);
+  if (!A.size || !B.size) return 0;
+  let inter = 0;
+  for (const w of A) if (B.has(w)) inter++;
+  return inter / (A.size + B.size - inter);
+}
+
+// True when two titles are plausibly the SAME work: identical, OR same scope with an overlapping
+// use-case, OR high whole-title word overlap. Tuned so "…— Guest-journaling server (Phase A)" and
+// "…— Build guest-journaling server (Phase A)" collide, while two distinct use-cases under one
+// scope ("…— Fix X" vs "…— Fix Y") do not.
+function titlesCollide(a, b) {
+  const ka = collideKey(a), kb = collideKey(b);
+  if (!ka.full || !kb.full) return false;
+  if (ka.full === kb.full) return true;
+  const wordsOf = s => s.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  if (ka.scope && ka.scope === kb.scope
+      && jaccard(wordsOf(ka.rest), wordsOf(kb.rest)) >= 0.5) return true;
+  return jaccard(ka.words, kb.words) >= 0.7;
+}
+
+function readStartedAt(dir, sid) {
+  try { return JSON.parse(fs.readFileSync(path.join(dir, `${sid}.session.json`), 'utf8')).startedAt || 0; }
+  catch (_) { return 0; }
+}
+
+// Record this session's birth time ONCE — the ordering token that lets kill-mode stand down the
+// NEWER tab. Write-if-absent so a compact/resume SessionStart (same sid) or a first UPS on a
+// session that predates this feature never overwrites the earliest known start. Best-effort: a
+// missing file just yields startedAt 0 (sorts oldest), degrading toward warn, never toward a
+// wrongful block.
+function ensureStartedAt(dir, sid) {
+  try {
+    if (!sid) return;
+    const f = path.join(dir, `${sid}.session.json`);
+    if (!fileExists(f)) fs.writeFileSync(f, JSON.stringify({ startedAt: Date.now() }));
+  } catch (_) { /* best-effort */ }
+}
+
+// Sibling sessions that are LIVE (fresh {sid}.glyph) AND carry a colliding title. The cheap glyph
+// stat is checked FIRST so stale sessions (the vast majority of accumulated .txt files) are skipped
+// before their title is even read.
+function activeTwins(dir, sid, myTitle, windowMs) {
+  const out = [];
+  let files = [];
+  try { files = fs.readdirSync(dir); } catch (_) { return out; }
+  const now = Date.now();
+  for (const f of files) {
+    if (!f.endsWith('.txt')) continue;
+    const other = f.slice(0, -4);
+    if (!other || other === sid) continue;
+    let lastSeen = 0;
+    try { lastSeen = fs.statSync(path.join(dir, `${other}.glyph`)).mtimeMs; } catch (_) { continue; }
+    if (now - lastSeen > windowMs) continue; // stale glyph → treat the tab as closed
+    const otherTitle = readTitle(path.join(dir, f));
+    if (!otherTitle || !titlesCollide(myTitle, otherTitle)) continue;
+    out.push({ sid: other, title: normalize(otherTitle), lastSeen, startedAt: readStartedAt(dir, other) || lastSeen });
+  }
+  return out;
+}
+
+function agoStr(ms) {
+  const s = Math.max(1, Math.round((Date.now() - ms) / 1000));
+  return s < 90 ? `${s}s ago` : `${Math.round(s / 60)}m ago`;
+}
+
+// Decide what the guard does for THIS UserPromptSubmit. Returns null (proceed normally),
+// { systemMessage, diag } (warn — one-shot per twin), or { block:true, reason, diag } (kill mode,
+// and this session is the newer one). Never throws: a guard failure must not break the turn.
+function dupeGuardResult(dir, sid, title, cwd) {
+  try {
+    const mode = dupeMode();
+    if (mode === 'off') return null;
+    if (isPlaceholderTitle(title, cwd)) return null;
+    const windowMs = Number(process.env.CLAUDE_TITLE_DUPE_WINDOW_MS) || DUPE_WINDOW_MS;
+    const twins = activeTwins(dir, sid, title, windowMs);
+    if (!twins.length) return null;
+    const list = twins.map(t => `“${t.title}” (active ${agoStr(t.lastSeen)})`).join(', ');
+    const myStart = readStartedAt(dir, sid) || Date.now();
+    const iAmNewer = twins.some(t => t.startedAt && t.startedAt < myStart);
+    if (mode === 'kill' && iAmNewer) {
+      return {
+        block: true,
+        reason: `⛔ Duplicate-session guard: another tab is already working on ${list}. `
+          + `This newer tab is standing down so the two don't clobber each other's edits. `
+          + `Close it, or set CLAUDE_TITLE_DUPE=warn (or off) to override.`,
+        diag: `mode=kill block twins=${twins.length}`,
+      };
+    }
+    // warn (mode=warn, or kill-mode but this is the OLDER tab): one systemMessage per new twin.
+    const warnedFile = path.join(dir, `${sid}.dupe.json`);
+    let warned = [];
+    try { warned = JSON.parse(fs.readFileSync(warnedFile, 'utf8')).sids || []; } catch (_) { /* none yet */ }
+    const fresh = twins.filter(t => !warned.includes(t.sid));
+    if (!fresh.length) return null;
+    try { fs.writeFileSync(warnedFile, JSON.stringify({ sids: twins.map(t => t.sid) })); } catch (_) { /* ignore */ }
+    return {
+      systemMessage: `⚠️ Possible duplicate session: ${list} ${twins.length > 1 ? 'are' : 'is'} `
+        + `active in another tab with a near-identical title. Two sessions on one task can clobber `
+        + `each other's edits — consider closing one.`,
+      diag: `mode=${mode} warn twins=${twins.length}`,
+    };
+  } catch (_) { return null; }
+}
+
 // Normalize ' - ' to ' — ' and capitalize the first letter of each segment.
 function normalize(title) {
   const sep = ` ${EMDASH} `;
@@ -1456,4 +1613,4 @@ function extractBlock(tpl, name) {
 // Exported for tests (require()'d when require.main !== module). The hook itself never reads these.
 // Contract: terminal-title.test.js, golden-endings.test.js, and arcade-beeps.js (lazy-requires
 // inspectLastResponse) depend on these names — renaming one silently degrades the beeps hook.
-module.exports = { inspectLastResponse, endsOnQuestion, normalize, GLYPH, shouldDefer, solicitsReply, readContextTokens, clearAdvice, ancestryChain, recordLineage, carriedTitle, displayTitle };
+module.exports = { inspectLastResponse, endsOnQuestion, normalize, GLYPH, shouldDefer, solicitsReply, readContextTokens, clearAdvice, ancestryChain, recordLineage, carriedTitle, displayTitle, titlesCollide, isPlaceholderTitle, activeTwins, dupeGuardResult };

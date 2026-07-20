@@ -1058,6 +1058,113 @@ test('every .claude/hooks command in the shipped settings.json is CLAUDE_PROJECT
 });
 console.log();
 
+// ---- Duplicate-session guard (warn / kill on a live colliding twin) --------
+const { titlesCollide, isPlaceholderTitle } = require(HOOK);
+
+console.log('Duplicate-session guard — title similarity:');
+test('titlesCollide: the 2026-07-20 real collision (Build-prefixed dup)', () => {
+  assert(titlesCollide(
+    'journal open-to-all — guest-journaling server (phase a)',
+    'journal open-to-all — build guest-journaling server (phase a)'),
+    'near-identical Phase-A titles must collide');
+});
+test('titlesCollide: identical titles collide', () => {
+  assert(titlesCollide('foo — bar baz qux', 'foo — bar baz qux'));
+});
+test('titlesCollide: distinct use-cases under one scope do NOT collide', () => {
+  assert(!titlesCollide('title hooks — fix stuck glyph on cancel', 'title hooks — add arcade beeps'),
+    'different goals under the same scope should not collide');
+});
+test('titlesCollide: unrelated tabs do NOT collide', () => {
+  assert(!titlesCollide('faf trial offer — deploy friends offer to prod',
+    'journal open-to-all — build guest-journaling server (phase a)'),
+    'unrelated work must not collide');
+});
+test('isPlaceholderTitle: folder name + new-session placeholder are placeholders', () => {
+  assert(isPlaceholderTitle('myrepo', path.join('x', 'myrepo')), 'bare folder name is a placeholder');
+  assert(isPlaceholderTitle('Claude Code - New session', path.join('x', 'myrepo')));
+  assert(!isPlaceholderTitle('myrepo — do a real thing', path.join('x', 'myrepo')), 'an authored title is not a placeholder');
+});
+console.log();
+
+// Behavioral: drive the REAL hook on a UserPromptSubmit with a sibling session pre-seeded into the
+// .titles dir. A "live" sibling has a fresh {sid}.glyph (the per-turn heartbeat); "older" is set via
+// its {sid}.session.json startedAt. No transcript_path in the payload → spawnTurnWatch no-ops.
+function seedTwin(cwd, sid, title, opts) {
+  opts = opts || {};
+  const tdir = path.join(cwd, '.claude', 'hooks', '.titles');
+  fs.mkdirSync(tdir, { recursive: true });
+  fs.writeFileSync(path.join(tdir, `${sid}.txt`), title);
+  fs.writeFileSync(path.join(tdir, `${sid}.glyph`), 'working|UserPromptSubmit');
+  fs.writeFileSync(path.join(tdir, `${sid}.session.json`),
+    JSON.stringify({ startedAt: opts.startedAt || Date.now() }));
+  if (opts.glyphAgeMs) {
+    const t = (Date.now() - opts.glyphAgeMs) / 1000;
+    fs.utimesSync(path.join(tdir, `${sid}.glyph`), t, t);
+  }
+}
+function runUPS(cwd, sid, env) {
+  return runHook({ hook_event_name: 'UserPromptSubmit', session_id: sid, cwd, prompt: 'go' }, env);
+}
+const MINE = 'journal open-to-all — build guest-journaling server (phase a)';
+const TWIN = 'journal open-to-all — guest-journaling server (phase a)';
+
+console.log('Duplicate-session guard — behavioral (real hook, seeded twin):');
+test('warn: a fresh colliding twin surfaces a systemMessage, no block', () => {
+  const cwd = mkWorkspace();
+  writeTitle(cwd, 'meSid', MINE);
+  seedTwin(cwd, 'twinSid', TWIN, { startedAt: Date.now() - 60000 });
+  const { json } = runUPS(cwd, 'meSid', { CLAUDE_TITLE_DUPE: 'warn' });
+  assert(json && typeof json.systemMessage === 'string' && /duplicate/i.test(json.systemMessage),
+    'expected a duplicate-session warning');
+  assert(!json.decision, 'warn mode must not block the prompt');
+});
+test('warn is the DEFAULT mode (no env set)', () => {
+  const cwd = mkWorkspace();
+  writeTitle(cwd, 'meSid', MINE);
+  seedTwin(cwd, 'twinSid', TWIN, {});
+  const { json } = runUPS(cwd, 'meSid', {});
+  assert(json && /duplicate/i.test(json.systemMessage || ''), 'default mode should warn');
+});
+test('kill: the newer tab is blocked when an older twin is live', () => {
+  const cwd = mkWorkspace();
+  writeTitle(cwd, 'meSid', MINE);
+  seedTwin(cwd, 'twinSid', TWIN, { startedAt: Date.now() - 60000 });
+  const { json } = runUPS(cwd, 'meSid', { CLAUDE_TITLE_DUPE: 'kill' });
+  assert(json && json.decision === 'block', 'kill mode should block the newer session');
+  assert(/standing down/i.test(json.reason || ''), 'block reason should explain the stand-down');
+});
+test('stale twin (glyph older than the window) does NOT trigger', () => {
+  const cwd = mkWorkspace();
+  writeTitle(cwd, 'meSid', MINE);
+  seedTwin(cwd, 'twinSid', TWIN, { glyphAgeMs: 10 * 60 * 1000 });
+  const { json } = runUPS(cwd, 'meSid', { CLAUDE_TITLE_DUPE: 'kill' });
+  assert(json && !json.decision, 'a stale twin must not block');
+  assert(!json.systemMessage, 'a stale twin must not warn');
+});
+test('off: disabled even with a fresh colliding twin', () => {
+  const cwd = mkWorkspace();
+  writeTitle(cwd, 'meSid', MINE);
+  seedTwin(cwd, 'twinSid', TWIN, {});
+  const { json } = runUPS(cwd, 'meSid', { CLAUDE_TITLE_DUPE: 'off' });
+  assert(json && !json.decision && !json.systemMessage, 'off mode must do nothing');
+});
+test('a non-colliding fresh twin is ignored', () => {
+  const cwd = mkWorkspace();
+  writeTitle(cwd, 'meSid', MINE);
+  seedTwin(cwd, 'twinSid', 'faf trial offer — deploy friends offer to prod', {});
+  const { json } = runUPS(cwd, 'meSid', { CLAUDE_TITLE_DUPE: 'kill' });
+  assert(json && !json.decision && !json.systemMessage, 'unrelated tab must not trigger');
+});
+test('a lone session never flags itself', () => {
+  const cwd = mkWorkspace();
+  writeTitle(cwd, 'soloSid', MINE);
+  fs.writeFileSync(path.join(cwd, '.claude', 'hooks', '.titles', 'soloSid.glyph'), 'working|UserPromptSubmit');
+  const { json } = runUPS(cwd, 'soloSid', { CLAUDE_TITLE_DUPE: 'kill' });
+  assert(json && !json.decision && !json.systemMessage, 'a lone session must never flag itself');
+});
+console.log();
+
 // ============================================================================
 // --turn-watch cancel watchdog (the user-interrupt rescue). Ported from the
 // scratchpad `watchdog-test.sh` 12-case suite (preserved at
