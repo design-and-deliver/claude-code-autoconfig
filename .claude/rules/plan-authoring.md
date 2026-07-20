@@ -18,7 +18,21 @@ conversation context.
    - Phase 3 — shrink the god files (per-domain, incremental, each substep shippable)
 4. **Session-sized substeps** (N.1, N.2 …) with checkboxes: each executable start-to-finish in
    one fresh session, ending with a **Verify** step (actual commands, not "check it works") and
-   a commit point (subject + `Changelog:` trailer per CLAUDE.md's changelog rules).
+   a commit point (subject + `Changelog:` trailer per CLAUDE.md's changelog rules). Every substep
+   heading carries an **effort tag** — `### ☐ N.N · <S|M|L> · ~<time> — <title>` — so a fresh
+   session (and the reader) knows the weight before opening it:
+
+   | Size | Shape | Rough time |
+   |------|-------|-----------|
+   | **S** | one file, mechanical, no new tests, no trap surface | ~10–20 min |
+   | **M** | a few files or one new test; bounded logic | ~30–60 min |
+   | **L** | new test suite(s), several coordinated edits, **or** any edit inside a ⛔ trap surface | 1–2 hr |
+
+   The letter leads because it is stable; the time trails because it is only a hint — a step
+   balloons the moment it hits a trap, which is exactly why size, not wall-clock, is the anchor.
+   **There is no XL**: a substep that sizes XL is too big for one session — split it into
+   N.a / N.b until each is ≤ L. (Size a done substep against what it actually took, so the tags
+   stay calibrated.)
 5. **Deferred** section: options considered and deliberately not planned, with reasons — so a
    later session doesn't "helpfully" do them.
 6. **Ledger** at the bottom, appended after each substep: date — step — outcome (+ commit

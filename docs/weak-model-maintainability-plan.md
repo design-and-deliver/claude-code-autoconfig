@@ -95,7 +95,7 @@ edit that violates one of these runs clean and breaks at runtime:
 
 Cheap, no product logic touched. Removes the traps that cause misinterpretation.
 
-### ☑ 1.1 Delete the dead `archive/`, `internal/`, and `todo.md` (01-A1, A2, A3, A4)
+### ☑ 1.1 · S · ~15m — Delete the dead `archive/`, `internal/`, and `todo.md` (01-A1, A2, A3, A4)
 
 `archive/` holds a byte-identical twin of the live shipped agent `create-retro-item.md` plus a
 stale v1 `enable-retro.md` that instructs exactly what the live v2 forbids. `internal/` holds a
@@ -119,7 +119,7 @@ was since half-fixed (its settings-canonicalization proposal landed at bin/cli.j
 **Verify:** the three greps return 0; `npm test` green.
 **Commit:** `chore: remove dead archive/, internal/, todo.md` + body `Changelog: none`.
 
-### ☑ 1.2 Make README.md stop lying about what gets installed (01-B1, B2, B3, B4, B5, B17)
+### ☑ 1.2 · M · ~45m — Make README.md stop lying about what gets installed (01-B1, B2, B3, B4, B5, B17)
 
 Fix the docs to match the code (never the reverse):
 
@@ -144,7 +144,7 @@ deprecated alias) confirm a README table row exists — and no row names a nonex
 `npm test` green. (The durable test for this arrives in 2.7.)
 **Commit:** `docs(readme): match install reality — remove rules/updates/.mcp.json claims, add /continue` + `Changelog: none`.
 
-### ☑ 1.3 Retire the legacy curl installers (01-B6, C2)
+### ☑ 1.3 · M · ~45m — Retire the legacy curl installers (01-B6, C2)
 
 `install.sh` / `install.ps1` are a drifted parallel installer: 5 of 18 commands, none of the
 seven hook scripts settings.json registers (→ MODULE_NOT_FOUND on every event), unconditional
@@ -161,7 +161,7 @@ settings.json overwrite, and they install CCA's own maintainer CLAUDE.md into us
 **Commit:** `fix(install): retire legacy curl installers — stub with npx redirect` + body
 `Changelog: Removed the outdated curl installer — install with npx claude-code-autoconfig instead`.
 
-### ☑ 1.4 Fix the shipped commands that mislead users (01-B7, B8, B15, B16)
+### ☑ 1.4 · M · ~45m — Fix the shipped commands that mislead users (01-B7, B8, B15, B16)
 
 - `validate-cca-install.md:71` — replace `dev_only = ['deploy-to-npmjs.md']` with the six
   entries from `DEV_ONLY_FILES` (bin/cli.js:751) and add a comment: *"mirror of DEV_ONLY_FILES
@@ -183,7 +183,7 @@ tests grep command prose — trap 6).
 **Commit:** `fix(commands): validate-cca-install false errors + broken hook check; agents/enable-retro doc lies` + body
 `Changelog: /validate-cca-install no longer reports false "missing command" errors`.
 
-### ☑ 1.5 Fix /autoconfig's self-contradictions (01-B9, B10, B11)
+### ☑ 1.5 · M · ~45m — Fix /autoconfig's self-contradictions (01-B9, B10, B11)
 
 - `autoconfig.md:106,134` — internal step numbers point at the wrong steps ("Step 5b" lives
   inside Step 3; "continue to Step 6" should be Step 4). Renumber the references (or retitle
@@ -207,7 +207,7 @@ don't restore the lie).
 **Commit:** `fix(autoconfig): step numbering, anchored hook form, defer permissions to shipped settings` + body
 `Changelog: /autoconfig sets up the format hook in the reliable path-anchored form`.
 
-### ☑ 1.6 Fix stale comments + decide the `ccr` bin (01-B12, B13, B14, A6/C3; 02-4.7)
+### ☑ 1.6 · M · ~45m — Fix stale comments + decide the `ccr` bin (01-B12, B13, B14, A6/C3; 02-4.7)
 
 - `bin/cli.js:748` cites `docs/cca-port-next-steps.md` — file doesn't exist. Fix the comment to
   cite what's real (CLAUDE.md's invariants section).
@@ -234,7 +234,7 @@ don't restore the lie).
 
 ## Phase 2 — Make wrong edits fail loudly
 
-### ☑ 2.1 Gate publishing on the test suite (02-3.1)
+### ☑ 2.1 · S · ~15m — Gate publishing on the test suite (02-3.1)
 
 Add to package.json scripts: `"prepublishOnly": "npm test"` and `"preversion": "npm test"`.
 This is the highest-leverage edit in the whole plan — every test that follows becomes
@@ -245,7 +245,7 @@ existing `postversion` changelog hook is untouched.)
 test output; abort is fine after confirmation); `npm test` green.
 **Commit:** `chore: gate npm version/publish on the full test suite` + `Changelog: none`.
 
-### ☐ 2.2 Single-source the dev-gate lists; fix the shipped-docs live bug (02-4.1, 02-5.3, 01-B7 guard)
+### ☐ 2.2 · M · ~45m — Single-source the dev-gate lists; fix the shipped-docs live bug (02-4.1, 02-5.3, 01-B7 guard)
 
 The shipped `autoconfig.docs.html` documents five dev-gated files users never receive, because
 `sync-docs.js:37` hand-mirrors `DEV_ONLY_FILES` and drifted (1 entry vs 6).
@@ -266,7 +266,7 @@ The shipped `autoconfig.docs.html` documents five dev-gated files users never re
 **Commit:** `fix(docs): single-source DEV_ONLY_FILES; stop documenting dev-only features to users` + body
 `Changelog: The interactive docs no longer show commands that aren't part of your install`.
 
-### ☐ 2.3 Stop the malformed-JSON data-loss paths (02-1.2, 02-1.3)
+### ☐ 2.3 · L · ~1.5h — Stop the malformed-JSON data-loss paths (02-1.2, 02-1.3)
 
 All fixes are loud-failure conversions; behavior on *valid* input is unchanged:
 
@@ -293,7 +293,7 @@ All fixes are loud-failure conversions; behavior on *valid* input is unchanged:
 **Commit:** `fix(cli): corrupt JSON no longer wipes settings, unpins projects, or hides merge failures` + body
 `Changelog: A corrupted settings or config file now produces a clear error instead of silent data loss`.
 
-### ☐ 2.4 Behavioral install tests — stop testing by source-grep (02-3.4, T14 vacuous-pass fix)
+### ☐ 2.4 · L · ~1.5h — Behavioral install tests — stop testing by source-grep (02-3.4, T14 vacuous-pass fix)
 
 Create `test/cli-behavior.test.js` that runs the real CLI headlessly (the `--bootstrap`
 early-exit at cli.js:1060-1063 makes this possible; shim `claude` on PATH for the version check
@@ -316,7 +316,7 @@ source-string asserts yet — Phase 3 replaces them region by region as code is 
 locally to confirm the suite can fail, then restore it (do not commit the break).
 **Commit:** `test: behavioral install/upgrade fixtures; box test can no longer pass vacuously` + `Changelog: none`.
 
-### ☐ 2.5 Test the destructive hook + smoke-test the silent ones (02-4.2, 02-4.3)
+### ☐ 2.5 · L · ~1.5h — Test the destructive hook + smoke-test the silent ones (02-4.2, 02-4.3)
 
 New suites in `.claude/hooks/tests/` (auto-discovered by `test/hook-tests.test.js`; already
 excluded from the tarball by package.json `files` negations — verify the new files match the
@@ -338,7 +338,7 @@ excluded from the tarball by package.json `files` negations — verify the new f
 **Verify:** `npm run test:hooks` green; `npm test` green.
 **Commit:** `test(hooks): migrate-feedback behavioral coverage + smoke tests for silent hooks` + `Changelog: none`.
 
-### ☐ 2.6 Minimal lint + honest engines (02-2.1, 02-1.4)
+### ☐ 2.6 · M · ~45m — Minimal lint + honest engines (02-2.1, 02-1.4)
 
 - ESLint flat config with exactly three rules: `no-undef`, `no-unused-vars`,
   `no-empty` (with `allowEmptyCatch: false` — but permit `catch (_) { /* comment */ }` styles
@@ -358,7 +358,7 @@ step.
 **Commit:** `chore: add minimal eslint (no-undef/no-unused-vars/no-empty); require node 18` + body
 `Changelog: Node 18 or newer is now required (matches what we test on)`.
 
-### ☐ 2.7 Pin the remaining prose-contracts with cheap tests (02-3.5, 4.6, 4.10, 4.9, 5.1; C8)
+### ☐ 2.7 · L · ~1.5h — Pin the remaining prose-contracts with cheap tests (02-3.5, 4.6, 4.10, 4.9, 5.1; C8)
 
 One new `test/contracts.test.js` (append to `npm test` chain — trap 8) asserting:
 
@@ -391,7 +391,7 @@ the @version test catches missing versions (don't commit); `node .claude/scripts
 still exits 0 here.
 **Commit:** `test: pin @version/update-numbering/README/docs/digest contracts; loud skips` + `Changelog: none`.
 
-### ☐ 2.8 Fix the @screenshotDir silent drop for legacy users (01-A5, T17)
+### ☐ 2.8 · M · ~45m — Fix the @screenshotDir silent drop for legacy users (01-A5, T17)
 
 The "preservation" block (bin/cli.js:805-811, 845-852) reads a legacy `<!-- @screenshotDir -->`
 marker from the OLD gls.md before copy, then tries to re-insert it into the NEW gls.md — but
@@ -412,7 +412,7 @@ value is silently dropped. Fix forward:
 **Commit:** `fix(cli): migrate legacy gls screenshot folder into cca.config.json instead of silently dropping it` + body
 `Changelog: Upgrades now preserve your saved /gls screenshot folder from very old installs`.
 
-### ☐ 2.9 Dev-box pre-push guard (02-3.2, 02-5.2) — local machine only, nothing ships
+### ☐ 2.9 · S · ~15m — Dev-box pre-push guard (02-3.2, 02-5.2) — local machine only, nothing ships
 
 `.git/hooks/` is untracked, so this is machine setup, not a commit (document it in CLAUDE.md so
 it survives): a `pre-push` hook running `npm test && node scripts/sync-terminal-title.js`
@@ -436,7 +436,7 @@ it until a "ship token-guard" decision forces the question). `sync-docs.js` gets
 Order matters: 2.4's behavioral suite must exist before any extraction — the current tests
 regex cli.js source and **pass vacuously when code moves** (trap 4).
 
-### ☐ 3.1 Map and migrate the source-string tests for the extraction regions (G1 prereq)
+### ☐ 3.1 · L · ~1.5h — Map and migrate the source-string tests for the extraction regions (G1 prereq)
 
 Inventory every `cliCode.includes(...)` / source-regex assertion in `test/cli-install.test.js`
 and `test/update-system.test.js`. For each, classify: (a) guards a region staying in cli.js
@@ -449,7 +449,7 @@ replacement tests while the code is still in place, so 3.2–3.4 have a green ne
 plan's Ledger entry for 3.2–3.4 to consult.
 **Commit:** `test: behavioral replacements for source-grep asserts on extractable cli.js regions` + `Changelog: none`.
 
-### ☐ 3.2 Extract the plugin subsystem → `bin/lib/plugins.js` (G1 seam 1)
+### ☐ 3.2 · M · ~45m — Extract the plugin subsystem → `bin/lib/plugins.js` (G1 seam 1)
 
 `bin/cli.js:312-483` (manifest load, ledger read/write, add/remove/list) is already pure named
 functions with a clean exit boundary (`process.exit(0)` at :483). Move mechanically; cli.js
@@ -463,7 +463,7 @@ Rails: `DEV_ONLY_FILES`, boxes, and all top-level install flow stay in cli.js by
 unmodified); `node bin/cli.js plugin list` works in a temp fixture.
 **Commit:** `refactor(cli): extract plugin subsystem to bin/lib/plugins.js` + `Changelog: none`.
 
-### ☐ 3.3 Extract settings merge/unmerge → `bin/lib/settings-merge.js` (G1 seam 2)
+### ☐ 3.3 · M · ~45m — Extract settings merge/unmerge → `bin/lib/settings-merge.js` (G1 seam 2)
 
 `bin/cli.js:179-310` (`migrateLegacyHookCommands`, `mergeSettingsInto`, `unmergeSettingsFrom`).
 The existing unit tests extract these functions from source text (cli-install.test.js:579-635)
@@ -475,7 +475,7 @@ rewrite.
 require the module (no more source extraction for these).
 **Commit:** `refactor(cli): extract settings merge helpers to bin/lib/settings-merge.js` + `Changelog: none`.
 
-### ☐ 3.4 Extract update parsing + pullUpdates → `bin/lib/updates.js`; harden sync-docs markers (G1 seam 3, G4)
+### ☐ 3.4 · M · ~45m — Extract update parsing + pullUpdates → `bin/lib/updates.js`; harden sync-docs markers (G1 seam 3, G4)
 
 - Move `parseAppliedUpdates`, the `@applied` regexes (byte-verbatim — trap 6), highest-applied
   filtering, and `pullUpdates` (cli.js:86-177) to `bin/lib/updates.js`. The `--pull-updates`
