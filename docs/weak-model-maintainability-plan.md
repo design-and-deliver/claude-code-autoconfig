@@ -95,7 +95,7 @@ edit that violates one of these runs clean and breaks at runtime:
 
 Cheap, no product logic touched. Removes the traps that cause misinterpretation.
 
-### ☐ 1.1 Delete the dead `archive/`, `internal/`, and `todo.md` (01-A1, A2, A3, A4)
+### ☑ 1.1 Delete the dead `archive/`, `internal/`, and `todo.md` (01-A1, A2, A3, A4)
 
 `archive/` holds a byte-identical twin of the live shipped agent `create-retro-item.md` plus a
 stale v1 `enable-retro.md` that instructs exactly what the live v2 forbids. `internal/` holds a
@@ -521,4 +521,14 @@ Append one entry after each substep, newest last. Format:
 - Discoveries: <anything a later step needs, with file:line pointers>
 ```
 
-*(no entries yet — Phase 1 starts in a fresh session)*
+### 2026-07-20 — substep 1.1 — done
+- Commit: a139b2a `chore: remove dead archive/, internal/, todo.md`
+- Deviations: (1) the plan doc, audit reports, and plan-authoring rule were still untracked
+  from the authoring session — committed first as b4aca7a. (2) The re-verify greps now need
+  `--exclude-dir=docs`: the audit evidence and this plan cite the deleted paths by name
+  (those citations didn't exist when audit 01 recorded its 0-match greps). With docs/
+  excluded, all three greps → 0.
+- Discoveries: `archive/.claude/agents/create-retro-item.md` and
+  `internal/.claude/agents/docs-refresh.md` were still byte-identical to their live copies
+  at deletion time (diff exit 0), so nothing was differently-stale. Full `npm test` green
+  before commit (hook suites 181/181).
