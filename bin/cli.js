@@ -18,14 +18,32 @@ const packageDir = path.dirname(__dirname);
 // (`npx claude-code-autoconfig@<anything>` in a terminal) expresses intent to move:
 // it removes the pin, says so, and proceeds. Primary use: installing an old version
 // on purpose to validate the @latest upgrade path (see README).
-function readCcaConfig() {
+// Reads .claude/cca.config.json, distinguishing three cases so callers can fail SAFE:
+//   • absent / unreadable   → { config: null, corrupt: false } (no pin — proceed normally)
+//   • present but not JSON   → { config: null, corrupt: true }  (treat as pinned — a silent
+//     refresh must NOT unpin on a parse error; a wrongly-unpinned project can't be
+//     un-dragged, whereas a skipped refresh is simply re-runnable once the file is fixed)
+//   • valid JSON            → { config: <obj>, corrupt: false }
+function readCcaConfigResult() {
+  const p = path.join(cwd, '.claude', 'cca.config.json');
+  let raw;
   try {
-    return JSON.parse(fs.readFileSync(path.join(cwd, '.claude', 'cca.config.json'), 'utf8'));
+    raw = fs.readFileSync(p, 'utf8');
   } catch (_) {
-    return null;
+    return { config: null, corrupt: false }; // ENOENT / unreadable → no pin in effect
+  }
+  try {
+    return { config: JSON.parse(raw), corrupt: false };
+  } catch (_) {
+    return { config: null, corrupt: true }; // present but unparseable → fail safe
   }
 }
-const pinnedVersion = (readCcaConfig() || {}).pinVersion || null;
+function readCcaConfig() {
+  return readCcaConfigResult().config;
+}
+const ccaConfigResult = readCcaConfigResult();
+const ccaConfigCorrupt = ccaConfigResult.corrupt;
+const pinnedVersion = (ccaConfigResult.config || {}).pinVersion || null;
 const installerVersion = require(path.join(packageDir, 'package.json')).version;
 
 // Cleanup any stray 'nul' file immediately on startup (Windows /dev/null artifact)
@@ -104,6 +122,12 @@ function getHighestAppliedId(appliedIds) {
 }
 
 function pullUpdates() {
+  if (ccaConfigCorrupt) {
+    // Can't read the pin from a corrupt config — treat as pinned and skip this silent
+    // pull rather than risk dragging a pinned project forward (fail safe).
+    console.log('\x1b[33m%s\x1b[0m', '⚠️  .claude/cca.config.json is present but not valid JSON — skipping this update pull to stay safe. Fix or delete the file, then re-run.');
+    return;
+  }
   if (pinnedVersion && pinnedVersion !== installerVersion) {
     console.log('\x1b[90m%s\x1b[0m', `⏸  Pinned to v${pinnedVersion} — skipped the v${installerVersion} update pull (remove "pinVersion" from .claude/cca.config.json to unpin).`);
     return;
@@ -331,7 +355,14 @@ const PLUGINS_LEDGER = '.autoconfig-plugins.json';
 function readPluginsLedger(claudeDir) {
   const p = path.join(claudeDir, PLUGINS_LEDGER);
   if (!fs.existsSync(p)) return {};
-  try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return {}; }
+  try {
+    return JSON.parse(fs.readFileSync(p, 'utf8'));
+  } catch (e) {
+    // Don't let a corrupt ledger masquerade as "no plugins installed" — say so, so a
+    // failed `plugin remove` / `plugin list` is diagnosable instead of silently wrong.
+    console.log('\x1b[33m%s\x1b[0m', `⚠️  ${PLUGINS_LEDGER} is not valid JSON (${e.message}) — treating it as empty; installed plugins may not be listed or cleanly removable until you fix it.`);
+    return {};
+  }
 }
 
 function writePluginsLedger(claudeDir, ledger) {
@@ -382,7 +413,16 @@ function pluginAdd(pluginArg, claudeDir) {
     const settingsPath = path.join(claudeDir, 'settings.json');
     let userSettings = {};
     if (fs.existsSync(settingsPath)) {
-      try { userSettings = JSON.parse(fs.readFileSync(settingsPath, 'utf8')); } catch { userSettings = {}; }
+      try {
+        userSettings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      } catch (e) {
+        // A corrupt settings.json must NOT be treated as {} — that would merge the plugin
+        // fragment over an empty object and overwrite the user's entire config. Back it up
+        // and refuse (mirrors pluginRemove's leave-intact behavior).
+        const backupPath = settingsPath + '.corrupt-' + Date.now() + '.bak';
+        try { fs.copyFileSync(settingsPath, backupPath); } catch (_) { /* best effort */ }
+        throw new Error(`.claude/settings.json is not valid JSON (${e.message}) — refusing to overwrite it. A backup was saved to ${path.basename(backupPath)}. Fix or delete settings.json, then re-run.`);
+      }
     }
     mergeSettingsInto(userSettings, JSON.parse(JSON.stringify(manifest.settings)));
     fs.mkdirSync(claudeDir, { recursive: true });
@@ -503,6 +543,19 @@ if (insideClaude && !process.argv.includes('--bootstrap')) {
   console.log('   \x1b[36mnpx claude-code-autoconfig@latest\x1b[0m');
   console.log();
   process.exit(0);
+}
+
+// Corrupt-config fail-safe — must run BEFORE any file copying. A present-but-unparseable
+// cca.config.json means we can't read the pin, so a SILENT refresh (--bootstrap) must not
+// drag the project forward; skip it (re-runnable once fixed). An EXPLICIT interactive
+// install expresses intent to move, so it proceeds — but says the file was ignored.
+if (ccaConfigCorrupt) {
+  if (process.argv.includes('--bootstrap')) {
+    console.log('\x1b[33m%s\x1b[0m', '⚠️  .claude/cca.config.json is present but not valid JSON — skipping this refresh to stay safe. Fix or delete the file, then re-run.');
+    process.exit(0);
+  }
+  console.log('\x1b[33m%s\x1b[0m', '⚠️  .claude/cca.config.json is not valid JSON — ignoring it for this explicit install.');
+  console.log();
 }
 
 // Version pin gate — must run BEFORE any file copying. Bootstrap (silent refresh)
@@ -928,7 +981,10 @@ if (fs.existsSync(settingsSrc)) {
 
       fs.writeFileSync(settingsDest, JSON.stringify(userSettings, null, 2));
     } catch (err) {
-      // If merge fails, don't break the install
+      // Don't break the install if the merge fails — but don't hide it either. A silent
+      // failure here means every future upgrade stops delivering new hooks/permissions/env
+      // while installs keep reporting success.
+      console.log('\x1b[33m%s\x1b[0m', `⚠️  Could not merge updated settings into .claude/settings.json (${err.message}) — left your settings as-is; new hooks/permissions may not have been applied.`);
     }
   }
 }
