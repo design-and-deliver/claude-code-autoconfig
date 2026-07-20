@@ -99,6 +99,14 @@ function testBoxStructure() {
 
   console.log(`Found ${boxes.length} box(es)\n`);
 
+  // Guard against a vacuous pass: if a refactor moves/renames the console.log box literals so the
+  // extractor finds nothing, the per-box loop below would run zero times and "succeed". cli.js
+  // ships two boxes (READY TO CONFIGURE + READY TO UPDATE), so anything under two is a regression.
+  if (boxes.length < 2) {
+    console.error(`✗ Expected at least 2 boxes in cli.js, found ${boxes.length}`);
+    return false;
+  }
+
   for (let b = 0; b < boxes.length; b++) {
     const box = boxes[b];
     const label = `Box ${b + 1}`;
