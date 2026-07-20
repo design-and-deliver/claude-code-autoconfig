@@ -1,7 +1,7 @@
 <!-- @description (Experimental) Enable Claude to log tech debt it encounters into .claude/retro. -->
-<!-- @version 2 -->
+<!-- @version 3 -->
 <!-- @response success | Retro enabled — Claude will log tech debt to .claude/retro/ when encountered. -->
-<!-- @sideeffect Creates .claude/retro/README.md, adds agent, updates CLAUDE.md -->
+<!-- @sideeffect Creates .claude/retro/README.md, verifies shipped agent, updates CLAUDE.md -->
 <!-- @example /enable-retro | Activate tech debt tracking -->
 
 # Enable Retro
@@ -11,7 +11,7 @@ Enable the experimental Retro feature, which lets Claude log tech debt and impro
 ## What This Does
 
 1. Creates `.claude/retro/` directory with a README
-2. Creates `.claude/agents/create-retro-item.md` agent
+2. Verifies the shipped `.claude/agents/create-retro-item.md` agent is present (it ships with autoconfig — this command never authors it)
 3. Adds Retro instructions to CLAUDE.md
 
 ## Step 1: Create Retro Directory

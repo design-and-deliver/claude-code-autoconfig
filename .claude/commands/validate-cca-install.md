@@ -1,5 +1,5 @@
 <!-- @description Validates your claude-code-autoconfig installation against the latest published version. -->
-<!-- @version 2 -->
+<!-- @version 3 -->
 <!-- @response valid | Install validated — all checks passed. -->
 <!-- @response issues | Validation found {N} issue(s) with fix suggestions. -->
 <!-- @sideeffect Read-only. Downloads latest package to temp dir for comparison, then cleans up. -->
@@ -68,7 +68,9 @@ for d in expected_dirs:
         info.append(f'OK: .claude/{d}/ exists')
 
 # --- 2. Check command files and versions ---
-dev_only = ['deploy-to-npmjs.md']
+# mirror of DEV_ONLY_FILES in bin/cli.js — keep in sync
+# (guard test: see test/dev-gate-consistency, substep 2.2)
+dev_only = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-session.md', 'eval-new-session.md', 'migrate-new-session.md', 'token-guard.js']
 pkg_cmds_dir = os.path.join(pkg_dir, '.claude', 'commands')
 local_cmds_dir = os.path.join(claude_dir, 'commands')
 
@@ -152,23 +154,33 @@ else:
     issues.append('MISSING: CLAUDE.md not found (run /autoconfig to generate)')
 
 # --- 7. Check hooks reference integrity ---
+# Schema: hooks -> {event: [matcher, ...]}, each matcher has a 'hooks' list whose
+# entries carry the 'command' string (commands live at matcher['hooks'][i]['command'],
+# NOT matcher['command']).
 if os.path.isfile(settings_path):
     try:
         settings = json.loads(open(settings_path, encoding='utf-8').read())
         hooks = settings.get('hooks', {})
         for event, matchers in hooks.items():
-            if isinstance(matchers, list):
-                for matcher in matchers:
-                    cmd = matcher.get('command', '')
-                    # Extract file paths from hook commands
-                    for token in cmd.split():
+            if not isinstance(matchers, list):
+                continue
+            for matcher in matchers:
+                if not isinstance(matcher, dict):
+                    continue
+                for hook in matcher.get('hooks', []):
+                    cmd = hook.get('command', '') if isinstance(hook, dict) else ''
+                    # Extract .js file paths. Anchored commands quote the path
+                    # (node \"...CLAUDE_PROJECT_DIR.../.claude/hooks/x.js\"), so a raw
+                    # token ends in .js\" — strip quotes before testing the suffix.
+                    for raw in cmd.split():
+                        token = raw.strip('\"')
                         if token.endswith('.js') and '.claude/' in token:
-                            hook_path = token.replace('.claude/', '')
-                            full_path = os.path.join(claude_dir, hook_path)
+                            rel_path = token.split('.claude/', 1)[1]
+                            full_path = os.path.join(claude_dir, rel_path)
                             if os.path.isfile(full_path):
-                                info.append(f'OK HOOK: {token} exists')
+                                info.append(f'OK HOOK: .claude/{rel_path} exists ({event})')
                             else:
-                                issues.append(f'BROKEN HOOK: {token} referenced in settings.json but file not found')
+                                issues.append(f'BROKEN HOOK: .claude/{rel_path} referenced in settings.json ({event}) but file not found')
     except:
         pass
 
