@@ -85,6 +85,15 @@
  *   /analyze-session forensic digest and waits (does NOT answer the pending prompt). It is a SOFT
  *   relay card, never a decision:'block' — a soft interrupt safe even in the light default
  *   posture, not only under token-saver. Off -> the passive standalone warning note.
+ *   Spike ATTRIBUTION (2026-07-19): the windows are account-level and the user runs several
+ *   sessions at once, so blaming the whole meter jump on "that last turn" is wrong the moment a
+ *   second session is busy. Every Stop appends the turn's weighted spend to a global ledger
+ *   (~/.claude/.token-guard/spend-ledger.jsonl, pruned to a trailing 6h); when a spike fires, the
+ *   interval's ledger slice picks the copy: other sessions materially present -> cumulative
+ *   phrasing ("your K open sessions together used X% in the last M min; this one drove ~P% of
+ *   that spend"); ledger silent/absent -> neutral "your usage climbed" (never single-turn blame —
+ *   web and other-machine sessions never reach the ledger); confirmed-solo -> the original
+ *   single-turn copy. The $ figures live only in the ledger; the copy stays %-and-tokens.
  *   windowThresholdWarn true · windowThresholdWarnPct [50, 80] — R12b: a warn LADDER (a single
  *   number still works). Fires once per RUNG per window cycle as the tightest live window (5h OR
  *   weekly) climbs past each mark; an escalation to a higher rung mid-cycle fires again; re-arms
@@ -925,7 +934,8 @@ function loadState(projectDir, sid) {
     nudgedScope: null, driftSnooze: null,
     approvedPayloadHop: null, payloadGateOkOnce: null,
     turnPayloadTok: 0, turnPayloadWarned: false, miniBombGateArmed: false,
-    lastWindowPct: null, lastWindowResetsAt: null, warnedWindow: null, lastTurnDeltaUsd: 0 };
+    lastWindowPct: null, lastWindowResetsAt: null, lastWindowAtIso: null, warnedWindow: null,
+    lastTurnDeltaUsd: 0 };
   try {
     return Object.assign(blank,
       JSON.parse(fs.readFileSync(path.join(stateDir(projectDir), `${sid}.json`), 'utf8')));
@@ -1367,21 +1377,108 @@ function effectiveWarn(worst, a, b) {
   return score(a) >= score(b) ? (a || b || null) : b;
 }
 
+// R12a spike attribution — the account-level meter can jump because of ANY session, not just this
+// one (the user runs several at once; Andrew 2026-07-19, four concurrent). Each Stop appends that
+// turn's weighted spend here; the spike copy then splits the interval's observed spend by session
+// instead of blaming the local turn. JSONL, one line per turn, lazily pruned so it never grows
+// unbounded. Web / other-machine sessions never write here — readers treat "no entries" as
+// UNKNOWN, never as proof this session did it.
+function spendLedgerPath() { return path.join(os.homedir(), '.claude', '.token-guard', 'spend-ledger.jsonl'); }
+
+function appendSpendLedger(entry) {
+  try {
+    const p = spendLedgerPath();
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.appendFileSync(p, JSON.stringify(entry) + '\n');
+    // prune lazily, only once the file is big enough to matter (keeps the Stop path cheap);
+    // trailing 6h covers the 5h window + slack
+    if (fs.statSync(p).size > 131072) {
+      const keepAfter = Date.now() - 6 * 3600 * 1000;
+      const kept = fs.readFileSync(p, 'utf8').split('\n').filter(l => {
+        if (!l) return false;
+        try { return Date.parse(JSON.parse(l).ts) >= keepAfter; } catch (_) { return false; }
+      });
+      fs.writeFileSync(p, kept.join('\n') + (kept.length ? '\n' : ''));
+    }
+  } catch (_) { /* attribution degrades to the neutral copy, never blocks the turn */ }
+}
+
+function readSpendLedger(sinceIso) {
+  if (!sinceIso) return null;                     // no interval anchor -> attribution unknown
+  const since = Date.parse(sinceIso);
+  if (!Number.isFinite(since)) return null;
+  try {
+    return fs.readFileSync(spendLedgerPath(), 'utf8').split('\n').flatMap(l => {
+      if (!l) return [];
+      try {
+        const e = JSON.parse(l);
+        return Date.parse(e.ts) >= since && typeof e.usd === 'number' ? [e] : [];
+      } catch (_) { return []; }
+    });
+  } catch (_) { return null; }                    // no ledger yet -> unknown, not solo
+}
+
+// Pure: split an interval's ledger entries into this session vs the rest. Null when nothing is
+// attributable (callers fall back to the neutral copy). `busyOthers` counts only sessions above
+// a dust floor — a session that idled through the interval doesn't change the story. `share` is
+// this session's fraction of the LEDGERED spend (unledgered web/other-machine work is invisible
+// here, which is exactly why the unknown branch exists).
+function spikeAttribution(entries, sid) {
+  if (!entries || !entries.length) return null;
+  let thisUsd = 0; const others = {};
+  for (const e of entries) {
+    if (e.sid === sid) thisUsd += e.usd;
+    else others[e.sid] = (others[e.sid] || 0) + e.usd;
+  }
+  const otherUsd = Object.values(others).reduce((a, v) => a + v, 0);
+  const busyOthers = Object.values(others).filter(v => v >= 0.02).length;
+  const total = thisUsd + otherUsd;
+  if (total <= 0) return null;
+  return { thisUsd, otherUsd, busyOthers, sessions: busyOthers + 1, share: thisUsd / total };
+}
+
+// Copy chooser: 'solo' keeps the single-turn blame, 'multi' switches to cumulative phrasing,
+// 'unknown' gets the neutral climbed-since copy — never blame without evidence. 15% other-spend
+// is the materiality bar: below it the single-turn story still holds. Pure + exported for tests.
+function spikeCopyMode(attr) {
+  if (!attr) return 'unknown';
+  if (attr.busyOthers >= 1 && attr.share <= 0.85) return 'multi';
+  return 'solo';
+}
+
 // The relayed copy — instructions TO the model (mirrors the idle/bomb notes). NEVER a dollar
 // figure: window budget is rate-limit consumption, and on a subscription a $ reads as a phantom
 // charge. Pure + exported so a golden test can pin the contract.
-function windowSpikeNote(sv, now5h) {
+function windowSpikeNote(sv, now5h, attr, mins) {
   const reset = now5h && now5h.resetsAt ? ` and resets ${fmtReset(now5h.resetsAt)}` : '';
   const magnitude = sv.estimated
     ? `an estimated ~${Math.round(sv.spikePct)}% of the 5-hour usage window (the meter was ` +
       `unreachable, so this is calibrated from the turn's weighted cost, not measured)`
     : `~${Math.round(sv.spikePct)} points of the 5-hour usage window (it climbed from ~` +
       `${sv.fromPct}% to ~${sv.toPct}% used${reset})`;
+  // The estimated fallback is derived from THIS turn's own weighted cost, so single-turn blame
+  // is accurate there by construction; only the meter-delta path needs attribution.
+  const mode = sv.estimated ? 'solo' : spikeCopyMode(attr);
+  const span = mins ? `in the last ~${mins} min` : `since the user's last turn here`;
+  const actor = mode === 'multi'
+    ? `${span}, work across the user's ${attr.sessions} concurrent sessions ate ${magnitude} — ` +
+      `this session drove ~${Math.round(attr.share * 100)}% of that spend`
+    : mode === 'unknown'
+      ? `${span}, the account-level meter climbed ${magnitude} — attribution is unknown (other ` +
+        `open sessions, devices, or the web app may have contributed)`
+      : `since the user's last turn, a single stretch of work ate ${magnitude}`;
+  const s1 = mode === 'multi'
+    ? `Sentence 1 names the jump as the combined work of their ${attr.sessions} open sessions ` +
+      `with this session's ~${Math.round(attr.share * 100)}% share — never "that last turn"`
+    : mode === 'unknown'
+      ? `Sentence 1 names the climb in window % WITHOUT pinning it on this session's last turn ` +
+        `(other sessions may have contributed)`
+      : `Sentence 1 names the jump in window %`;
   return (
-    `window-spike: since the user's last turn, a single stretch of work ate ${magnitude}. Relay ` +
+    `window-spike: ${actor}. Relay ` +
     `this as a STANDALONE warning block, never woven into your answer: open with "⚠️ Hey —" and ` +
     `keep a warm conversational voice (helpful friend, not system log), 2 plain sentences, NO ` +
-    `dollar figures (this is rate-limit budget, not money). Sentence 1 names the jump in window %; ` +
+    `dollar figures (this is rate-limit budget, not money). ${s1}; ` +
     `sentence 2 the out — a lighter next turn, or /clear and a fresh session if that heavy work is ` +
     `done. Then a horizontal rule before the answer itself.`
   );
@@ -1393,7 +1490,7 @@ function windowSpikeNote(sv, now5h) {
 // passive note (window budget is a rate limit, not money). Because it's a relayed card and NOT a
 // `decision:'block'`, it stays a soft interrupt — safe to ship on by default (it never hard-blocks
 // a turn, unlike the R12b throttle gate). Pure + exported so a golden test pins it.
-function windowSpikeConfirmNote(sv, now5h, sid) {
+function windowSpikeConfirmNote(sv, now5h, sid, attr, mins) {
   const reset = now5h && now5h.resetsAt ? `, resets ${fmtReset(now5h.resetsAt)}` : '';
   const magnitude = sv.estimated
     ? `an estimated ~${Math.round(sv.spikePct)}% of your 5-hour usage window (calibrated from the ` +
@@ -1401,13 +1498,34 @@ function windowSpikeConfirmNote(sv, now5h, sid) {
     : `~${Math.round(sv.spikePct)}% of your 5-hour usage window (it climbed from ~${sv.fromPct}% to ` +
       `~${sv.toPct}% used${reset})`;
   const analyze = sid ? `/analyze-session ${sid}` : '/analyze-session';
+  // Estimated fallback derives from THIS turn's own cost — single-turn blame is accurate there.
+  const mode = sv.estimated ? 'solo' : spikeCopyMode(attr);
+  const span = mins ? ` in the last ~${mins} min` : '';
+  const question = mode === 'multi'
+    ? `"⚠️ Hey — your ${attr.sessions} open sessions together used ${magnitude}${span}; this one ` +
+      `drove about ${Math.round(attr.share * 100)}% of that spend. That's a big bite out of your ` +
+      `rate-limit window — not a bill, but a throttle (lost access until it resets) if it runs out. ` +
+      `Want to keep going, or pause and see where this session's tokens went?"`
+    : mode === 'unknown'
+      ? `"⚠️ Hey — your usage climbed ${magnitude}${span}, and not necessarily from this session ` +
+        `alone (other open sessions or devices may have contributed). Not a bill, but a throttle ` +
+        `(lost access until it resets) if it runs out. Want to keep going, or pause and see where ` +
+        `this session's tokens went?"`
+      : `"⚠️ Hey — that last turn used ${magnitude}. That's a big single bite out of your rate-limit ` +
+        `window — not a bill, but a throttle (lost access until it resets) if it runs out. Want to keep ` +
+        `going, or pause and see where the tokens went?"`;
+  const lead = mode === 'multi'
+    ? `since the user's last turn HERE, work spread across ${attr.sessions} of their concurrent ` +
+      `sessions used ${magnitude}`
+    : mode === 'unknown'
+      ? `since the user's last turn here, the account-level meter climbed ${magnitude} ` +
+        `(attribution unknown — possibly other sessions or devices)`
+      : `since the user's last turn, one stretch of work used ${magnitude}`;
   return (
-    `window-spike(confirm): since the user's last turn, one stretch of work used ${magnitude}. Present ` +
+    `window-spike(confirm): ${lead}. Present ` +
     `it as a SINGLE self-contained AskUserQuestion card — do NOT render any warning prose above it. ` +
     `The card's \`question\` field is this line VERBATIM (the agreed copy):\n` +
-    `"⚠️ Hey — that last turn used ${magnitude}. That's a big single bite out of your rate-limit ` +
-    `window — not a bill, but a throttle (lost access until it resets) if it runs out. Want to keep ` +
-    `going, or pause and see where the tokens went?"\n` +
+    question + `\n` +
     `Header chip: "Window spike". TWO options, primary first. Option 1 — label "Keep going". Option 2 ` +
     `— label "Unpack it — where did the tokens go?". BOTH options are bare labels with NO description ` +
     `— the labels say it all, do NOT add subtext to either. NEVER narrate any internal mechanism (no ` +
@@ -1698,10 +1816,20 @@ async function onUserPromptSubmit(data, projectDir) {
       // windowSpikeConfirm upgrades the passive note to an interactive AskUserQuestion card — a SOFT
       // relay, never a decision:'block', so it can't stall the turn. Off -> the standalone note.
       if (sv.fire) {
-        notes.push(cfg.windowSpikeConfirm ? windowSpikeConfirmNote(sv, now5h, sid) : windowSpikeNote(sv, now5h));
+        // Attribute the interval's spend across sessions before wording the flag — the meter is
+        // account-level, so "that last turn" is only sayable when the ledger shows we were alone.
+        const attr = spikeAttribution(readSpendLedger(st.lastWindowAtIso), sid);
+        const mins = st.lastWindowAtIso && Number.isFinite(Date.parse(st.lastWindowAtIso))
+          ? Math.max(1, Math.round((Date.now() - Date.parse(st.lastWindowAtIso)) / 60000)) : null;
+        notes.push(cfg.windowSpikeConfirm
+          ? windowSpikeConfirmNote(sv, now5h, sid, attr, mins)
+          : windowSpikeNote(sv, now5h, attr, mins));
       }
       // advance the baseline whenever the meter is live (fired or not) so the next delta is fresh
-      if (now5h) { st.lastWindowPct = now5h.pct; st.lastWindowResetsAt = now5h.resetsAt; }
+      if (now5h) {
+        st.lastWindowPct = now5h.pct; st.lastWindowResetsAt = now5h.resetsAt;
+        st.lastWindowAtIso = new Date().toISOString();
+      }
     }
     if (cfg.windowThresholdWarn || cfg.windowThresholdGate) {
       const worst = tightestWindow(official);
@@ -1854,6 +1982,12 @@ function onStop(data, projectDir) {
   // Stash the turn's weighted spend so R12a's spike flag has a denominator when the live window
   // meter is unreachable (its only fallback path; the primary path uses the meter's own % delta).
   st.lastTurnDeltaUsd = Math.max(0, delta);
+  // R12a attribution ledger — this turn's spend, visible to every OTHER session's spike check
+  // (the meter is account-level; see spendLedgerPath). Dust floor keeps no-op turns out.
+  if (cfg.windowSpikeWarn && delta > 0.001) {
+    appendSpendLedger({ ts: new Date().toISOString(), sid,
+      proj: path.basename(projectDir || ''), usd: Math.round(delta * 10000) / 10000 });
+  }
 
   // R2: workflow growth -> usage-log receipt + queue a one-line receipt for the next prompt +
   // update the project-level history the launch confirm quotes.
@@ -2521,4 +2655,5 @@ module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, l
   writeMigrateCandidate, clearMarker, writeRecoverPointer, idleReturnNote,
   migrateReceipt, resolveConfig, TOKEN_SAVER,
   fiveHourWindow, tightestWindow, windowSpikeVerdict, windowThresholdVerdict, effectiveWarn,
+  spikeAttribution, spikeCopyMode,
   windowSpikeNote, windowSpikeConfirmNote, windowThresholdNote, windowThresholdGateReason };

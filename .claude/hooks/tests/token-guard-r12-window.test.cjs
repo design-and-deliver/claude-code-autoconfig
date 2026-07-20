@@ -12,6 +12,7 @@ const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
 const {
   resolveConfig, TOKEN_SAVER,
   fiveHourWindow, tightestWindow, windowSpikeVerdict, windowThresholdVerdict, effectiveWarn,
+  spikeAttribution, spikeCopyMode,
   windowSpikeNote, windowSpikeConfirmNote, windowThresholdNote, windowThresholdGateReason,
 } = require(HOOK);
 
@@ -358,4 +359,79 @@ test('windowSpikeConfirmNote labels the estimate path and omits the sid when the
   assert.match(note, /not measured/);
   assert.match(note, /\/analyze-session/);
   assert.ok(!/\/analyze-session \w/.test(note), 'no sid to append when the session id is empty');
+});
+
+// ---------- R12a attribution: the account meter moves for EVERY session, so the copy must too ----------
+
+const SV = { spikePct: 36, fromPct: 34, toPct: 70, estimated: false };
+
+test('spikeAttribution splits interval spend into this-session vs busy others (dust-floored)', () => {
+  const attr = spikeAttribution([
+    { sid: 'me', usd: 2 }, { sid: 'a', usd: 1 }, { sid: 'a', usd: 0.5 }, { sid: 'b', usd: 0.01 },
+  ], 'me');
+  assert.equal(attr.thisUsd, 2);
+  assert.equal(attr.otherUsd, 1.51);
+  assert.equal(attr.busyOthers, 1);            // 'b' idled under the dust floor — not a story-changer
+  assert.equal(attr.sessions, 2);
+  assert.ok(Math.abs(attr.share - 2 / 3.51) < 1e-9);
+});
+
+test('spikeAttribution returns null when nothing is attributable (empty, absent, or zero spend)', () => {
+  assert.equal(spikeAttribution(null, 'me'), null);
+  assert.equal(spikeAttribution([], 'me'), null);
+  assert.equal(spikeAttribution([{ sid: 'a', usd: 0 }], 'me'), null);
+});
+
+test('spikeCopyMode: unknown without evidence, solo when alone or dominant, multi when others material', () => {
+  assert.equal(spikeCopyMode(null), 'unknown');
+  assert.equal(spikeCopyMode(spikeAttribution([{ sid: 'me', usd: 3 }], 'me')), 'solo');
+  // 95% ours: the single-turn story still holds
+  assert.equal(spikeCopyMode(spikeAttribution([{ sid: 'me', usd: 9 }, { sid: 'a', usd: 0.5 }], 'me')), 'solo');
+  assert.equal(spikeCopyMode(spikeAttribution([{ sid: 'me', usd: 1 }, { sid: 'a', usd: 1 }], 'me')), 'multi');
+});
+
+test('REGRESSION: the confirm card never blames "that last turn" when other sessions were busy', () => {
+  // the 2026-07-19 misfire: four concurrent sessions, a ~34→~70 climb pinned on THIS session's
+  // last turn. With others busy in the interval the card must go cumulative: sessions + share.
+  const attr = spikeAttribution([
+    { sid: 'me', usd: 1 }, { sid: 's2', usd: 3 }, { sid: 's3', usd: 2 },
+  ], 'me');
+  const note = windowSpikeConfirmNote(SV, now(70), 'me', attr, 12);
+  assert.ok(!/that last turn/.test(note), 'single-turn blame is wrong under concurrency');
+  assert.match(note, /3 open sessions together/);   // 2 busy others + this one
+  assert.match(note, /in the last ~12 min/);
+  assert.match(note, /about 17% of that spend/);    // 1 of 6 ledgered dollars, rounded
+  assert.match(note, /Keep going/);
+  assert.ok(!/\$\d/.test(note), 'ledger dollars must never leak into the copy');
+});
+
+test('confirm card with NO attribution data goes neutral — a climb, not a blame', () => {
+  const note = windowSpikeConfirmNote(SV, now(70), 'me', null, null);
+  assert.match(note, /usage climbed/);
+  assert.match(note, /other open sessions or devices/);
+  assert.ok(!/that last turn/.test(note), 'no evidence, no single-turn blame');
+});
+
+test('confirm card keeps the single-turn copy when the ledger shows this session was alone', () => {
+  const attr = spikeAttribution([{ sid: 'me', usd: 4 }], 'me');
+  const note = windowSpikeConfirmNote(SV, now(70), 'me', attr, 9);
+  assert.match(note, /that last turn used/);        // confirmed solo — the original copy is right
+});
+
+test('the passive windowSpikeNote makes the same three-way call', () => {
+  const multi = spikeAttribution([{ sid: 'me', usd: 1 }, { sid: 'a', usd: 2 }], 'me');
+  const m = windowSpikeNote(SV, now(70), multi, 8);
+  assert.match(m, /2 concurrent sessions/);
+  assert.match(m, /~33% of that spend/);
+  assert.ok(!/single stretch of work/.test(m));
+  const u = windowSpikeNote(SV, now(70), null, null);
+  assert.match(u, /attribution is unknown/);
+  const s = windowSpikeNote(SV, now(70), spikeAttribution([{ sid: 'me', usd: 4 }], 'me'), 5);
+  assert.match(s, /single stretch of work/);
+});
+
+test('the estimated fallback keeps single-turn copy — it is derived from THIS turn\'s own cost', () => {
+  const est = { spikePct: 40, fromPct: null, toPct: null, estimated: true };
+  const busy = spikeAttribution([{ sid: 'me', usd: 1 }, { sid: 'a', usd: 5 }], 'me');
+  assert.match(windowSpikeConfirmNote(est, null, 'me', busy, 4), /that last turn used/);
 });
