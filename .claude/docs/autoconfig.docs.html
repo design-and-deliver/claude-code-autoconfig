@@ -1013,6 +1013,11 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">arcade-beeps.js</span>
                             </div>
+                            <div class="tree-item indent-3 hidden" data-info="auto-guard-hook" data-parent="hooks">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">auto-guard.js</span>
+                            </div>
                             <div class="tree-item indent-3 hidden" data-info="feedback-rule-check-hook" data-parent="hooks">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
@@ -1502,6 +1507,11 @@
                 title: 'arcade-beeps.js',
                 desc: 'arcade-beeps.js in hooks/',
                 trigger: 'PostToolUse hook'
+            },
+            'auto-guard-hook': {
+                title: 'auto-guard.js',
+                desc: 'Opt-in guard rails: asks before pushes, installs, and credential touches; blocks curl|bash',
+                trigger: 'PreToolUse on Bash'
             },
             'feedback-rule-check-hook': {
                 title: 'feedback-rule-check.js',

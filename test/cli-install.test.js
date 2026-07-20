@@ -259,6 +259,35 @@ test('/autoconfig and /autoconfig-update both carry the asked-once auto-mode opt
   }
 });
 
+test('auto-guard hook ships, is always refreshed, and is registered in shipped settings', () => {
+  assertExists(path.join(PACKAGE_CLAUDE_DIR, 'hooks', 'auto-guard.js'), 'auto-guard.js should exist');
+  const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
+  assert(
+    /MANAGED_HOOKS\s*=\s*\[[^\]]*'auto-guard\.js'[^\]]*\]/.test(cliCode),
+    'auto-guard.js should be in MANAGED_HOOKS so fixes reach existing installs'
+  );
+  const settings = JSON.parse(fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'settings.json'), 'utf8'));
+  const pre = settings.hooks.PreToolUse || [];
+  assert(
+    pre.some(m => m.matcher === 'Bash' && m.hooks.some(h => h.command && h.command.includes('auto-guard.js'))),
+    'shipped settings should register auto-guard as a PreToolUse Bash hook'
+  );
+});
+
+test('/autoconfig and /autoconfig-update both carry the asked-once auto-guard opt-in', () => {
+  for (const name of ['autoconfig', 'autoconfig-update']) {
+    const content = fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'commands', `${name}.md`), 'utf8');
+    assert(
+      content.includes('"autoGuardPrompted": true'),
+      `${name}.md should gate the auto-guard question on the autoGuardPrompted flag`
+    );
+    assert(
+      content.includes('"autoGuard": { "enabled": true }'),
+      `${name}.md should enable the guard via autoGuard.enabled in cca.config.json`
+    );
+  }
+});
+
 test('shipped project settings templates never set defaultMode', () => {
   for (const name of ['settings.json', 'settings.local.json']) {
     const p = path.join(PACKAGE_CLAUDE_DIR, name);

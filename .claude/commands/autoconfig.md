@@ -1,5 +1,5 @@
 <!-- @description Configures Claude Code scaffolding for your project. Sets up settings, permissions, hooks, commands, and docs. -->
-<!-- @version 14 -->
+<!-- @version 15 -->
 <!-- @response success | Scaffolding configured, CLAUDE.md initialized, docs opened in browser. -->
 <!-- @response no-project | No project detected — asks user to confirm directory. -->
 <!-- @sideeffect Initializes CLAUDE.md, settings.json, hooks, commands, and MEMORY.md -->
@@ -271,6 +271,22 @@ Offer Claude Code's auto permission mode. This is deliberately a **user-level** 
      - "No thanks"
 3. On **yes**: Read `~/.claude/settings.json` (treat a missing file as `{}`), add `"defaultMode": "auto"` under `permissions` while preserving every existing key, and Write it back. Then tell the user: "Auto mode is on for new sessions in all projects. Revert anytime: Shift+Tab in a session, or delete `permissions.defaultMode` from `~/.claude/settings.json`. (If your plan or model doesn't support auto mode, Claude Code ignores the setting.)"
 4. On **yes or no** (not on skip): merge `"autoModePrompted": true` into `.claude/cca.config.json` with the Write tool, preserving any existing keys — `/autoconfig-update` uses this to avoid re-asking on upgrades.
+
+### Auto-Guard Opt-in
+
+Offer the deterministic guard rails (`.claude/hooks/auto-guard.js`, already registered in settings). The hook is inert until `autoGuard.enabled` is true in `.claude/cca.config.json` — this question is what turns it on.
+
+1. **Skip silently** if any of these hold:
+   - `.claude/cca.config.json` already has an `autoGuard` key (already configured), or
+   - `.claude/cca.config.json` has `"autoGuardPrompted": true` (already asked), or
+   - the run is headless / the question can't be answered.
+2. Otherwise ask with the AskUserQuestion tool:
+   - Question: "Add guard rails for risky commands?"
+   - Options:
+     - "Yes, add guard rails (recommended)" — description: "Claude always asks before pushes, new package installs, credential-file reads, and destructive git commands — and always blocks downloads piped into a shell — even when other settings would auto-approve them. Tune or disable per category in .claude/cca.config.json."
+     - "No thanks"
+3. On **yes**: merge `"autoGuard": { "enabled": true }` into `.claude/cca.config.json` with the Write tool, preserving any existing keys. Then tell the user: "Guard rails are on. Categories: credentials, installs, publish, destructiveGit (ask) and pipeToShell (deny) — set any of them to \"ask\", \"deny\", or \"off\" under autoGuard.categories in .claude/cca.config.json."
+4. On **yes or no** (not on skip): merge `"autoGuardPrompted": true` into `.claude/cca.config.json`, preserving any existing keys — `/autoconfig-update` uses this to avoid re-asking on upgrades.
 
 ### Status Beeps Opt-in
 

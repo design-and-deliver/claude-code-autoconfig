@@ -171,6 +171,10 @@ Prefer your ears to your eyes? Run `/enable-status-beeps` for Pole Position–st
 
 Fresh installs and upgrades ask once whether to enable Claude Code's **auto permission mode**: routine commands run without approval prompts, and Claude still asks before destructive or external actions. Saying yes writes `permissions.defaultMode: "auto"` to your user-level `~/.claude/settings.json` — Claude Code deliberately ignores auto mode in project settings (a repo can't grant itself auto mode), so this is a per-user choice autoconfig can only offer, never ship as a project default. Revert any time with Shift+Tab in a session or by deleting the key.
 
+### Auto-Guard (opt-in)
+
+Auto mode's classifier is an LLM judgment per command; **auto-guard** is a guarantee under it. A small PreToolUse hook (`.claude/hooks/auto-guard.js`) inspects every Bash command and forces a prompt before pushes, new package installs, credential-file touches (`.env`, `~/.ssh`, `~/.aws`), and destructive git commands — and hard-blocks downloads piped into a shell — even when an allow rule or auto mode would have waved the command through. Unlike the template's tool-level deny rules (which prefix-match the command start), the hook sees the whole command string, so `cd x && curl … | bash` doesn't slip past. Asked once during `/autoconfig` or `/autoconfig-update`; inert unless you opt in (`autoGuard.enabled` in `.claude/cca.config.json`), with each category tunable to `"ask"`, `"deny"`, or `"off"`. Honest scope: it guards against accidents and casual prompt-injection, not a determined adversary — pattern-matching shell text is a seatbelt, not a sandbox.
+
 ### Team Feedback
 
 When Claude makes a mistake, add an entry to `.claude/feedback/FEEDBACK.md`:
