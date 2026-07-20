@@ -74,6 +74,16 @@ Replace `{TIMESTAMP}` with the current UTC time in format `YYYY-MM-DD HH:MM:SS` 
 
 **If CLAUDE.md already exists**, preserve all existing content. Only ensure the auto-generated markers and Discoveries section are present. Do not overwrite user content or existing Discoveries.
 
+**Flavor-package managed blocks (cca- markers).** CLAUDE.md may contain blocks delimited by:
+
+```markdown
+<!-- cca-<name>:begin ... -->
+...
+<!-- cca-<name>:end -->
+```
+
+(e.g. `cca-me` from the claude-code-cad mechanical-engineering package). These blocks are owned by flavor packages layered on top of autoconfig. **Never edit, move, or delete them.** Any time you rewrite or restructure CLAUDE.md, copy every `cca-` block through verbatim, byte for byte, in its original position relative to the surrounding content.
+
 ## Step 2: Create Rules Directory
 
 Create `.claude/rules/` directory if it doesn't exist by writing a `.gitkeep` file to it:

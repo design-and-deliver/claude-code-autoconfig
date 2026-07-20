@@ -1,5 +1,5 @@
 <!-- @description Ensures CLAUDE.md has the required markers and Discoveries section. -->
-<!-- @version 3 -->
+<!-- @version 4 -->
 <!-- @response success | CLAUDE.md verified and updated if needed. -->
 <!-- @sideeffect May add markers or Discoveries section if missing, preserves all existing content -->
 <!-- @example /sync-claude-md | Verify CLAUDE.md structure -->
@@ -37,7 +37,9 @@ Check that CLAUDE.md exists and has the required elements:
    <!-- Claude: append project-specific learnings, gotchas, and context below. This section persists across /autoconfig runs. -->
    ```
 
-If any of these are missing, add them. **Never remove or overwrite existing content** — especially the Discoveries section, which contains organic learnings from real work.
+4. **Flavor-package managed blocks** — if CLAUDE.md contains blocks delimited by `<!-- cca-<name>:begin ... -->` … `<!-- cca-<name>:end -->` (e.g. `cca-me` from claude-code-cad), leave them exactly as found. They are owned by flavor packages; never edit, move, or delete them, and copy them through verbatim on any rewrite.
+
+If any of these are missing, add them. **Never remove or overwrite existing content** — especially the Discoveries section, which contains organic learnings from real work, and any `cca-` managed block.
 
 If CLAUDE.md doesn't exist at all, create it with the minimal template from `/autoconfig` Step 1.
 
