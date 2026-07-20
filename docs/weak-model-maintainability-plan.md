@@ -234,7 +234,7 @@ don't restore the lie).
 
 ## Phase 2 — Make wrong edits fail loudly
 
-### ☐ 2.1 Gate publishing on the test suite (02-3.1)
+### ☑ 2.1 Gate publishing on the test suite (02-3.1)
 
 Add to package.json scripts: `"prepublishOnly": "npm test"` and `"preversion": "npm test"`.
 This is the highest-leverage edit in the whole plan — every test that follows becomes
@@ -616,3 +616,19 @@ Append one entry after each substep, newest last. Format:
   `bin/ccr.js` by file path, not via the published bin. recover.json's flat shape stays
   frozen regardless (T16). (3) `git stash pop` refuses to merge into dirty files even when
   hunks are disjoint — `git diff 'stash@{0}^' 'stash@{0}' | git apply` does it cleanly.
+
+### 2026-07-20 — substep 2.1 — done
+- Commit: 7f8347d `chore: gate npm version/publish on the full test suite`
+- Deviations: none. Added `"preversion": "npm test"` and `"prepublishOnly": "npm test"`
+  to package.json scripts, placed directly after the `test` entry (keeps the version-
+  lifecycle hooks near it; `postversion` untouched).
+- Discoveries: (1) Verify used the real `npm publish --dry-run` (exit 0): `prepublishOnly`
+  visibly fired `npm test` (full suite, 189 hook subtests + all top-level suites green)
+  BEFORE packing, then built the 1.0.216 tarball (58 files, 290.8 kB) — `(dry-run)`, so
+  nothing was published (deploy-approval rule intact; the plan itself prescribes the
+  dry-run). (2) `preversion` fires only on `npm version`, which must NOT be run here
+  (bump+commit+tag = a deploy action), so it was verified by inspection, not execution —
+  its correctness is identical to the dry-run-verified `prepublishOnly`. (3) The whole
+  point per the plan: every test added in 2.2–2.9 now becomes publish-gating automatically,
+  no further wiring. (4) Line-ending note: `package.json` has LF in-repo; git warns it'll
+  store CRLF on next touch — pre-existing, unrelated to this edit.
