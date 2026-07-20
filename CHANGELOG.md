@@ -4,6 +4,20 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.215
+- feat(commands): New /sync-claude-md repairs CLAUDE.md structure if markers go missing; /submit-claude-code-github-issue files an upstream Claude Code issue with duplicate-checking first; a new docs-refresh agent keeps the interactive docs current when .claude files change.
+- feat(retro): New opt-in /enable-retro — when enabled, Claude logs tech debt and improvement ideas it notices into .claude/retro as small structured story files you can pick up later.
+- feat(commit-guard): Claude now reminds you when a lot of uncommitted work piles up, and knows to stay quiet while you're actively committing in any terminal. New /check-commit command runs the check on demand.
+- feat(terminal-title): Terminal tabs for plan-driven work now lead with the plan's name, so parallel sessions from the same plan group together visually.
+- feat(token-guard): Usage-spike warnings now tell you when other open sessions drove the spend, instead of blaming your last turn here.
+- feat(terminal-title): Claude now answers yes/no questions with a numbered 1-yes/2-no
+- fix(token-guard): Usage-window checkpoints now announce once per window cycle across all your sessions, instead of repeating in every new session.
+- feat(commands): New /continue command — after /clear (or a fresh session in the same
+- feat(terminal-title): /recover-context (no arguments) now recovers exactly the session that
+- feat(commands): /recover-context now works with no arguments — after /clear or in a
+- feat(token-guard): The "session sat idle" warning now gives you a short command to type in
+- feat(token-guard): The stale-session warning can now end with a one-click Yes/No card — pick Yes and a recovered session opens in a new terminal window, no retyping.
+
 ## v1.0.214
 - feat(token-guard): New ccr command — when the token-guard blocks a stale idle session, just exit and type ccr to pick the same work up in a fresh, cheap session, no retyping the recovery command.
 - feat(token-guard): The "this session has drifted" nudge now checks whether your current message actually returns to the earlier topic (and whether that earlier work ever finished) before speaking up — and if the moment is wrong it quietly retries a few prompts later instead of never offering again.
@@ -160,7 +174,4 @@
 
 ## v1.0.167
 - fix: postversion creates separate commit instead of amending
-
-## v1.0.165
-- debug: add temporary changelog debug logging
 
