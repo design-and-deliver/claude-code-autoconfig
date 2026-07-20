@@ -144,7 +144,7 @@ deprecated alias) confirm a README table row exists — and no row names a nonex
 `npm test` green. (The durable test for this arrives in 2.7.)
 **Commit:** `docs(readme): match install reality — remove rules/updates/.mcp.json claims, add /continue` + `Changelog: none`.
 
-### ☐ 1.3 Retire the legacy curl installers (01-B6, C2)
+### ☑ 1.3 Retire the legacy curl installers (01-B6, C2)
 
 `install.sh` / `install.ps1` are a drifted parallel installer: 5 of 18 commands, none of the
 seven hook scripts settings.json registers (→ MODULE_NOT_FOUND on every event), unconditional
@@ -546,3 +546,18 @@ Append one entry after each substep, newest last. Format:
   (cli.js:814-901) never touches either; don't let a later step "fix" the tree back from
   that list. Cross-check script result: 16 shipped commands, all 18 table rows valid
   (16 shipped + 2 deprecated aliases). `npm test` exit 0 before commit.
+
+### 2026-07-20 — substep 1.3 — done
+- Commit: 924267a `fix(install): retire legacy curl installers — stub with npx redirect`
+- Deviations: install.ps1 stub is ASCII-only and has no `exit` statement — both forced by
+  verify-time discoveries (below). install.sh keeps its colors/em-dash and exits 1
+  (`curl | bash` runs in a subshell, so exiting is safe there).
+- Discoveries: (1) PowerShell 5.1 decodes BOM-less UTF-8 .ps1 files as cp1252, so an em
+  dash's 0x94 byte becomes a smart quote that PS treats as a string terminator → parse
+  error at verify. The original script only survived because its emoji bytes decode to
+  non-quote garbage. Keep install.ps1 pure ASCII (comment in the file says so). (2) The
+  advertised `irm … | iex` usage runs the script in the caller's session — an `exit`
+  there would close the user's terminal; the ps1 stub therefore just ends. Verified via
+  `Get-Content -Raw | iex` that the session survives. (3) Only repo reference to
+  install.sh/install.ps1 outside README/docs is test/auto-guard.test.js:97 — a generic
+  example.com URL, unrelated, untouched.
