@@ -187,6 +187,7 @@ test("reminder keeps both critical actions: title write + this session's {sid}.a
   assert(/nothing is solicited, end on a statement/.test(r.directive), 'reminder should carry the inverse (no-signal) rule');
   assert(/DIRECT QUESTION/.test(r.directive), 'reminder should demand the direct-question phrasing');
   assert(/never a declarative offer/.test(r.directive), 'reminder should name the declarative-offer failure mode');
+  assert(/AskUserQuestion/.test(r.directive), 'reminder should route closed choices to the picker');
 });
 
 test('UserPromptSubmit clears a stale {sid}.ask flag from an interrupted prior turn', () => {
@@ -496,6 +497,9 @@ test('fresh session -> idle glyph + "New session" placeholder + injects the FULL
   assert(/New session/.test(titleText(r.shown)), `expected "New session", got "${titleText(r.shown)}"`);
   assert(r.directive && /DESIGN SCOPE/.test(r.directive), 'SessionStart should inject the full RULES block');
   assert(/Pending-question signal/.test(r.directive), 'RULES should include the pending-question protocol');
+  assert(/CLOSED CHOICE/.test(r.directive) && /AskUserQuestion/.test(r.directive),
+    'RULES should route closed choices to the AskUserQuestion picker');
+  assert(/OPEN-ENDED/.test(r.directive), 'RULES should keep the open-ended text-question branch');
   assert(r.directive.includes('ss-1.txt') && r.directive.includes('ss-1.ask'),
     'RULES should name this session\'s title + ask paths');
 });

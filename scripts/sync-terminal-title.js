@@ -19,15 +19,20 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const CANONICAL = path.join(__dirname, '..', '.claude', 'hooks', 'terminal-title.js');
+// The hook reads terminal-title.directive.md from its own directory, so the pair syncs together.
+const CANONICAL_FILES = ['terminal-title.js', 'terminal-title.directive.md'];
+const canonicalFor = f => path.join(__dirname, '..', '.claude', 'hooks', f);
 
 // Personal fleet — the copies that must stay byte-derived from the canonical. Edit as repos change.
-const TARGETS = [
-  { label: 'global (~/.claude)',  file: path.join(os.homedir(), '.claude', 'hooks', 'terminal-title.js') },
-  { label: 'job-agent-extension', file: 'C:\\CODE\\job-agent-extension\\.claude\\hooks\\terminal-title.js' },
-  { label: 'wifi-app',            file: 'C:\\CODE\\wifi-app\\.claude\\hooks\\terminal-title.js' },
-  { label: 'test',                file: 'C:\\CODE\\test\\.claude\\hooks\\terminal-title.js' },
+const TARGET_DIRS = [
+  { label: 'global (~/.claude)',  dir: path.join(os.homedir(), '.claude', 'hooks') },
+  { label: 'job-agent-extension', dir: 'C:\\CODE\\job-agent-extension\\.claude\\hooks' },
+  { label: 'wifi-app',            dir: 'C:\\CODE\\wifi-app\\.claude\\hooks' },
+  { label: 'test',                dir: 'C:\\CODE\\test\\.claude\\hooks' },
 ];
+const TARGETS = TARGET_DIRS.flatMap(t =>
+  CANONICAL_FILES.map(f => ({ label: `${t.label} ${f === 'terminal-title.js' ? '' : '(directive)'}`.trim(),
+    file: path.join(t.dir, f), canonical: canonicalFor(f) })));
 
 const WRITE = process.argv.includes('--write');
 
@@ -38,25 +43,34 @@ const driftLines = (a, b) => {                                // rough count of 
   return norm(b).split('\n').filter(l => !setA.has(l)).length;
 };
 
-const canon = readOr(CANONICAL);
-if (canon == null) { console.error(`canonical not found: ${CANONICAL}`); process.exit(2); }
-
-console.log(`CANONICAL  ${CANONICAL}  (${norm(canon).split('\n').length} lines)`);
+const canonCache = {};
+for (const f of CANONICAL_FILES) {
+  const c = readOr(canonicalFor(f));
+  if (c == null) { console.error(`canonical not found: ${canonicalFor(f)}`); process.exit(2); }
+  canonCache[f] = c;
+  console.log(`CANONICAL  ${canonicalFor(f)}  (${norm(c).split('\n').length} lines)`);
+}
 console.log(`MODE       ${WRITE ? 'WRITE (sync drifted targets)' : 'CHECK (report only)'}`);
 console.log('');
 
 let drifted = 0, missing = 0, wrote = 0;
 for (const t of TARGETS) {
+  const canon = canonCache[path.basename(t.file)];
   const cur = readOr(t.file);
-  if (cur == null) { console.log(`  [miss]  ${t.label.padEnd(22)} not found (skipped)`); missing++; continue; }
-  if (norm(cur) === norm(canon)) { console.log(`  [ ok ]  ${t.label.padEnd(22)} in sync`); continue; }
-  const d = driftLines(canon, cur);
+  // A target repo missing just the directive .md is a fleet gap, not an unadopted repo — only
+  // skip when the .js itself is absent; the .md is created on --write.
+  if (cur == null && (path.basename(t.file) !== 'terminal-title.directive.md'
+      || readOr(t.file.replace(/\.directive\.md$/, '.js')) == null)) {
+    console.log(`  [miss]  ${t.label.padEnd(34)} not found (skipped)`); missing++; continue;
+  }
+  if (cur != null && norm(cur) === norm(canon)) { console.log(`  [ ok ]  ${t.label.padEnd(34)} in sync`); continue; }
+  const d = cur == null ? norm(canon).split('\n').length : driftLines(canon, cur);
   if (WRITE) {
     fs.writeFileSync(t.file, canon);
-    console.log(`  [sync]  ${t.label.padEnd(22)} updated (${d} lines)`);
+    console.log(`  [sync]  ${t.label.padEnd(34)} ${cur == null ? 'created' : 'updated'} (${d} lines)`);
     wrote++;
   } else {
-    console.log(`  [DRIFT] ${t.label.padEnd(22)} ${d} lines behind`);
+    console.log(`  [DRIFT] ${t.label.padEnd(34)} ${cur == null ? 'absent' : `${d} lines behind`}`);
     drifted++;
   }
 }
