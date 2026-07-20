@@ -467,7 +467,7 @@ Rails: `DEV_ONLY_FILES`, boxes, and all top-level install flow stay in cli.js by
 unmodified); `node bin/cli.js plugin list` works in a temp fixture.
 **Commit:** `refactor(cli): extract plugin subsystem to bin/lib/plugins.js` + `Changelog: none`.
 
-### ☐ 3.3 · M · ~45m — Extract settings merge/unmerge → `bin/lib/settings-merge.js` (G1 seam 2)
+### ☑ 3.3 · M · ~45m — Extract settings merge/unmerge → `bin/lib/settings-merge.js` (G1 seam 2)
 
 `bin/cli.js:179-310` (`migrateLegacyHookCommands`, `mergeSettingsInto`, `unmergeSettingsFrom`).
 The existing unit tests extract these functions from source text (cli-install.test.js:579-635)
@@ -1005,3 +1005,42 @@ Append one entry after each substep, newest last. Format:
   file copy + reserved-name guard, settings merge preserving a pre-existing `env` key, unmerge restoring it)
   — ALL PASS. Full `npm test` **exit 0** (all 15 top-level suites incl. plugin-system 13/13 unmodified +
   hook suites **206/206**); `npm run lint` **exit 0**. No `npm version`/publish (deploy-approval rail intact).
+
+### 2026-07-20 — substep 3.3 — done
+- Commit: bb82ab0 `refactor(cli): extract settings merge helpers to bin/lib/settings-merge.js` (ledger commit follows).
+- Deviations: (1) **Plain move, NO dependency injection** (cleaner than 3.2). The three functions
+  (`migrateLegacyHookCommands`, `mergeSettingsInto`, `unmergeSettingsFrom`) are pure — userSettings-in,
+  userSettings-out, referencing only JS globals (no `cwd`/`isReservedName`/etc.) — so cli.js just
+  `require`s them at the top (cli.js:9) and destructures all three. Bodies are byte-verbatim; only the
+  section header comment (cli.js:204-206) + the ~130 lines of definitions were replaced by a 6-line
+  pointer comment. cli.js keeps injecting `mergeSettingsInto`/`unmergeSettingsFrom` into the plugin
+  dispatch's `deps` object (cli.js:~218) — now the **imported** names, so plugins.js is untouched
+  (3.2 Discovery #1 held exactly). (2) **`extractCliFn` helper removed, not just its callers converted.**
+  cli-install.test.js:608-613's source-extract-by-`eval` helper had exactly two callers (both
+  settings-merge tests); converting them to `require('../bin/lib/settings-merge.js')` orphaned the
+  helper, so it was deleted (net −4 lines in the test's diff). The ordering-guard test
+  (cli-install.test.js:657) uses `fs.readFileSync(CLI_PATH).indexOf(...)` directly — never
+  `extractCliFn` — so `CLI_PATH`/`fs` stay in use and that test is **KEEP, untouched** per the 3.1
+  inventory. (3) The plan's cited region (cli.js:179-310) was **stale** — real definitions were
+  219-335 (same file-growth drift 3.2 flagged for its own range); extracted by content, not line number.
+- Discoveries (things 3.4 needs):
+  (1) **Ordering-guard call sites survived and shifted** — `migrateLegacyHookCommands(userSettings);`
+  and `mergeSettingsInto(userSettings, pkgSettings);` are now at cli.js:683/687 (were ~808/812; the
+  ~125-line shrink moved them up). The guard matches by `indexOf` on the exact strings, not line number,
+  so it stays green. 3.4's `pullUpdates` region (cli.js:86-177, near the TOP of the file) is far above
+  these — extracting it won't disturb the settings-merge call sites.
+  (2) **`bin/lib/` now holds two seams** (`plugins.js`, `settings-merge.js`), both `'use strict'` +
+  `module.exports`, both lint-clean under the 2.6 eslint scope (`bin/` covers `bin/lib/`). 3.4 adds
+  `updates.js` there the same way; `bin/` ships whole via package.json `files` — no `files` edit.
+  (3) **Merge/unmerge-through-import proven end-to-end**: `plugin-system.test.js` passed **unmodified**
+  (13 tests), and a manual temp-fixture round-trip (add folds `DEMO_KEY`+Stop hook while preserving the
+  user's `MY_VAR`; remove strips exactly those, `MY_VAR` survives) confirms the `deps` object still
+  resolves the two names now that they come from `require('./lib/settings-merge.js')`.
+  (4) No generated-file regen, no README/@version change (bin/lib is in no user-facing tree;
+  `autoconfig.docs.html` embeds hook headers, not cli.js — per 1.6/2.3/3.2 ledgers). Trap 4/T14 intact:
+  `DEV_ONLY_FILES` literal + ANSI boxes untouched.
+- Verify: `npm test` **exit 0** — all 12 top-level suites green (cli-install **52**, plugin-system
+  **13** unmodified, cli-behavior **27** incl. Fixture 5 the settings-merge net, + the rest) and hook
+  suites **206/206**; `npm run lint` **exit 0**; plugin add/list/remove round-trip clean. Only **3.4**
+  (extract updates + pullUpdates → `bin/lib/updates.js`; harden sync-docs markers) remains in Phase 3.
+  No `npm version`/publish (deploy-approval rail intact).
