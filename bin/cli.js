@@ -854,7 +854,10 @@ if (fs.existsSync(commandsDest)) {
 }
 
 // Copy commands (required for /autoconfig to work)
-// Preserve user's saved @screenshotDir in gls.md across upgrades
+// Preserve a legacy gls @screenshotDir marker across upgrades: read it here (pre-copy, from the
+// OLD gls.md's first line), then migrate it into cca.config.json below (post-copy). Shipped
+// gls.md (v5+) no longer carries the marker — the value now lives at cca.config.json
+// gls.screenshotDir — so the old in-file re-insert silently dropped it for these legacy users.
 const glsDest = path.join(claudeDest, 'commands', 'gls.md');
 let savedScreenshotDir = null;
 if (fs.existsSync(glsDest)) {
@@ -895,13 +898,20 @@ for (const f of fs.readdirSync(commandsDest).filter(f => f.endsWith('.md') && !D
   }
 }
 
-// Restore saved screenshot dir after commands overwrite
-if (savedScreenshotDir && fs.existsSync(glsDest)) {
-  const content = fs.readFileSync(glsDest, 'utf8');
-  fs.writeFileSync(glsDest, content.replace(
-    /<!-- @screenshotDir\s*-->/,
-    `<!-- @screenshotDir ${savedScreenshotDir} -->`
-  ));
+// Migrate a legacy gls @screenshotDir into cca.config.json (the current home for the value).
+// Only when the config isn't already tracking it (never clobber a newer value), never when the
+// config is corrupt (fail safe — a wrongly-overwritten config can't be un-broken), and
+// round-trip every existing key so nothing else is lost (additive-only, trap 1).
+if (savedScreenshotDir && !ccaConfigCorrupt) {
+  const cfg = readCcaConfig() || {};
+  if (!(cfg.gls && cfg.gls.screenshotDir)) {
+    cfg.gls = cfg.gls || {};
+    cfg.gls.screenshotDir = savedScreenshotDir;
+    try {
+      fs.writeFileSync(path.join(cwd, '.claude', 'cca.config.json'), JSON.stringify(cfg, null, 2));
+      console.log('\x1b[90m%s\x1b[0m', `📁 Preserved your saved /gls screenshot folder (${savedScreenshotDir}) in cca.config.json.`);
+    } catch (_) { /* non-fatal — a dropped legacy path just means /gls re-detects once */ }
+  }
 }
 
 // Copy docs (only .html files — skip internal planning docs)
