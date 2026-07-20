@@ -266,7 +266,7 @@ The shipped `autoconfig.docs.html` documents five dev-gated files users never re
 **Commit:** `fix(docs): single-source DEV_ONLY_FILES; stop documenting dev-only features to users` + body
 `Changelog: The interactive docs no longer show commands that aren't part of your install`.
 
-### ☐ 2.3 · L · ~1.5h — Stop the malformed-JSON data-loss paths (02-1.2, 02-1.3)
+### ☑ 2.3 · L · ~1.5h — Stop the malformed-JSON data-loss paths (02-1.2, 02-1.3)
 
 All fixes are loud-failure conversions; behavior on *valid* input is unchanged:
 
@@ -658,3 +658,35 @@ Append one entry after each substep, newest last. Format:
   uncommitted is stale. Housekeeping still open: backup `stash@{0}` "R12a runway reframe" can
   be dropped (per 1.6's ledger). (4) Full `npm test` exit 0 before commit (hook suites 189/189;
   the new suite is the 11th top-level entry in the `npm test` chain, before `hook-tests`).
+
+### 2026-07-20 — substep 2.3 — done
+- Commit: d662360 `fix(cli): corrupt JSON no longer wipes settings, unpins projects, or hides merge failures`
+- Deviations: (1) The audit named THREE data-loss paths plus the blanket merge-catch (02-1.3);
+  the `readCcaConfig` fail-safe turned out to need **two** guards, not one — `pinnedVersion` is
+  read once at module load and gates BOTH silent-refresh paths (`pullUpdates()` at cli.js:~112
+  and the `--bootstrap` pin gate at cli.js:~524). A single guard at the pin gate would have left
+  `--pull-updates` unprotected (it dispatches at cli.js:174, long before the pin gate). Solution:
+  `readCcaConfigResult()` exposes a module-level `ccaConfigCorrupt` const consumed by both
+  guards (single source). (2) The `plugin add` fatal now **throws** (caught by the uniform
+  red-error printer in `runPluginCommand`, cli.js:474-477) instead of a bespoke
+  `console.log`+`process.exit(1)` — matches the file's established error path. (3) All messages
+  use `console.log` (not `console.error`), matching house style (e.g. the inside-Claude red
+  block at cli.js:499) so a single stdout capture sees them.
+- Discoveries: (1) **Two silent-refresh entry points, not one** — any future pin-related change
+  must cover both `pullUpdates()` AND the `--bootstrap` pin gate; they're ~400 lines apart and
+  both read the same `pinnedVersion`/`ccaConfigCorrupt` module consts. (2) Fail-safe *direction*
+  is deliberate and asymmetric: a corrupt config makes a silent refresh SKIP (a wrongly-unpinned
+  project can't be un-dragged; a skipped refresh is re-runnable) but an EXPLICIT install PROCEED
+  (user intent to move) — the `--bootstrap`-vs-explicit split lives in the new guard at the pin
+  gate. (3) In `pluginAdd`, declared files are copied (cli.js step 1) BEFORE the settings merge
+  (step 2), so the corrupt-settings abort can leave the plugin's files on disk with no ledger
+  entry — strictly better than wiping settings, and the plan scoped the fix to "exit without
+  writing [settings]"; not reordered. Test gives the fixture plugin an empty `files` array to
+  isolate the merge path. (4) `test/corrupt-json.test.js` clears `CLAUDECODE` in the child env so
+  the inside-Claude block (cli.js:498) can't fire for `--bootstrap` when the suite runs inside a
+  Claude session. (5) Fail-against-old confirmed by reading each path (old `plugin add` wrote
+  `{}`-merged settings + exit 0 + no backup; old config/ledger paths were silent and proceeded) —
+  the plan permits spot-check-by-reading for this. (6) No generated-file regen needed:
+  `autoconfig.docs.html` embeds hook-file headers, not `bin/cli.js` (per 1.6's ledger), and no
+  box/DEV_ONLY_FILES source-regex line was touched (trap 4/T14 intact). Full `npm test` exit 0
+  before commit (corrupt-json 4/4; hook suites 189/189).
