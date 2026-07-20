@@ -16,19 +16,8 @@ Claude Code is powerful out of the box, but every new project means manually wri
 
 Run it from a regular terminal — not from inside a Claude Code session (the installer detects that and asks you to switch to a separate terminal).
 
-**npm:**
 ```bash
 npx claude-code-autoconfig
-```
-
-**macOS / Linux / WSL:**
-```bash
-curl -fsSL https://raw.githubusercontent.com/design-and-deliver/claude-code-autoconfig/main/install.sh | bash
-```
-
-**Windows (PowerShell):**
-```powershell
-irm https://raw.githubusercontent.com/design-and-deliver/claude-code-autoconfig/main/install.ps1 | iex
 ```
 
 ## After Install
