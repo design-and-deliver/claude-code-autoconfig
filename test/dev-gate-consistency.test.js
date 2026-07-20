@@ -1,0 +1,94 @@
+#!/usr/bin/env node
+'use strict';
+
+/**
+ * dev-gate-consistency.test.js — pins the DEV_ONLY_FILES install gate so its
+ * three hand-kept mirrors can never drift from bin/cli.js again.
+ *
+ * bin/cli.js's DEV_ONLY_FILES (bin/cli.js, one-line literal) is the ONLY real
+ * install gate (CLAUDE.md trap: not package.json "files"). Three other places
+ * name the same files and used to drift:
+ *   (a) the shipped interactive docs (.claude/docs/autoconfig.docs.html) —
+ *       drifted at 1 vs 6, so users saw docs for commands they never received;
+ *   (b) package.json "files" negations (tarball-shaping only, but any command
+ *       file negated there must also be gated by DEV_ONLY_FILES);
+ *   (c) validate-cca-install.md's `dev_only` list (else false "MISSING CMD").
+ *
+ * sync-docs.js now parses (a) straight from DEV_ONLY_FILES; this suite proves it
+ * stayed parsed, and pins (b) and (c).
+ */
+
+const fs = require('fs');
+const path = require('path');
+
+const repoRoot = path.join(__dirname, '..');
+const cliPath = path.join(repoRoot, 'bin', 'cli.js');
+const docsPath = path.join(repoRoot, '.claude', 'docs', 'autoconfig.docs.html');
+const pkgPath = path.join(repoRoot, 'package.json');
+const validateMdPath = path.join(repoRoot, '.claude', 'commands', 'validate-cca-install.md');
+
+let passed = 0, failed = 0;
+function test(name, fn) {
+  try { fn(); console.log(`✓ ${name}`); passed++; }
+  catch (e) { console.log(`✗ ${name}`); console.log(`  Error: ${e.message}`); failed++; }
+}
+function assert(c, m) { if (!c) throw new Error(m); }
+
+// The canonical source of truth — parsed exactly as bin/cli.js and sync-docs.js do.
+function parseDevOnlyFiles(src) {
+  const block = src.match(/const DEV_ONLY_FILES = \[([^\]]+)\]/);
+  if (!block) return [];
+  return [...block[1].matchAll(/'([^']+)'/g)].map(m => m[1]);
+}
+
+const cliSrc = fs.readFileSync(cliPath, 'utf8');
+const DEV_ONLY_FILES = parseDevOnlyFiles(cliSrc);
+
+console.log('============================================================');
+console.log('DEV-GATE CONSISTENCY TESTS');
+console.log('============================================================');
+console.log();
+
+test('DEV_ONLY_FILES parses to a non-empty one-line literal', () => {
+  assert(DEV_ONLY_FILES.length > 0,
+    'could not parse DEV_ONLY_FILES from bin/cli.js — the literal must stay one line, single-quoted (trap T1)');
+});
+
+// (a) The shipped docs must not document ANY dev-only file. This is the live bug
+//     substep 2.2 fixed: sync-docs.js drifted and documented five of six.
+test('shipped docs HTML documents zero dev-only files', () => {
+  const html = fs.readFileSync(docsPath, 'utf8');
+  const leaked = DEV_ONLY_FILES.filter(name => html.includes(`<span class="file">${name}</span>`));
+  assert(leaked.length === 0,
+    `autoconfig.docs.html documents dev-only file(s) users never receive: ${leaked.join(', ')} — re-run \`node .claude/scripts/sync-docs.js\``);
+});
+
+// (b) Every command file negated in package.json "files" must also be in the real
+//     gate. (The negations only shape the tarball; DEV_ONLY_FILES is what installs.)
+test('package.json "files" command negations are all in DEV_ONLY_FILES', () => {
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+  const negatedCmds = (pkg.files || [])
+    .filter(f => /^!\.claude\/commands\/.+\.md$/.test(f))
+    .map(f => path.basename(f));
+  for (const cmd of negatedCmds) {
+    assert(DEV_ONLY_FILES.includes(cmd),
+      `package.json negates .claude/commands/${cmd} but it is missing from DEV_ONLY_FILES (bin/cli.js) — the real install gate`);
+  }
+});
+
+// (c) validate-cca-install.md's dev_only list must equal DEV_ONLY_FILES exactly,
+//     or the validator reports false "MISSING CMD" errors (substep 1.4).
+test('validate-cca-install.md dev_only list equals DEV_ONLY_FILES', () => {
+  const md = fs.readFileSync(validateMdPath, 'utf8');
+  const block = md.match(/dev_only = \[([^\]]+)\]/);
+  assert(block, 'could not find `dev_only = [...]` list in validate-cca-install.md');
+  const mdList = [...block[1].matchAll(/'([^']+)'/g)].map(m => m[1]);
+  const a = [...mdList].sort();
+  const b = [...DEV_ONLY_FILES].sort();
+  assert(JSON.stringify(a) === JSON.stringify(b),
+    `validate-cca-install.md dev_only [${a.join(', ')}] != DEV_ONLY_FILES [${b.join(', ')}] — keep them in sync`);
+});
+
+console.log();
+console.log(`${passed} passed, ${failed} failed`);
+process.exit(failed > 0 ? 1 : 0);

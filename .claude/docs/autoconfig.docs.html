@@ -863,11 +863,6 @@
                                 <span class="tree-folder-icon">📁</span>
                                 <span class="folder">commands</span>
                             </div>
-                            <div class="tree-item indent-3 hidden" data-info="analyze-session" data-parent="commands">
-                                <span class="tree-spacer"></span>
-                                <span class="tree-file-icon">📄</span>
-                                <span class="file">analyze-session.md</span>
-                            </div>
                             <div class="tree-item indent-3 hidden" data-info="autoconfig-update" data-parent="commands">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
@@ -918,11 +913,6 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">enable-status-beeps.md</span>
                             </div>
-                            <div class="tree-item indent-3 hidden" data-info="eval-new-session" data-parent="commands">
-                                <span class="tree-spacer"></span>
-                                <span class="tree-file-icon">📄</span>
-                                <span class="file">eval-new-session.md</span>
-                            </div>
                             <div class="tree-item indent-3 hidden" data-info="extract-rules" data-parent="commands">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
@@ -932,11 +922,6 @@
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">gls.md</span>
-                            </div>
-                            <div class="tree-item indent-3 hidden" data-info="migrate-new-session" data-parent="commands">
-                                <span class="tree-spacer"></span>
-                                <span class="tree-file-icon">📄</span>
-                                <span class="file">migrate-new-session.md</span>
                             </div>
                             <div class="tree-item indent-3 hidden" data-info="recover-context" data-parent="commands">
                                 <span class="tree-spacer"></span>
@@ -962,11 +947,6 @@
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">test.md</span>
-                            </div>
-                            <div class="tree-item indent-3 hidden" data-info="usage-report" data-parent="commands">
-                                <span class="tree-spacer"></span>
-                                <span class="tree-file-icon">📄</span>
-                                <span class="file">usage-report.md</span>
                             </div>
                             <div class="tree-item indent-3 hidden" data-info="validate-cca-install" data-parent="commands">
                                 <span class="tree-spacer"></span>
@@ -1047,11 +1027,6 @@
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">terminal-title.js</span>
-                            </div>
-                            <div class="tree-item indent-3 hidden" data-info="token-guard-hook" data-parent="hooks">
-                                <span class="tree-spacer"></span>
-                                <span class="tree-file-icon">📄</span>
-                                <span class="file">token-guard.js</span>
                             </div>
                             <div class="tree-item indent-2 folder-row hidden collapsed" data-info="docs" data-folder="docs-folder" data-parent="claude-dir">
                                 <span class="tree-chevron">›</span>
@@ -1358,7 +1333,7 @@
                 title: '.claude/ Directory',
                 desc: 'Commands, rules, settings, and these docs. Keeps configuration organized as your project grows.'
             },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        'rules': {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                'rules': {
                 title: 'rules/',
                 desc: 'Path-scoped context that loads when Claude works on matching files.'
             },
@@ -1377,11 +1352,6 @@
             'feedback': {
                 title: 'feedback/',
                 desc: 'Team-maintained corrections and guidance for Claude. Add notes here when Claude does something wrong — it learns for next time. This directory persists across <code>/autoconfig</code> runs.'
-            },
-            'analyze-session': {
-                title: 'analyze-session.md',
-                desc: 'Analyze one session\'s token spend — deterministic RENT/BOMBS/FLEETS/TTL digest plus an efficiency read-out: dominant cost category, named causes, and what to change in future sessions.<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Prints the digest verbatim, then interpretation: dominant category, top causes, forward recommendations.</td></tr></table></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/analyze-session cf4d557d</code> <span style="opacity: 0.6;">— Analyze that session\'s efficiency</span></div></div></div>',
-                trigger: '/analyze-session'
             },
             'autoconfig-update': {
                 title: 'autoconfig-update.md',
@@ -1433,11 +1403,6 @@
                 desc: 'enable-status-beeps.md in commands/<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div>',
                 trigger: '/enable-status-beeps'
             },
-            'eval-new-session': {
-                title: 'eval-new-session.md',
-                desc: 'Evaluates the merit of spinning the current conversation out into a fresh session, and if worth it, preps the spinout: recovery window + handoff notes + a one-command /migrate-new-session manifest.<div style="margin-top: 12px;"><strong>Parameters</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Name</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Type</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>--cut</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>flag</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Skip the merit verdict and go straight to handoff prep.</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>cut</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Verdict CUT — handoff file written; exact recover commands printed.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>stay</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Verdict STAY — reason plus what would flip it.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Reads this session\'s .jsonl transcript; runs git status; writes .claude/handoff/<sid8>-<stamp>.md</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/eval-new-session</code> <span style="opacity: 0.6;">— Evaluate, and prep only if worth it</span></div><div><code>/eval-new-session --cut</code> <span style="opacity: 0.6;">— Prep the spinout without the debate</span></div></div></div>',
-                trigger: '/eval-new-session'
-            },
             'extract-rules': {
                 title: 'extract-rules.md',
                 desc: 'Scan Claude artifacts and extract structured rules into .claude/rules/<div style="margin-top: 12px;"><strong>Parameters</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Name</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Type</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>select</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>string</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Write only specific rules by number: "1,3,5". Default: all.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>keep-sources</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>boolean</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Write rules but skip source cleanup (Step 8)</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Rules extracted, written, and sources cleaned up.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-rules</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">No extractable rules found in scanned sources.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Creates .claude/rules/ files and removes extracted content from source files</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/extract-rules</code> <span style="opacity: 0.6;">— Scan, propose, prompt for approval, write, and clean up</span></div><div><code>/extract-rules --keep-sources</code> <span style="opacity: 0.6;">— Write rules without modifying source files</span></div><div><code>/extract-rules --select 1,3</code> <span style="opacity: 0.6;">— Write only rules #1 and #3</span></div></div></div>',
@@ -1447,11 +1412,6 @@
                 title: 'gls.md',
                 desc: 'Get the latest screenshot(s) and display them.<div style="margin-top: 12px;"><strong>Parameters</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Name</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Type</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>count</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>integer</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Number of screenshots to display. Use /gls-N syntax. Default: 1. Min: 1.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>path</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>string</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Screenshot directory path. Saved for future use. Auto-detected if omitted.</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Displays requested screenshot(s) from newest to oldest.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-screenshots</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Directory exists but contains no image files.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-directory</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Unable to detect screenshot directory — prompts for path.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Saves detected screenshot path to .claude/cca.config.json on first run</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/gls</code> <span style="opacity: 0.6;">— Display the most recent screenshot</span></div><div><code>/gls-3</code> <span style="opacity: 0.6;">— Display the 3 most recent screenshots</span></div><div><code>/gls /path/to/dir</code> <span style="opacity: 0.6;">— Use a specific screenshot directory</span></div></div></div>',
                 trigger: '/gls'
-            },
-            'migrate-new-session': {
-                title: 'migrate-new-session.md',
-                desc: 'Completes a session migration — recovers the old session\'s conversation tail and its handoff, from one keyword. Works with an /eval-new-session manifest OR self-packages from a bare scope keyword (e.g. one a scope-drift nudge printed).<div style="margin-top: 12px;"><strong>Parameters</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Name</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Type</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>keyword</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>string</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">required</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Migration name from /eval-new-session, OR the scope slug a /migrate-new-session {slug} drift-nudge printed.</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Migrated {keyword}: ~{tokens} tokens recovered + handoff internalized.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>self-packaged</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">No manifest for {keyword} — self-packaged from the title-ledger boundary of session {sid8}.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Reads .claude/handoff/*.manifest.json OR .claude/hooks/.titles/*.history.jsonl (terminal-title ledger); runs the recover-context extraction</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/migrate-new-session guard-ux</code> <span style="opacity: 0.6;">— Manifest prepped by /eval-new-session</span></div><div><code>/migrate-new-session cca-distribution</code> <span style="opacity: 0.6;">— No manifest — self-package from the scope keyword a drift nudge printed</span></div></div></div>',
-                trigger: '/migrate-new-session'
             },
             'recover-context': {
                 title: 'recover-context.md',
@@ -1477,11 +1437,6 @@
                 title: 'test.md',
                 desc: 'Runs your test suite. Auto-detects Jest, Vitest, Pytest, Go, RSpec, or falls back to npm test.<div style="margin-top: 12px;"><strong>Parameters</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Name</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Type</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>scope</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>string</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">File, directory, or pattern to limit test run. Runs full suite if omitted.</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Test suite passes.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>failure</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Test suite fails with non-zero exit code.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Executes detected test runner command</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/test</code> <span style="opacity: 0.6;">— Run full test suite</span></div><div><code>/test src/auth</code> <span style="opacity: 0.6;">— Run tests in src/auth directory</span></div><div><code>/test --coverage</code> <span style="opacity: 0.6;">— Run tests with coverage report</span></div></div></div>',
                 trigger: '/test'
-            },
-            'usage-report': {
-                title: 'usage-report.md',
-                desc: 'Show this session\'s usage report: token spend with cache/model splits, the last-5-hours rollup across all projects, and the plan/overage line. The report standard /usage doesn\'t give you.<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Prints per-model session breakdown, live-context floor, 5h window total, and plan line.</td></tr></table></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/usage-report</code> <span style="opacity: 0.6;">— Show current usage report</span></div></div></div>',
-                trigger: '/usage-report'
             },
             'validate-cca-install': {
                 title: 'validate-cca-install.md',
@@ -1541,11 +1496,6 @@
             'terminal-title-hook': {
                 title: 'terminal-title.js',
                 desc: 'terminal-title.js in hooks/',
-                trigger: 'PostToolUse hook'
-            },
-            'token-guard-hook': {
-                title: 'token-guard.js',
-                desc: 'token-guard.js in hooks/',
                 trigger: 'PostToolUse hook'
             },
             'feedback-feedback': {
@@ -1759,40 +1709,7 @@ CRITICAL: A plausible-looking cause from code reading is NOT confirmed evidence.
 
 > Run \`/autoconfig\` to populate this based on your project.`
             },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        'analyze-session': {
-                filename: 'analyze-session.md',
-                content: `# Analyze Session
-
-Explain where a session's tokens went and what to change next time. The heavy lifting is
-deterministic (the \`--analyze\` digest — pure node, no LLM, ~free); the model interprets ONLY
-the digest.
-
-Argument: \`$ARGUMENTS\` — a session-id prefix (the sid8 shown on \`/usage-report\`'s LAST 5 HOURS
-rows) or a full transcript path. No argument → analyze the CURRENT session (derive the
-transcript path the same way \`/usage-report\` does).
-
-## Step 1: generate the digest (deterministic)
-
-\`\`\`bash
-node .claude/hooks/token-guard.js --analyze <sid8-or-path>
-\`\`\`
-
-If it reports ambiguity, show the candidate list and ask which one was meant.
-
-## Step 2: interpret — the digest ONLY
-
-**Hard rule: never read the raw transcript.** Analyzing a 40M-token session must not itself
-load 40M tokens — if the digest can't answer something, say what's missing instead of digging.
-(Targeted transcript digging is future work, behind an explicit user approval.)
-
-Show the digest verbatim in a code block first. Then, in prose:
-
-1. **Dominant cost category** — RENT / BOMBS / FLEETS / TTL, with its share taken from the
-   digest.
-2. **Top causes, named** — specific skills/tools/workflows from the digest lines, never bare
-   categories ("the claude-api skill payload, +302k" — not "a big skill").`
-            },
-            'autoconfig-update': {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                'autoconfig-update': {
                 filename: 'autoconfig-update.md',
                 content: `<!-- @applied
 -->
@@ -2035,39 +1952,6 @@ Run exactly this command, then reply with a single confirmation line and nothing
 mkdir -p "\${CLAUDE_PROJECT_DIR:-.}/.claude/sounds" && touch "\${CLAUDE_PROJECT_DIR:-.}/.claude/sounds/status-beeps.enabled" && echo "status beeps ENABLED for this project (every turn-end beeps: awaiting=low, complete=high). Disable with /disable-status-beeps."
 \`\`\``
             },
-            'eval-new-session': {
-                filename: 'eval-new-session.md',
-                content: `Evaluate whether cutting over to a fresh session is worth it (killing the per-turn rent on
-resolved context), and if so, prep everything the new session needs to spin out effectively.
-
-Companion to token-guard and \`/recover-context\`: the guard says *you should move*, this skill
-decides **if** and preps the move. Everything runs in ONE turn — no subagents, no re-reading
-the conversation from disk (it is already in your context).
-
-## Step 1: Measure (deterministic, cheap)
-
-Find this session's transcript — the most recently modified \`.jsonl\` for this project
-(\`~/.claude/projects/<slug>/\`, slug = cwd with separators mapped to \`-\`; with concurrent
-sessions the newest is still this one, since this very prompt just appended to it). Then run,
-substituting the path:
-
-\`\`\`bash
-node -e "
-const fs=require('fs');
-const p=process.argv[1];
-const ts=[];let last=null;
-for(const line of fs.readFileSync(p,'utf8').split('\\n')){
-  if(!line.trim())continue;let o;try{o=JSON.parse(line)}catch(_){continue}
-  if(o&&o.type==='assistant'&&o.message&&o.message.usage){last=o.message.usage;
-    const t=Date.parse(o.timestamp||'');if(t)ts.push(t);}
-}
-const live=last?(last.input_tokens||0)+(last.cache_read_input_tokens||0)+(last.cache_creation_input_tokens||0):0;
-let i=ts.length-1;
-for(let acc=0;i>0&&acc<15*60000;i--)acc+=Math.min(ts[i]-ts[i-1],5*60000);
-const rec=Math.max(5,Math.ceil((Date.now()-(ts[i]||Date.now()))/300000)*5);
-console.log(JSON.stringify({liveContextTokens:live,recoverMinFallback:rec,sid8:require('path').basename(p).slice(0,8)}));
-" "<transcript-path>"`
-            },
             'extract-rules': {
                 filename: 'extract-rules.md',
                 content: `# Extract Rules
@@ -2132,39 +2016,6 @@ OS=$(uname -s); echo "OS=$OS"; for d in \\
   "$HOME/Desktop" \\
   "$HOME/Pictures" \\
   "$HOME/Videos/Captures"; do \\`
-            },
-            'migrate-new-session': {
-                filename: 'migrate-new-session.md',
-                content: `Run this **in the new session**. It completes the cutover — no manual \`/recover-context\` args, no
-manual handoff read. Two modes, auto-detected in Step 1.
-
-## Step 1: Resolve the keyword — manifest first, else self-package
-
-The keyword is: $ARGUMENTS (trim whitespace/flags). Look for \`.claude/handoff/<keyword>.manifest.json\`.
-
-- **It exists → MANIFEST MODE.** Read its fields (\`sid8\`, \`boundaryIso\`, \`handoffFile\`) and use them
-  for Steps 2–4 exactly as written.
-- **It doesn't → SELF-PACKAGE MODE.** The keyword is a scope slug (e.g. the one a scope-drift nudge
-  printed). There is no pre-written prep — derive it from the old session's terminal-title ledger
-  (\`.titles/{sid}.history.jsonl\`, one line per title change). Run this to find the source session +
-  boundary (collapses each ledger into scope tenures — scope = segment 1 of the title — and matches
-  the keyword against them, slugified the same way the guard emits it; a just-born session whose
-  first ledger line is under 10 minutes old is skipped, so the session you're running this in never
-  matches its own baseline title):
-
-  \`\`\`bash
-  node -e "
-  const fs=require('fs'),path=require('path');
-  const kw=process.argv[1];
-  const slug=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+\\$/g,'').slice(0,40).replace(/-+\\$/g,'')||'session';
-  const dir=path.join(process.cwd(),'.claude','hooks','.titles');
-  let out=[];
-  try{for(const f of fs.readdirSync(dir).filter(f=>f.endsWith('.history.jsonl'))){
-    const tenures=[];
-    for(const line of fs.readFileSync(path.join(dir,f),'utf8').split(/\\r?\\n/)){
-      if(!line.trim())continue;
-      let e;try{e=JSON.parse(line)}catch(_){continue}
-      const scope=String(e.title||'').split(' — ')[0].trim();`
             },
             'recover-context': {
                 filename: 'recover-context.md',
@@ -2303,39 +2154,6 @@ Run tests for this project.
 If no scope provided, run the full test suite. Otherwise run tests matching the scope (file, directory, or pattern).
 
 Detect the test command from project config (package.json scripts, pytest, go test, etc.) and execute it.`
-            },
-            'usage-report': {
-                filename: 'usage-report.md',
-                content: `# Usage Report
-
-Show the current session's usage report — tokens first (with the cache-read and per-model
-splits that make raw totals honest), the weighted $-equivalent beside them, the 5-hour
-cross-project rollup, and the plan/overage-billing line.
-
-Renamed from \`/token-guard-report\` 2026-07-12 — the built-in \`/usage\` shows quota bars;
-this shows where the usage went.
-
-## Step 1: Run the meter
-
-Run via Bash (the session transcript lives at \`~/.claude/projects/<project-slug>/<session_id>.jsonl\` — derive the path from the current project directory and session; if unsure, run without an argument and pass the transcript path only when known):
-
-\`\`\`bash
-node .claude/hooks/token-guard.js --report "$HOME/.claude/projects/<project-slug>/<session_id>.jsonl"
-\`\`\`
-
-## Step 2: Display
-
-Show the report output verbatim in a code block — do not summarize away the numbers. Add ONE line of interpretation at most (e.g. whether a fresh session is advisable given the live-context floor).
-
-Notes for interpretation:
-- The ALLOCATION block leads and is authoritative — those are Anthropic's own server-computed
-  percentages (same source as the built-in /usage), fetched live with severity flags and reset
-  times. Everything below it is supporting detail: WHERE the usage went. If it shows
-  "unavailable", the estimate lines below are calibrated guesses, marked "≈ ... (estimate)".
-- Tokens lead; dollars are API-list-price equivalents. On a subscription they proxy for rate-limit consumption, not billing — and the final \`Plan:\` line says which applies (the overage-OFF case means worst-case throttling, never a charge).
-- "live context" is re-read on EVERY turn — that is the per-turn floor cost of continuing this session.
-- The session total INCLUDES subagent/workflow fleet transcripts (the \`main $X + agents $Y\` split line) — fleets bill outside the main transcript and historically hid 63% of a session's spend.
-- Thresholds are configured in \`.claude/cca.config.json\` → \`tokenGuard\` (\`contextWarnTokens\`, \`sessionWarnUSD\`, \`hardGateUSD\`, \`gateStepUSD\`, plus v2: \`fleetMeter\`, \`workflowConfirm\`, \`bombJumpTokens\`, \`bombGateWhenFat\`, \`idleWarnMinutes\`, \`windowBudgetUSD\`, \`planDetect\`).`
             },
             'validate-cca-install': {
                 filename: 'validate-cca-install.md',
@@ -2699,39 +2517,6 @@ Maintain it across the session:
  *                       context re-learns the rules.
  *
  * Dedupe: when this file is the USER-LEVEL copy (~/.claude/hooks) and the project ships its own`
-            },
-            'token-guard-hook': {
-                filename: 'token-guard.js',
-                content: `#!/usr/bin/env node
-/**
- * token-guard v2 — session spend meter + tripwires for Claude Code (prototyped in wifi-app,
- * destined for CCA distribution as a module beside terminal-title.js / arcade-beeps.js).
- * Spec-by-example: .claude/hooks/tests/ (the suites pin every guard's contract). Evidence base: the July 10-11 blowup forensics
- * (RENT / BOMBS / FLEETS) — every v2 guard maps to a measured failure mode.
- *
- * WHY: the API is stateless — every turn re-sends (via cache) the whole conversation, so a fat
- * session makes even a one-line question expensive. Dollars here are API-list-price
- * EQUIVALENTS: on a subscription they proxy for rate-limit consumption, on an API key real money.
- *
- * MESSAGING UNIT (2026-07-12): user-facing check-ins lead with TOKENS — meaningful on both Max
- * (dollars are fictional there) and API plans — one metric per line (session / 5h window / plan
- * target); the model-weighted dollar figure stays as internal normalization + a parenthetical.
- *
- * ONE self-dispatching hook, keyed on hook_event_name:
- *   UserPromptSubmit -> meter the session (v2: INCLUDING subagent/workflow fleets); inject
- *                       compact additionalContext warnings: fat-context advisory, session-spend
- *                       steps, context-bomb tripwire (R3), idle-return TTL warning (R4),
- *                       workflow completion receipts (R2), scope-drift nudge (R6), window
- *                       spike + threshold flags (R12).
- *   Stop             -> append one line to the bounded usage log (now with a main/agents split);
- *                       detect workflow cost growth and queue a receipt for the next prompt.
- *   PreToolUse       -> (a) R2 + R10: gate Workflow launches — R2 confirms the launch COST from a
- *                           history-based estimate; R10 flags a fan whose SHAPE is disproportionate
- *                           to the task (a fan-named constant >= threshold, or a fan nested inside a
- *                           fan over run-time data). R10 asks (never blocks) and fires even with R2 off;
- *                       (b) R8: payload pre-gate — ask BEFORE a bomb-sized Skill/Read payload
- *                           lands (R3 warns after; this fires while the rent is avoidable);
- *                       (c) R9: one-shot ask once the turn's accumulator crossed (opt-in);`
             },
             'feedback-feedback': {
                 filename: 'FEEDBACK.md',

@@ -22,7 +22,7 @@
     "cli"
   ],
   "scripts": {
-    "test": "node test/box-alignment.test.js && node test/cli-install.test.js && node test/auto-guard.test.js && node test/update-system.test.js && node test/plugin-system.test.js && node test/terminal-title.test.js && node test/golden-endings.test.js && node test/live-twin-parity.test.js && node test/update-summary.test.js && node test/changelog-gen.test.js && node test/hook-tests.test.js",
+    "test": "node test/box-alignment.test.js && node test/cli-install.test.js && node test/auto-guard.test.js && node test/update-system.test.js && node test/plugin-system.test.js && node test/terminal-title.test.js && node test/golden-endings.test.js && node test/live-twin-parity.test.js && node test/update-summary.test.js && node test/changelog-gen.test.js && node test/dev-gate-consistency.test.js && node test/hook-tests.test.js",
     "preversion": "npm test",
     "prepublishOnly": "npm test",
     "test:hooks": "node test/hook-tests.test.js",

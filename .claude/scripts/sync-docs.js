@@ -33,8 +33,30 @@ const SKIP = new Set([
 const SCAN_FOLDERS = ['commands', 'agents', 'hooks', 'feedback'];
 
 // Dev-only files that live in the maintainer repo but are never installed to
-// user projects (mirror of bin/cli.js DEV_ONLY_FILES) — never document them.
-const DEV_ONLY_FILES = new Set(['deploy-to-npmjs.md']);
+// user projects — never document them. Single-sourced from bin/cli.js's
+// DEV_ONLY_FILES (the real install gate) so this can't drift from what ships.
+// (Guard: test/dev-gate-consistency.test.js.)
+function loadDevOnlyFiles() {
+  const cliPath = path.join(cwd, 'bin', 'cli.js');
+  let src;
+  try {
+    src = fs.readFileSync(cliPath, 'utf8');
+  } catch (_) {
+    // bin/cli.js is the maintainer-repo signal — absent means a user project,
+    // where the dev-only files were never installed, so there is nothing to filter.
+    return new Set();
+  }
+  // Same regex the tests use to parse the one-line literal (see CLAUDE.md trap: T1).
+  const block = src.match(/const DEV_ONLY_FILES = \[([^\]]+)\]/);
+  const names = block ? [...block[1].matchAll(/'([^']+)'/g)].map(m => m[1]) : [];
+  if (names.length === 0) {
+    console.error('sync-docs: could not parse DEV_ONLY_FILES from bin/cli.js — aborting so dev-only files are not documented to users');
+    process.exit(1);
+  }
+  return new Set(names);
+}
+
+const DEV_ONLY_FILES = loadDevOnlyFiles();
 
 // Structural keys that are not file-backed (always preserved, never generated)
 const STRUCTURAL_KEYS = new Set([
