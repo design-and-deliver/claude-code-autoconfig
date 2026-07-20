@@ -358,7 +358,7 @@ step.
 **Commit:** `chore: add minimal eslint (no-undef/no-unused-vars/no-empty); require node 18` + body
 `Changelog: Node 18 or newer is now required (matches what we test on)`.
 
-### ☐ 2.7 · L · ~1.5h — Pin the remaining prose-contracts with cheap tests (02-3.5, 4.6, 4.10, 4.9, 5.1; C8)
+### ☑ 2.7 · L · ~1.5h — Pin the remaining prose-contracts with cheap tests (02-3.5, 4.6, 4.10, 4.9, 5.1; C8)
 
 One new `test/contracts.test.js` (append to `npm test` chain — trap 8) asserting:
 
@@ -803,3 +803,45 @@ Append one entry after each substep, newest last. Format:
   scope per the plan) so `eslint .` doesn't parse-error. (6) Verify: `npm run lint` exit 0;
   full `npm test` exit 0 (hook suites 205/205); `npm ci --dry-run` exit 0 (lock in sync, records
   engines >=18.0.0). No `npm version`/publish run (deploy-approval rail intact).
+
+### 2026-07-20 — substep 2.7 — done
+- Commit: 2d90093 `test: pin @version/update-numbering/README/docs/digest contracts; loud skips`
+  (ledger commit follows).
+- Deviations: (1) **The docs ratchet is NOT byte-identical as the plan specified** — `sync-docs.js`
+  is **non-idempotent**: its treeInfo/fileContents splice (sync-docs.js:596-609 / 638-650) grows a
+  pathological leading-whitespace run (hundreds of spaces) on the two boundary lines before `'rules'`
+  and `'autoconfig-update'` by a fixed amount on EVERY run, so raw output is never byte-stable
+  (run2 ≠ run1, proven directly). A byte-compare could therefore never stay green. The ratchet now
+  collapses runs of **≥64 spaces** (a length no legitimate line ever has) to a fixed token on both
+  sides before comparing — neutralizing ONLY that quirk; every real content change still fails it
+  loudly (verified: breaking a command's @description tripped the ratchet). Fixing the generator is
+  **deferred to 3.4** (Phase 3 owns all sync-docs hardening; trap 3 forbids touching the splice from
+  a test substep). Left a `// Tighten to byte-for-byte once 3.4 makes sync-docs idempotent` note in
+  contracts.test.js. (2) The committed `autoconfig.docs.html` was already **content-current** (a fresh
+  regen differed only in the ≥64-space run) — so I `git checkout`'d my two in-place diagnostic regens
+  rather than commit whitespace churn (trap 3: don't hand-grow a generated file). (3) The digest
+  snapshot landed as `.claude/hooks/tests/token-guard-analyze-digest.test.cjs` (auto-discovered by
+  test/hook-tests.test.js, tarball-excluded — no package.json wiring, matching 2.5's pattern) rather
+  than a top-level test; the four prose-contracts landed in top-level `test/contracts.test.js` (wired
+  into the `npm test` chain before `hook-tests`). (4) The report-loop fix (bin/cli.js:1002-1009)
+  drops the `continue` and uses a `bumped` boolean so a content-changed-but-version-equal command now
+  prints `↑ /name (updated)` instead of vanishing (trap T6). Bundled under `Changelog: none` per the
+  plan though it is faintly user-visible (a niche upgrade-report line); `test:` subject drops it from
+  the changelog regardless.
+- Discoveries: (1) **sync-docs is non-idempotent** (above) — ledger 2.2's "idempotent (second run →
+  identical diff)" meant "same 2-line diff vs HEAD," NOT run1==run2; the raw bytes are not stable.
+  **3.4 MUST make sync-docs idempotent, then tighten `collapseWsQuirk` in contracts.test.js to a real
+  byte-for-byte compare.** The growth is in the whitespace-skip + `'\n        '`-prefix around the two
+  splices (sync-docs.js:596-609, 638-650). (2) All three prose inputs were **already green** before
+  this substep — every command carries `<!-- @version N -->`, README lists every shipped command (1.2
+  held), updates numbering is clean (001/003/004, no 002, next-free 005 > 4) — so no doc fixes were
+  needed here; the tests just pin what 1.2/1.4 established. (3) Both fail-detections **confirmed live**:
+  breaking show-docs.md's version marker (`@version`→`@versionX`) tripped the @version test, and its
+  @description edit tripped the ratchet — proving the ≥64-space tolerance did NOT over-normalize away
+  real drift; restored via `git checkout`. (4) The new sync-docs loud-abort was verified in three
+  scratch dirs: maintainer-signal (bin/cli.js present) + missing docs → exit 1 loud; user project (no
+  bin/cli.js) + missing docs → exit 0 quiet; real repo (docs present) → exit 0. (5) The digest test
+  builds a minimal 2-request `.jsonl` fixture (assistant `message.usage` lines → `rent` populates so
+  the RENT header renders; BOMBS/FLEETS/TTL/"live context at end" always render) and asserts via the
+  real `--analyze` CLI path. (6) Verify: full `npm test` exit 0 (hook suites **206/206** — +1 digest);
+  `npm run lint` exit 0. No `npm version`/publish (deploy-approval rail intact).
