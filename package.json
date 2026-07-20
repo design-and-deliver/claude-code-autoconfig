@@ -31,7 +31,8 @@
     "test:install": "node test/cli-install.test.js",
     "test:update": "node test/update-system.test.js",
     "postversion": "node scripts/generate-changelog.js --postversion",
-    "test:guard": "node test/auto-guard.test.js"
+    "test:guard": "node test/auto-guard.test.js",
+    "lint": "eslint ."
   },
   "bin": {
     "claude-code-autoconfig": "bin/cli.js"
@@ -56,6 +57,10 @@
     "CHANGELOG.md"
   ],
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^10.7.0",
+    "globals": "^17.7.0"
   }
 }

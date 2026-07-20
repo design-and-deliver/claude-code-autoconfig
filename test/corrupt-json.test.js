@@ -158,7 +158,7 @@ test('skips the refresh (fail safe) and copies nothing into the project', () => 
 
 // --- Cleanup ---------------------------------------------------------------
 for (const dir of cleanups) {
-  try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
 }
 
 console.log();

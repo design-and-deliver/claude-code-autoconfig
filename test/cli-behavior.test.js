@@ -287,7 +287,7 @@ test("the user's @applied block is preserved (not wiped or re-marked)", () => {
 
 // ── Cleanup ──────────────────────────────────────────────────────────────────
 for (const dir of cleanups) {
-  try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
 }
 
 console.log();

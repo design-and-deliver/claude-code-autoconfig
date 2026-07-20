@@ -51,7 +51,6 @@ function testBoxAlignment() {
   let allPass = true;
 
   widths.forEach((item, index) => {
-    const status = item.width === expectedWidth ? 'PASS' : 'FAIL';
     const indicator = item.width === expectedWidth ? '✓' : '✗';
 
     console.log(`${indicator} Line ${index + 1}: width=${item.width} (expected ${expectedWidth})`);

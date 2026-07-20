@@ -1559,7 +1559,7 @@ function windowSpikeConfirmNote(sv, now5h, sid, attr, mins) {
   );
 }
 
-function windowThresholdNote(tv, cfg) {
+function windowThresholdNote(tv, _cfg) {
   const reset = tv.resetsAt ? `, resets ${fmtReset(tv.resetsAt)}` : '';
   // Below the top rung: a quiet bearing, deliberately ⚠️-free so the top rung's alarm keeps its
   // punch (wallpaper-proofing). Top rung: the checkpoint styling.

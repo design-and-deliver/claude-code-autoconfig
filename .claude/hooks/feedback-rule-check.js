@@ -36,7 +36,7 @@ process.stdin.on('end', () => {
     ].join('\n'));
 
     process.exit(0);
-  } catch (err) {
+  } catch (_) {
     process.exit(0);
   }
 });

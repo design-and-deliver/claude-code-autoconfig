@@ -23,12 +23,6 @@ if (!fs.existsSync(docsPath)) {
   process.exit(0);
 }
 
-// Directories/files to skip entirely
-const SKIP = new Set([
-  'docs', 'plans', 'migration', 'scripts',
-  'settings.local.json'
-]);
-
 // Folders we scan for files
 const SCAN_FOLDERS = ['commands', 'agents', 'hooks', 'feedback'];
 
@@ -57,39 +51,6 @@ function loadDevOnlyFiles() {
 }
 
 const DEV_ONLY_FILES = loadDevOnlyFiles();
-
-// Structural keys that are not file-backed (always preserved, never generated)
-const STRUCTURAL_KEYS = new Set([
-  'memory-md', 'root', 'claude-md', 'claude-dir'
-]);
-
-// Hardcoded entries that have special handling
-const STATIC_ENTRIES = {
-  'settings': {
-    file: 'settings.json',
-    parent: 'claude-dir',
-    icon: '⚙️',
-    indent: 2
-  },
-  'mcp': {
-    file: '.mcp.json',
-    parent: 'claude-dir',
-    icon: '🔌',
-    indent: 2
-  },
-  'docs': {
-    file: 'autoconfig.docs.html',
-    parent: 'docs-folder',
-    icon: '🌐',
-    indent: 3,
-    folder: {
-      key: 'docs',
-      name: 'docs',
-      dataFolder: 'docs-folder',
-      parent: 'claude-dir'
-    }
-  }
-};
 
 /**
  * Extract @description from a file's content.
@@ -247,7 +208,7 @@ function deriveTrigger(folder, filename, content) {
 /**
  * Generate a content preview (first ~30 meaningful lines).
  */
-function generatePreview(content, ext) {
+function generatePreview(content, _ext) {
   const lines = content.split(/\r?\n/);
   // Skip metadata comments at the top
   let start = 0;

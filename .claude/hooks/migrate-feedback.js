@@ -21,7 +21,7 @@ process.stdin.on('data', chunk => input += chunk);
 process.stdin.on('end', () => {
   try {
     migrate();
-  } catch (err) {
+  } catch (_) {
     // Silent exit on any error
   }
   process.exit(0);

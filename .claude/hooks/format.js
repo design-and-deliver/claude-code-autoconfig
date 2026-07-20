@@ -7,7 +7,6 @@
  */
 
 const { execSync } = require('child_process');
-const path = require('path');
 
 // Read hook input from stdin
 let input = '';
@@ -17,7 +16,7 @@ process.stdin.on('end', () => {
   try {
     const data = JSON.parse(input);
     handleHook(data);
-  } catch (err) {
+  } catch (_) {
     // Silent exit if no valid input
     process.exit(0);
   }
@@ -42,7 +41,7 @@ function handleHook(data) {
       cwd: process.cwd(),
       stdio: 'ignore'
     });
-  } catch (err) {
+  } catch (_) {
     // Formatting is best-effort, don't block on failure
   }
 

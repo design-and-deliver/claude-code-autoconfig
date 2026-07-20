@@ -195,7 +195,7 @@ test('removing an unknown plugin fails with a clear error', () => {
 });
 
 // --- Cleanup ----------------------------------------------------------------
-try { fs.rmSync(tmpRoot, { recursive: true, force: true }); } catch {}
+try { fs.rmSync(tmpRoot, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
 
 console.log();
 console.log('============================================================');

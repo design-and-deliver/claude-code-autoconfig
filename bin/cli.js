@@ -52,7 +52,7 @@ function cleanupNulFile() {
   if (fs.existsSync(nulFile)) {
     try {
       fs.unlinkSync(nulFile);
-    } catch (e) {
+    } catch (_) {
       // Ignore - file might be locked
     }
   }
@@ -614,7 +614,7 @@ function installClaude() {
     console.log();
     console.log('\x1b[32m%s\x1b[0m', '✅ Claude Code installed');
     return true;
-  } catch (err) {
+  } catch (_) {
     console.log('\x1b[31m%s\x1b[0m', '❌ Failed to install Claude Code');
     console.log('   Install manually: npm install -g @anthropic-ai/claude-code');
     return false;
@@ -1107,7 +1107,7 @@ if (isUpgrade && previousVersion !== currentVersion) {
         segments: formatUpdateSummary(previousVersion, currentVersion, changelogText)
       }, null, 2)
     );
-  } catch (err) { /* cosmetic — never block the install */ }
+  } catch (_) { /* cosmetic — never block the install */ }
 }
 
 const launchCommand = isUpgrade ? '/autoconfig-update' : '/autoconfig';
@@ -1184,7 +1184,7 @@ rl.question('\x1b[90mPress ENTER to continue...\x1b[0m', () => {
     shell: true
   });
 
-  claude.on('error', (err) => {
+  claude.on('error', (_) => {
     console.log('\x1b[31m%s\x1b[0m', '❌ Failed to launch Claude Code');
     console.log(`   Run "claude" manually, then run ${launchCommand}`);
   });
