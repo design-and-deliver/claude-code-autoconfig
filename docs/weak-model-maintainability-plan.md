@@ -161,7 +161,7 @@ settings.json overwrite, and they install CCA's own maintainer CLAUDE.md into us
 **Commit:** `fix(install): retire legacy curl installers — stub with npx redirect` + body
 `Changelog: Removed the outdated curl installer — install with npx claude-code-autoconfig instead`.
 
-### ☐ 1.4 Fix the shipped commands that mislead users (01-B7, B8, B15, B16)
+### ☑ 1.4 Fix the shipped commands that mislead users (01-B7, B8, B15, B16)
 
 - `validate-cca-install.md:71` — replace `dev_only = ['deploy-to-npmjs.md']` with the six
   entries from `DEV_ONLY_FILES` (bin/cli.js:751) and add a comment: *"mirror of DEV_ONLY_FILES
@@ -561,3 +561,20 @@ Append one entry after each substep, newest last. Format:
   `Get-Content -Raw | iex` that the session survives. (3) Only repo reference to
   install.sh/install.ps1 outside README/docs is test/auto-guard.test.js:97 — a generic
   example.com URL, unrelated, untouched.
+
+### 2026-07-20 — substep 1.4 — done
+- Commit: 115aeab `fix(commands): validate-cca-install false errors + broken hook check; agents/enable-retro doc lies`
+- Deviations: also updated enable-retro.md's `@sideeffect` line ("adds agent" →
+  "verifies shipped agent") and agents/README.md's `@description` ("Placeholder" →
+  names the two shipped agents) — same lie-class as the cited lines, adjacent metadata.
+  No test greps any edited string (verified before editing).
+- Discoveries: (1) Step 7's fix was verified functionally, not just by reading: the
+  exact `python3 -c` block was extracted from the md and run through bash against this
+  repo (12 OK HOOK lines across all events — previously 0, the check could never fire)
+  and against a fixture with a ghost hook (BROKEN HOOK fires). The path resolution uses
+  `token.split('.claude/', 1)[1]` joined onto claude_dir — the old
+  `token.replace('.claude/', '')` would mangle the anchored
+  `${CLAUDE_PROJECT_DIR:-.}/...` form. (2) `$`-bearing literals must never be written
+  inside the md's `python3 -c "…"` blocks (bash-expanded at run time) — the Step 7
+  comments deliberately avoid them. (3) Versions after bump: validate-cca-install v3,
+  enable-retro v3.
