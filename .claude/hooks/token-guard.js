@@ -64,7 +64,9 @@
  *   contextWarnTokens 150000 · sessionWarnUSD [5,15,30] · hardGateUSD null · gateStepUSD 5
  *   (sessionWarnUSD check-ins fire on API-billed sessions ONLY since 2026-07-18 — on a
  *   subscription the $-equivalent steps map to nothing the user experiences; the R12 window
- *   flags carry the plan-meter story there. billingKind() is the cheap per-prompt read.)
+ *   flags carry the plan-meter story there. billingKind() is the cheap per-prompt read.
+ *   hardGateUSD still fires on subscriptions — it's a backstop the user armed — but its copy
+ *   goes token-denominated there, per showDollars/wantDollars. 2026-07-20.)
  *   windowBudgetUSD null — your 5h-window budget in WEIGHTED $-equivalent, the mix-robust proxy
  *   for Max metering (Anthropic confirms cached content is discounted and model choice affects
  *   depletion, but publishes no multipliers — support.claude.com 9797557 / 14552983). Set an
@@ -2141,9 +2143,21 @@ function onPreToolUse(data, projectDir) {
   if (m.usd < gate) return;
   st.gateArmedAt = gate + (cfg.gateStepUSD || DEFAULTS.gateStepUSD); // re-arm one step higher
   saveState(projectDir, sid, st);
+  if (wantDollars(cfg)) {
+    return ask('PreToolUse',
+      `token-guard: session estimate ${fmtUSD(m.usd)} ≥ ${fmtUSD(gate)} gate. ` +
+      `Approve to continue (next check at ${fmtUSD(st.gateArmedAt)}), or /clear for a fresh session.`);
+  }
+  // Subscription copy: the gate still fires (it's a backstop the user armed), but the message is
+  // token-denominated — thresholds stay $-weighted internally (that's the normalization) and are
+  // back-converted at this session's own effective rate, so the token figures are estimates in
+  // exactly the sense the $ figures are.
+  const tok = sessionTokens(m);
+  const perUSD = m.usd > 0 ? tok / m.usd : 0;
   return ask('PreToolUse',
-    `token-guard: session estimate ${fmtUSD(m.usd)} ≥ ${fmtUSD(gate)} gate. ` +
-    `Approve to continue (next check at ${fmtUSD(st.gateArmedAt)}), or /clear for a fresh session.`);
+    `token-guard: session estimate ${fmtK(tok)} tokens ≥ the ~${fmtK(gate * perUSD)}-token gate. ` +
+    `Approve to continue (next check ≈ ${fmtK(st.gateArmedAt * perUSD)} tokens), or /clear for a ` +
+    `fresh session.`);
 }
 
 function ask(event, reason) {
