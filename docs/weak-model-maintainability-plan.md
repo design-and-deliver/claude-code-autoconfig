@@ -453,7 +453,7 @@ replacement tests while the code is still in place, so 3.2–3.4 have a green ne
 plan's Ledger entry for 3.2–3.4 to consult.
 **Commit:** `test: behavioral replacements for source-grep asserts on extractable cli.js regions` + `Changelog: none`.
 
-### ☐ 3.2 · M · ~45m — Extract the plugin subsystem → `bin/lib/plugins.js` (G1 seam 1)
+### ☑ 3.2 · M · ~45m — Extract the plugin subsystem → `bin/lib/plugins.js` (G1 seam 1)
 
 `bin/cli.js:312-483` (manifest load, ledger read/write, add/remove/list) is already pure named
 functions with a clean exit boundary (`process.exit(0)` at :483). Move mechanically; cli.js
@@ -973,3 +973,35 @@ Append one entry after each substep, newest last. Format:
   proof.
 - Verify: full `npm test` **exit 0** — all 11 top-level suites green + hook suites **206/206**;
   `cli-behavior.test.js` 23 → **27** tests. No `npm version`/publish (deploy-approval rail intact).
+
+### 2026-07-20 — substep 3.2 — done
+- Commit: 7751d39 `refactor(cli): extract plugin subsystem to bin/lib/plugins.js` (ledger commit follows).
+- Deviations: (1) **Dependency injection over a plain move.** The plan said "move mechanically; cli.js
+  requires and dispatches," but the subsystem references four cli.js module-scope helpers — `cwd`,
+  `isReservedName`, `mergeSettingsInto`, `unmergeSettingsFrom`. cli.js runs its whole install flow on
+  `require` (no `main()` — Deferred item + trap 4), so `bin/lib/plugins.js` **cannot** `require('../cli.js')`
+  back without triggering the entire install. Solution: cli.js injects a `deps` object at the dispatch
+  boundary — `runPluginCommand(process.argv, { cwd, isReservedName, mergeSettingsInto, unmergeSettingsFrom })`
+  — and `pluginAdd`/`pluginRemove` thread it through. Function BODIES are byte-verbatim except the four
+  `foo(...)` → `deps.foo(...)` call sites; only signatures gained a `deps` param. (2) The plan's cited line
+  range (cli.js:312-483) was stale — the real region was **336-523** in the current file (later substeps
+  2.3/2.8 grew cli.js above it). Extracted by content, not line number.
+- Discoveries (things 3.3/3.4 need):
+  (1) **3.3 will NOT need to touch plugins.js.** When `mergeSettingsInto`/`unmergeSettingsFrom` move to
+  `bin/lib/settings-merge.js` (3.3), cli.js just imports them from there and keeps injecting the same two
+  names into the `deps` object — plugins.js stays decoupled (it never names the source, only `deps.merge…`).
+  (2) **The dispatch stayed in place** (now cli.js:~341): it still runs after all four deps are defined
+  (cwd@9, isReservedName@70, mergeSettingsInto@237, unmergeSettingsFrom@297) and before the main install
+  flow (`forceMode`, the insideClaude gate) — no top-level executable statement moved relative to it
+  (trap 4 intact). The new `require('./lib/plugins.js')` (cli.js:8) is inert at load (plugins.js only
+  declares functions + one const; no top-level execution).
+  (3) **No generated-file regen, no README/docs change** — `autoconfig.docs.html` embeds hook-file headers,
+  not `bin/cli.js` (per 1.6/2.3 ledgers); `bin/lib/` is not in any user-facing tree; `bin/` ships whole via
+  package.json `files`, so `bin/lib/plugins.js` is included with no `files` edit (as the plan noted).
+  (4) No test references the plugin functions by name (grepped `test/`, `scripts/`, `.claude/` — only cli.js
+  did); `plugin-system.test.js` is fully behavioral (`execFileSync('node', [CLI, 'plugin', …])`) and passed
+  **unmodified** — the 3.1 inventory's "no replacement needed" for this region held exactly.
+- Verify: functional round-trip in a temp fixture (add → list → remove, exercising all four injected deps:
+  file copy + reserved-name guard, settings merge preserving a pre-existing `env` key, unmerge restoring it)
+  — ALL PASS. Full `npm test` **exit 0** (all 15 top-level suites incl. plugin-system 13/13 unmodified +
+  hook suites **206/206**); `npm run lint` **exit 0**. No `npm version`/publish (deploy-approval rail intact).
