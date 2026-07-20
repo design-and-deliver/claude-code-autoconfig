@@ -316,7 +316,7 @@ source-string asserts yet — Phase 3 replaces them region by region as code is 
 locally to confirm the suite can fail, then restore it (do not commit the break).
 **Commit:** `test: behavioral install/upgrade fixtures; box test can no longer pass vacuously` + `Changelog: none`.
 
-### ☐ 2.5 · L · ~1.5h — Test the destructive hook + smoke-test the silent ones (02-4.2, 02-4.3)
+### ☑ 2.5 · L · ~1.5h — Test the destructive hook + smoke-test the silent ones (02-4.2, 02-4.3)
 
 New suites in `.claude/hooks/tests/` (auto-discovered by `test/hook-tests.test.js`; already
 excluded from the tarball by package.json `files` negations — verify the new files match the
@@ -724,3 +724,39 @@ Append one entry after each substep, newest last. Format:
   corrupt-json.test.js) so the inside-Claude block can't fire for --bootstrap when the suite runs
   inside a Claude session. (5) Phase-3 prereq satisfied: this behavioral net (cli-behavior.test.js,
   18 tests) is what 3.1-3.4 lean on when the source-grep asserts go vacuous during extraction.
+
+### 2026-07-20 — substep 2.5 — done
+- Commit: 4797bc9 `test(hooks): migrate-feedback behavioral coverage + smoke tests for silent hooks`
+- Deviations: (1) Landed as TWO files (not the implied per-hook split):
+  `.claude/hooks/tests/migrate-feedback.test.cjs` (7 tests: a–d + malformed-stdin + parity) and
+  `silent-hooks-smoke.test.cjs` (9 tests). Both auto-discover via test/hook-tests.test.js and are
+  tarball-excluded by the `!.claude/hooks/tests/**` negation (package.json:47-48) — no package.json
+  wiring needed (trap 8 applies to top-level test/, not these). (2) The plan's separate
+  "template-parity test" bullet is folded into migrate-feedback.test.cjs (same FEEDBACK.md template).
+  Implemented as **hook-produced output (ground truth) vs bin/cli.js source-literal**: run the hook,
+  read the reset FEEDBACK.md, compare to cli.js's `cleanTemplate` extracted from source and
+  un-escaped (`\n`→NL, backslash-backtick→backtick). This pins BOTH copies without eval'ing extracted
+  source, and catches runtime drift the migrate side would introduce. `assert.ok(m)` on the regex
+  makes it fail loud (not vacuous) if the literal is renamed/moved. (3) **arcade-beeps smoke drives
+  only NON-Stop/Notification events** (deterministic, audio-free) rather than the Stop playback path,
+  because `.claude/sounds/status-beeps.enabled` is PRESENT on this machine (see Discovery 4), so a
+  Stop event would spawn a real audio player. The invocation log line (`invoked event=… enabled=…`,
+  arcade-beeps.js:109) is written BEFORE the enable/event gate → ambient-independent observable.
+  (4) **format.js smoke proves the formatter actually RAN** via a sentinel-writing `format` npm
+  script in a temp fixture (one real `npm run`), stronger than exit-0-only; skips (non-source,
+  node_modules) assert the sentinel is ABSENT.
+- Discoveries: (1) **migrate-feedback.js resolves paths from `process.cwd()`, NOT
+  `CLAUDE_PROJECT_DIR`** (unlike mark-commit-active) — tests MUST set spawnSync `cwd`. A future
+  consolidation of the two FEEDBACK.md-migration copies (the parity bullet's stated goal) must
+  preserve this cwd contract or the SessionStart hook silently no-ops. (2) The two FEEDBACK.md reset
+  templates are **byte-identical today** (verified): migrate-feedback.js:60-71 (array `.join('\n')`)
+  and bin/cli.js:1078 (`cleanTemplate` backtick literal); both end `---\n\n`. Parity test now fails
+  loudly on any drift. (3) **arcade-beeps.js's `logLine()` appends but never mkdirs** its
+  `~/.claude/hooks/.titles/` dir (arcade-beeps.js:54-57) — to observe the log in a test you must set
+  BOTH `HOME` + `USERPROFILE` (cross-platform `os.homedir()`) to a temp home AND pre-create the
+  `.titles` dir, else the log write is swallowed. (4) **Opt-in contract confirmed intact
+  end-to-end**: the enable flag is gitignored (.gitignore:10 `.claude/sounds/*.enabled`) AND
+  tarball-excluded (package.json:54) — users never receive it, so a fresh `npx` install never beeps.
+  No bug, no fix. (5) Hook count 189 → 205 (16 new). `npm run test:hooks` exit 0 (205/205); full
+  `npm test` exit 0, 0 failures; the 2.4-flagged lineage flake (terminal-title-lineage.test.cjs:31)
+  did NOT recur this run.
