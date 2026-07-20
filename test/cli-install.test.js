@@ -603,17 +603,12 @@ console.log();
 
 console.log('Legacy Hook-Command Migration:');
 
-// cli.js is a script, not a module — extract the pure helpers by source for a functional check
-// (same source-level testing approach as assertCliCopies above).
-function extractCliFn(name) {
-  const src = fs.readFileSync(CLI_PATH, 'utf8');
-  const m = src.match(new RegExp('function ' + name + '\\([\\s\\S]*?\\n}'));
-  if (!m) throw new Error(`${name}() not found in cli.js`);
-  return eval('(' + m[0] + ')');
-}
+// The settings-merge helpers live in bin/lib/settings-merge.js (Phase 3 seam 2) — require
+// them directly (a real module under test) instead of source-extracting them from cli.js.
+const { migrateLegacyHookCommands, mergeSettingsInto } = require('../bin/lib/settings-merge.js');
 
 test('migrateLegacyHookCommands rewrites managed relative commands, leaves user commands alone', () => {
-  const migrate = extractCliFn('migrateLegacyHookCommands');
+  const migrate = migrateLegacyHookCommands;
   const s = {
     hooks: {
       Stop: [{ matcher: '', hooks: [
@@ -634,8 +629,8 @@ test('migrateLegacyHookCommands rewrites managed relative commands, leaves user 
 });
 
 test('upgrade path: migrate-then-merge yields ONE anchored entry, not a legacy+anchored double', () => {
-  const migrate = extractCliFn('migrateLegacyHookCommands');
-  const merge = extractCliFn('mergeSettingsInto');
+  const migrate = migrateLegacyHookCommands;
+  const merge = mergeSettingsInto;
   const userSettings = {
     hooks: { Stop: [{ matcher: '', hooks: [
       { type: 'command', command: 'node .claude/hooks/terminal-title.js' },
