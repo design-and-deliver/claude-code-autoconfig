@@ -245,7 +245,7 @@ existing `postversion` changelog hook is untouched.)
 test output; abort is fine after confirmation); `npm test` green.
 **Commit:** `chore: gate npm version/publish on the full test suite` + `Changelog: none`.
 
-### ☐ 2.2 · M · ~45m — Single-source the dev-gate lists; fix the shipped-docs live bug (02-4.1, 02-5.3, 01-B7 guard)
+### ☑ 2.2 · M · ~45m — Single-source the dev-gate lists; fix the shipped-docs live bug (02-4.1, 02-5.3, 01-B7 guard)
 
 The shipped `autoconfig.docs.html` documents five dev-gated files users never receive, because
 `sync-docs.js:37` hand-mirrors `DEV_ONLY_FILES` and drifted (1 entry vs 6).
@@ -632,3 +632,29 @@ Append one entry after each substep, newest last. Format:
   point per the plan: every test added in 2.2–2.9 now becomes publish-gating automatically,
   no further wiring. (4) Line-ending note: `package.json` has LF in-repo; git warns it'll
   store CRLF on next touch — pre-existing, unrelated to this edit.
+
+### 2026-07-20 — substep 2.2 — done
+- Commit: c14d630 `fix(docs): single-source DEV_ONLY_FILES; stop documenting dev-only features to users`
+- Deviations: (1) Check (c) — the plan text says the test asserts the md's `dev_only` equals
+  "DEV_ONLY_FILES' **command** entries", but the shipped `validate-cca-install.md:73` list
+  (set by substep 1.4) holds all SIX entries, including the hook `token-guard.js`. Asserted
+  **full-set equality** (the stronger guard, matching what 1.4 actually shipped) — a
+  command-only assertion would fail against the real md. (2) `sync-docs.js`'s loader resolves
+  `bin/cli.js` via `cwd` and returns an **empty set gracefully** when cli.js is absent
+  (bin/cli.js is the maintainer-repo signal per 2.7's planned detection; a user project has
+  no cli.js and never received the dev-only files, so nothing to filter). It only **exits 1
+  loudly** when cli.js EXISTS but the regex yields empty — the reformat/drift case trap T1
+  warns about.
+- Discoveries: (1) The regen removed exactly five dev-only blocks — `analyze-session.md`,
+  `eval-new-session.md`, `migrate-new-session.md`, `usage-report.md`, `token-guard.js`;
+  `deploy-to-npmjs.md` was already correctly absent (the one entry the old mirror had). Under
+  `core.autocrlf=true` the committed diff is a clean **2 insertions / 217 deletions**; the two
+  "insertions" (`'rules':`, `'autoconfig-update':`) are byte-identical to deletions — pure
+  diff-alignment at the deletion boundaries, no new content. `sync-docs.js` output is
+  **idempotent** (second run → identical diff). (2) The new test fails-first correctly: before
+  the regen it flagged exactly those five files on check (a), with (b)/(c) already green.
+  (3) The token-guard runway rework is now **committed** (adc2ce0/cfe159d/a5043d9, landed after
+  1.6's ledger) — the working tree was clean at 2.2 start; the memory note about it being
+  uncommitted is stale. Housekeeping still open: backup `stash@{0}` "R12a runway reframe" can
+  be dropped (per 1.6's ledger). (4) Full `npm test` exit 0 before commit (hook suites 189/189;
+  the new suite is the 11th top-level entry in the `npm test` chain, before `hook-tests`).
