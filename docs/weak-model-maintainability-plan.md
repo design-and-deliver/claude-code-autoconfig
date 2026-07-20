@@ -183,7 +183,7 @@ tests grep command prose — trap 6).
 **Commit:** `fix(commands): validate-cca-install false errors + broken hook check; agents/enable-retro doc lies` + body
 `Changelog: /validate-cca-install no longer reports false "missing command" errors`.
 
-### ☐ 1.5 Fix /autoconfig's self-contradictions (01-B9, B10, B11)
+### ☑ 1.5 Fix /autoconfig's self-contradictions (01-B9, B10, B11)
 
 - `autoconfig.md:106,134` — internal step numbers point at the wrong steps ("Step 5b" lives
   inside Step 3; "continue to Step 6" should be Step 4). Renumber the references (or retitle
@@ -578,3 +578,18 @@ Append one entry after each substep, newest last. Format:
   inside the md's `python3 -c "…"` blocks (bash-expanded at run time) — the Step 7
   comments deliberately avoid them. (3) Versions after bump: validate-cca-install v3,
   enable-retro v3.
+
+### 2026-07-20 — substep 1.5 — done
+- Commit: aae6cb1 `fix(autoconfig): step numbering, anchored hook form, defer permissions to shipped settings`
+- Deviations: (1) "Step 5b" was retitled to "Step 3b" (it lives inside Step 3) rather than
+  renumbering the later sections — smallest diff, and Step 6's own references to Steps
+  1/5/4 (autoconfig.md:204-206) stay correct untouched. (2) Added one sentence after the
+  hook JSON explaining WHY the anchor is required (MODULE_NOT_FOUND on cd) — a literal
+  executor otherwise has no reason not to "simplify" it back. (3) The old Step 4's
+  `NODE_ENV=development` env example was dropped entirely (not in the shipped template;
+  same divergent-source-of-truth class as the deny/allow lists).
+- Discoveries: (1) autoconfig-update.md:173 has its own internally-consistent "Step 5b" —
+  do not "fix" it to match this file. (2) No test greps any edited string (verified:
+  cli-install.test.js's autoconfig.md asserts cover only status-beeps, "no longer
+  supported", and cca- block prose). (3) autoconfig.md is now @version 16. Full
+  `npm test` exit 0 before commit (hook suites 181/181).
