@@ -88,7 +88,9 @@
  *   windowThresholdWarn true · windowThresholdWarnPct [50, 80] — R12b: a warn LADDER (a single
  *   number still works). Fires once per RUNG per window cycle as the tightest live window (5h OR
  *   weekly) climbs past each mark; an escalation to a higher rung mid-cycle fires again; re-arms
- *   when THAT window resets. The stake is a throttle, not a bill — the copy never carries a $
+ *   when THAT window resets. The one-shot is GLOBAL (~/.claude/.token-guard/window-warns.json) —
+ *   the windows are account-level, so a rung announced in ANY session/project counts everywhere
+ *   (per-session memory until 2026-07-19 re-announced mid-ladder readings in every new session). The stake is a throttle, not a bill — the copy never carries a $
  *   figure. Both ride the officialUsageFetch meter; on an API key with no OAuth meter they're
  *   inert unless windowBudgetUSD supplies a proxy.
  *   Each firing is a one-line note appended at the END of the response. Rungs below the top are a
@@ -1332,6 +1334,39 @@ function windowThresholdVerdict(worst, warned, cfg) {
   return { fire: true, pct: worst.pct, name: worst.name, resetsAt: worst.resetsAt, rung, topRung: ladder[ladder.length - 1] };
 }
 
+// R12b rung memory is GLOBAL — cross-session AND cross-project — because the windows themselves
+// are account-level. Per-session memory (the shape until 2026-07-19) made every fresh session
+// re-announce the already-crossed rung, so a user sitting at 75% got a "~75% used" FYI in each
+// new session — a random-looking mid-ladder number instead of the two crossings they signed up
+// for. Keyed by window name; a new cycle (resets_at moved a full window) starts fresh via the
+// same tolerance identity the verdict uses.
+function windowWarnsPath() { return path.join(os.homedir(), '.claude', '.token-guard', 'window-warns.json'); }
+
+function loadWindowWarn(name) {
+  try { return JSON.parse(fs.readFileSync(windowWarnsPath(), 'utf8'))[name] || null; } catch (_) { return null; }
+}
+
+function saveWindowWarn(name, entry) {
+  try {
+    let all = {};
+    try { all = JSON.parse(fs.readFileSync(windowWarnsPath(), 'utf8')); } catch (_) { /* first write */ }
+    all[name] = entry;
+    fs.mkdirSync(path.dirname(windowWarnsPath()), { recursive: true });
+    fs.writeFileSync(windowWarnsPath(), JSON.stringify(all));
+  } catch (_) { /* lost memory just re-announces at the next rung check */ }
+}
+
+// The union of the global memory and this session's legacy warnedWindow field: whichever entry
+// suppresses MORE for the window under test wins (missing .rung = pre-ladder shape = top-fired).
+// Honoring the session field keeps an in-flight session from double-firing right after an
+// upgrade deploys (its own fire predates the global file). Pure + exported for tests.
+function effectiveWarn(worst, a, b) {
+  if (!worst) return a || b || null;
+  const score = w => (w && w.name === worst.name && sameWindowCycle(w.resetsAt, worst.resetsAt))
+    ? (typeof w.rung === 'number' ? w.rung : Infinity) : -Infinity;
+  return score(a) >= score(b) ? (a || b || null) : b;
+}
+
 // The relayed copy — instructions TO the model (mirrors the idle/bomb notes). NEVER a dollar
 // figure: window budget is rate-limit consumption, and on a subscription a $ reads as a phantom
 // charge. Pure + exported so a golden test can pin the contract.
@@ -1669,9 +1704,12 @@ async function onUserPromptSubmit(data, projectDir) {
       if (now5h) { st.lastWindowPct = now5h.pct; st.lastWindowResetsAt = now5h.resetsAt; }
     }
     if (cfg.windowThresholdWarn || cfg.windowThresholdGate) {
-      const tv = windowThresholdVerdict(tightestWindow(official), st.warnedWindow, cfg);
+      const worst = tightestWindow(official);
+      const warned = effectiveWarn(worst, worst ? loadWindowWarn(worst.name) : null, st.warnedWindow);
+      const tv = windowThresholdVerdict(worst, warned, cfg);
       if (tv.fire) {
         st.warnedWindow = { name: tv.name, resetsAt: tv.resetsAt, rung: tv.rung };
+        saveWindowWarn(tv.name, st.warnedWindow);
         // Gate: pre-empt the turn before anything reaches the API — TOP rung only (lower rungs
         // are FYI bearings and never block). The one-shot key set above lets the ↑+Enter re-send
         // pass through silently next time (charge accepted). Note is the fallback.
@@ -2482,5 +2520,5 @@ module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, l
   generateBudgets, slug, driftNote, driftDeferralTick, recoverTail, resolveMarker,
   writeMigrateCandidate, clearMarker, writeRecoverPointer, idleReturnNote,
   migrateReceipt, resolveConfig, TOKEN_SAVER,
-  fiveHourWindow, tightestWindow, windowSpikeVerdict, windowThresholdVerdict,
+  fiveHourWindow, tightestWindow, windowSpikeVerdict, windowThresholdVerdict, effectiveWarn,
   windowSpikeNote, windowSpikeConfirmNote, windowThresholdNote, windowThresholdGateReason };
