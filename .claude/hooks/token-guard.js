@@ -2,7 +2,7 @@
 /**
  * token-guard v2 — session spend meter + tripwires for Claude Code (prototyped in wifi-app,
  * destined for CCA distribution as a module beside terminal-title.js / arcade-beeps.js).
- * Spec: docs/token-guard-v2-cca-spec.md. Evidence base: the July 10-11 blowup forensics
+ * Spec-by-example: .claude/hooks/tests/ (the suites pin every guard's contract). Evidence base: the July 10-11 blowup forensics
  * (RENT / BOMBS / FLEETS) — every v2 guard maps to a measured failure mode.
  *
  * WHY: the API is stateless — every turn re-sends (via cache) the whole conversation, so a fat

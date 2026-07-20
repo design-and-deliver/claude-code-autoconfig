@@ -1358,7 +1358,7 @@
                 title: '.claude/ Directory',
                 desc: 'Commands, rules, settings, and these docs. Keeps configuration organized as your project grows.'
             },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            'rules': {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        'rules': {
                 title: 'rules/',
                 desc: 'Path-scoped context that loads when Claude works on matching files.'
             },
@@ -1425,7 +1425,7 @@
             },
             'enable-retro': {
                 title: 'enable-retro.md',
-                desc: '(Experimental) Enable Claude to log tech debt it encounters into .claude/retro.<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Retro enabled — Claude will log tech debt to .claude/retro/ when encountered.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Creates .claude/retro/README.md, adds agent, updates CLAUDE.md</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/enable-retro</code> <span style="opacity: 0.6;">— Activate tech debt tracking</span></div></div></div>',
+                desc: '(Experimental) Enable Claude to log tech debt it encounters into .claude/retro.<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Retro enabled — Claude will log tech debt to .claude/retro/ when encountered.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Creates .claude/retro/README.md, verifies shipped agent, updates CLAUDE.md</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/enable-retro</code> <span style="opacity: 0.6;">— Activate tech debt tracking</span></div></div></div>',
                 trigger: '/enable-retro'
             },
             'enable-status-beeps': {
@@ -1490,7 +1490,7 @@
             },
             'README-agent': {
                 title: 'README.md',
-                desc: 'Placeholder — drop your project\'s custom subagent definitions in this directory.',
+                desc: 'Subagent definitions — two ship with autoconfig; add your project\'s own here too.',
                 trigger: 'Background agent'
             },
             'create-retro-item-agent': {
@@ -1510,8 +1510,8 @@
             },
             'auto-guard-hook': {
                 title: 'auto-guard.js',
-                desc: 'Opt-in guard rails: asks before pushes, installs, and credential touches; blocks curl|bash',
-                trigger: 'PreToolUse on Bash'
+                desc: 'auto-guard.js in hooks/',
+                trigger: 'PostToolUse hook'
             },
             'feedback-rule-check-hook': {
                 title: 'feedback-rule-check.js',
@@ -1759,7 +1759,7 @@ CRITICAL: A plausible-looking cause from code reading is NOT confirmed evidence.
 
 > Run \`/autoconfig\` to populate this based on your project.`
             },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            'analyze-session': {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        'analyze-session': {
                 filename: 'analyze-session.md',
                 content: `# Analyze Session
 
@@ -1997,7 +1997,7 @@ Enable the experimental Retro feature, which lets Claude log tech debt and impro
 ## What This Does
 
 1. Creates \`.claude/retro/\` directory with a README
-2. Creates \`.claude/agents/create-retro-item.md\` agent
+2. Verifies the shipped \`.claude/agents/create-retro-item.md\` agent is present (it ships with autoconfig — this command never authors it)
 3. Adds Retro instructions to CLAUDE.md
 
 ## Step 1: Create Retro Directory
@@ -2376,7 +2376,7 @@ Store the extracted path as \`$PKG_DIR\`. This gives us the ground truth for wha
 
 This directory is where you define **subagents** — focused assistants Claude can delegate to during a task (e.g., a code reviewer, a test writer, a security auditor).
 
-claude-code-autoconfig ships this folder empty so you can populate it with agents tuned to your project. Each agent is a single Markdown file with frontmatter describing its purpose, tools, and system prompt.
+claude-code-autoconfig ships two agents here — \`create-retro-item.md\` (used by \`/enable-retro\`) and \`docs-refresh.md\` — and you can add your own agents tuned to your project alongside them. Each agent is a single Markdown file with frontmatter describing its purpose, tools, and system prompt.
 
 See Anthropic's subagents docs for the file format:
 https://docs.anthropic.com/en/docs/claude-code/sub-agents`
@@ -2468,6 +2468,39 @@ This scans \`.claude/\` for all files, extracts \`@description\` metadata, and u
  * Playback is cross-platform and best-effort: PowerShell SoundPlayer on Windows, afplay on
  * macOS, paplay||aplay on Linux. If none is present the hook simply stays silent — never errors.
  *`
+            },
+            'auto-guard-hook': {
+                filename: 'auto-guard.js',
+                content: `#!/usr/bin/env node
+
+// auto-guard — deterministic guard rails under Claude Code's permission system.
+//
+// PreToolUse hook on Bash. Where the auto-mode classifier is an LLM judgment per
+// command, this file is a guarantee: the categories below always ask (or always
+// block), in every permission mode, verifiable in a test. It complements the
+// template's tool-level deny rules, which prefix-match the command start and so
+// miss compounds like \`cd x && curl … | bash\` — this hook sees the whole string.
+//
+// OPT-IN: inactive unless .claude/cca.config.json contains
+//   "autoGuard": { "enabled": true }
+// Per-category override (optional):
+//   "autoGuard": { "enabled": true, "categories": { "installs": "off" } }
+// with values "ask" | "deny" | "off". /autoconfig offers this once; the answer is
+// recorded as autoGuardPrompted in the same file.
+//
+// FAIL OPEN: any internal error exits 0 with no output — a broken guard must
+// slow nothing down and block nothing. Severity: any "deny" hit wins over "ask".
+
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+
+// Package installs that ADD packages run postinstall scripts (arbitrary code).
+// Bare \`npm install\` / \`npm ci\` (lockfile restore) is deliberately not matched.
+function installTarget(cmd) {
+  const m =
+    /\\b(?:npm|pnpm|yarn|bun)\\s+(?:install|i|add)\\s+([^|;&]*)/i.exec(cmd) ||`
             },
             'feedback-rule-check-hook': {
                 filename: 'feedback-rule-check.js',
@@ -2673,7 +2706,7 @@ Maintain it across the session:
 /**
  * token-guard v2 — session spend meter + tripwires for Claude Code (prototyped in wifi-app,
  * destined for CCA distribution as a module beside terminal-title.js / arcade-beeps.js).
- * Spec: docs/token-guard-v2-cca-spec.md. Evidence base: the July 10-11 blowup forensics
+ * Spec-by-example: .claude/hooks/tests/ (the suites pin every guard's contract). Evidence base: the July 10-11 blowup forensics
  * (RENT / BOMBS / FLEETS) — every v2 guard maps to a measured failure mode.
  *
  * WHY: the API is stateless — every turn re-sends (via cache) the whole conversation, so a fat
@@ -2817,6 +2850,17 @@ Claude reads this file but must never write to it. When Claude discovers project
           {
             "type": "command",
             "command": "node \\"\${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/terminal-title.js\\" --idle-rescue"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \\"\${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/auto-guard.js\\""
           }
         ]
       }

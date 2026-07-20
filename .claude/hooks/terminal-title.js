@@ -42,7 +42,7 @@
  * per paint, for tracing an out-of-sync tab) is gated behind CLAUDE_TITLE_DEBUG=1 — default OFF,
  * ~512KB-capped, written to .titles/_debug.log — so it never ships a growing log.
  *
- * Requires `env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE = "1"` (set by plugin.json), or CC's own writer races.
+ * Requires `env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE = "1"` (set by .claude/settings.json's env block), or CC's own writer races.
  */
 const fs = require('fs');
 const path = require('path');

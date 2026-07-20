@@ -32,8 +32,7 @@
     "test:guard": "node test/auto-guard.test.js"
   },
   "bin": {
-    "claude-code-autoconfig": "bin/cli.js",
-    "ccr": "bin/ccr.js"
+    "claude-code-autoconfig": "bin/cli.js"
   },
   "files": [
     "bin",
