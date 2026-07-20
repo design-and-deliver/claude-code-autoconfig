@@ -1353,7 +1353,7 @@
                 title: '.claude/ Directory',
                 desc: 'Commands, rules, settings, and these docs. Keeps configuration organized as your project grows.'
             },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                'rules': {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            'rules': {
                 title: 'rules/',
                 desc: 'Path-scoped context that loads when Claude works on matching files.'
             },
@@ -1400,7 +1400,7 @@
             },
             'continue': {
                 title: 'continue.md',
-                desc: 'Continues where your previous session in this terminal left off — recovers its context and resumes the work.<div style="margin-top: 12px;"><strong>Parameters</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Name</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Type</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>--show</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>flag</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Opens the recovered transcript in your default editor.</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Picking up where we left off — {what we were doing}. Then the work resumes.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-previous</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">I can\'t find a previous session for this terminal.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Reads .jsonl transcripts from ~/.claude/projects/, writes temp file</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/continue</code> <span style="opacity: 0.6;">— Recover the previous session here and resume its work</span></div></div></div>',
+                desc: 'Continues where your previous session in this terminal left off — recovers its context and resumes the work. Plan-aware: if that session was executing a substep of a plan doc, resumes from the plan\'s Ledger instead of the transcript.<div style="margin-top: 12px;"><strong>Parameters</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Name</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Type</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>--show</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>flag</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Opens the recovered transcript in your default editor.</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Picking up where we left off — {what we were doing}. Then the work resumes.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>plan</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Picking up where we left off — {plan alias}: substep {N.k} done ({hash}); starting {next}. Then the next substep runs.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-previous</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">I can\'t find a previous session for this terminal.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Reads .jsonl transcripts from ~/.claude/projects/, writes temp file</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/continue</code> <span style="opacity: 0.6;">— Recover the previous session here and resume its work</span></div></div></div>',
                 trigger: '/continue'
             },
             'disable-arcade-beeps': {
@@ -1749,7 +1749,7 @@ CRITICAL: A plausible-looking cause from code reading is NOT confirmed evidence.
 
 > Run \`/autoconfig\` to populate this based on your project.`
             },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                'analyze-session': {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            'analyze-session': {
                 filename: 'analyze-session.md',
                 content: `# Analyze Session
 
@@ -1907,30 +1907,30 @@ This is the no-ceremony wrapper around \`/recover-context\`'s auto mode: recover
 session's context, then RESUME the work — unlike \`/recover-context\`, which recovers and
 waits for direction. No arguments; it figures everything out itself.
 
-## Step 1: Recover
+It is also **plan-aware**: when the previous session was executing a substep of a phased
+plan doc (the plan-authoring pattern — a \`docs/*.md\` with a \`## Ledger\` section), the plan
+doc + Ledger is the handoff, not the transcript. Recovery shrinks to a sliver and this
+session starts the next substep, so \`/clear\` → \`/continue\` is the intended loop between
+plan substeps.
+
+## Step 1: Resolve the previous session
 
 Read \`.claude/commands/recover-context.md\` (fall back to \`~/.claude/commands/recover-context.md\`
-if the project doesn't ship it) and follow its **auto mode** exactly as written: Step 2c to
-resolve the previous session (terminal lineage first, newest-other-transcript fallback), then
-Step 4 to extract. Honor \`--show\` via its Step 6. Do NOT use its Step 5 confirmation or
-Step 7 wait — /continue replaces both below.
+if the project doesn't ship it) and run its **Step 2c** (auto mode) exactly as written to
+resolve the previous session: terminal lineage first, newest-other-transcript fallback. Store
+\`$SID\`, \`$FILES_TO_PARSE\` (the \`FILE=\` path), and \`$CUTOFF_ISO\`.
 
 If it reports no previous session: say "I can't find a previous session for this terminal." and
 suggest \`/recover-context -60\` for time-window recovery instead — then stop.
 
-## Step 2: Internalize
+## Step 2: Plan check — was that session executing a plan substep?
 
-Read the extracted temp file and treat the recovered exchanges as your own memory of the
-conversation you were just having with this user — not a document to summarize.
+Two cheap probes BEFORE extracting anything:
 
-## Step 3: Resume
-
-Silently reconstruct from that memory: the active task and its state, the next action that was
-in flight, and what was already completed. Before acting, cross-check reality — \`git status
---short\`, plus a quick look at any file the tail claims was mid-edit — the recovered tail may
-predate work that already landed.
-
-Then open your reply with exactly this line (bold, em-dash clause naming the work):`
+1. **Last title**: read the final line of \`.claude/hooks/.titles/{$SID}.history.jsonl\`
+   (fall back to \`~/.claude/hooks/.titles/\`). Plan-driven sessions title as
+   \`{plan alias} — {area} — {goal}\`.
+2. **Plan docs**: list the plan docs — \`grep -l '^## Ledger' docs/*.md\` (no \`docs/\` or no`
             },
             'disable-arcade-beeps': {
                 filename: 'disable-arcade-beeps.md',
