@@ -436,7 +436,7 @@ it until a "ship token-guard" decision forces the question). `sync-docs.js` gets
 Order matters: 2.4's behavioral suite must exist before any extraction — the current tests
 regex cli.js source and **pass vacuously when code moves** (trap 4).
 
-### ☐ 3.1 · L · ~1.5h — Map and migrate the source-string tests for the extraction regions (G1 prereq)
+### ☑ 3.1 · L · ~1.5h — Map and migrate the source-string tests for the extraction regions (G1 prereq)
 
 Inventory every `cliCode.includes(...)` / source-regex assertion in `test/cli-install.test.js`
 and `test/update-system.test.js`. For each, classify: (a) guards a region staying in cli.js
@@ -445,9 +445,9 @@ settings-merge helpers, or pullUpdates — replace with a behavioral or module-l
 (the extraction substeps below will break the source-greps **silently** otherwise). Land the
 replacement tests while the code is still in place, so 3.2–3.4 have a green net.
 
-- [ ] inventory every `cliCode.includes(...)` / source-regex assert in cli-install + update-system tests
-- [ ] classify each — (a) region stays in cli.js → keep; (b) plugin / settings-merge / pullUpdates → replace with a behavioral or module-level assert
-- [ ] land the replacement tests while the code is still in place (green net for 3.2–3.4)
+- [x] inventory every `cliCode.includes(...)` / source-regex assert in cli-install + update-system tests
+- [x] classify each — (a) region stays in cli.js → keep; (b) plugin / settings-merge / pullUpdates → replace with a behavioral or module-level assert
+- [x] land the replacement tests while the code is still in place (green net for 3.2–3.4)
 
 **Verify:** `npm test` green; the inventory (region → test → replacement) is pasted into this
 plan's Ledger entry for 3.2–3.4 to consult.
@@ -904,3 +904,72 @@ Append one entry after each substep, newest last. Format:
   OR fleet drift) aborts the push. (4) **2.9 is the last Phase-2 substep — Phase 2 is complete.** Only
   Phase 3 remains: 3.1 (migrate source-string tests, the prereq gate), then 3.2–3.4 (extract
   plugins / settings-merge / updates out of bin/cli.js). No `npm version`/publish (deploy rail intact).
+
+### 2026-07-20 — substep 3.1 — done
+- Commit: 94750b1 `test: behavioral replacements for source-grep asserts on extractable cli.js regions`
+  (ledger commit follows).
+- Deviations: (1) **Additive-only** — 3.1 landed the behavioral NET (2 new fixtures in
+  `test/cli-behavior.test.js`) and removed/converted **no** source-grep. That matches 2.4's rail
+  ("do NOT delete the source-string asserts yet — Phase 3 replaces them region by region"): 3.2–3.4
+  each retire their own region's greps against this net. (2) The "replacement" is **behavioral**, not
+  module-level — the plan offered "behavioral OR module-level," but a module-level `require()` is
+  impossible now (the modules don't exist until 3.2–3.4), and a behavioral fixture driving the real
+  CLI is extraction-agnostic (green whether the code sits in cli.js or bin/lib/), which is exactly the
+  green-net property 3.1 needs. Module-level `require()` unit tests are the natural add INSIDE 3.3/3.4
+  once each module exists. (3) Also refreshed cli-behavior.test.js's header docstring (said "Three
+  fixtures", omitted 2.8's Fixture 4) to enumerate all six — docs-match-code rail on a stale comment.
+
+- **INVENTORY (region → source-grep asserts → disposition)** — the plan's required handoff for 3.2–3.4:
+
+  **Region 3.2 · plugins → `bin/lib/plugins.js` (cli.js:312-483)**
+  - Source-greps in cli-install/update-system tests: **NONE**.
+  - Net: `test/plugin-system.test.js` is already fully behavioral (drives `bin/cli.js plugin
+    add/remove/list` against temp dirs). 3.2's own Verify already leans on it passing unmodified.
+  - Disposition: **no replacement needed** — cleanest extraction of the three.
+
+  **Region 3.3 · settings-merge → `bin/lib/settings-merge.js` (cli.js:179-310: migrateLegacyHookCommands,
+  mergeSettingsInto, unmergeSettingsFrom)**
+  - `cli-install.test.js:608-613` `extractCliFn()` — source-extracts a fn by name via `eval`; throws
+    "not found" once the fn moves. → **CONVERT** in 3.3 to `require('../bin/lib/settings-merge.js')`.
+  - `cli-install.test.js:615-634` `migrateLegacyHookCommands rewrites managed relative commands…`
+    (uses extractCliFn). → **CONVERT** to `require`.
+  - `cli-install.test.js:636-655` `migrate-then-merge yields ONE anchored entry…` (extractCliFn
+    migrate+merge). → **CONVERT** to `require`.
+  - `cli-install.test.js:657-663` `cli.js migrates BEFORE merging (ordering guard)` —
+    `src.indexOf('migrateLegacyHookCommands(userSettings);')` / `src.indexOf('mergeSettingsInto(userSettings, pkgSettings);')`.
+    Guards the **call sites that STAY in cli.js**. → **KEEP**; 3.3 must preserve those two exact
+    call-site strings (arg names `userSettings`/`pkgSettings`) or update this guard's indexOf strings
+    in the same substep.
+  - NET (landed 3.1): cli-behavior.test.js **Fixture 5** (legacy relative terminal-title → ONE anchored
+    entry via real `--bootstrap` upgrade) + existing **Fixture 2** (settings MERGED not replaced).
+
+  **Region 3.4 · updates + pullUpdates → `bin/lib/updates.js` (cli.js:86-177: parseAppliedUpdates,
+  @applied regexes, pullUpdates)**
+  - `update-system.test.js:160` `content.includes('function pullUpdates()')` → **REMOVE/CONVERT**.
+  - `update-system.test.js:165` `content.includes('function parseAppliedUpdates(')` → **REMOVE/CONVERT**.
+  - `cli-install.test.js:378` `/function pullUpdates\(\)…pinnedVersion !== installerVersion/`
+    (pin-respect INSIDE pullUpdates) → **REMOVE/CONVERT**.
+  - **KEEP** (stay in cli.js): `update-system.test.js:155` `--pull-updates` dispatch flag;
+    `cli-install.test.js:305` whats-new write; `:374` the `--bootstrap` pin GATE;
+    `:382` `delete cfg.pinVersion` (pin removal in the bootstrap flow);
+    `update-system.test.js:174` AUTOCONFIG_FILES-excludes-'updates'.
+  - NET: existing **Fixture 3** (parseAppliedUpdates + pullUpdates block-preservation) + new
+    **Fixture 6** (pullUpdates respects the pin).
+
+- Discoveries (things 3.2–3.4 need):
+  (1) **The pin check is DUPLICATED**: `pullUpdates()` (cli.js:131) AND the `--bootstrap` gate
+  (cli.js:564) both read module-level `pinnedVersion` (cli.js:46, from cca.config.json `pinVersion`)
+  and `installerVersion` (cli.js:47). **Only the pullUpdates copy moves in 3.4**; the module consts +
+  the bootstrap gate stay in cli.js, so `bin/lib/updates.js`'s `pullUpdates` must RECEIVE
+  `pinnedVersion`/`installerVersion` (params/import), not re-derive them.
+  (2) The **ordering guard** (cli-install.test.js:657-663) is the ONE settings-merge assert that must
+  SURVIVE 3.3 unchanged — it guards call ORDER in cli.js, not the helper bodies. Do not "convert" it.
+  (3) Shipped settings.json registers the anchored `terminal-title.js` under SessionStart /
+  UserPromptSubmit / Stop / Notification; migration output is **byte-identical** to the shipped Stop
+  command, so Fixture 5's legacy Stop entry migrates+dedups to exactly one.
+  (4) **Non-vacuity**: Fixture 6 is proven by Fixture 3 (same fixture UNpinned copies 003/004, so
+  "copies nothing" isolates the pin); Fixture 5 is structural (no migration → 2 terminal-title
+  entries). No fail-first stash cycle was run for these two — the A/B and the 2-vs-1 count are the
+  proof.
+- Verify: full `npm test` **exit 0** — all 11 top-level suites green + hook suites **206/206**;
+  `cli-behavior.test.js` 23 → **27** tests. No `npm version`/publish (deploy-approval rail intact).
