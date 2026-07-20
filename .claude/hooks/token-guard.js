@@ -1659,7 +1659,11 @@ async function onUserPromptSubmit(data, projectDir) {
   }
 
   // R3 context-bomb tripwire — single-hop jump beyond bombJumpTokens since the last prompt.
-  // Priced by the turns that will re-read it, not the hop itself.
+  // Priced by the turns that will re-read it, not the hop itself — at CACHE-READ weight
+  // (~10%), the same basis as turnFloorUSD: warm turns re-read the payload from prompt cache,
+  // and full price only recurs on the first turn after a gap longer than the cache TTL (R4's
+  // story). Numbers stay "~" — the plan meter's exact cache weighting isn't published.
+  // (Andrew, 2026-07-20: the old ×50 full-price extrapolation overstated ~10× on warm loops.)
   if (st.lastLiveContext != null) {
     const jump = m.liveContext - st.lastLiveContext;
     if (jump > cfg.bombJumpTokens && st.approvedPayloadHop) {
@@ -1678,13 +1682,14 @@ async function onUserPromptSubmit(data, projectDir) {
       const skillHit = who && /^Skill\((.+)\)$/.exec(who.label);
       if (skillHit) recordObservedSkill(projectDir, skillHit[1], jump, who.chars, cfg);
       const bombCost = usd$
-        ? `so the per-turn floor is now ≥ ${fmtUSD(m.turnFloorUSD)} (50 more turns ≈ ` +
+        ? `the per-turn floor is now ≥ ${fmtUSD(m.turnFloorUSD)} (50 more turns ≈ ` +
           `${fmtUSD(m.turnFloorUSD * 50)})`
-        : `adding ~${fmtK(jump)} tokens to every future turn (50 more turns ≈ ` +
-          `${fmtK(jump * 50)} tokens of the plan window)`;
+        : `~${fmtK(Math.round(jump * 0.1))} tokens per cache-warm turn (a cache read, ~10% ` +
+          `weight), the full ~${fmtK(jump)} again on the first turn after a break longer than ` +
+          `the cache TTL, and ${fmtK(jump)} of context-window headroom gone until trimmed`;
       notes.push(
         `context-bomb: something just loaded +${fmtK(jump)} tokens into this conversation` +
-        `${culprit} — every turn from here on re-reads it, ${bombCost}. Relay as ` +
+        `${culprit} — every future turn re-reads it: ${bombCost}. Relay as ` +
         `a STANDALONE warning block, never woven into your answer: open with "⚠️ Hey —" and ` +
         `keep a warm conversational voice (helpful friend, not system log), 2-3 plain sentences ` +
         `naming what landed and the out (a one-time reference belongs in a disposable subagent; ` +

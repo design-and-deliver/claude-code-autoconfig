@@ -132,6 +132,25 @@ test('E2E: approved skill hop landing records the measured jump, R3 stays silent
   assert.match(table, /^tg-obs {2}≈ 99k tok {2}⚠ {2}\(observed /m);
 });
 
+test('E2E: R3 bomb note prices re-reads at cache weight, not ×50 full price (2026-07-20)', () => {
+  const dir = mkProject();
+  // pin the tokens-only branch regardless of the machine's billing env
+  fs.writeFileSync(path.join(dir, '.claude', 'cca.config.json'),
+    JSON.stringify({ tokenGuard: { showDollars: false } }));
+  const tp = path.join(dir, 'main.jsonl');
+  fs.writeFileSync(tp, usageLine('m1', 1000));
+  const prompt = { hook_event_name: 'UserPromptSubmit', prompt: 'hello',
+    session_id: 'sid-cache', transcript_path: tp };
+  runHook(dir, prompt); // seeds lastLiveContext
+  fs.appendFileSync(tp, usageLine('m2', 61000)); // +60k jump, unapproved
+  const out = runHook(dir, prompt);
+  assert.match(out, /context-bomb/);
+  assert.match(out, /per cache-warm turn/);                  // warm re-reads at ~10% weight
+  assert.match(out, /break longer than the cache TTL/);      // full price only after a gap
+  assert.match(out, /context-window headroom/);              // occupancy is the third cost
+  assert.doesNotMatch(out, /50 more turns/, 'the ×50 full-price extrapolation was cut 2026-07-20');
+});
+
 test('E2E: R3 attribution Skill(name) records an observed row alongside the warn', () => {
   const dir = mkProject();
   const tp = path.join(dir, 'main.jsonl');
