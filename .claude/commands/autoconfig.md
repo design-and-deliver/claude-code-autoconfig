@@ -1,5 +1,5 @@
 <!-- @description Configures Claude Code scaffolding for your project. Sets up settings, permissions, hooks, commands, and docs. -->
-<!-- @version 15 -->
+<!-- @version 16 -->
 <!-- @response success | Scaffolding configured, CLAUDE.md initialized, docs opened in browser. -->
 <!-- @response no-project | No project detected — asks user to confirm directory. -->
 <!-- @sideeffect Initializes CLAUDE.md, settings.json, hooks, commands, and MEMORY.md -->
@@ -103,7 +103,7 @@ Rules are path-scoped context files that load automatically when Claude works on
 1. Check if `scripts.format` already exists in `package.json`
 
 2. **If `scripts.format` exists:**
-   - Skip to adding the hook (Step 5b)
+   - Skip to adding the hook (Step 3b below)
 
 3. **If `scripts.format` does NOT exist:**
    - Ask the user:
@@ -131,9 +131,9 @@ Rules are path-scoped context files that load automatically when Claude works on
    - Inform user: "Formatting is ready but inactive. Rename `.prettierrc.example` to `.prettierrc` when your team decides on style preferences."
 
 5. **If user says no:**
-   - Skip formatter setup, continue to Step 6
+   - Skip formatter setup, continue to Step 4
 
-**Step 5b: Add PostToolUse Format Hook**
+**Step 3b: Add PostToolUse Format Hook**
 
 If the project has `scripts.format` (either existing or just added), add the format hook to `.claude/settings.json`:
 
@@ -144,7 +144,7 @@ If the project has `scripts.format` (either existing or just added), add the for
       {
         "matcher": "Write|Edit",
         "hooks": [
-          { "type": "command", "command": "node .claude/hooks/format.js" }
+          { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/format.js\"" }
         ]
       }
     ]
@@ -152,64 +152,18 @@ If the project has `scripts.format` (either existing or just added), add the for
 }
 ```
 
-The format hook script (`.claude/hooks/format.js`) runs `npm run format` after Write/Edit operations on source files. Users can customize this script to add file filtering or different formatting logic.
+The format hook script (`.claude/hooks/format.js`) runs `npm run format` after Write/Edit operations on source files. Users can customize this script to add file filtering or different formatting logic. The `${CLAUDE_PROJECT_DIR:-.}` anchor is required — a cwd-relative `node .claude/hooks/...` command breaks with MODULE_NOT_FOUND whenever a session changes directories.
 
 **Important:** Merge this with any existing hooks. Don't overwrite existing hooks.
 
 ## Step 4: Configure Settings
 
-Update `.claude/settings.json` using the official schema.
+The Step 0a bootstrap already merged the shipped settings template into `.claude/settings.json`, preserving any pre-existing user entries. That shipped template is the **single source of truth** for deny/allow permissions, env vars, and hook registrations — do NOT re-derive or restate those lists here.
 
-### Deny Patterns (files Claude shouldn't read/write)
+1. **Verify the merge landed:** read `.claude/settings.json` and confirm it has a `permissions.deny` list (security entries like `.env`, `secrets/`, credential files) and registered `hooks`. If the file is missing or has no permissions at all, the bootstrap didn't complete — re-run Step 0a rather than hand-writing settings from memory.
+2. **Optionally add project-specific allow patterns:** `Bash()` prefix patterns for scripts that actually exist in THIS project (e.g., `Bash(npm run test:*)` only if package.json defines such scripts).
 
-Use `Read()` for blocking reads, `Edit()` for blocking writes:
-
-**Always deny (security):**
-```
-Read(./.env)
-Read(./.env.*)
-Read(./secrets/**)
-Edit(./.env)
-Edit(./.env.*)
-```
-
-**Always deny (Windows artifacts):**
-```
-Write(./nul)
-Edit(./nul)
-```
-These prevent accidental `nul` file creation from bash/Windows command translation issues.
-
-**Often deny (generated/vendor):**
-```
-Edit(./node_modules/**)
-Edit(./dist/**)
-Edit(./.git/**)
-```
-
-### Allow Patterns (auto-approve without prompting)
-
-Use `Bash()` patterns with prefix matching:
-
-```
-Bash(npm run test:*)
-Bash(npm run lint:*)
-Bash(npm run build)
-```
-
-### Environment Variables
-
-Set session-level env vars:
-
-```json
-{
-  "env": {
-    "NODE_ENV": "development"
-  }
-}
-```
-
-**Keep it minimal** — only include patterns that actually exist in this project.
+**Keep additions minimal** — only patterns that actually exist in this project. Never remove or reword entries the template installed: hook `command` strings are matched by exact text on upgrade, so rewording one causes duplicate hook entries later.
 
 ## Guidelines
 
