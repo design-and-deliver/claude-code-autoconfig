@@ -445,6 +445,10 @@ settings-merge helpers, or pullUpdates — replace with a behavioral or module-l
 (the extraction substeps below will break the source-greps **silently** otherwise). Land the
 replacement tests while the code is still in place, so 3.2–3.4 have a green net.
 
+- [ ] inventory every `cliCode.includes(...)` / source-regex assert in cli-install + update-system tests
+- [ ] classify each — (a) region stays in cli.js → keep; (b) plugin / settings-merge / pullUpdates → replace with a behavioral or module-level assert
+- [ ] land the replacement tests while the code is still in place (green net for 3.2–3.4)
+
 **Verify:** `npm test` green; the inventory (region → test → replacement) is pasted into this
 plan's Ledger entry for 3.2–3.4 to consult.
 **Commit:** `test: behavioral replacements for source-grep asserts on extractable cli.js regions` + `Changelog: none`.

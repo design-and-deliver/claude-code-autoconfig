@@ -33,6 +33,13 @@ conversation context.
    **There is no XL**: a substep that sizes XL is too big for one session — split it into
    N.a / N.b until each is ≤ L. (Size a done substep against what it actually took, so the tags
    stay calibrated.)
+
+   **Microsteps (optional — enables a per-substep progress bar):** a substep body MAY list its
+   action items as checkbox bullets — `- [ ] <action>` — instead of plain `-` bullets. When it
+   does, `/plan-progress` counts the `[x]`/`[ ]` boxes of the **current** substep into a
+   per-substep progress bar, and the executing session ticks each box as that microstep lands.
+   Only genuine **action bullets** become microsteps; the ⚠ trap notes and the **Verify** /
+   **Commit** lines stay prose, outside the count.
 5. **Deferred** section: options considered and deliberately not planned, with reasons — so a
    later session doesn't "helpfully" do them.
 6. **Ledger** at the bottom, appended after each substep: date — step — outcome (+ commit

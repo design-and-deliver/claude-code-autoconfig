@@ -49,6 +49,9 @@ try {
 // Effort tag ( · S · ~time ) is optional so count-only plans still parse.
 const SUBSTEP = /^#{2,4}\s+([☑☐])\s+(\d+\.\w+)\s*(?:·\s*([SML])\s*·\s*~(\d+(?:\.\d+)?)\s*([hm]))?\s*—\s*(.+?)\s*$/;
 const PHASE = /^##\s+Phase\s+(\S+)\s*—\s*(.+?)\s*$/;
+// A microstep is a checkbox action-bullet inside a substep body: `- [ ] …` / `- [x] …`.
+// Only these count toward the per-substep bar — prose bullets, ⚠ notes, Verify/Commit stay out.
+const MICRO = /^\s*-\s+\[([ xX])\]\s+(.+?)\s*$/;
 
 function toMin(num, unit) {
   if (num == null) return null;
@@ -76,6 +79,7 @@ function parsePlan(file) {
   const phases = [];
   let cur = { num: '–', title: '(unphased)', subs: [] };
   let sawSub = false;
+  let lastSub = null; // substep that trailing microsteps attach to
 
   let title = path.basename(file);
   const h1 = raw.match(/^#\s+(.+)$/m);
@@ -89,19 +93,30 @@ function parsePlan(file) {
     if (pm) {
       if (cur.subs.length) phases.push(cur);
       cur = { num: pm[1], title: pm[2].trim(), subs: [] };
+      lastSub = null;
       continue;
     }
     const sm = line.match(SUBSTEP);
     if (sm) {
       sawSub = true;
-      cur.subs.push({
+      const sub = {
         done: sm[1] === '☑',
         id: sm[2],
         size: sm[3] || null,
         min: toMin(sm[4], sm[5]),
         title: sm[6].trim(),
-      });
+        micro: [],
+      };
+      cur.subs.push(sub);
+      lastSub = sub;
+      continue;
     }
+    const mm = line.match(MICRO);
+    if (mm && lastSub) {
+      lastSub.micro.push({ done: mm[1].toLowerCase() === 'x', text: mm[2].trim() });
+      continue;
+    }
+    if (/^#{1,6}\s/.test(line)) lastSub = null; // a heading ends the substep body
   }
   if (cur.subs.length) phases.push(cur);
   if (!sawSub) return null;
@@ -165,6 +180,15 @@ function render(p) {
         if (shownDone.includes(s)) out.push(`- ~~${label}~~`);           // struck-through when done
       } else if (p.current && s.id === p.current.id) {
         out.push(`- ▶ **${label}**  ← you are here`);                    // highlighted current step
+        if (s.micro && s.micro.length) {                                 // expanded microstep widget (current step only)
+          const md = s.micro.filter(m => m.done).length, mt = s.micro.length;
+          const mpct = mt ? md / mt : 0;
+          out.push(`      ${bar(mpct)}  **${Math.round(mpct * 100)}%**  ·  ${md}/${mt} microsteps`);
+          for (const m of s.micro) {
+            const txt = truncate(m.text, 62);
+            out.push(`      ${m.done ? '☑' : '☐'} ${m.done ? `~~${txt}~~` : txt}`);
+          }
+        }
       } else {
         out.push(`- ${label}`);                                          // upcoming
       }
