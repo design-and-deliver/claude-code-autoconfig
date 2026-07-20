@@ -391,7 +391,7 @@ the @version test catches missing versions (don't commit); `node .claude/scripts
 still exits 0 here.
 **Commit:** `test: pin @version/update-numbering/README/docs/digest contracts; loud skips` + `Changelog: none`.
 
-### ☐ 2.8 · M · ~45m — Fix the @screenshotDir silent drop for legacy users (01-A5, T17)
+### ☑ 2.8 · M · ~45m — Fix the @screenshotDir silent drop for legacy users (01-A5, T17)
 
 The "preservation" block (bin/cli.js:805-811, 845-852) reads a legacy `<!-- @screenshotDir -->`
 marker from the OLD gls.md before copy, then tries to re-insert it into the NEW gls.md — but
@@ -845,3 +845,31 @@ Append one entry after each substep, newest last. Format:
   the RENT header renders; BOMBS/FLEETS/TTL/"live context at end" always render) and asserts via the
   real `--analyze` CLI path. (6) Verify: full `npm test` exit 0 (hook suites **206/206** — +1 digest);
   `npm run lint` exit 0. No `npm version`/publish (deploy-approval rail intact).
+
+### 2026-07-20 — substep 2.8 — done
+- Commit: cff8cd8 `fix(cli): migrate legacy gls screenshot folder into cca.config.json instead of silently dropping it`
+  (ledger commit follows).
+- Deviations: (1) Added a `!ccaConfigCorrupt` guard the plan's one-liner didn't spell out. The plan
+  said "if cca.config.json has no `gls.screenshotDir`, write it there" — but a *corrupt* config reads
+  as `null` (no screenshotDir), so an unguarded write would **overwrite the corrupt file**, exactly
+  the data-loss class 2.3 fixed. The migration now skips when `ccaConfigCorrupt` (fail safe — a
+  wrongly-overwritten config can't be un-broken), consistent with `readCcaConfigResult`'s contract
+  (cli.js:27-40). (2) The migration uses a **fresh `readCcaConfig()`** at write time (post-copy,
+  cli.js:~900), NOT the module-load `ccaConfigResult` (cli.js:44) — the pin-removal path
+  (cli.js:570-572) may rewrite cca.config.json between module load and here, so a fresh read merges
+  into the current on-disk state (mirrors pin-removal's own fresh `readCcaConfig()`). (3) Also updated
+  the pre-copy read block's comment (cli.js:857) — it claimed to preserve the value "in gls.md across
+  upgrades", which *is* the dropped behavior; it now documents the migrate-to-config path
+  (docs-match-code rail, applied to a code comment).
+- Discoveries: (1) **Fail-first proven** (non-vacuity): `git stash push -- bin/cli.js` then re-running
+  the behavioral suite → new fixtures (a) and (b) FAIL (dead re-insert writes nothing to
+  cca.config.json), (c) PASSES (old code never touched cca.config.json, so it couldn't clobber an
+  existing value either). Restored via `git stash pop`. (2) The migration is **NOT gated on
+  isUpgrade** — it fires whenever the destination's pre-copy gls.md carries the legacy marker
+  (cli.js:860-864), so `--bootstrap` over any such project migrates. (3) **No generated-file regen,
+  no @version bump**: gls.md itself is byte-unchanged (only cli.js migration logic moved), and
+  `autoconfig.docs.html` embeds hook-file headers, not `bin/cli.js` (per 1.6/2.3 ledgers). Trap 4/T14
+  intact — the `DEV_ONLY_FILES` literal (cli.js:804) and the ANSI boxes were not touched. (4) The
+  new fixtures live in `test/cli-behavior.test.js` (extends 2.4's suite; already in the `npm test`
+  chain — no new wiring). Verify: behavioral **23/23**, full `npm test` **exit 0** (hook suites
+  206/206), fail-first confirmed. No `npm version`/publish (deploy-approval rail intact).
