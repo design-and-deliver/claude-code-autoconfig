@@ -338,7 +338,7 @@ excluded from the tarball by package.json `files` negations — verify the new f
 **Verify:** `npm run test:hooks` green; `npm test` green.
 **Commit:** `test(hooks): migrate-feedback behavioral coverage + smoke tests for silent hooks` + `Changelog: none`.
 
-### ☐ 2.6 · M · ~45m — Minimal lint + honest engines (02-2.1, 02-1.4)
+### ☑ 2.6 · M · ~45m — Minimal lint + honest engines (02-2.1, 02-1.4)
 
 - ESLint flat config with exactly three rules: `no-undef`, `no-unused-vars`,
   `no-empty` (with `allowEmptyCatch: false` — but permit `catch (_) { /* comment */ }` styles
@@ -760,3 +760,46 @@ Append one entry after each substep, newest last. Format:
   No bug, no fix. (5) Hook count 189 → 205 (16 new). `npm run test:hooks` exit 0 (205/205); full
   `npm test` exit 0, 0 failures; the 2.4-flagged lineage flake (terminal-title-lineage.test.cjs:31)
   did NOT recur this run.
+
+### 2026-07-20 — substep 2.6 — done
+- Commit: 96723ad `fix: require node 18 + add minimal eslint (no-undef/no-unused-vars/no-empty)`
+- Deviations: (1) **Subject is `fix:`, NOT the plan's `chore:`** — the changelog generator's
+  `isHousekeeping()` (scripts/generate-changelog.js:56-59) drops every `chore:`/`chore(` subject,
+  and update-summary.js's `SKIP_TYPES` (bin/update-summary.js:23 = {chore,docs,test,ci,build,style})
+  drops those types from the upgrade screen. So the plan's prescribed `chore: … + Changelog: Node 18…`
+  would have SILENTLY SWALLOWED the required user-facing trailer. `fix:` surfaces it under
+  update-summary's "Fixes & improvements" bucket, honoring 2.6's explicit "carry a real changelog
+  trailer" intent. **Rule for later substeps: any chore-ish change with a user-facing `Changelog:`
+  trailer must use a non-chore, non-SKIP_TYPES subject (feat/fix/perf/refactor).** (2) eslint is
+  **v10.7.0** (flat config), not v9 — "flat config" is generic; v10 is current + flat-native.
+  Added `globals` as a 2nd devDep for `globals.node`. This is the repo's FIRST `devDependencies`
+  and FIRST `package-lock.json` (was zero-dep). (3) CI got a **separate `lint` JOB**, not a step in
+  the test-matrix job, because the `test` job has NO install step (zero-dep package → `npm test`
+  needs nothing installed). The lint job runs `npm ci` (needs the now-committed package-lock.json)
+  → `npm run lint` (.github/workflows/test.yml). (4) `no-unused-vars` tuned with `^_` ignore
+  patterns (args/vars/caughtErrors) — honors the codebase's dominant `catch (_)` convention (123+
+  sites), so NEITHER trap file was edited: all 58 `_` findings in trap-5 terminal-title.js and 64
+  in token-guard.js clear via the pattern. Kept `no-empty` at `allowEmptyCatch:false` (plan's
+  preference) and fixed the 3 empty test-cleanup catches with comments, not by relaxing the rule.
+  (5) Dead code REMOVED as the fix (not suppressed, per plan): sync-docs.js `SKIP`/`STRUCTURAL_KEYS`/
+  `STATIC_ENTRIES` (each referenced exactly once = orphaned) and format.js's unused `path` require.
+- Discoveries: (1) **ZERO `no-undef` findings** across the whole codebase — the plan's headline
+  worry (undefined-identifier typos in silent-swallow branches) has no current instances; the rule
+  is now a forward ratchet. (2) **The sync-docs const removal is provably INERT to generated
+  output** — isolation experiment: reverting sync-docs.js to HEAD (const removal undone) while
+  keeping the hook edits produced a BYTE-IDENTICAL `autoconfig.docs.html` diff (same 12 lines). The
+  12-line HTML change is ENTIRELY from the embedded PREVIEWS of the edited shipped hooks: removing
+  `const path` shifts format.js's ~30-line preview window (reveals one more line: `process.exit(0)`)
+  and the `catch(err)→catch(_)` renames. The `'rules':`/`'autoconfig-update':` whitespace-run shift
+  (autoconfig.docs.html:~1333/1709; +12 chars on the `'rules':` line) is a PRE-EXISTING generator
+  quirk (a giant space-run whose length tracks upstream content position — sync-docs hardening is
+  deferred to 3.4), NOT introduced here. Same embedded-preview class ledger 1.6/2.2 flagged. (3)
+  **Trap-5 respected**: terminal-title.js untouched → no `sync-terminal-title.js --write` needed,
+  live-twin-parity stays green. (4) token-guard.js:1562 `windowThresholdNote(tv, cfg)` — `cfg`
+  genuinely unused (→ `_cfg`); it's exported (token-guard.js:2701) + tested
+  (token-guard-r12-window.test.cjs) with 2 args, so the rename preserves arity/behavior. (5)
+  `.claude/hooks/tests/fixtures/deep-research-harness.js` is an intentional top-level fragment
+  (`return` outside function) → added `.claude/hooks/tests/**` to eslint `ignores` (out of lint
+  scope per the plan) so `eslint .` doesn't parse-error. (6) Verify: `npm run lint` exit 0;
+  full `npm test` exit 0 (hook suites 205/205); `npm ci --dry-run` exit 0 (lock in sync, records
+  engines >=18.0.0). No `npm version`/publish run (deploy-approval rail intact).
