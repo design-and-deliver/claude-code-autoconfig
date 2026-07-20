@@ -43,6 +43,11 @@ Maintain it across the session:
   never "and"-join two use cases.
 - Add a third segment ( {{EMDASH}} {sub-function} ) only when the work goes a level deeper --
   a step beneath the user goal.
+- Plan-driven sessions: when the session executes a step of a multi-phase plan doc, the
+  plan itself is the scope -- {scope} = a SHORT ALIAS of the plan's name (e.g.
+  "Maintainability" for weak-model-maintainability-plan.md; never the filename), and the
+  usual pair pushes down one level: {plan} {{EMDASH}} {area} {{EMDASH}} {goal}. The alias
+  holds for the whole session; never add a fourth segment.
 - Use ' {{EMDASH}} ' (space, em-dash, space) as the separator; keep segments short (a few
   words); write only the BARE title -- a state glyph is prepended automatically. This is a
   compass, not a log: change it rarely.
