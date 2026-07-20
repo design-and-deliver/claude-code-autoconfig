@@ -1484,53 +1484,73 @@ function windowSpikeNote(sv, now5h, attr, mins) {
   );
 }
 
-// R12a confirm variant — when windowSpikeConfirm is on, the passive spike note becomes a two-option
-// AskUserQuestion card (mirrors driftNote's auto-migrate branch): "keep going" dismisses; "unpack it"
-// runs the /analyze-session forensic digest and waits. Same dollar-free throttle framing as the
-// passive note (window budget is a rate limit, not money). Because it's a relayed card and NOT a
-// `decision:'block'`, it stays a soft interrupt — safe to ship on by default (it never hard-blocks
-// a turn, unlike the R12b throttle gate). Pure + exported so a golden test pins it.
+// Runway = minutes until the 5h meter hits 100% at the burn rate observed over the last
+// interval, quantized DOWN (never promise more runway than measured; bursty burn makes finer
+// precision fake — ux/never-print-an-unmeasured-number): 15-min steps under 2 hrs, half-hours
+// past that. beatsReset = projected exhaustion lands BEFORE the window resets — the only case
+// worth a card (a missing reset time counts as beating it: warn, don't assume safety).
+// Pure + exported so tests can pin the math and the labels.
+function windowRunway(sv, now5h, mins) {
+  if (!now5h || !mins || !(sv.spikePct > 0) || sv.toPct == null) return null;
+  const runwayMin = (100 - sv.toPct) * (mins / sv.spikePct);
+  const resetMin = now5h.resetsAt && Number.isFinite(Date.parse(now5h.resetsAt))
+    ? (Date.parse(now5h.resetsAt) - Date.now()) / 60000 : null;
+  const q = Math.max(15, Math.floor(runwayMin / 15) * 15);
+  const label = q < 120
+    ? `~${q} min`
+    : (h => `~${Number.isInteger(h) ? h : Math.floor(h) + '½'} hrs`)(Math.floor(runwayMin / 30) * 30 / 60);
+  return { runwayMin, label, beatsReset: resetMin == null || runwayMin < resetMin };
+}
+
+// R12a confirm variant — when windowSpikeConfirm is on, the spike becomes a two-option
+// AskUserQuestion card. Reframed 2026-07-20 (Andrew): the old card was a stats dump (delta %,
+// interval span, per-session share) with no "so what" — now it leads with RUNWAY (time-to-empty
+// at the observed rate) and returns NULL when the window resets before projected exhaustion:
+// no throttle risk, no card (the R12b threshold ladder still reports position). The per-session
+// share line is gone for good — the meter is account-wide and share is a factoid with no action
+// attached (see project_token_guard_multisession_attribution). Same dollar-free framing; still a
+// relayed card and never a `decision:'block'`, so it can't stall the turn. Pure + exported so a
+// golden test pins the contract.
 function windowSpikeConfirmNote(sv, now5h, sid, attr, mins) {
-  const reset = now5h && now5h.resetsAt ? `, resets ${fmtReset(now5h.resetsAt)}` : '';
-  const magnitude = sv.estimated
-    ? `an estimated ~${Math.round(sv.spikePct)}% of your 5-hour usage window (calibrated from the ` +
-      `turn's weighted cost — the meter was unreachable, so it's estimated, not measured)`
-    : `~${Math.round(sv.spikePct)}% of your 5-hour usage window (it climbed from ~${sv.fromPct}% to ` +
-      `~${sv.toPct}% used${reset})`;
   const analyze = sid ? `/analyze-session ${sid}` : '/analyze-session';
-  // Estimated fallback derives from THIS turn's own cost — single-turn blame is accurate there.
-  const mode = sv.estimated ? 'solo' : spikeCopyMode(attr);
-  const span = mins ? ` in the last ~${mins} min` : '';
-  const question = mode === 'multi'
-    ? `"⚠️ Hey — your ${attr.sessions} open sessions together used ${magnitude}${span}; this one ` +
-      `drove about ${Math.round(attr.share * 100)}% of that spend. That's a big bite out of your ` +
-      `rate-limit window — not a bill, but a throttle (lost access until it resets) if it runs out. ` +
-      `Want to keep going, or pause and see where this session's tokens went?"`
-    : mode === 'unknown'
-      ? `"⚠️ Hey — your usage climbed ${magnitude}${span}, and not necessarily from this session ` +
-        `alone (other open sessions or devices may have contributed). Not a bill, but a throttle ` +
-        `(lost access until it resets) if it runs out. Want to keep going, or pause and see where ` +
-        `this session's tokens went?"`
-      : `"⚠️ Hey — that last turn used ${magnitude}. That's a big single bite out of your rate-limit ` +
-        `window — not a bill, but a throttle (lost access until it resets) if it runs out. Want to keep ` +
-        `going, or pause and see where the tokens went?"`;
-  const lead = mode === 'multi'
-    ? `since the user's last turn HERE, work spread across ${attr.sessions} of their concurrent ` +
-      `sessions used ${magnitude}`
-    : mode === 'unknown'
-      ? `since the user's last turn here, the account-level meter climbed ${magnitude} ` +
-        `(attribution unknown — possibly other sessions or devices)`
-      : `since the user's last turn, one stretch of work used ${magnitude}`;
+  const reset = now5h && now5h.resetsAt ? ` (resets ${fmtReset(now5h.resetsAt)})` : '';
+  let question, lead;
+  if (sv.estimated) {
+    // Meter unreachable → no rate to project; single-turn blame is accurate by construction
+    // (the estimate derives from THIS turn's own weighted cost).
+    question = `"⚠️ Hey — that last turn used an estimated ~${Math.round(sv.spikePct)}% of your ` +
+      `5-hour usage window (calibrated from the turn's weighted cost — the meter was unreachable, ` +
+      `so it's estimated, not measured). Keep going?"`;
+    lead = `this turn used an estimated ~${Math.round(sv.spikePct)}% of the 5-hour window ` +
+      `(meter unreachable — calibrated from the turn's own weighted cost)`;
+  } else {
+    const rw = windowRunway(sv, now5h, mins);
+    if (rw && !rw.beatsReset) return null;   // resets before projected exhaustion — no throttle risk
+    if (rw) {
+      const who = attr && attr.busyOthers >= 1 ? ` across ${attr.sessions} open sessions` : '';
+      question = `"⚠️ Hey — at your current rate${who}, you'll burn through your 5-hour usage ` +
+        `window in ${rw.label}${reset}. Keep going?"`;
+      lead = `at the burn rate observed since the user's last turn here (~${sv.fromPct}% → ` +
+        `~${sv.toPct}% used), the 5-hour window is projected to hit 100% in ${rw.label} — ` +
+        `BEFORE it resets`;
+    } else {
+      // Measured climb but no usable interval to rate it — can't prove safety, so warn plainly.
+      question = `"⚠️ Hey — your 5-hour usage window climbed from ~${sv.fromPct}% to ` +
+        `~${sv.toPct}% used${reset}. Keep going?"`;
+      lead = `the 5-hour meter climbed ~${Math.round(sv.spikePct)} points but the interval ` +
+        `baseline is missing, so the burn rate is unmeasurable this turn`;
+    }
+  }
   return (
     `window-spike(confirm): ${lead}. Present ` +
     `it as a SINGLE self-contained AskUserQuestion card — do NOT render any warning prose above it. ` +
     `The card's \`question\` field is this line VERBATIM (the agreed copy):\n` +
     question + `\n` +
-    `Header chip: "Window spike". TWO options, primary first. Option 1 — label "Keep going". Option 2 ` +
-    `— label "Unpack it — where did the tokens go?". BOTH options are bare labels with NO description ` +
+    `Header chip: "Window spike". TWO options, primary first. Option 1 — label "Yes". Option 2 ` +
+    `— label "Wait — where did the tokens go". BOTH options are bare labels with NO description ` +
     `— the labels say it all, do NOT add subtext to either. NEVER narrate any internal mechanism (no ` +
-    `state file, meter cache, or budget wiring — that is pure noise to the user; the window % above IS ` +
-    `the trigger and stays). On the Option 1 pick, dismiss the card and answer the user's original ` +
+    `state file, meter cache, or budget wiring — that is pure noise to the user). On the Option 1 ` +
+    `pick, dismiss the card and answer the user's original ` +
     `prompt normally, as if it had never appeared. On the Option 2 pick, run \`${analyze}\` to show the ` +
     `forensic spend digest, then STOP and wait — do NOT answer the original prompt yet (the user is ` +
     `reviewing first). NEVER run \`/analyze-session\` yourself before the user picks Option 2.`
@@ -1821,9 +1841,12 @@ async function onUserPromptSubmit(data, projectDir) {
         const attr = spikeAttribution(readSpendLedger(st.lastWindowAtIso), sid);
         const mins = st.lastWindowAtIso && Number.isFinite(Date.parse(st.lastWindowAtIso))
           ? Math.max(1, Math.round((Date.now() - Date.parse(st.lastWindowAtIso)) / 60000)) : null;
-        notes.push(cfg.windowSpikeConfirm
+        // The confirm card returns null when the window resets before projected exhaustion —
+        // provably no throttle risk, so nothing is relayed at all (threshold ladder still runs).
+        const spikeNote = cfg.windowSpikeConfirm
           ? windowSpikeConfirmNote(sv, now5h, sid, attr, mins)
-          : windowSpikeNote(sv, now5h, attr, mins));
+          : windowSpikeNote(sv, now5h, attr, mins);
+        if (spikeNote) notes.push(spikeNote);
       }
       // advance the baseline whenever the meter is live (fired or not) so the next delta is fresh
       if (now5h) {
@@ -2656,4 +2679,4 @@ module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, l
   migrateReceipt, resolveConfig, TOKEN_SAVER,
   fiveHourWindow, tightestWindow, windowSpikeVerdict, windowThresholdVerdict, effectiveWarn,
   spikeAttribution, spikeCopyMode,
-  windowSpikeNote, windowSpikeConfirmNote, windowThresholdNote, windowThresholdGateReason };
+  windowSpikeNote, windowSpikeConfirmNote, windowRunway, windowThresholdNote, windowThresholdGateReason };

@@ -13,7 +13,7 @@ const {
   resolveConfig, TOKEN_SAVER,
   fiveHourWindow, tightestWindow, windowSpikeVerdict, windowThresholdVerdict, effectiveWarn,
   spikeAttribution, spikeCopyMode,
-  windowSpikeNote, windowSpikeConfirmNote, windowThresholdNote, windowThresholdGateReason,
+  windowSpikeNote, windowSpikeConfirmNote, windowRunway, windowThresholdNote, windowThresholdGateReason,
 } = require(HOOK);
 
 const CFG = resolveConfig({});                 // light default (token-saver off): spike 20, threshold 80
@@ -330,26 +330,72 @@ test('windowThresholdGateReason is USER-facing and tight: state + ↑+Enter esca
   assert.ok(!/\$\d/.test(reason), 'must not contain a $ amount');
 });
 
-// ---------- R12a confirm-card copy: AskUserQuestion relay, two options, /analyze-session, dollar-free ----------
+// ---------- R12a confirm-card copy: runway-framed AskUserQuestion relay (reframed 2026-07-20) ----------
+// The card leads with time-to-empty at the observed rate ("so what"), fires only when that beats
+// the reset, and never prints the per-session share factoid or raw interval spans.
 
-test('windowSpikeConfirmNote relays a two-option AskUserQuestion card, dollar-free', () => {
-  const note = windowSpikeConfirmNote({ spikePct: 23, fromPct: 10, toPct: 33, estimated: false }, now(33), 'sid123');
+const inMin = m => new Date(Date.now() + m * 60000).toISOString();
+
+test('windowRunway projects time-to-empty from the observed rate, quantized to 15-min steps', () => {
+  // 20 points in 30 min → 0.67%/min; 40 points of headroom → 60 min runway, 180 min to reset
+  const rw = windowRunway({ spikePct: 20, fromPct: 40, toPct: 60, estimated: false },
+    { pct: 60, resetsAt: inMin(180) }, 30);
+  assert.equal(rw.label, '~60 min');
+  assert.equal(rw.beatsReset, true);
+});
+
+test('windowRunway rounds DOWN (never promises more runway than measured) and floors at 15 min', () => {
+  // 25 points in 25 min → 1%/min; 50 points left → 50 min → floors to ~45 min
+  const a = windowRunway({ spikePct: 25, fromPct: 25, toPct: 50, estimated: false },
+    { pct: 50, resetsAt: inMin(240) }, 25);
+  assert.equal(a.label, '~45 min');
+  // 40 points in 4 min → 10%/min; 10 points left → ~1 min → clamps to the 15-min floor
+  const b = windowRunway({ spikePct: 40, fromPct: 50, toPct: 90, estimated: false },
+    { pct: 90, resetsAt: inMin(240) }, 4);
+  assert.equal(b.label, '~15 min');
+});
+
+test('windowRunway speaks half-hours past 2 hrs', () => {
+  // 10 points in 30 min → 0.33%/min; 50 points left → 150 min → "~2½ hrs"
+  const rw = windowRunway({ spikePct: 10, fromPct: 40, toPct: 50, estimated: false },
+    { pct: 50, resetsAt: inMin(290) }, 30);
+  assert.equal(rw.label, '~2½ hrs');
+});
+
+test('a missing reset time counts as beating the reset — warn, never assume safety', () => {
+  const rw = windowRunway({ spikePct: 20, fromPct: 40, toPct: 60, estimated: false },
+    { pct: 60, resetsAt: '' }, 30);
+  assert.equal(rw.beatsReset, true);
+});
+
+test('windowSpikeConfirmNote leads with runway and ends "Keep going?" — Yes/Wait options, dollar-free', () => {
+  const sv = { spikePct: 20, fromPct: 40, toPct: 60, estimated: false };
+  const note = windowSpikeConfirmNote(sv, { pct: 60, resetsAt: inMin(180) }, 'sid123', null, 30);
   assert.match(note, /AskUserQuestion/);
   assert.match(note, /⚠️ Hey/);
-  assert.match(note, /23%/);                       // names the measured jump
-  assert.match(note, /Keep going/);                // option 1 (primary)
-  assert.match(note, /Unpack/);                    // option 2
+  assert.match(note, /at your current rate, you'll burn through your 5-hour usage window in ~60 min/);
+  assert.match(note, /Keep going\?/);
+  assert.match(note, /label "Yes"/);
+  assert.match(note, /label "Wait — where did the tokens go"/);
   assert.ok(!/\$\d/.test(note), 'window budget is a throttle, not money — never a $');
 });
 
-test('windowSpikeConfirmNote routes Unpack to /analyze-session for THIS session, and waits (no answer yet)', () => {
-  const note = windowSpikeConfirmNote({ spikePct: 40, fromPct: 5, toPct: 45, estimated: false }, now(45), 'abc987');
+test('the confirm card goes SILENT when the window resets before projected exhaustion', () => {
+  // 10 points in 30 min → 150 min runway, but the window resets in 60 — no throttle risk, no card
+  const sv = { spikePct: 10, fromPct: 40, toPct: 50, estimated: false };
+  assert.equal(windowSpikeConfirmNote(sv, { pct: 50, resetsAt: inMin(60) }, 'me', null, 30), null);
+});
+
+test('windowSpikeConfirmNote routes Wait to /analyze-session for THIS session, and waits (no answer yet)', () => {
+  const sv = { spikePct: 40, fromPct: 5, toPct: 45, estimated: false };
+  const note = windowSpikeConfirmNote(sv, { pct: 45, resetsAt: inMin(240) }, 'abc987', null, 60);
   assert.match(note, /\/analyze-session abc987/);          // sid-scoped digest
   assert.match(note, /do NOT answer the original prompt/i); // it pauses instead of answering
 });
 
 test('windowSpikeConfirmNote is a SOFT relay — carries no decision:block (that is what keeps it flow-safe)', () => {
-  const note = windowSpikeConfirmNote({ spikePct: 22, fromPct: 8, toPct: 30, estimated: false }, now(30), 'x');
+  const sv = { spikePct: 22, fromPct: 8, toPct: 30, estimated: false };
+  const note = windowSpikeConfirmNote(sv, { pct: 30, resetsAt: inMin(300) }, 'x', null, 30);
   assert.ok(!/decision.{0,4}block/i.test(note), 'the confirm card is a relay, not a hard block');
 });
 
@@ -392,30 +438,31 @@ test('spikeCopyMode: unknown without evidence, solo when alone or dominant, mult
 
 test('REGRESSION: the confirm card never blames "that last turn" when other sessions were busy', () => {
   // the 2026-07-19 misfire: four concurrent sessions, a ~34→~70 climb pinned on THIS session's
-  // last turn. With others busy in the interval the card must go cumulative: sessions + share.
+  // last turn. The rate frame names the session count and NOTHING else — no share, no span.
   const attr = spikeAttribution([
     { sid: 'me', usd: 1 }, { sid: 's2', usd: 3 }, { sid: 's3', usd: 2 },
   ], 'me');
-  const note = windowSpikeConfirmNote(SV, now(70), 'me', attr, 12);
+  const note = windowSpikeConfirmNote(SV, { pct: 70, resetsAt: inMin(200) }, 'me', attr, 12);
   assert.ok(!/that last turn/.test(note), 'single-turn blame is wrong under concurrency');
-  assert.match(note, /3 open sessions together/);   // 2 busy others + this one
-  assert.match(note, /in the last ~12 min/);
-  assert.match(note, /about 17% of that spend/);    // 1 of 6 ledgered dollars, rounded
-  assert.match(note, /Keep going/);
+  assert.match(note, /at your current rate across 3 open sessions/);   // 2 busy others + this one
+  assert.ok(!/% of that spend/.test(note), 'the per-session share factoid was cut 2026-07-20');
+  assert.ok(!/in the last ~12 min/.test(note), 'raw interval spans went with the stats-dump frame');
+  assert.match(note, /Keep going\?/);
   assert.ok(!/\$\d/.test(note), 'ledger dollars must never leak into the copy');
 });
 
-test('confirm card with NO attribution data goes neutral — a climb, not a blame', () => {
+test('measured climb with no interval baseline warns plainly — cannot prove safety without a rate', () => {
   const note = windowSpikeConfirmNote(SV, now(70), 'me', null, null);
-  assert.match(note, /usage climbed/);
-  assert.match(note, /other open sessions or devices/);
+  assert.match(note, /climbed from ~34% to ~70% used/);
+  assert.match(note, /Keep going\?/);
   assert.ok(!/that last turn/.test(note), 'no evidence, no single-turn blame');
 });
 
-test('confirm card keeps the single-turn copy when the ledger shows this session was alone', () => {
+test('confirm card drops the session-count clause when the ledger shows this session was alone', () => {
   const attr = spikeAttribution([{ sid: 'me', usd: 4 }], 'me');
-  const note = windowSpikeConfirmNote(SV, now(70), 'me', attr, 9);
-  assert.match(note, /that last turn used/);        // confirmed solo — the original copy is right
+  const note = windowSpikeConfirmNote(SV, { pct: 70, resetsAt: inMin(200) }, 'me', attr, 9);
+  assert.match(note, /at your current rate, you'll burn through/);   // rate frame, attribution-free
+  assert.ok(!/open sessions/.test(note));
 });
 
 test('the passive windowSpikeNote makes the same three-way call', () => {
