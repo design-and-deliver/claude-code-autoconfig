@@ -207,7 +207,7 @@ don't restore the lie).
 **Commit:** `fix(autoconfig): step numbering, anchored hook form, defer permissions to shipped settings` + body
 `Changelog: /autoconfig sets up the format hook in the reliable path-anchored form`.
 
-### ☐ 1.6 Fix stale comments + decide the `ccr` bin (01-B12, B13, B14, A6/C3; 02-4.7)
+### ☑ 1.6 Fix stale comments + decide the `ccr` bin (01-B12, B13, B14, A6/C3; 02-4.7)
 
 - `bin/cli.js:748` cites `docs/cca-port-next-steps.md` — file doesn't exist. Fix the comment to
   cite what's real (CLAUDE.md's invariants section).
@@ -593,3 +593,26 @@ Append one entry after each substep, newest last. Format:
   cli-install.test.js's autoconfig.md asserts cover only status-beeps, "no longer
   supported", and cca- block prose). (3) autoconfig.md is now @version 16. Full
   `npm test` exit 0 before commit (hook suites 181/181).
+
+### 2026-07-20 — substep 1.6 — done
+- Commit: e70f19b `chore: fix stale comment references; un-publish dev-only ccr bin`
+- Deviations: (1) The verify grep needs `--exclude-dir=docs` (same class as 1.1's deviation:
+  the audit evidence and this plan cite the dead paths by name). With docs/ excluded → 0.
+  (2) Regenerated `.claude/docs/autoconfig.docs.html` in this substep — it embeds
+  token-guard.js's header comment (the stale spec path had leaked into the shipped docs at
+  html line ~2676), and the regen also caught up command-file edits from 1.4/1.5 that were
+  never re-synced. (3) Executed AROUND a concurrent session's uncommitted R12a "runway"
+  rework of `windowSpikeConfirmNote` (token-guard.js + token-guard-r12-window.test.cjs):
+  that work was stash-protected while the docs regen ran against a clean baseline, then
+  re-applied; the commit stages only the line-5 hunk of token-guard.js (hunk-level stage) —
+  the runway hunks remain UNCOMMITTED in the working tree for their author. Full `npm test`
+  exit 0 on the union tree before commit (hook suites 186/186 — count grew: the runway work
+  adds tests). A redundant safety copy of the runway work sits in `stash@{0}` ("R12a runway
+  reframe") — drop it once the runway work is committed.
+- Discoveries: (1) autoconfig.docs.html embeds hook-file header comments — a comment-only
+  edit in `.claude/hooks/*.js` can require a docs regen to keep the verify greps clean
+  (substep 2.2's dev-gate fix will stop embedding dev-gated files altogether). (2) Removing
+  the `ccr` bin entry breaks no test: `.claude/hooks/tests/token-guard-ccr.test.cjs` drives
+  `bin/ccr.js` by file path, not via the published bin. recover.json's flat shape stays
+  frozen regardless (T16). (3) `git stash pop` refuses to merge into dirty files even when
+  hunks are disjoint — `git diff 'stash@{0}^' 'stash@{0}' | git apply` does it cleanly.
