@@ -14,7 +14,7 @@ Claude Code is powerful out of the box, but every new project means manually wri
 
 ## Quick Install
 
-Works from a regular terminal or from inside an existing Claude Code session.
+Run it from a regular terminal — not from inside a Claude Code session (the installer detects that and asks you to switch to a separate terminal).
 
 **npm:**
 ```bash
@@ -49,6 +49,7 @@ your-project/
     │   ├── autoconfig-update.md       #   /autoconfig-update - install updates
     │   ├── check-commit.md            #   /check-commit - uncommitted-work check
     │   ├── commit-and-push.md         #   /commit-and-push - git workflow
+    │   ├── continue.md                #   /continue - resume the last session's work
     │   ├── enable-retro.md            #   /enable-retro - opt-in tech-debt log
     │   ├── enable-status-beeps.md     #   /enable-status-beeps - tab status beeps on
     │   ├── disable-status-beeps.md    #   /disable-status-beeps - tab status beeps off
@@ -73,22 +74,18 @@ your-project/
     │   ├── terminal-title.js          #   Use-case terminal tab titles + live state
     │   ├── terminal-title.directive.md # Injected title directive (tunable wording)
     │   ├── arcade-beeps.js            #   Optional Pole Position status beeps (opt-in)
+    │   ├── auto-guard.js              #   Opt-in deterministic guardrails under auto mode
     │   ├── feedback-rule-check.js     #   Nudges FEEDBACK.md entries toward .claude/rules/
     │   ├── mark-commit-active.js      #   Quiets the uncommitted-work reminder mid-commit
     │   └── migrate-feedback.js        #   One-time FEEDBACK.md → Discoveries migration
     ├── docs/                          # Interactive documentation
     │   └── autoconfig.docs.html       #   Open with /show-docs
-    ├── updates/                       # Pending config updates
-    ├── rules/                         # Path-scoped context rules
-    │   ├── deploy-approval.md         #   Require approval before publish
-    │   └── readme-sync.md             #   Sync README & docs before publish
     ├── scripts/                       # Utility scripts
     │   ├── gls-downscale.js           #   Shrink /gls screenshots to save image tokens
     │   └── sync-docs.js               #   Regenerate interactive HTML docs
     ├── sounds/                        # Status-cue audio for the status beeps
     │   ├── pp3-getready-G4.wav        #   Awaiting tone (get-ready tick)
     │   └── pp3-go-F#5.wav             #   Complete tone (GO beep)
-    ├── .mcp.json                      # MCP server configs (empty placeholder)
     └── settings.json                  # Permissions & security
 ```
 
@@ -125,6 +122,7 @@ Autoconfig is **self-configuring**. Run `/autoconfig` and Claude:
 | `/test` | Runs your test suite (auto-detects framework) |
 | `/commit-and-push` | Stages, commits with good message, and pushes |
 | `/recover-context` | Recovers conversation context after compaction |
+| `/continue` | Continues where the previous session in this terminal left off |
 | `/gls` | Views latest screenshot (auto-downscaled to save tokens) |
 | `/validate-cca-install` | Validates installation against latest published version |
 | `/extract-rules` | Scan Claude artifacts and extract structured rules |
@@ -147,7 +145,7 @@ npx claude-code-autoconfig@latest
 
 Installing a specific older version isn't supported — if an old release is laid down explicitly (`npx claude-code-autoconfig@1.0.186`), the next `/autoconfig` announces it and brings the project up to the latest version.
 
-Autoconfig detects existing installations and automatically launches `/autoconfig-update` instead of a full reconfigure. Your customizations (feedback, hooks, settings) are preserved — only new files are added.
+Autoconfig detects existing installations and automatically launches `/autoconfig-update` instead of a full reconfigure. Your own content is preserved — feedback entries, hooks you wrote, and your settings customizations (settings are merged, never replaced) — while CCA-managed files (commands, managed hooks, scripts, sounds, docs) are refreshed to the new version.
 
 Use `--force` for a clean slate reset if needed:
 
@@ -189,7 +187,7 @@ Claude reads this directory and learns for next time. Persists across `/autoconf
 
 ### Rules
 
-The `rules/` directory contains path-scoped context rules that activate when Claude edits matching files. Autoconfig ships with publish-safety rules; you can add your own or use `/extract-rules` to generate rules from existing Claude artifacts.
+Claude Code supports path-scoped context rules in `.claude/rules/` that activate when Claude edits matching files. Autoconfig doesn't install any rules itself — write your own, or run `/extract-rules` to generate them from your existing Claude artifacts.
 
 **Want optimized rules for your project?**
 Reach out: [info@adac1001.com](mailto:info@adac1001.com)
