@@ -119,7 +119,7 @@ was since half-fixed (its settings-canonicalization proposal landed at bin/cli.j
 **Verify:** the three greps return 0; `npm test` green.
 **Commit:** `chore: remove dead archive/, internal/, todo.md` + body `Changelog: none`.
 
-### ☐ 1.2 Make README.md stop lying about what gets installed (01-B1, B2, B3, B4, B5, B17)
+### ☑ 1.2 Make README.md stop lying about what gets installed (01-B1, B2, B3, B4, B5, B17)
 
 Fix the docs to match the code (never the reverse):
 
@@ -532,3 +532,17 @@ Append one entry after each substep, newest last. Format:
   `internal/.claude/agents/docs-refresh.md` were still byte-identical to their live copies
   at deletion time (diff exit 0), so nothing was differently-stale. Full `npm test` green
   before commit (hook suites 181/181).
+
+### 2026-07-20 — substep 1.2 — done
+- Commit: 44c0e95 `docs(readme): match install reality — remove rules/updates/.mcp.json claims, add /continue`
+- Deviations: (1) also added `auto-guard.js` to the README hooks tree — it landed as a
+  MANAGED_HOOK (bin/cli.js:880) in 975e6e9 after the audit, and README's own Auto-Guard
+  section already referenced it while the tree omitted it (same "match install reality"
+  class as this substep). (2) The Rules section was rewritten rather than deleted: kept the
+  truthful part (/extract-rules generates rules; users can write their own) and the
+  reach-out CTA, removed only the "Autoconfig ships with publish-safety rules" lie.
+- Discoveries: `AUTOCONFIG_FILES` (bin/cli.js:50) lists `rules` and `.mcp.json` but that
+  list drives ownership/backup detection (cli.js:599-663), NOT copying — the copy section
+  (cli.js:814-901) never touches either; don't let a later step "fix" the tree back from
+  that list. Cross-check script result: 16 shipped commands, all 18 table rows valid
+  (16 shipped + 2 deprecated aliases). `npm test` exit 0 before commit.
