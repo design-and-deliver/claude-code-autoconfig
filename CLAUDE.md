@@ -123,6 +123,29 @@ lives there, and those tests do NOT run any other way).
 
 **DO NOT commit or present code changes if tests fail.** Fix the issues first.
 
+### Dev-box pre-push guard (per-machine setup, not tracked)
+
+`.git/hooks/` is untracked, so this hook lives only on the dev box — it is **not** shipped and
+**not** committed. It is the one mechanical guard for the fleet-parity class that CI structurally
+cannot see: `live-twin-parity.test.js` skips on CI, so CI green never proves the terminal-title
+fleet is in sync (see trap 5 / T8 below). The hook blocks a push unless `npm test` passes AND
+`node scripts/sync-terminal-title.js` (check mode) reports zero drift.
+
+On a fresh checkout, recreate `.git/hooks/pre-push` (then `chmod +x` it):
+
+```sh
+#!/bin/sh
+# CCA dev-box pre-push guard (see CLAUDE.md). Not tracked; recreate on a fresh checkout.
+# Blocks a push unless the full suite passes AND the terminal-title fleet is in sync
+# (the parity class CI cannot see — live-twin-parity.test.js skips on CI).
+set -e
+echo "[pre-push] running full test suite (npm test)..."
+npm test
+echo "[pre-push] checking terminal-title fleet sync..."
+node scripts/sync-terminal-title.js
+echo "[pre-push] OK - tests green, fleet in sync."
+```
+
 ### Invariants & Landmines — read before editing
 
 Cross-file contracts that don't look like contracts. Each of these survives a naive read
