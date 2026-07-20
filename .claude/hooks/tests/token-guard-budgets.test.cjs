@@ -18,9 +18,15 @@ function mkProject() {
   return dir;
 }
 
+// Spawned hooks must NEVER see the real home dir: real ~/.claude carries live credentials
+// (the meter fetch would hit the real usage API) and the global window-warns memory (a test
+// firing would swallow the user's real rung announcement — happened live 2026-07-19).
+const TMP_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'tgb-home-'));
+
 function runHook(projectDir, data, home) {
   const env = Object.assign({}, process.env, { CLAUDE_PROJECT_DIR: projectDir });
-  if (home) { env.USERPROFILE = home; env.HOME = home; }
+  const h = home || TMP_HOME;
+  env.USERPROFILE = h; env.HOME = h;
   const r = spawnSync('node', [HOOK].concat(data == null ? ['--budgets'] : []), {
     input: data == null ? undefined : JSON.stringify(data),
     encoding: 'utf8', env, timeout: 20000,

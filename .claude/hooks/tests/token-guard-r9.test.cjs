@@ -17,10 +17,15 @@ function mkProject(cfg) {
   return dir;
 }
 
+// isolate HOME: real ~/.claude carries live credentials (meter fetch) + global window-warns
+// memory — a spawned hook must touch neither (a test fire once swallowed a real announcement)
+const TMP_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'tg9-home-'));
+
 function runHook(projectDir, data) {
   const r = spawnSync('node', [HOOK], {
     input: JSON.stringify(data), encoding: 'utf8',
-    env: Object.assign({}, process.env, { CLAUDE_PROJECT_DIR: projectDir }),
+    env: Object.assign({}, process.env,
+      { CLAUDE_PROJECT_DIR: projectDir, USERPROFILE: TMP_HOME, HOME: TMP_HOME }),
     timeout: 20000,
   });
   return r.stdout || '';

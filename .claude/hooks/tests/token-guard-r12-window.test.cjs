@@ -11,7 +11,7 @@ const path = require('path');
 const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
 const {
   resolveConfig, TOKEN_SAVER,
-  fiveHourWindow, tightestWindow, windowSpikeVerdict, windowThresholdVerdict,
+  fiveHourWindow, tightestWindow, windowSpikeVerdict, windowThresholdVerdict, effectiveWarn,
   windowSpikeNote, windowSpikeConfirmNote, windowThresholdNote, windowThresholdGateReason,
 } = require(HOOK);
 
@@ -238,6 +238,46 @@ test('threshold re-fires for a DIFFERENT window even within the same cycle', () 
 
 test('threshold null-safe when the meter carried no window', () => {
   assert.equal(windowThresholdVerdict(null, null, CFG).fire, false);
+});
+
+// ---------- effectiveWarn(): global (cross-session) rung memory unioned with the session field ----------
+
+test('REGRESSION: a fresh session must NOT re-announce a rung another session already fired', () => {
+  // the 2026-07-19 bug: rung memory was per-session, so a fresh session at 75% re-fired the
+  // 50 rung and FYI\'d a random-looking "~75% used". With global memory the fresh session
+  // (session field null) inherits the global entry and the verdict stays quiet.
+  const worst = { pct: 75, name: 'Weekly (Fable)', resetsAt: R };
+  const global50 = { name: 'Weekly (Fable)', resetsAt: R, rung: 50 };
+  const warned = effectiveWarn(worst, global50, null);       // fresh session: no session memory
+  assert.equal(warned, global50);
+  assert.equal(windowThresholdVerdict(worst, warned, CFG).fire, false);
+  // …but a genuine escalation past the NEXT rung still fires
+  assert.equal(windowThresholdVerdict({ ...worst, pct: 82 }, warned, CFG).fire, true);
+});
+
+test('effectiveWarn keeps the session entry when it suppresses more (in-flight session, pre-global fire)', () => {
+  const worst = { pct: 82, name: '5h window', resetsAt: R };
+  const session80 = { name: '5h window', resetsAt: R, rung: 80 };
+  assert.equal(effectiveWarn(worst, null, session80), session80);          // no global file yet
+  assert.equal(effectiveWarn(worst, { name: '5h window', resetsAt: R, rung: 50 }, session80), session80);
+});
+
+test('effectiveWarn treats a pre-ladder entry (no rung) as top-fired, like the verdict does', () => {
+  const worst = { pct: 82, name: '5h window', resetsAt: R };
+  const legacy = { name: '5h window', resetsAt: R };
+  const global50 = { name: '5h window', resetsAt: R, rung: 50 };
+  assert.equal(effectiveWarn(worst, legacy, global50), legacy);
+});
+
+test('effectiveWarn ignores entries for another window or cycle and is null-safe', () => {
+  const worst = { pct: 63, name: 'Weekly (Fable)', resetsAt: R };
+  const otherWindow = { name: '5h window', resetsAt: R, rung: 80 };
+  const matching = { name: 'Weekly (Fable)', resetsAt: R, rung: 50 };
+  assert.equal(effectiveWarn(worst, otherWindow, matching), matching);     // name mismatch loses
+  assert.equal(effectiveWarn(worst, null, null), null);
+  assert.equal(effectiveWarn(null, matching, null), matching);
+  // an other-window-only pair still returns something the verdict safely ignores
+  assert.equal(windowThresholdVerdict(worst, effectiveWarn(worst, otherWindow, null), CFG).fire, true);
 });
 
 // ---------- note copy: the relay contract, and NEVER a dollar figure ----------
