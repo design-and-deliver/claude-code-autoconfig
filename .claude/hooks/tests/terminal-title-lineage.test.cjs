@@ -29,7 +29,15 @@ function registrations(dir) {
 // The suite runs as node ← npm ← shell, so the live chain is a realistic stand-in for
 // node(hook) ← claude ← shell: it must contain self plus at least one node-ish ancestor.
 test('ancestryChain walks the real process tree from self upward', () => {
-  const chain = ancestryChain(process.pid);
+  // The walk shells out (PowerShell CIM on Windows, ps on POSIX) under a short spawn
+  // timeout. Under full-suite parallel load that first spawn can exceed it and return an
+  // empty chain — transient, not a regression (production treats a miss as a fail-safe and
+  // falls back). Retry a few times so a load-induced timeout doesn't flake the suite; a
+  // genuine break still fails every attempt. Isolation is reliable — see the 12/12 note.
+  let chain = [];
+  for (let attempt = 0; attempt < 3 && chain.length < 2; attempt++) {
+    chain = ancestryChain(process.pid);
+  }
   assert.ok(chain.length >= 2, `expected >=2 entries, got ${chain.length}`);
   assert.equal(chain[0].pid, process.pid);
   assert.ok(chain.every(e => e.pid > 0 && e.created !== ''), 'every entry has pid + creation stamp');
