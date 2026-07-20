@@ -1,5 +1,5 @@
 <!-- @description Manages and installs updates to Claude Code configuration. -->
-<!-- @version 4 -->
+<!-- @version 5 -->
 <!-- @response updates-available | Displays list of pending updates with install/review options. -->
 <!-- @response up-to-date | All updates are already installed. -->
 <!-- @sideeffect Pulls latest update files from npm, executes update instructions, tracks applied updates -->
@@ -44,7 +44,25 @@ The status beeps are opt-in, and upgraded projects have never been asked. Offer 
 3. On **yes**: create the flag by writing an empty file with the Write tool: `.claude/sounds/status-beeps.enabled`
 4. On **yes or no** (not on skip): merge `"statusBeepsPrompted": true` into `.claude/cca.config.json` with the Write tool, preserving any existing keys — this is what prevents re-asking on every future update.
 
-Either way the choice stays reversible with `/enable-status-beeps` / `/disable-status-beeps`. Continue to Step 1.
+Either way the choice stays reversible with `/enable-status-beeps` / `/disable-status-beeps`. Continue to Step 0c.
+
+## Step 0c: Auto Permission Mode Opt-in (asked once)
+
+Auto permission mode is a **user-level** opt-in — Claude Code ignores `permissions.defaultMode: "auto"` in project `.claude/settings.json` (a repository cannot grant itself auto mode), so it only works from `~/.claude/settings.json`; never write it into project settings. Upgraded projects have never been asked. Offer it **once**:
+
+1. **Skip silently** if any of these hold:
+   - `~/.claude/settings.json` already has any `permissions.defaultMode` value (the user already chose a mode), or
+   - `.claude/cca.config.json` has `"autoModePrompted": true` (already asked), or
+   - the run is headless / the question can't be answered.
+2. Otherwise ask with the AskUserQuestion tool:
+   - Question: "Enable auto permission mode?"
+   - Options:
+     - "Yes, enable auto mode (recommended)" — description: "Claude runs routine commands without approval prompts, and still asks before destructive or external actions. Applies to all your projects (writes ~/.claude/settings.json)."
+     - "No thanks"
+3. On **yes**: Read `~/.claude/settings.json` (treat a missing file as `{}`), add `"defaultMode": "auto"` under `permissions` while preserving every existing key, and Write it back. Then tell the user: "Auto mode is on for new sessions in all projects. Revert anytime: Shift+Tab in a session, or delete `permissions.defaultMode` from `~/.claude/settings.json`. (If your plan or model doesn't support auto mode, Claude Code ignores the setting.)"
+4. On **yes or no** (not on skip): merge `"autoModePrompted": true` into `.claude/cca.config.json` with the Write tool, preserving any existing keys — this is what prevents re-asking on every future update.
+
+Continue to Step 1.
 
 ## Step 1: Pull Latest Updates
 

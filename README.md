@@ -167,6 +167,10 @@ Run several Claude Code sessions at once and the tabs all look alike. Autoconfig
 
 Prefer your ears to your eyes? Run `/enable-status-beeps` for Pole Position–style tab cues that mirror the title glyph: a low get-ready tick when a session is **waiting on you** and a higher GO tone when it **finishes**. Cross-platform (Windows / macOS / Linux) and off unless you opt in — fresh installs ask once at the end of `/autoconfig`, upgrades ask once during `/autoconfig-update`, and you can flip the answer any time with `/enable-status-beeps` / `/disable-status-beeps`. (The old `/enable-arcade-beeps` and `/disable-arcade-beeps` names still work as deprecated aliases.)
 
+### Auto Permission Mode (opt-in)
+
+Fresh installs and upgrades ask once whether to enable Claude Code's **auto permission mode**: routine commands run without approval prompts, and Claude still asks before destructive or external actions. Saying yes writes `permissions.defaultMode: "auto"` to your user-level `~/.claude/settings.json` — Claude Code deliberately ignores auto mode in project settings (a repo can't grant itself auto mode), so this is a per-user choice autoconfig can only offer, never ship as a project default. Revert any time with Shift+Tab in a session or by deleting the key.
+
 ### Team Feedback
 
 When Claude makes a mistake, add an entry to `.claude/feedback/FEEDBACK.md`:

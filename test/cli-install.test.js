@@ -232,6 +232,44 @@ test('deprecated arcade-beeps aliases still ship and delegate to the new flag', 
   );
 });
 
+console.log();
+
+// -----------------------------------------------------------------------------
+// Auto Permission Mode Opt-in (user-level only — project scope is ignored by
+// Claude Code, so shipping defaultMode in project settings would silently no-op)
+// -----------------------------------------------------------------------------
+
+console.log('Auto Permission Mode Opt-in:');
+
+test('/autoconfig and /autoconfig-update both carry the asked-once auto-mode opt-in', () => {
+  for (const name of ['autoconfig', 'autoconfig-update']) {
+    const content = fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'commands', `${name}.md`), 'utf8');
+    assert(
+      content.includes('"autoModePrompted": true'),
+      `${name}.md should gate the auto-mode question on the autoModePrompted flag`
+    );
+    assert(
+      content.includes('~/.claude/settings.json') && content.includes('"defaultMode": "auto"'),
+      `${name}.md should write defaultMode "auto" to USER settings (~/.claude/settings.json)`
+    );
+    assert(
+      /never write it into project settings/i.test(content),
+      `${name}.md should warn against writing auto mode into project settings (Claude Code ignores it there)`
+    );
+  }
+});
+
+test('shipped project settings templates never set defaultMode', () => {
+  for (const name of ['settings.json', 'settings.local.json']) {
+    const p = path.join(PACKAGE_CLAUDE_DIR, name);
+    if (!fs.existsSync(p)) continue;
+    assert(
+      !fs.readFileSync(p, 'utf8').includes('defaultMode'),
+      `${name} template must not set defaultMode — Claude Code ignores auto mode from project scope, so it would silently no-op (and any other mode would override the user's choice)`
+    );
+  }
+});
+
 test('upgrades persist a what\'s-new summary and /autoconfig-update renders + consumes it', () => {
   const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
   assert(

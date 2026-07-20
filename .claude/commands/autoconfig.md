@@ -1,5 +1,5 @@
 <!-- @description Configures Claude Code scaffolding for your project. Sets up settings, permissions, hooks, commands, and docs. -->
-<!-- @version 13 -->
+<!-- @version 14 -->
 <!-- @response success | Scaffolding configured, CLAUDE.md initialized, docs opened in browser. -->
 <!-- @response no-project | No project detected — asks user to confirm directory. -->
 <!-- @sideeffect Initializes CLAUDE.md, settings.json, hooks, commands, and MEMORY.md -->
@@ -245,6 +245,22 @@ After populating CLAUDE.md, update the docs file previews to show actual project
 This ensures double-clicking these files in the docs shows real project content, not stale placeholders.
 
 ## After Completion
+
+### Auto Permission Mode Opt-in
+
+Offer Claude Code's auto permission mode. This is deliberately a **user-level** opt-in: Claude Code ignores `permissions.defaultMode: "auto"` in project `.claude/settings.json` (a repository cannot grant itself auto mode), so it only works from the user's own `~/.claude/settings.json` — never write it into project settings.
+
+1. **Skip silently** if any of these hold:
+   - `~/.claude/settings.json` already has any `permissions.defaultMode` value (the user already chose a mode), or
+   - `.claude/cca.config.json` has `"autoModePrompted": true` (already asked), or
+   - the run is headless / the question can't be answered.
+2. Otherwise ask with the AskUserQuestion tool:
+   - Question: "Enable auto permission mode?"
+   - Options:
+     - "Yes, enable auto mode (recommended)" — description: "Claude runs routine commands without approval prompts, and still asks before destructive or external actions. Applies to all your projects (writes ~/.claude/settings.json)."
+     - "No thanks"
+3. On **yes**: Read `~/.claude/settings.json` (treat a missing file as `{}`), add `"defaultMode": "auto"` under `permissions` while preserving every existing key, and Write it back. Then tell the user: "Auto mode is on for new sessions in all projects. Revert anytime: Shift+Tab in a session, or delete `permissions.defaultMode` from `~/.claude/settings.json`. (If your plan or model doesn't support auto mode, Claude Code ignores the setting.)"
+4. On **yes or no** (not on skip): merge `"autoModePrompted": true` into `.claude/cca.config.json` with the Write tool, preserving any existing keys — `/autoconfig-update` uses this to avoid re-asking on upgrades.
 
 ### Status Beeps Opt-in
 
