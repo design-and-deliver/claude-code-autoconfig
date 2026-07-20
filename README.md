@@ -47,7 +47,9 @@ your-project/
     ├── commands/                      # Slash commands
     │   ├── autoconfig.md              #   /autoconfig - self-configures
     │   ├── autoconfig-update.md       #   /autoconfig-update - install updates
+    │   ├── check-commit.md            #   /check-commit - uncommitted-work check
     │   ├── commit-and-push.md         #   /commit-and-push - git workflow
+    │   ├── enable-retro.md            #   /enable-retro - opt-in tech-debt log
     │   ├── enable-status-beeps.md     #   /enable-status-beeps - tab status beeps on
     │   ├── disable-status-beeps.md    #   /disable-status-beeps - tab status beeps off
     │   ├── enable-arcade-beeps.md     #   (deprecated alias of /enable-status-beeps)
@@ -56,10 +58,14 @@ your-project/
     │   ├── gls.md                     #   /gls - view latest screenshot
     │   ├── recover-context.md         #   /recover-context - restore context after compaction
     │   ├── show-docs.md               #   /show-docs - interactive walkthrough
+    │   ├── submit-claude-code-github-issue.md # /submit-claude-code-github-issue - file upstream issue
+    │   ├── sync-claude-md.md          #   /sync-claude-md - repair CLAUDE.md structure
     │   ├── test.md                    #   /test - run tests
     │   └── validate-cca-install.md   #   /validate-cca-install - verify installation
     ├── agents/                        # Custom subagents (add your own)
-    │   └── README.md                  #   How to define agents
+    │   ├── README.md                  #   How to define agents
+    │   ├── create-retro-item.md       #   Logs tech debt as story files (see /enable-retro)
+    │   └── docs-refresh.md            #   Keeps interactive docs in sync with .claude/
     ├── feedback/                      # Team corrections for Claude
     │   └── FEEDBACK.md                #   Add entries when Claude errs
     ├── hooks/                         # Hook scripts
@@ -68,6 +74,7 @@ your-project/
     │   ├── terminal-title.directive.md # Injected title directive (tunable wording)
     │   ├── arcade-beeps.js            #   Optional Pole Position status beeps (opt-in)
     │   ├── feedback-rule-check.js     #   Nudges FEEDBACK.md entries toward .claude/rules/
+    │   ├── mark-commit-active.js      #   Quiets the uncommitted-work reminder mid-commit
     │   └── migrate-feedback.js        #   One-time FEEDBACK.md → Discoveries migration
     ├── docs/                          # Interactive documentation
     │   └── autoconfig.docs.html       #   Open with /show-docs
@@ -121,6 +128,10 @@ Autoconfig is **self-configuring**. Run `/autoconfig` and Claude:
 | `/gls` | Views latest screenshot (auto-downscaled to save tokens) |
 | `/validate-cca-install` | Validates installation against latest published version |
 | `/extract-rules` | Scan Claude artifacts and extract structured rules |
+| `/check-commit` | Checks whether uncommitted work has piled up |
+| `/sync-claude-md` | Repairs CLAUDE.md markers and Discoveries section |
+| `/enable-retro` | Opt-in: Claude logs tech debt to `.claude/retro/` |
+| `/submit-claude-code-github-issue` | Files an upstream issue with duplicate-checking |
 | `/enable-status-beeps` | Turn on opt-in Pole Position status beeps |
 | `/disable-status-beeps` | Turn off the status beeps |
 | `/enable-arcade-beeps` | Deprecated alias for `/enable-status-beeps` (upgrades only) |

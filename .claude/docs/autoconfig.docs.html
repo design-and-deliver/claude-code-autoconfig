@@ -878,6 +878,11 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">autoconfig.md</span>
                             </div>
+                            <div class="tree-item indent-3 hidden" data-info="check-commit" data-parent="commands">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">check-commit.md</span>
+                            </div>
                             <div class="tree-item indent-3 hidden" data-info="commit-and-push" data-parent="commands">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
@@ -902,6 +907,11 @@
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">enable-arcade-beeps.md</span>
+                            </div>
+                            <div class="tree-item indent-3 hidden" data-info="enable-retro" data-parent="commands">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">enable-retro.md</span>
                             </div>
                             <div class="tree-item indent-3 hidden" data-info="enable-status-beeps" data-parent="commands">
                                 <span class="tree-spacer"></span>
@@ -938,6 +948,16 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">show-docs.md</span>
                             </div>
+                            <div class="tree-item indent-3 hidden" data-info="submit-claude-code-github-issue" data-parent="commands">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">submit-claude-code-github-issue.md</span>
+                            </div>
+                            <div class="tree-item indent-3 hidden" data-info="sync-claude-md" data-parent="commands">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">sync-claude-md.md</span>
+                            </div>
                             <div class="tree-item indent-3 hidden" data-info="test" data-parent="commands">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
@@ -962,6 +982,16 @@
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">README.md</span>
+                            </div>
+                            <div class="tree-item indent-3 hidden" data-info="create-retro-item-agent" data-parent="agents">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">create-retro-item.md</span>
+                            </div>
+                            <div class="tree-item indent-3 hidden" data-info="docs-refresh-agent" data-parent="agents">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">docs-refresh.md</span>
                             </div>
                             <div class="tree-item indent-2 folder-row hidden collapsed" data-info="feedback" data-folder="feedback" data-parent="claude-dir">
                                 <span class="tree-chevron">›</span>
@@ -992,6 +1022,11 @@
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">format.js</span>
+                            </div>
+                            <div class="tree-item indent-3 hidden" data-info="mark-commit-active-hook" data-parent="hooks">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">mark-commit-active.js</span>
                             </div>
                             <div class="tree-item indent-3 hidden" data-info="migrate-feedback-hook" data-parent="hooks">
                                 <span class="tree-spacer"></span>
@@ -1318,7 +1353,7 @@
                 title: '.claude/ Directory',
                 desc: 'Commands, rules, settings, and these docs. Keeps configuration organized as your project grows.'
             },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    'rules': {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                'rules': {
                 title: 'rules/',
                 desc: 'Path-scoped context that loads when Claude works on matching files.'
             },
@@ -1353,6 +1388,11 @@
                 desc: 'Configures Claude Code scaffolding for your project. Sets up settings, permissions, hooks, commands, and docs.<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Scaffolding configured, CLAUDE.md initialized, docs opened in browser.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-project</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">No project detected — asks user to confirm directory.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Initializes CLAUDE.md, settings.json, hooks, commands, and MEMORY.md</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/autoconfig</code> <span style="opacity: 0.6;">— Analyze project and configure Claude</span></div></div></div>',
                 trigger: '/autoconfig'
             },
+            'check-commit': {
+                title: 'check-commit.md',
+                desc: 'Check for uncommitted work exceeding thresholds and recommend a commit.<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Reports commit status; recommends /commit-and-push when a threshold is exceeded.</td></tr></table></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/check-commit</code> <span style="opacity: 0.6;">— Check whether uncommitted work has piled up</span></div></div></div>',
+                trigger: '/check-commit'
+            },
             'commit-and-push': {
                 title: 'commit-and-push.md',
                 desc: 'Runs tests, then stages all changes, generates a conventional commit message, commits, and pushes.<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Changes committed and pushed to current branch.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>test-failure</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Tests failed — no commit made.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Runs test suite, stages all changes, creates git commit, pushes to remote</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/commit-and-push</code> <span style="opacity: 0.6;">— Run tests, commit, and push</span></div></div></div>',
@@ -1377,6 +1417,11 @@
                 title: 'enable-arcade-beeps.md',
                 desc: 'enable-arcade-beeps.md in commands/<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div>',
                 trigger: '/enable-arcade-beeps'
+            },
+            'enable-retro': {
+                title: 'enable-retro.md',
+                desc: '(Experimental) Enable Claude to log tech debt it encounters into .claude/retro.<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Retro enabled — Claude will log tech debt to .claude/retro/ when encountered.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Creates .claude/retro/README.md, adds agent, updates CLAUDE.md</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/enable-retro</code> <span style="opacity: 0.6;">— Activate tech debt tracking</span></div></div></div>',
+                trigger: '/enable-retro'
             },
             'enable-status-beeps': {
                 title: 'enable-status-beeps.md',
@@ -1405,13 +1450,23 @@
             },
             'recover-context': {
                 title: 'recover-context.md',
-                desc: 'Recovers conversation context from the session transcript after compaction.<div style="margin-top: 12px;"><strong>Parameters</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Name</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Type</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>minutes</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>integer</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">required</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">How far back to recover, in minutes. Leading dash optional. Min: 1.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>--show</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>flag</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Opens the extracted transcript in your default editor.</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">~{tokens} tokens recovered ({N} messages across {sessions} session(s), last {minutes} min).</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-transcript</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">No transcript files found.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-messages</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">No messages found in the requested time range.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Reads .jsonl transcripts from ~/.claude/projects/, writes temp file</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/recover-context -60</code> <span style="opacity: 0.6;">— Last 60 minutes of conversation</span></div><div><code>/recover-context 120</code> <span style="opacity: 0.6;">— Last 2 hours (dash optional)</span></div><div><code>/recover-context -60 --show</code> <span style="opacity: 0.6;">— Last 60 min + open transcript file</span></div></div></div>',
+                desc: 'Recovers conversation context from the session transcript after compaction.<div style="margin-top: 12px;"><strong>Parameters</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Name</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Type</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>minutes</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>integer</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">How far back to recover, in minutes. Leading dash optional. Min: 1. Bare invocation auto-recovers the last session instead.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>pid</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>integer</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Recovery-pointer id from token-guard\'s idle warning (e.g. pid=3). Resolves the exact session + cutoff from .claude/hooks/.token-guard/recover.json.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>--show</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>flag</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Opens the extracted transcript in your default editor.</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">~{tokens} tokens recovered ({N} messages across {sessions} session(s)).</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-transcript</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">No transcript files found.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-messages</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">No messages found in the requested time range.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-pointer</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">No recovery pointer found (or that pid is not in it).</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-previous</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">No previous session found in this project.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Reads .jsonl transcripts from ~/.claude/projects/, writes temp file</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/recover-context</code> <span style="opacity: 0.6;">— Auto: last ~15 min of this project\'s previous session</span></div><div><code>/recover-context -60</code> <span style="opacity: 0.6;">— Last 60 minutes of conversation</span></div><div><code>/recover-context pid=3</code> <span style="opacity: 0.6;">— Recover exactly what token-guard\'s idle warning pointed at</span></div><div><code>/recover-context -60 --show</code> <span style="opacity: 0.6;">— Last 60 min + open transcript file</span></div></div></div>',
                 trigger: '/recover-context'
             },
             'show-docs': {
                 title: 'show-docs.md',
                 desc: 'Opens the interactive docs in your browser.<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Docs synced and opened in default browser.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-docs</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Docs file not found — run /autoconfig first.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Runs sync-docs.js to refresh content, opens browser</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/show-docs</code> <span style="opacity: 0.6;">— Open interactive documentation</span></div></div></div>',
                 trigger: '/show-docs'
+            },
+            'submit-claude-code-github-issue': {
+                title: 'submit-claude-code-github-issue.md',
+                desc: 'File a GitHub issue on anthropics/claude-code, with duplicate-check due diligence.<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Issue filed (or upvote/comment on an existing one) after explicit user approval.</td></tr></table></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/submit-claude-code-github-issue plan names should be meaningful</code> <span style="opacity: 0.6;">— File with context</span></div></div></div>',
+                trigger: '/submit-claude-code-github-issue'
+            },
+            'sync-claude-md': {
+                title: 'sync-claude-md.md',
+                desc: 'Ensures CLAUDE.md has the required markers and Discoveries section.<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">CLAUDE.md verified and updated if needed.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">May add markers or Discoveries section if missing, preserves all existing content</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/sync-claude-md</code> <span style="opacity: 0.6;">— Verify CLAUDE.md structure</span></div></div></div>',
+                trigger: '/sync-claude-md'
             },
             'test': {
                 title: 'test.md',
@@ -1433,6 +1488,16 @@
                 desc: 'Placeholder — drop your project\'s custom subagent definitions in this directory.',
                 trigger: 'Background agent'
             },
+            'create-retro-item-agent': {
+                title: 'create-retro-item.md',
+                desc: 'Creates a formatted retro item when tech debt or improvements are spotted.',
+                trigger: 'Background agent'
+            },
+            'docs-refresh-agent': {
+                title: 'docs-refresh.md',
+                desc: 'Background worker that syncs the docs when .claude/ files change.',
+                trigger: 'Background agent'
+            },
             'arcade-beeps-hook': {
                 title: 'arcade-beeps.js',
                 desc: 'arcade-beeps.js in hooks/',
@@ -1446,6 +1511,11 @@
             'format-hook': {
                 title: 'format.js',
                 desc: 'format.js in hooks/',
+                trigger: 'PostToolUse hook'
+            },
+            'mark-commit-active-hook': {
+                title: 'mark-commit-active.js',
+                desc: 'mark-commit-active.js in hooks/',
                 trigger: 'PostToolUse hook'
             },
             'migrate-feedback-hook': {
@@ -1679,7 +1749,7 @@ CRITICAL: A plausible-looking cause from code reading is NOT confirmed evidence.
 
 > Run \`/autoconfig\` to populate this based on your project.`
             },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    'analyze-session': {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                'analyze-session': {
                 filename: 'analyze-session.md',
                 content: `# Analyze Session
 
@@ -1778,6 +1848,34 @@ Read \`.claude/feedback/FEEDBACK.md\`. If it contains custom content beyond the 
 3. Reset FEEDBACK.md to the clean template:
    \`\`\``
             },
+            'check-commit': {
+                filename: 'check-commit.md',
+                content: `# Commit Reminder Rules
+
+Check if there are uncommitted changes that should be committed, based on these thresholds:
+
+**Thresholds:**
+- **>5 uncommitted files** OR
+- **>500 lines changed** OR
+- **Changes older than 24 hours** (check last commit time)
+
+**Actions:**
+1. Run \`git status --short\` to see uncommitted files
+2. Run \`git diff --stat\` to see lines changed
+3. Run \`git log -1 --format="%cr"\` to see when last commit was made
+4. Count modified/new files and total lines changed
+5. If any threshold is exceeded:
+   - Show the stats clearly
+   - Strongly recommend running \`/commit-and-push\`
+   - Explain which threshold(s) were exceeded
+
+**When to check (proactively):**
+- At the start of each session
+- After completing major tasks
+- Before starting new work
+
+**Note:** This command can be run manually anytime to check commit status, or Claude should run it proactively based on the triggers above. The automated companion is the Stop-hook reminder in \`.claude/settings.json\`, which fires on its own at higher thresholds (>10 files / >1000 lines) and stays quiet while any session is mid-commit (see \`.claude/hooks/mark-commit-active.js\`).`
+            },
             'commit-and-push': {
                 filename: 'commit-and-push.md',
                 content: `# Commit and Push
@@ -1803,14 +1901,7 @@ Keep the subject line under 50 chars. Add body if the change needs explanation.`
             },
             'continue': {
                 filename: 'continue.md',
-                content: `<!-- @description Continues where your previous session in this terminal left off — recovers its context and resumes the work. -->
-<!-- @version 1 -->
-<!-- @param --show | flag | optional | Opens the recovered transcript in your default editor. -->
-<!-- @response success | Picking up where we left off — {what we were doing}. Then the work resumes. -->
-<!-- @response no-previous | I can't find a previous session for this terminal. -->
-<!-- @sideeffect Reads .jsonl transcripts from ~/.claude/projects/, writes temp file -->
-<!-- @example /continue | Recover the previous session here and resume its work -->
-Continue where the previous session in this terminal left off.
+                content: `Continue where the previous session in this terminal left off.
 
 This is the no-ceremony wrapper around \`/recover-context\`'s auto mode: recover the last
 session's context, then RESUME the work — unlike \`/recover-context\`, which recovers and
@@ -1839,20 +1930,7 @@ in flight, and what was already completed. Before acting, cross-check reality �
 --short\`, plus a quick look at any file the tail claims was mid-edit — the recovered tail may
 predate work that already landed.
 
-Then open your reply with exactly this line (bold, em-dash clause naming the work):
-
-> **Picking up where we left off** — {one short clause: what we were doing}.
-
-And continue, by ending state:
-
-- **Work was mid-flight** (a task underway, a named next step): carry on with it now, under the
-  same rules as any turn — proceed with reversible work; confirm first before anything
-  destructive or outward-facing.
-- **The session ended waiting on the user** (an open question, a pending decision): re-ask that
-  question, refreshed with anything you can now verify yourself.
-- **The work was finished**: say so in one line, then ask what's next.
-
-Never re-do work the tail (or git) already shows as done.`
+Then open your reply with exactly this line (bold, em-dash clause naming the work):`
             },
             'disable-arcade-beeps': {
                 filename: 'disable-arcade-beeps.md',
@@ -1899,6 +1977,39 @@ Run exactly this command, then reply with a single confirmation line and nothing
 \`\`\`
 mkdir -p "\${CLAUDE_PROJECT_DIR:-.}/.claude/sounds" && touch "\${CLAUDE_PROJECT_DIR:-.}/.claude/sounds/status-beeps.enabled" && echo "status beeps ENABLED for this project (every turn-end beeps: awaiting=low, complete=high). Heads up: /enable-arcade-beeps is deprecated — next time use /enable-status-beeps. Disable with /disable-status-beeps."
 \`\`\``
+            },
+            'enable-retro': {
+                filename: 'enable-retro.md',
+                content: `# Enable Retro
+
+Enable the experimental Retro feature, which lets Claude log tech debt and improvement opportunities as structured story files.
+
+## What This Does
+
+1. Creates \`.claude/retro/\` directory with a README
+2. Creates \`.claude/agents/create-retro-item.md\` agent
+3. Adds Retro instructions to CLAUDE.md
+
+## Step 1: Create Retro Directory
+
+Create \`.claude/retro/README.md\` with:
+
+\`\`\`markdown
+# Retro Items
+
+Tech debt and improvement opportunities identified during development.
+
+Each item is a structured story file with:
+- Problem description
+- Acceptance criteria
+- Suggested approach
+- Priority & effort sizing
+- Files involved
+
+## Working with Retro Items
+
+- "Fix retro #001" — Work on a specific item
+- "What's in the retro backlog?" — List pending items`
             },
             'enable-status-beeps': {
                 filename: 'enable-status-beeps.md',
@@ -2050,32 +2161,33 @@ The keyword is: $ARGUMENTS (trim whitespace/flags). Look for \`.claude/handoff/<
                 content: `Recover recent conversation context from the raw session transcript on disk.
 
 Usage:
-- \`/recover-context -60\` — last 60 minutes of conversation
-- \`/recover-context -60 --show\` — same, but also opens the transcript in your editor
+- \`/recover-context\` — auto: recover the last session in this project (after a /clear or in a fresh terminal), no arguments needed
+- \`/recover-context -60\` — last 60 minutes of conversation (any recent session)
+- \`/recover-context pid=3\` — recover via a token-guard pointer: the exact stale session and cutoff its idle warning computed
+- \`/recover-context -60 --show\` — same as minutes mode, but also opens the transcript in your editor
 
-The number means "go back N minutes from now." The leading dash is optional. The minutes argument is **required**.
+Three modes:
+- **Auto mode** (no arguments): recovers the session that ran in THIS terminal before the current one. The terminal-title hook maintains a terminal-lineage registry: on every SessionStart (including /clear) it records which session this terminal held, and stamps the outgoing session as the incoming one's predecessor in \`.claude/hooks/.titles/{sid}.lineage.json\`. Auto mode reads its own lineage file (keyed by \`$CLAUDE_CODE_SESSION_ID\`), falling back to the newest-other-transcript heuristic when no lineage exists. The cutoff ladder: a matching token-guard pointer (frozen at fire time) → the start of the previous session's final use-case thread per its title history (\`{sid}.history.jsonl\`), floored at ~15 min of real interaction and capped at 60 wall-clock minutes → the plain ~15-min walk-back.
+- **Minutes mode**: the number means "go back N minutes from now." The leading dash is optional.
+- **Pointer mode** (\`pid=N\`): token-guard's idle-return warning writes a numbered recovery pointer to \`.claude/hooks/.token-guard/recover.json\` in the project it fired in. The pid encapsulates the stale session's id and the recovery cutoff (frozen at fire time), so this mode recovers the right window no matter how long ago the warning fired — even if other sessions happened in between (which would fool auto mode).
 
 ## Step 1: Parse the arguments
 
 The arguments are: $ARGUMENTS
 
-- If empty or missing, ask the user: "How many minutes back? (e.g., -60)"
-- Strip the leading \`-\` from the number and treat it as the number of minutes to look back
-- Check if \`--show\` flag is present
+- If empty (no arguments beyond flags) → **auto mode**. Go to Step 2c.
+- If they match \`pid=N\` (also accept \`pid N\` or \`--pid N\`) → **pointer mode**, \`$PID\` = N. Go to Step 2a.
+- Otherwise, strip the leading \`-\` from the number and treat it as minutes to look back → **minutes mode**. Go to Step 2b.
+- Check if \`--show\` flag is present (any mode).
 
-## Step 2: List candidate transcript files
+## Step 2a: Pointer mode — resolve the pid
 
-List all \`.jsonl\` transcript files sorted by most recently modified:
+From the project root (the directory you were launched in), run:
 
 \`\`\`bash
-ls -t ~/.claude/projects/*/*.jsonl 2>/dev/null | head -20
-\`\`\`
-
-If no transcripts are found, tell the user and stop. Store the list as \`$TRANSCRIPT_FILES\` (one path per line).
-
-## Step 3: Identify which files to parse (lazy probing)
-
-For each file in \`$TRANSCRIPT_FILES\` (starting from most recent), probe its time range by reading only the **first and last timestamp** — do NOT parse the full file yet. Run this script, substituting \`$MINUTES\` and \`$TRANSCRIPT_FILES\`:`
+python3 -c "
+import json, sys
+from datetime import datetime, timezone, timedelta`
             },
             'show-docs': {
                 filename: 'show-docs.md',
@@ -2104,6 +2216,71 @@ Open the docs in the default browser. Use the command matching the current OS:
 - **Windows:** \`powershell -NoProfile -Command "Start-Process '.claude/docs/autoconfig.docs.html'"\`
 
 **Important:** If the command exits with a non-zero exit code or produces an error, tell the user the file failed to open and suggest they open it manually. Do NOT report success unless the command completed without error.`
+            },
+            'submit-claude-code-github-issue': {
+                filename: 'submit-claude-code-github-issue.md',
+                content: `File a GitHub issue on the anthropics/claude-code repository, with due diligence.
+
+Usage:
+- \`/submit-claude-code-github-issue\` - Start the workflow
+- \`/submit-claude-code-github-issue plan names should be meaningful\` - Start with context from arguments
+
+Arguments: $ARGUMENTS
+
+Workflow:
+
+### Phase 1: Understand the Issue
+1. Ask the user what the issue is about, OR use any context/description provided in the arguments
+2. Summarize the core request in 1-2 sentences to confirm understanding
+
+### Phase 2: Due Diligence — Search Existing Issues
+3. Search for similar/duplicate issues using multiple keyword variations:
+   - \`gh search issues --repo anthropics/claude-code "<keywords>" --limit 15\`
+   - Also search closed issues: \`gh search issues --repo anthropics/claude-code "<keywords>" --state closed --limit 10\`
+4. Categorize each result by match strength:
+   - **Exact** — Same issue, same ask. Filing would be a duplicate.
+   - **Strong** — Very similar issue, minor differences in scope or framing.
+   - **High** — Related topic, but meaningfully different request or context.
+   - Discard anything below High — don't show medium/low matches.
+5. Present findings in a markdown table:
+
+   | # | Match | Status | Title | URL |
+   |---|-------|--------|-------|-----|
+   | 1234 | Exact | Open | Plan filenames should be descriptive | https://... |
+   | 987 | Strong | Closed | Allow custom names for plan files | https://... |`
+            },
+            'sync-claude-md': {
+                filename: 'sync-claude-md.md',
+                content: `# Sync CLAUDE.md
+
+Verify that CLAUDE.md has the required structure. This command does NOT populate project descriptions — CLAUDE.md grows organically through Discoveries as you work. Claude can read your config files directly.
+
+## Step 1: Check for Team Feedback
+
+Read \`.claude/feedback/FEEDBACK.md\` for any corrections or guidance from the team. Note any relevant entries.
+
+## Step 2: Verify CLAUDE.md Structure
+
+Check that CLAUDE.md exists and has the required elements:
+
+1. **Auto-generated markers** — ensure these exist:
+   \`\`\`markdown
+   <!-- AUTO-GENERATED BY /autoconfig at {TIMESTAMP} UTC -->
+   ...
+   <!-- END AUTO-GENERATED at {TIMESTAMP} UTC -->
+   \`\`\`
+
+2. **Team Feedback pointer** — between the markers:
+   \`\`\`markdown
+   ## Team Feedback
+   The contents of \`.claude/feedback/FEEDBACK.md\` are an extension of this file.
+   Read it at the start of every session before taking any action.
+   FEEDBACK.md is reserved for human-authored corrections only — do not write to it.
+   \`\`\`
+
+3. **Discoveries section** — below the end marker:
+   \`\`\`markdown
+   ## Discoveries`
             },
             'test': {
                 filename: 'test.md',
@@ -2193,6 +2370,61 @@ claude-code-autoconfig ships this folder empty so you can populate it with agent
 
 See Anthropic's subagents docs for the file format:
 https://docs.anthropic.com/en/docs/claude-code/sub-agents`
+            },
+            'create-retro-item-agent': {
+                filename: 'create-retro-item.md',
+                content: `# Create Retro Item Agent
+
+Create a fully-scoped story file in \`.claude/retro/\` when tech debt or improvement opportunities are identified.
+
+## When to Trigger
+
+Call this agent when you notice:
+- Tech debt that should be addressed later
+- Code that works but could be improved
+- Missing tests, documentation, or error handling
+- Architectural improvements worth tracking
+
+## Input
+
+Provide these details when calling:
+- **title**: Short descriptive name (used for filename)
+- **problem**: What's wrong or what friction was encountered
+- **criteria**: Specific, testable acceptance criteria
+- **approach**: How to fix it
+- **priority**: Critical | High | Medium | Low
+- **effort**: S | M | L | XL
+- **files**: List of files involved
+
+## Behavior
+
+1. Generate filename from title: \`kebab-case.md\`
+2. Create story file in \`.claude/retro/\` using this format:
+
+\`\`\`markdown
+# [Title]`
+            },
+            'docs-refresh-agent': {
+                filename: 'docs-refresh.md',
+                content: `# Docs Refresh Agent
+
+Sync the interactive docs with the current state of \`.claude/\`.
+
+## How
+
+Run:
+
+\`\`\`bash
+node .claude/scripts/sync-docs.js
+\`\`\`
+
+This scans \`.claude/\` for all files, extracts \`@description\` metadata, and updates the docs HTML (file tree, info cards, and content previews).
+
+## When to Use
+
+- After adding, modifying, or deleting files in \`.claude/\`
+- Before opening docs with \`/show-docs\` (already built in)
+- As a background task when \`.claude/\` files change`
             },
             'arcade-beeps-hook': {
                 filename: 'arcade-beeps.js',
@@ -2293,6 +2525,39 @@ function handleHook(data) {
   // Skip non-source files
   if (!filePath.match(/\\.(js|jsx|ts|tsx|json|css|scss|md|html)$/)) {`
             },
+            'mark-commit-active-hook': {
+                filename: 'mark-commit-active.js',
+                content: `#!/usr/bin/env node
+// PostToolUse(Bash) — arm the "a session is actively sorting out commits" flag.
+//
+// When ANY session in this repo runs a git *write* command (add/commit/push/
+// pull/rebase/merge/stash/cherry-pick/revert), stamp a flag inside .git/. The
+// Stop hook (see settings.json) treats that flag as live for a few minutes and
+// suppresses its "Uncommitted work…" reminder while it's live — so the other
+// terminals sharing this one working tree don't nag about the very files the
+// committing session is mid-flight on.
+//
+// Why .git/ : git never tracks anything under .git/, so the flag is invisible
+// to \`git status\` (can't inflate the file count it guards) and can never be
+// committed by accident. No .gitignore entry needed.
+//
+// Self-expiring by design: freshness is judged by the flag's mtime, not an
+// explicit "done" signal. A session that dies mid-commit just stops refreshing
+// the flag; ~5 min later the Stop hook's reminder comes back on its own. Nothing
+// to clean up, no stale lock to get wedged on.
+//
+// Read-only git (\`status\`/\`log\`/\`diff\`) deliberately does NOT arm the flag — the
+// Stop hook itself runs those, so arming on reads would silence every session
+// permanently.
+
+const fs = require('fs');
+const path = require('path');
+
+let raw = '';
+process.stdin.on('data', (d) => (raw += d));
+process.stdin.on('end', () => {
+  try {`
+            },
             'migrate-feedback-hook': {
                 filename: 'migrate-feedback.js',
                 content: `#!/usr/bin/env node
@@ -2348,16 +2613,16 @@ Maintain it across the session:
   never "and"-join two use cases.
 - Add a third segment ( {{EMDASH}} {sub-function} ) only when the work goes a level deeper --
   a step beneath the user goal.
+- Plan-driven sessions: when the session executes a step of a multi-phase plan doc, the
+  plan itself is the scope -- {scope} = a SHORT ALIAS of the plan's name (e.g.
+  "Maintainability" for weak-model-maintainability-plan.md; never the filename), and the
+  usual pair pushes down one level: {plan} {{EMDASH}} {area} {{EMDASH}} {goal}. The alias
+  holds for the whole session; never add a fourth segment.
 - Use ' {{EMDASH}} ' (space, em-dash, space) as the separator; keep segments short (a few
   words); write only the BARE title -- a state glyph is prepended automatically. This is a
   compass, not a log: change it rarely.
 - If no title has been set yet, treat your first turn as the baseline: infer the title from
-  that turn's prompt and write it immediately, even though nothing has "shifted".
-- Slash-command turns: the command NAME is an implementation detail -- never put it in the
-  title. Name the goal the command ACCOMPLISHES ("{{FOLDER}} {{EMDASH}} <verb the goal>",
-  never "{{FOLDER}} {{EMDASH}} <command-name>").
-
-Pending-question signal -- END-OF-TURN TEST, apply it on every turn: does your final`
+  that turn's prompt and write it immediately, even though nothing has "shifted".`
             },
             'terminal-title-hook': {
                 filename: 'terminal-title.js',
@@ -2499,6 +2764,16 @@ Claude reads this file but must never write to it. When Claude discovers project
     ],
     "Stop": [
       {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "cd \\"\${CLAUDE_PROJECT_DIR:-.}\\" 2>/dev/null; if [ -n \\"$(find .git/.cc-commit-active -mmin -5 2>/dev/null)\\" ]; then exit 0; fi; f=$(git status --porcelain 2>/dev/null | grep -c .); l=$(git diff HEAD --numstat 2>/dev/null | awk '{s+=$1+$2} END {print s+0}'); if [ \\"\${f:-0}\\" -gt 10 ] || [ \\"\${l:-0}\\" -gt 1000 ]; then printf '{\\"systemMessage\\":\\"⚠️ Uncommitted work: %s files, ~%s lines changed — consider /commit-and-push\\"}' \\"$f\\" \\"$l\\"; fi",
+            "timeout": 15
+          }
+        ]
+      },
+      {
         "matcher": "",
         "hooks": [
           {
@@ -2543,6 +2818,15 @@ Claude reads this file but must never write to it. When Claude discovers project
           {
             "type": "command",
             "command": "node \\"\${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/feedback-rule-check.js\\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \\"\${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/mark-commit-active.js\\""
           }
         ]
       },
