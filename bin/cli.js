@@ -1000,9 +1000,12 @@ if (isUpgrade && (newCommands.length > 0 || updatedCommands.length > 0)) {
     console.log('\x1b[36m%s\x1b[0m', `   + /${name}${ver} (new)`);
   }
   for (const { file, oldVersion, newVersion } of updatedCommands) {
-    if (oldVersion > 0 && newVersion > 0 && oldVersion === newVersion) continue;
     const name = file.replace('.md', '');
-    const ver = (oldVersion > 0 && newVersion > 0) ? ` (v${oldVersion} → v${newVersion})` : ' (updated)';
+    // A content change with no @version bump (oldVersion === newVersion) used to be dropped
+    // here — trap T6: the edit shipped but never surfaced on the upgrade report. Show it as
+    // "(updated)" so an unbumped change is still visible to the user.
+    const bumped = oldVersion > 0 && newVersion > 0 && oldVersion !== newVersion;
+    const ver = bumped ? ` (v${oldVersion} → v${newVersion})` : ' (updated)';
     console.log('\x1b[33m%s\x1b[0m', `   ↑ /${name}${ver}`);
   }
 }

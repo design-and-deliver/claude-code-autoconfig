@@ -75,7 +75,7 @@ runCorpus('Twin (.claude/hooks/terminal-title.js)', TWIN);
 if (fs.existsSync(LIVE)) {
   runCorpus('LIVE user-level hook (~/.claude/hooks)', LIVE);
 } else {
-  console.log('LIVE hook not present on this machine — twin-only run (expected off the dev box).');
+  console.log('LIVE hook not present on this machine — SKIPPED (no live hook) — parity NOT verified (twin-only run, expected off the dev box).');
   console.log();
 }
 

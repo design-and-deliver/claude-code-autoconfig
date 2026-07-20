@@ -30,8 +30,8 @@ console.log('============================================================');
 console.log();
 
 if (!fs.existsSync(LIVE)) {
-  console.log('LIVE hook not present on this machine — skipping (expected off the dev box).');
-  console.log('ALL TESTS PASSED (0 tests, skipped)');
+  console.log('LIVE hook not present on this machine (expected off the dev box).');
+  console.log('SKIPPED (no live hook) — parity NOT verified');
   process.exit(0);
 }
 

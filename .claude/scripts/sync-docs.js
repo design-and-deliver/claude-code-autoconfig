@@ -19,7 +19,14 @@ const claudeDir = path.join(cwd, '.claude');
 const docsPath = path.join(claudeDir, 'docs', 'autoconfig.docs.html');
 
 if (!fs.existsSync(docsPath)) {
-  // No docs file — nothing to sync
+  // In the maintainer repo the docs HTML always exists; a miss means someone deleted or moved
+  // it, and silently exiting 0 (the old behavior) let that rot unseen. Fail loudly there.
+  // A user project legitimately has no docs to sync — detect the maintainer repo by bin/cli.js
+  // (the same maintainer-repo signal loadDevOnlyFiles uses) and stay quiet everywhere else.
+  if (fs.existsSync(path.join(cwd, 'bin', 'cli.js'))) {
+    console.error(`sync-docs: ${docsPath} not found in the maintainer repo (bin/cli.js present) — aborting instead of silently skipping`);
+    process.exit(1);
+  }
   process.exit(0);
 }
 
