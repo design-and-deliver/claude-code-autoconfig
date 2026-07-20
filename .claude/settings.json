@@ -37,6 +37,16 @@
     ],
     "Stop": [
       {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "cd \"${CLAUDE_PROJECT_DIR:-.}\" 2>/dev/null; if [ -n \"$(find .git/.cc-commit-active -mmin -5 2>/dev/null)\" ]; then exit 0; fi; f=$(git status --porcelain 2>/dev/null | grep -c .); l=$(git diff HEAD --numstat 2>/dev/null | awk '{s+=$1+$2} END {print s+0}'); if [ \"${f:-0}\" -gt 10 ] || [ \"${l:-0}\" -gt 1000 ]; then printf '{\"systemMessage\":\"⚠️ Uncommitted work: %s files, ~%s lines changed — consider /commit-and-push\"}' \"$f\" \"$l\"; fi",
+            "timeout": 15
+          }
+        ]
+      },
+      {
         "matcher": "",
         "hooks": [
           {
@@ -81,6 +91,15 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/feedback-rule-check.js\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/mark-commit-active.js\""
           }
         ]
       },

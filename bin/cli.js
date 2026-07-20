@@ -877,7 +877,7 @@ if (fs.existsSync(feedbackSrc)) {
 // (copyDirIfMissing), BUT the cca-managed title-hook files are ALWAYS refreshed so bug-fixes
 // reach existing installs — without this, copyDirIfMissing leaves stale hooks in place forever
 // (same always-overwrite rationale as scripts/ below). --force already overwrites everything.
-const MANAGED_HOOKS = ['terminal-title.js', 'terminal-title.directive.md', 'arcade-beeps.js'];
+const MANAGED_HOOKS = ['terminal-title.js', 'terminal-title.directive.md', 'arcade-beeps.js', 'mark-commit-active.js'];
 if (fs.existsSync(hooksSrc)) {
   const copyFn = forceMode ? copyDir : copyDirIfMissing;
   copyFn(hooksSrc, path.join(claudeDest, 'hooks'));
