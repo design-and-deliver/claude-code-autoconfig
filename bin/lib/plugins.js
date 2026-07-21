@@ -28,6 +28,30 @@ const path = require('path');
 
 const PLUGINS_LEDGER = '.autoconfig-plugins.json';
 
+// Build a fresh settings-delta accumulator (BH-1), seeded from a prior install's recorded
+// delta so a re-install UNIONS onto it rather than shrinking it to only what the second
+// merge happened to add (a re-install adds nothing — everything is already present — so
+// without this seed `plugin remove` after a re-install would revert nothing). Normalizes any
+// malformed/absent prior shape to the canonical accumulator.
+function seedAddedDelta(priorEntry) {
+  const prior = (priorEntry && priorEntry.added) || {};
+  const perm = prior.permissions || {};
+  const hooks = {};
+  if (prior.hooks && typeof prior.hooks === 'object') {
+    for (const [event, cmds] of Object.entries(prior.hooks)) {
+      hooks[event] = Array.isArray(cmds) ? cmds.slice() : [];
+    }
+  }
+  return {
+    env: Array.isArray(prior.env) ? prior.env.slice() : [],
+    hooks,
+    permissions: {
+      allow: Array.isArray(perm.allow) ? perm.allow.slice() : [],
+      deny: Array.isArray(perm.deny) ? perm.deny.slice() : []
+    }
+  };
+}
+
 function readPluginsLedger(claudeDir) {
   const p = path.join(claudeDir, PLUGINS_LEDGER);
   if (!fs.existsSync(p)) return {};
@@ -70,6 +94,11 @@ function pluginAdd(pluginArg, claudeDir, deps) {
   const manifest = loadManifest(pluginDir);
   console.log('\x1b[36m%s\x1b[0m', `📦 Installing plugin: ${manifest.name}${manifest.version ? ' v' + manifest.version : ''}`);
 
+  // Read the ledger up front: on a re-install its prior `added` delta seeds this run's
+  // accumulator so removal still reverts everything this plugin ever added (BH-1).
+  const ledger = readPluginsLedger(claudeDir);
+  const addedDelta = seedAddedDelta(ledger[manifest.name]);
+
   // 1. Copy declared files into <project>/.claude/<to>
   const installedFiles = [];
   for (const file of manifest.files) {
@@ -100,18 +129,20 @@ function pluginAdd(pluginArg, claudeDir, deps) {
         throw new Error(`.claude/settings.json is not valid JSON (${e.message}) — refusing to overwrite it. A backup was saved to ${path.basename(backupPath)}. Fix or delete settings.json, then re-run.`);
       }
     }
-    deps.mergeSettingsInto(userSettings, JSON.parse(JSON.stringify(manifest.settings)));
+    deps.mergeSettingsInto(userSettings, JSON.parse(JSON.stringify(manifest.settings)), addedDelta);
     fs.mkdirSync(claudeDir, { recursive: true });
     fs.writeFileSync(settingsPath, JSON.stringify(userSettings, null, 2));
     console.log('\x1b[90m%s\x1b[0m', '   ✎ merged settings.json (hooks / env / permissions)');
   }
 
-  // 3. Record in the ledger so removal can cleanly undo everything
-  const ledger = readPluginsLedger(claudeDir);
+  // 3. Record in the ledger so removal can cleanly undo everything. `added` is the true delta
+  //    this install introduced (additive field — trap 1: old ledgers without it fall back to
+  //    value-equality on remove); it's what `unmergeSettingsFrom` reverts, never user config.
   ledger[manifest.name] = {
     version: manifest.version || null,
     files: installedFiles,
     settings: manifest.settings || null,
+    added: addedDelta,
     installedAt: new Date().toISOString()
   };
   writePluginsLedger(claudeDir, ledger);
@@ -139,7 +170,9 @@ function pluginRemove(name, claudeDir, deps) {
     if (fs.existsSync(settingsPath)) {
       try {
         const userSettings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-        deps.unmergeSettingsFrom(userSettings, entry.settings);
+        // Pass the recorded delta (BH-1): revert only what this plugin added, never a
+        // user-owned key/hook/rule it also declared. Absent on pre-fix ledgers → value-equality.
+        deps.unmergeSettingsFrom(userSettings, entry.settings, entry.added);
         fs.writeFileSync(settingsPath, JSON.stringify(userSettings, null, 2));
         console.log('\x1b[90m%s\x1b[0m', '   ✎ reverted settings.json contributions');
       } catch { /* leave settings intact if unparsable */ }

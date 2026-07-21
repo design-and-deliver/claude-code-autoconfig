@@ -194,6 +194,61 @@ test('removing an unknown plugin fails with a clear error', () => {
   assert(threw, 'should exit non-zero for unknown plugin');
 });
 
+console.log();
+console.log('BH-1 — remove must not delete config the user set themselves:');
+
+// A fresh project whose settings.json contains an env key, a hook command, and a permission
+// rule the USER added by hand. A plugin then declares the exact same three. mergeSettingsInto
+// is dedup-safe (adds none of them — they're already there), so `plugin remove` must leave all
+// three intact. The pre-fix unmerge, which removed anything value-equal to the fragment, wrongly
+// deleted the user's own entries. (Red on HEAD, green after — see the plan's Ledger.)
+const proj2 = path.join(tmpRoot, 'project2');
+const claude2 = path.join(proj2, '.claude');
+fs.mkdirSync(claude2, { recursive: true });
+
+const USER_CMD = 'node .claude/hooks/user-owned.js'; // user hand-added; the plugin also declares it
+
+fs.writeFileSync(path.join(claude2, 'settings.json'), JSON.stringify({
+  env: { SHARED_KEY: '1' },
+  hooks: {
+    Stop: [{ matcher: '', hooks: [{ type: 'command', command: USER_CMD }] }]
+  },
+  permissions: { allow: ['WebSearch'], deny: [] }
+}, null, 2));
+
+const overlapPlugin = path.join(tmpRoot, 'overlap-plugin');
+fs.mkdirSync(path.join(overlapPlugin, 'hooks'), { recursive: true });
+fs.writeFileSync(path.join(overlapPlugin, 'hooks', 'ov.js'), '// overlap hook\n');
+fs.writeFileSync(path.join(overlapPlugin, 'plugin.json'), JSON.stringify({
+  name: 'overlap',
+  version: '1.0.0',
+  description: 'declares config the user already has',
+  files: [{ from: 'hooks/ov.js', to: 'hooks/ov.js' }],
+  settings: {
+    env: { SHARED_KEY: '1' },
+    hooks: { Stop: [{ matcher: '', hooks: [{ type: 'command', command: USER_CMD }] }] },
+    permissions: { allow: ['WebSearch'] }
+  }
+}, null, 2));
+
+runCli(proj2, ['plugin', 'add', overlapPlugin]);
+runCli(proj2, ['plugin', 'remove', 'overlap']);
+
+test("user's own env key a plugin also declared survives remove", () => {
+  const s = readJson(path.join(claude2, 'settings.json'));
+  assert(s.env && s.env.SHARED_KEY === '1', "user's own SHARED_KEY must not be deleted on plugin remove");
+});
+
+test("user's own hook a plugin also declared survives remove", () => {
+  const s = readJson(path.join(claude2, 'settings.json'));
+  assert(countCommand(s, 'Stop', USER_CMD) === 1, "user's own Stop hook must not be deleted on plugin remove");
+});
+
+test("user's own permission rule a plugin also declared survives remove", () => {
+  const s = readJson(path.join(claude2, 'settings.json'));
+  assert(s.permissions && s.permissions.allow.includes('WebSearch'), "user's own WebSearch allow rule must not be deleted on plugin remove");
+});
+
 // --- Cleanup ----------------------------------------------------------------
 try { fs.rmSync(tmpRoot, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
 
