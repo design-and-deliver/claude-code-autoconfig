@@ -107,15 +107,15 @@ is NOT run here (no `npm version`) — just assert the generator's output on fix
 **Commit:** `fix(changelog): drop revert/merge commits from the changelog and upgrade summary` +
 body `Changelog: Revert and merge commits no longer clutter the release notes`.
 
-### ☐ 1.2 · S · ~15m — Platform-guard `cleanupNulFile` so it can't delete a real `nul` on POSIX (BH-8)
+### ☑ 1.2 · S · ~15m — Platform-guard `cleanupNulFile` so it can't delete a real `nul` on POSIX (BH-8)
 
 `bin/cli.js:57` — the `nul` artifact is Windows-only (`> nul` residue), but `cleanupNulFile` runs
 on every platform (also on Claude exit, :819), so a legitimately-named `nul` file on Linux/macOS
 is silently `unlinkSync`'d with no backup.
 
-- [ ] Gate the unlink on `process.platform === 'win32'` (smallest correct fix; no top-level
+- [x] Gate the unlink on `process.platform === 'win32'` (smallest correct fix; no top-level
       reorder — trap 8).
-- [ ] Add a behavioral assertion in `test/cli-behavior.test.js`: on a non-win32 run (or by calling
+- [x] Add a behavioral assertion in `test/cli-behavior.test.js`: on a non-win32 run (or by calling
       the guarded helper), a file named `nul` in a fixture root **survives**. If the helper isn't
       exported, assert via the `--bootstrap` fixture that a pre-seeded `nul` is untouched.
 
@@ -451,3 +451,28 @@ Append one entry after each substep, newest last. Format:
   (`- revert: remove /extract-rules from deployed build`). It is now inert (SKIP_TYPES hides it on
   upgrade; the next `npm version` regen will drop it via isHousekeeping) — no action needed, but a
   later reader shouldn't be alarmed to still see the line in the file. Full suite green (EXIT=0).
+
+### 2026-07-21 — substep 1.2 — done
+- Commit: b634230 fix(cli): only clean up the Windows nul artifact on Windows
+- Fail-first: proven RED→GREEN in-process. Wrote two assertions in `test/cli-behavior.test.js`
+  ("a real `nul` file survives cleanup on POSIX (linux + darwin)" and "the stray `nul` artifact is
+  still removed on Windows") that drive the extracted helper with an INJECTED platform. Against the
+  unguarded logic the POSIX case failed (`Error: a `nul` file on Linux must not be deleted`); after
+  the `win32` guard both pass. This is the honest cross-platform gate — see Deviation for why a
+  `--bootstrap` fixture couldn't do it on this box.
+- Deviations: (1) Rather than gate INLINE in cli.js (plan's smallest-fix wording), extracted
+  `cleanupNulFile` to `bin/lib/nul-cleanup.js` with an injectable `platform` param (default
+  `process.platform`) — idiomatic to this repo (bin/lib/ already holds plugins/settings-merge/
+  updates) and the ONLY honest way to fail-first the guard: cli.js has no `main()`/`require.main`
+  guard and no `module.exports`, so it can't be required in-process; and a child-process
+  `--bootstrap` fixture can't fake `process.platform`. No top-level statement reorder (trap 8): the
+  require sits with the other lib requires (cli.js:11); both invocation sites (:63 startup, :819
+  Claude-exit) still fire in the same order, now `cleanupNulFile(cwd)`. (2) Test lives in
+  cli-behavior.test.js as the plan specified, but as a direct-require unit test rather than a
+  tree-driven fixture (that suite already mixes require-based lib checks per its own header).
+- Discoveries: on THIS Windows box a real file named `nul` CAN be created in a mkdtemp temp dir
+  (`fs.writeFileSync(dir/nul)` succeeds, `existsSync` true, `readdir` shows it, `unlinkSync` removes
+  it) — the reserved-device interception did not apply for that temp path. So the post-fix behavior
+  on Windows is unchanged (win32 still deletes the artifact); the guard only spares POSIX. No test
+  grepped for the inline `cleanupNulFile` (safe to extract). Full suite green (NPM_TEST_EXIT=0,
+  incl. hook suites 206/206).
