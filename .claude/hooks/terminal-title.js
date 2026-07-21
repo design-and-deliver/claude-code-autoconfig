@@ -185,7 +185,18 @@ async function handle(data) {
         }
       }
     } catch (_) { /* the canary is best-effort — never block the repaint */ }
-    emit(setTitle(GLYPH.working, normalize(raw)));
+    const title = normalize(raw);
+    // Paint-time duplicate guard — catches collisions born mid-turn (see dupeGuardPaint).
+    const guard = dupeGuardPaint(dir, sid, title, cwd);
+    const out = setTitle(GLYPH.working, title);
+    if (guard) {
+      if (guard.systemMessage) out.systemMessage = guard.systemMessage;
+      if (guard.additionalContext) {
+        out.hookSpecificOutput = { hookEventName: 'PostToolUse', additionalContext: guard.additionalContext };
+      }
+      if (logCtx) { logCtx.note = (logCtx.note ? `${logCtx.note}+` : '') + 'dupe-paint'; logCtx.diag = guard.diag; }
+    }
+    emit(out);
     return;
   }
 
@@ -1550,6 +1561,36 @@ function dupeGuardResult(dir, sid, title, cwd) {
   } catch (_) { return null; }
 }
 
+// Paint-time guard (PostToolUse): a collision BORN MID-TURN — a /continue adopting another tab's
+// work, or the model authoring a twin title between prompts — never meets the UserPromptSubmit
+// check (observed 2026-07-21: two tabs ground the same token-guard file for 20+ min with zero
+// warnings; the hijacker's only prompt wore the exempt placeholder title). Runs the twin scan
+// only when the painted title CHANGES ({sid}.dupe.json.lastTitle stamps the last checked one),
+// so the steady-state per-tool-call cost is one small JSON read. A running turn can't be
+// blocked, so kill mode degrades to an urgent model-visible stand-down directive here — the
+// hard block still lands on the next UserPromptSubmit.
+function dupeGuardPaint(dir, sid, title, cwd) {
+  try {
+    if (dupeMode() === 'off') return null;
+    const f = path.join(dir, `${sid}.dupe.json`);
+    let st = {};
+    try { st = JSON.parse(fs.readFileSync(f, 'utf8')) || {}; } catch (_) { /* none yet */ }
+    if (st.lastTitle === title) return null;
+    const res = dupeGuardResult(dir, sid, title, cwd);
+    // dupeGuardResult may have rewritten the warned-sids list — re-read and merge, don't clobber.
+    let sids = [];
+    try { sids = JSON.parse(fs.readFileSync(f, 'utf8')).sids || []; } catch (_) { /* keep [] */ }
+    try { fs.writeFileSync(f, JSON.stringify({ sids, lastTitle: title })); } catch (_) { /* best-effort */ }
+    if (!res) return null;
+    const ctx = res.block
+      ? `${res.reason} You are the newer duplicate: STOP working now — tell the user another tab `
+        + `already owns this work, make no further edits, and end the turn.`
+      : `${res.systemMessage} You are one of the duplicate sessions: surface this to the user in `
+        + `your next message and avoid editing shared files until they choose a tab.`;
+    return { systemMessage: res.systemMessage || res.reason, additionalContext: ctx, diag: `${res.diag || ''} paint` };
+  } catch (_) { return null; }
+}
+
 // Normalize ' - ' to ' — ' and capitalize the first letter of each segment.
 function normalize(title) {
   const sep = ` ${EMDASH} `;
@@ -1636,4 +1677,4 @@ function extractBlock(tpl, name) {
 // Exported for tests (require()'d when require.main !== module). The hook itself never reads these.
 // Contract: terminal-title.test.js, golden-endings.test.js, and arcade-beeps.js (lazy-requires
 // inspectLastResponse) depend on these names — renaming one silently degrades the beeps hook.
-module.exports = { inspectLastResponse, endsOnQuestion, normalize, GLYPH, shouldDefer, solicitsReply, readContextTokens, clearAdvice, ancestryChain, recordLineage, carriedTitle, displayTitle, titlesCollide, isPlaceholderTitle, activeTwins, dupeGuardResult };
+module.exports = { inspectLastResponse, endsOnQuestion, normalize, GLYPH, shouldDefer, solicitsReply, readContextTokens, clearAdvice, ancestryChain, recordLineage, carriedTitle, displayTitle, titlesCollide, isPlaceholderTitle, activeTwins, dupeGuardResult, dupeGuardPaint };

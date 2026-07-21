@@ -1214,6 +1214,50 @@ test('rapid double-/clear: the grandparent ghost is exempt too, a REAL twin stil
 });
 console.log();
 
+// Paint-time: a collision BORN MID-TURN (a /continue adopting another tab's work, or the model
+// authoring a twin title between prompts) never meets the UserPromptSubmit check. The 2026-07-21
+// incident: the hijacker's only prompt wore the exempt placeholder; the colliding title arrived
+// two minutes into the autonomous turn; neither tab was prompted again → zero warnings.
+function runPTU(cwd, sid, env) {
+  return runHook({ hook_event_name: 'PostToolUse', session_id: sid, cwd }, env);
+}
+console.log('Duplicate-session guard — paint-time (collision born mid-turn):');
+test('the 2026-07-21 hijack: placeholder at UPS, colliding title authored mid-turn → PostToolUse warns', () => {
+  const cwd = mkWorkspace();
+  seedTwin(cwd, 'twinSid', TWIN, { startedAt: Date.now() - 60000 });
+  writeTitle(cwd, 'meSid', path.basename(cwd)); // placeholder at prompt time → UPS exempt
+  let r = runUPS(cwd, 'meSid', { CLAUDE_TITLE_DUPE: 'warn' });
+  assert(r.json && !r.json.systemMessage, 'placeholder title must not warn at UPS');
+  writeTitle(cwd, 'meSid', MINE); // the turn authors the colliding title mid-flight
+  r = runPTU(cwd, 'meSid', { CLAUDE_TITLE_DUPE: 'warn' });
+  assert(r.json && /duplicate/i.test(r.json.systemMessage || ''), 'paint-time must warn the user');
+  assert(r.directive && /duplicate/i.test(r.directive), 'model-visible context must be injected');
+});
+test('unchanged title: the next PostToolUse stays silent (one check per title change)', () => {
+  const cwd = mkWorkspace();
+  seedTwin(cwd, 'twinSid', TWIN, {});
+  writeTitle(cwd, 'meSid', MINE);
+  runPTU(cwd, 'meSid', { CLAUDE_TITLE_DUPE: 'warn' });
+  const r = runPTU(cwd, 'meSid', { CLAUDE_TITLE_DUPE: 'warn' });
+  assert(r.json && !r.json.systemMessage && !r.directive, 'same title must not re-fire');
+});
+test('paint-time kill mode: urgent stand-down context, but never a mid-turn block', () => {
+  const cwd = mkWorkspace();
+  seedTwin(cwd, 'twinSid', TWIN, { startedAt: Date.now() - 60000 });
+  writeTitle(cwd, 'meSid', MINE);
+  const r = runPTU(cwd, 'meSid', { CLAUDE_TITLE_DUPE: 'kill' });
+  assert(r.json && !r.json.decision, 'PostToolUse must not block a running turn');
+  assert(r.directive && /stop|stand/i.test(r.directive), 'kill mode should direct the turn to stand down');
+});
+test('paint-time off mode: silent even with a fresh colliding twin', () => {
+  const cwd = mkWorkspace();
+  seedTwin(cwd, 'twinSid', TWIN, {});
+  writeTitle(cwd, 'meSid', MINE);
+  const r = runPTU(cwd, 'meSid', { CLAUDE_TITLE_DUPE: 'off' });
+  assert(r.json && !r.json.systemMessage && !r.directive, 'off must do nothing');
+});
+console.log();
+
 // ============================================================================
 // --turn-watch cancel watchdog (the user-interrupt rescue). Ported from the
 // scratchpad `watchdog-test.sh` 12-case suite (preserved at
