@@ -1,5 +1,5 @@
 <!-- @description Analyze one session's token spend — deterministic RENT/BOMBS/FLEETS/TTL digest plus an efficiency read-out: dominant cost category, named causes, and what to change in future sessions. -->
-<!-- @version 3 -->
+<!-- @version 4 -->
 <!-- @response success | Prints the digest verbatim, then interpretation: dominant category, top causes, forward recommendations. -->
 <!-- @example /analyze-session cf4d557d | Analyze that session's efficiency -->
 
@@ -35,7 +35,7 @@ Show the digest verbatim in a code block first. Then, in prose:
    categories ("the claude-api skill payload, +302k" — not "a big skill").
 3. **2–3 forward recommendations** for future sessions, each citing a digest number (house
    rule: never print an unmeasured number). Draw from: cut to a fresh session earlier
-   (`/clear` + `/migrate-new-session {scope}` when live context is fat with settled work),
+   (`/clear`, then `/continue` when live context is fat with settled work),
    avoid or defer a named
    payload bomb (one-time references belong in a disposable subagent), scope or skip a
    workflow fleet, batch screenshot Reads, don't leave a fat session idle past an hour.
