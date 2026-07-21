@@ -479,7 +479,7 @@ rewrite.
 require the module (no more source extraction for these).
 **Commit:** `refactor(cli): extract settings merge helpers to bin/lib/settings-merge.js` + `Changelog: none`.
 
-### ☐ 3.4 · M · ~45m — Extract update parsing + pullUpdates → `bin/lib/updates.js`; harden sync-docs markers (G1 seam 3, G4)
+### ☑ 3.4 · M · ~45m — Extract update parsing + pullUpdates → `bin/lib/updates.js`; harden sync-docs markers (G1 seam 3, G4)
 
 - Move `parseAppliedUpdates`, the `@applied` regexes (byte-verbatim — trap 6), highest-applied
   filtering, and `pullUpdates` (cli.js:86-177) to `bin/lib/updates.js`. The `--pull-updates`
@@ -1044,3 +1044,55 @@ Append one entry after each substep, newest last. Format:
   suites **206/206**; `npm run lint` **exit 0**; plugin add/list/remove round-trip clean. Only **3.4**
   (extract updates + pullUpdates → `bin/lib/updates.js`; harden sync-docs markers) remains in Phase 3.
   No `npm version`/publish (deploy-approval rail intact).
+
+### 2026-07-20 — substep 3.4 — done
+- Commit: 8dea703 `refactor(cli): extract update parsing to bin/lib/updates.js; table-ize sync-docs markers`
+  (ledger commit follows).
+- Deviations: (1) **Plain move + a params object, not full DI** (between 3.2 and 3.3 in shape).
+  `parseAppliedUpdates`/`getHighestAppliedId` are pure (fs-only) → moved byte-verbatim. `pullUpdates`
+  referenced five cli.js module consts (`cwd`, `packageDir`, `pinnedVersion`, `installerVersion`,
+  `ccaConfigCorrupt`); it now takes them as a **destructured params object**
+  `pullUpdates({ cwd, packageDir, pinnedVersion, installerVersion, ccaConfigCorrupt })` — body
+  byte-verbatim (only the signature changed), per 3.1 Discovery #1 (the pin consts STAY in cli.js
+  because the `--bootstrap` gate reads the same two; the module must RECEIVE, not re-derive). The
+  dispatch (`if (process.argv.includes('--pull-updates'))`) + its `process.exit(0)` stay in cli.js,
+  unmoved relative to the main flow (trap 4 intact). (2) The plan's cited region (cli.js:86-177) was
+  **stale** — same file-growth drift 3.2/3.3 flagged; real defs were 106-198 and the dispatch 200-203.
+  Extracted by content. (3) **Test dispositions per the 3.1 inventory, exactly:** the two
+  `content.includes('function pullUpdates()' / 'function parseAppliedUpdates(')` greps in
+  update-system.test.js → **converted** to `require('../bin/lib/updates.js')` module checks (the
+  parseAppliedUpdates one also parses a temp `@applied` block → [1,3], strictly stronger); the middle
+  `/function pullUpdates\(\)…pinnedVersion !== installerVersion/` grep in cli-install.test.js →
+  **removed** (its NET is cli-behavior.test.js Fixture 6, which already existed from 3.1), leaving that
+  test's two KEEP asserts (`--bootstrap` gate, `delete cfg.pinVersion`) — both guard code that stays in
+  cli.js. (4) **sync-docs hardening scoped to the substep body** ("hardening, NOT a rewrite"): hoisted
+  the eight HTML splice anchors to a named `MARKERS` table + a pre-splice `assertMarkersUnique(html)`
+  that aborts loudly (exit 1) on a missing/ambiguous anchor. The three section anchors + the treeInfo
+  start are checked **globally-unique**; the two entry markers are scoped to their own object body via
+  `assertOnceInSection` because `'claude-md': {` legitimately appears **TWICE** (once in `treeInfo`,
+  once in `fileContents` — verified by count) and a global `=== 1` would false-positive. Output is
+  byte-unchanged (validation + literal-hoisting only) → **no docs regen, ratchet stays green**.
+- **OPEN — the 2.7 idempotency ask is deliberately NOT done here.** 2.7's ledger said "3.4 MUST make
+  sync-docs idempotent, then tighten `collapseWsQuirk` in contracts.test.js to byte-for-byte." I did
+  not: the 3.4 substep body explicitly scopes sync-docs to marker-hardening ("not a rewrite"), and the
+  idempotency fix is a **splice-math rewrite** (trap 3 surface) — out of scope for an M step not
+  written for it, and the docs ratchet already passes via `collapseWsQuirk`. Root cause for whoever
+  picks it up: the treeInfo/fileContents insert points skip the pre-line indentation (sync-docs.js
+  ~647-650 / ~689-692 after this substep's additions) while the generated block re-adds its own
+  12-space indent, so the leading-whitespace run before the first generated entry grows +12 spaces
+  every run. Recommend a small follow-up substep (call it 3.5 · S) or a Deferred entry — flagged to the
+  user. This does NOT block Phase 3 completion; it's a latent cosmetic non-idempotency the ratchet
+  already tolerates.
+- Discoveries: (1) cli.js shrank **~87 net lines** (105 deleted / 18 added); `bin/lib/` now holds
+  **three seams** — `plugins.js`, `settings-merge.js`, `updates.js` — all `'use strict'` +
+  `module.exports`, all lint-clean under the 2.6 eslint scope; `bin/` ships whole via package.json
+  `files` (no `files` edit). (2) **Verify was proven non-vacuous both ways:** the marker abort fired
+  on demand (injected a 2nd `const fileContents = {` into the real docs → `sync-docs` exit 1 with the
+  named-anchor error, then `git checkout` restored it); and a `--pull-updates` temp-fixture round-trip
+  through the REAL CLI (unpinned copies 003/004 but not already-applied 001; pinned prints the pin-skip
+  notice and copies nothing) all passed. Full `npm test` **exit 0** — 11 top-level suites (cli-install
+  52, update-system 15, plugin-system 13, cli-behavior 27, …) + hook suites **206/206**; `npm run lint`
+  **exit 0**. No `npm version`/publish (deploy-approval rail intact). (3) **Phase 3 is COMPLETE — 3.4
+  was the last substep of the whole plan.** All three god-file seams are extracted; bin/cli.js is now
+  its top-level install flow + the ANSI boxes + `DEV_ONLY_FILES` (trap 4 source-regex surfaces
+  untouched throughout).
