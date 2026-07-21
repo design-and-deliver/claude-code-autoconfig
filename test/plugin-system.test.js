@@ -249,6 +249,69 @@ test("user's own permission rule a plugin also declared survives remove", () => 
   assert(s.permissions && s.permissions.allow.includes('WebSearch'), "user's own WebSearch allow rule must not be deleted on plugin remove");
 });
 
+console.log();
+console.log('BH-10 — re-install cleans up files the old version left behind:');
+
+// v1 ships [keep.js, dropped.js]; v2 ships only [keep.js]. Pre-fix, re-install replaced the
+// ledger's file list with v2's snapshot, so dropped.js became an orphan that `plugin remove`
+// could never delete. (Red on HEAD, green after — see the plan's Ledger.)
+const proj3 = path.join(tmpRoot, 'project3');
+const claude3 = path.join(proj3, '.claude');
+fs.mkdirSync(claude3, { recursive: true });
+
+const shrinking = path.join(tmpRoot, 'shrinking-plugin');
+fs.mkdirSync(path.join(shrinking, 'hooks'), { recursive: true });
+fs.writeFileSync(path.join(shrinking, 'hooks', 'keep.js'), '// kept in v2\n');
+fs.writeFileSync(path.join(shrinking, 'hooks', 'dropped.js'), '// gone in v2\n');
+function writeShrinkingManifest(version, files) {
+  fs.writeFileSync(path.join(shrinking, 'plugin.json'), JSON.stringify({
+    name: 'shrinking', version, description: 'file list shrinks in v2', files
+  }, null, 2));
+}
+
+writeShrinkingManifest('1.0.0', [
+  { from: 'hooks/keep.js', to: 'hooks/keep.js' },
+  { from: 'hooks/dropped.js', to: 'hooks/dropped.js' }
+]);
+runCli(proj3, ['plugin', 'add', shrinking]);
+
+writeShrinkingManifest('2.0.0', [
+  { from: 'hooks/keep.js', to: 'hooks/keep.js' }
+]);
+runCli(proj3, ['plugin', 'add', shrinking]);
+
+test('re-install deletes a file the new version no longer ships', () => {
+  assert(!fs.existsSync(path.join(claude3, 'hooks', 'dropped.js')), 'dropped.js must be cleaned up when v2 stops shipping it');
+  assert(fs.existsSync(path.join(claude3, 'hooks', 'keep.js')), 'keep.js must survive the re-install');
+});
+
+runCli(proj3, ['plugin', 'remove', 'shrinking']);
+
+test('after re-install + remove, no file from ANY version remains', () => {
+  assert(!fs.existsSync(path.join(claude3, 'hooks', 'keep.js')), 'keep.js should be removed');
+  assert(!fs.existsSync(path.join(claude3, 'hooks', 'dropped.js')), 'dropped.js must not be an undeletable orphan (BH-10)');
+});
+
+test('a failing add copies nothing (no untracked orphan from a mid-copy abort)', () => {
+  const proj4 = path.join(tmpRoot, 'project4');
+  fs.mkdirSync(path.join(proj4, '.claude'), { recursive: true });
+  const badPlugin = path.join(tmpRoot, 'bad-plugin');
+  fs.mkdirSync(path.join(badPlugin, 'hooks'), { recursive: true });
+  fs.writeFileSync(path.join(badPlugin, 'hooks', 'first.js'), '// pre-fix: copied before the throw\n');
+  fs.writeFileSync(path.join(badPlugin, 'plugin.json'), JSON.stringify({
+    name: 'bad', version: '1.0.0',
+    files: [
+      { from: 'hooks/first.js', to: 'hooks/first.js' },
+      { from: 'hooks/missing.js', to: 'hooks/missing.js' }
+    ]
+  }, null, 2));
+  let threw = false;
+  try { runCli(proj4, ['plugin', 'add', badPlugin]); }
+  catch (e) { threw = true; assert(/not found/.test(e.stdout || e.message), 'error names the missing file'); }
+  assert(threw, 'add should exit non-zero when a declared file is missing');
+  assert(!fs.existsSync(path.join(proj4, '.claude', 'hooks', 'first.js')), 'no file may be copied before validation completes (orphan with no ledger record)');
+});
+
 // --- Cleanup ----------------------------------------------------------------
 try { fs.rmSync(tmpRoot, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
 

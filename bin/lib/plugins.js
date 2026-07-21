@@ -95,47 +95,87 @@ function pluginAdd(pluginArg, claudeDir, deps) {
   console.log('\x1b[36m%s\x1b[0m', `📦 Installing plugin: ${manifest.name}${manifest.version ? ' v' + manifest.version : ''}`);
 
   // Read the ledger up front: on a re-install its prior `added` delta seeds this run's
-  // accumulator so removal still reverts everything this plugin ever added (BH-1).
+  // accumulator so removal still reverts everything this plugin ever added (BH-1), and its
+  // prior file list drives the dropped-file cleanup below (BH-10).
   const ledger = readPluginsLedger(claudeDir);
-  const addedDelta = seedAddedDelta(ledger[manifest.name]);
+  const priorEntry = ledger[manifest.name];
+  const addedDelta = seedAddedDelta(priorEntry);
+  const priorFiles = (priorEntry && Array.isArray(priorEntry.files)) ? priorEntry.files : [];
 
-  // 1. Copy declared files into <project>/.claude/<to>
-  const installedFiles = [];
+  // 1. Validate every declared file — and that settings.json is parseable — BEFORE touching
+  //    the project: a mid-loop throw used to leave already-copied files behind as orphans no
+  //    ledger entry tracked (BH-10).
+  const copies = [];
   for (const file of manifest.files) {
     if (!file || !file.from || !file.to) throw new Error('each "files" entry must have "from" and "to"');
     const src = path.resolve(pluginDir, file.from);
     if (!fs.existsSync(src)) throw new Error(`plugin file not found: ${file.from}`);
     const dest = path.join(claudeDir, file.to);
     if (deps.isReservedName(path.basename(dest))) throw new Error(`refusing to write reserved filename: ${file.to}`);
-    fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.copyFileSync(src, dest);
-    installedFiles.push(file.to);
-    console.log('\x1b[90m%s\x1b[0m', `   + .claude/${file.to}`);
+    copies.push({ src, dest, to: file.to });
   }
 
-  // 2. Fold the settings fragment into .claude/settings.json (clone first to avoid aliasing the ledger copy)
-  if (manifest.settings) {
-    const settingsPath = path.join(claudeDir, 'settings.json');
-    let userSettings = {};
-    if (fs.existsSync(settingsPath)) {
-      try {
-        userSettings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-      } catch (e) {
-        // A corrupt settings.json must NOT be treated as {} — that would merge the plugin
-        // fragment over an empty object and overwrite the user's entire config. Back it up
-        // and refuse (mirrors pluginRemove's leave-intact behavior).
-        const backupPath = settingsPath + '.corrupt-' + Date.now() + '.bak';
-        try { fs.copyFileSync(settingsPath, backupPath); } catch (_) { /* best effort */ }
-        throw new Error(`.claude/settings.json is not valid JSON (${e.message}) — refusing to overwrite it. A backup was saved to ${path.basename(backupPath)}. Fix or delete settings.json, then re-run.`);
-      }
+  const settingsPath = path.join(claudeDir, 'settings.json');
+  let userSettings = {};
+  if (manifest.settings && fs.existsSync(settingsPath)) {
+    try {
+      userSettings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    } catch (e) {
+      // A corrupt settings.json must NOT be treated as {} — that would merge the plugin
+      // fragment over an empty object and overwrite the user's entire config. Back it up
+      // and refuse (mirrors pluginRemove's leave-intact behavior).
+      const backupPath = settingsPath + '.corrupt-' + Date.now() + '.bak';
+      try { fs.copyFileSync(settingsPath, backupPath); } catch (_) { /* best effort */ }
+      throw new Error(`.claude/settings.json is not valid JSON (${e.message}) — refusing to overwrite it. A backup was saved to ${path.basename(backupPath)}. Fix or delete settings.json, then re-run.`);
     }
+  }
+
+  // 2. Record intent before copying: files = union(prior, incoming), so a genuine I/O
+  //    failure mid-copy still leaves every possibly-on-disk file tracked and removable via
+  //    `plugin remove`. Same entry shape (trap 1: the ledger is additive-only); the success
+  //    path overwrites this with the final snapshot below. The pre-merge `added` seed is
+  //    safe to record: it reverts only what a PRIOR install merged (nothing, on a first
+  //    install), matching what is actually in settings.json if this run aborts.
+  if (copies.length > 0) {
+    ledger[manifest.name] = {
+      version: manifest.version || null,
+      files: [...new Set([...priorFiles, ...copies.map(c => c.to)])],
+      settings: priorEntry ? priorEntry.settings : (manifest.settings || null),
+      added: addedDelta,
+      installedAt: priorEntry ? priorEntry.installedAt : new Date().toISOString()
+    };
+    writePluginsLedger(claudeDir, ledger);
+  }
+
+  // 3. Copy declared files into <project>/.claude/<to>
+  const installedFiles = [];
+  for (const c of copies) {
+    fs.mkdirSync(path.dirname(c.dest), { recursive: true });
+    fs.copyFileSync(c.src, c.dest);
+    installedFiles.push(c.to);
+    console.log('\x1b[90m%s\x1b[0m', `   + .claude/${c.to}`);
+  }
+
+  // 3b. A re-install deletes files the previous version shipped and this one doesn't
+  //     (BH-10) — left in place, they would outlive every future `plugin remove`.
+  for (const rel of priorFiles) {
+    if (installedFiles.includes(rel)) continue;
+    const stale = path.join(claudeDir, rel);
+    if (fs.existsSync(stale)) {
+      fs.rmSync(stale, { force: true });
+      console.log('\x1b[90m%s\x1b[0m', `   - .claude/${rel} (no longer shipped by this version)`);
+    }
+  }
+
+  // 4. Fold the settings fragment into .claude/settings.json (clone first to avoid aliasing the ledger copy)
+  if (manifest.settings) {
     deps.mergeSettingsInto(userSettings, JSON.parse(JSON.stringify(manifest.settings)), addedDelta);
     fs.mkdirSync(claudeDir, { recursive: true });
     fs.writeFileSync(settingsPath, JSON.stringify(userSettings, null, 2));
     console.log('\x1b[90m%s\x1b[0m', '   ✎ merged settings.json (hooks / env / permissions)');
   }
 
-  // 3. Record in the ledger so removal can cleanly undo everything. `added` is the true delta
+  // 5. Record in the ledger so removal can cleanly undo everything. `added` is the true delta
   //    this install introduced (additive field — trap 1: old ledgers without it fall back to
   //    value-equality on remove); it's what `unmergeSettingsFrom` reverts, never user config.
   ledger[manifest.name] = {
