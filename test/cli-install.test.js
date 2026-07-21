@@ -648,6 +648,43 @@ test('upgrade path: migrate-then-merge yields ONE anchored entry, not a legacy+a
   assert(cmds[0].includes('${CLAUDE_PROJECT_DIR:-.}'), `surviving entry must be the anchored one: ${cmds[0]}`);
 });
 
+test('merge under a NEW matcher adds only genuinely-new hooks, never a re-add (BH-4)', () => {
+  const merge = mergeSettingsInto;
+  const TT = 'node "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/terminal-title.js"';
+  const TT_IDLE = 'node "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/terminal-title.js" --idle-rescue';
+  const AB = 'node "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/arcade-beeps.js"';
+  // User already runs terminal-title under the catch-all matcher.
+  const userSettings = {
+    hooks: { Notification: [
+      { matcher: '', hooks: [{ type: 'command', command: TT }] },
+    ] },
+  };
+  // Fragment ships a NEW matcher carrying that same command plus two genuinely-new ones
+  // (the --idle-rescue variant is a DIFFERENT exact string — it must still be added).
+  const pkgFragment = {
+    hooks: { Notification: [
+      { matcher: 'permission_prompt', hooks: [
+        { type: 'command', command: TT },
+        { type: 'command', command: AB },
+        { type: 'command', command: TT_IDLE },
+      ] },
+    ] },
+  };
+  merge(userSettings, pkgFragment);
+  const count = (cmd) => userSettings.hooks.Notification
+    .reduce((n, m) => n + (m.hooks || []).filter(h => h.command === cmd).length, 0);
+  assert(count(TT) === 1, `existing hook re-added under the new matcher: ${count(TT)} copies of terminal-title`);
+  assert(count(AB) === 1, `genuinely-new hook must be added exactly once, got ${count(AB)}`);
+  assert(count(TT_IDLE) === 1, `distinct --idle-rescue command must still be added (exact-string dedup), got ${count(TT_IDLE)}`);
+  const pp = userSettings.hooks.Notification.find(m => m.matcher === 'permission_prompt');
+  assert(pp, 'the new matcher itself must land');
+  const ppCmds = (pp.hooks || []).map(h => h.command);
+  assert(
+    ppCmds.length === 2 && ppCmds.includes(AB) && ppCmds.includes(TT_IDLE),
+    `new matcher must carry ONLY its genuinely-new hooks, got: ${ppCmds.join(' | ')}`
+  );
+});
+
 test('cli.js migrates BEFORE merging on the settings upgrade path (ordering guard)', () => {
   const src = fs.readFileSync(CLI_PATH, 'utf8');
   const migrateAt = src.indexOf('migrateLegacyHookCommands(userSettings);');

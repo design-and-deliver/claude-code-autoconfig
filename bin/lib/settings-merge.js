@@ -80,25 +80,29 @@ function mergeSettingsInto(userSettings, fragment, added) {
           for (const hook of matcher.hooks || []) recHook(event, hook.command);
         }
       } else {
-        // Add any hook commands that don't already exist
+        // Add any hook commands that don't already exist. Dedup is per COMMAND but the
+        // insert unit is a matcher, so a new matcher must land carrying ONLY its
+        // genuinely-new hooks (BH-4) — pushing the fragment's whole matcher would re-add
+        // a command the user already runs under another matcher, and it would fire twice.
         for (const matcher of matchers) {
+          const fresh = [];
           for (const hook of matcher.hooks || []) {
             const exists = userSettings.hooks[event].some(m =>
               (m.hooks || []).some(h => h.command === hook.command)
-            );
-            if (!exists) {
-              const existingMatcher = userSettings.hooks[event].find(m => m.matcher === matcher.matcher);
-              if (existingMatcher) {
-                existingMatcher.hooks = existingMatcher.hooks || [];
-                existingMatcher.hooks.push(hook);
-                recHook(event, hook.command);
-              } else {
-                userSettings.hooks[event].push(matcher);
-                // The whole matcher lands at once — record every command it carries so a
-                // multi-hook matcher isn't under-recorded (the later hooks now read as "exists").
-                for (const h of matcher.hooks || []) recHook(event, h.command);
-              }
+            ) || fresh.some(h => h.command === hook.command);
+            if (!exists) fresh.push(hook);
+          }
+          if (fresh.length === 0) continue;
+          const existingMatcher = userSettings.hooks[event].find(m => m.matcher === matcher.matcher);
+          if (existingMatcher) {
+            existingMatcher.hooks = existingMatcher.hooks || [];
+            for (const hook of fresh) {
+              existingMatcher.hooks.push(hook);
+              recHook(event, hook.command);
             }
+          } else {
+            userSettings.hooks[event].push({ ...matcher, hooks: fresh });
+            for (const h of fresh) recHook(event, h.command);
           }
         }
       }
