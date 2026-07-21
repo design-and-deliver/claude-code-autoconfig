@@ -584,6 +584,25 @@ test('carriedTitle() unit: no lineage -> empty; lineage + prev file -> that titl
   fs.writeFileSync(path.join(dir, 'p.txt'), 'Prev — Title');
   assert(carriedTitle(dir, 'orphan') === 'Prev — Title', 'carriedTitle should read {prevSid}.txt');
 });
+
+// Regression (2026-07-21): the anchor cache was keyed by CLAUDE_CODE_SSE_PORT, which is per
+// VS Code WINDOW (every tab inherits the same value), not per claude process — so a brand-new
+// terminal cache-hit the OLD tab's tid, was recorded as a same-tab rotation, and wore the old
+// tab's title. A stale cache entry keyed by anything but THIS session's sid must be ignored:
+// a fresh sid re-walks its own ancestry and must never inherit another tab's anchor.
+test('stale anchor cache under a shared env key must not fabricate a lineage for a new terminal', () => {
+  const cwd = mkWorkspace();
+  const tdir = path.join(cwd, '.claude', 'hooks', '.titles', 'terminals');
+  fs.mkdirSync(tdir, { recursive: true });
+  // The exact state the buggy code trusted: a port-keyed cache entry + that terminal occupied by tab A.
+  fs.writeFileSync(path.join(tdir, '.anchor-cache.json'), JSON.stringify({ key: '25935', tid: 'tab-A' }));
+  fs.writeFileSync(path.join(tdir, 'tab-A.json'), JSON.stringify({ tid: 'tab-A', sid: 'session-A', updatedAt: 1 }));
+  runHook({ hook_event_name: 'SessionStart', session_id: 'session-B', cwd, source: 'startup' },
+    { CLAUDE_CODE_SSE_PORT: '25935' });
+  const lin = path.join(cwd, '.claude', 'hooks', '.titles', 'session-B.lineage.json');
+  assert(!fs.existsSync(lin),
+    'a brand-new terminal must not inherit another tab\'s lineage via a shared-env cache key');
+});
 console.log();
 
 console.log('Dedupe (user-level copy stands down when a project copy exists):');

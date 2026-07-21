@@ -812,19 +812,21 @@ function recordLineage(dir, sid, source) {
     const tdir = path.join(dir, 'terminals');
     fs.mkdirSync(tdir, { recursive: true });
     // The ancestry walk costs ~3s on Windows (PowerShell spin-up), so its result is cached
-    // keyed by CLAUDE_CODE_SSE_PORT — stable for the life of the claude process, i.e. across
-    // every /clear. Only a relaunch (new port) re-walks. A recycled port matching a stale
-    // cache would mislabel the terminal — ephemeral-port odds, and the cost is a wrong
-    // "previous session" suggestion, so accepted.
-    const port = process.env.CLAUDE_CODE_SSE_PORT || '';
+    // keyed by SESSION ID — a compact/resume re-fire of SessionStart (same sid) hits; a
+    // /clear (new sid) re-walks once, the accepted pre-cache cost. The key was originally
+    // CLAUDE_CODE_SSE_PORT, assumed unique per claude process — falsified 2026-07-21: the
+    // port is per VS Code WINDOW (every tab inherits the same value), so a stale entry
+    // relabeled a brand-new terminal as a same-tab rotation and the old tab's title leaked
+    // onto it. sids are per-session UUIDs and cannot collide across tabs. Residual
+    // (accepted): --resume in a DIFFERENT terminal hits the original terminal's tid; the
+    // occupant check below makes that a no-op unless the terminal was since re-occupied,
+    // and the worst case is a wrong "previous session" suggestion, never a cross-tab carry.
     const cacheFile = path.join(tdir, '.anchor-cache.json');
     let tid = null;
-    if (port) {
-      try {
-        const c = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
-        if (c.key === port && c.tid) tid = c.tid;
-      } catch (_) { /* no cache yet */ }
-    }
+    try {
+      const c = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+      if (c.key === sid && c.tid) tid = c.tid;
+    } catch (_) { /* no cache yet */ }
     if (!tid) {
       const chain = ancestryChain(process.pid);
       let anchor = null;
@@ -833,9 +835,7 @@ function recordLineage(dir, sid, source) {
       }
       if (!anchor) return;
       tid = `${anchor.pid}-${String(anchor.created).replace(/[^0-9]/g, '')}`;
-      if (port) {
-        try { fs.writeFileSync(cacheFile, JSON.stringify({ key: port, tid })); } catch (_) { /* best-effort */ }
-      }
+      try { fs.writeFileSync(cacheFile, JSON.stringify({ key: sid, tid })); } catch (_) { /* best-effort */ }
     }
     const tf = path.join(tdir, `${tid}.json`);
     let occupant = null;
