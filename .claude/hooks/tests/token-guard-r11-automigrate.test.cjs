@@ -51,13 +51,13 @@ test('driftNote autoMigrate=true renders the locked self-contained Token-bloat c
   assert.doesNotMatch(note, /will be preserved/);        // the injection-era promise line is gone
 });
 
-test('driftNote autoMigrate=false is exactly the R6 paste-command copy (no drift)', () => {
+test('driftNote autoMigrate=false is the R6 prose copy with the same /clear + /continue out', () => {
   const note = driftNote('title hooks', 'CCA distribution', 90, false);
-  assert.match(note, /paste-ready command/);
-  assert.match(note, /\/migrate-new-session cca-distribution\b/);
-  assert.match(note, /NEVER run the command yourself/);
+  assert.match(note, /\/clear, then \/continue/);
+  assert.match(note, /NEVER run the command/);
   assert.doesNotMatch(note, /arm it/i);
   assert.doesNotMatch(note, /pending-migrate\.armed/);
+  assert.doesNotMatch(note, /migrate-new-session/);    // swept 2026-07-21: one metaphor everywhere
   // omitting the 4th arg (legacy call sites) must behave like false
   assert.equal(driftNote('title hooks', 'CCA distribution', 90), note);
 });

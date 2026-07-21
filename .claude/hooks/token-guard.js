@@ -131,9 +131,9 @@
  *   the one gate that saves one-shot money: the warn ships in the request that pays, the gate
  *   fires before it.  (skillBudgetWarnChars is read by the CCA auditor, not this hook)
  *   driftNudge true · driftPriorShareMin 0.6 · driftMinContextTokens 100000 · driftRetryPrompts 4
- *   — R6: the terminal-title trail as a RENT signal; fires only above /eval's STAY floor, so it hands
- *   the user a paste-ready /migrate-new-session {slug(scope)} (never runs it); /eval is the escape
- *   hatch. The hook's arithmetic only STAGES the card (2026-07-18) — the in-turn model holds the
+ *   — R6: the terminal-title trail as a RENT signal; fires only above the STAY floor, so it hands
+ *   the user the action-first /clear + /continue out (never runs it); the builds-on-earlier-work
+ *   case is a stay-put aside in the copy. The hook's arithmetic only STAGES the card (2026-07-18) — the in-turn model holds the
  *   render gate: it judges RELATEDNESS (current prompt returns to the earlier work → stale premise)
  *   and RESOLUTION (earlier threads actually closed → picks the copy's framing) against the live
  *   conversation, and defers by writing .token-guard/drift-deferred; the guard snoozes
@@ -475,7 +475,7 @@ function slug(scope) {
 
 // The relay instruction the model turns into the standalone warm warning block. Pure + exported so a
 // fixture can assert the out without an E2E. Follows the did/costs/out shape (ux copy/warnings-name-the-
-// trigger): moved scope + rent% + a SINGLE ready out, with /eval as a one-clause escape hatch for the
+// trigger): moved scope + rent% + a SINGLE ready out, with a stay-put aside for the
 // cross-scope-dependency case drift can't see. R11 (revised 2026-07-21): when autoMigrate is on, the
 // out is a clickable AskUserQuestion card whose Yes hands the user the standard two-step — /clear,
 // then /continue (a hook-staged recover-pointer makes /continue land on this thread's boundary).
@@ -506,7 +506,6 @@ function driftJudge(dominant, autoMigrate) {
 }
 
 function driftNote(dominant, scope, priorPct, autoMigrate, liveContext) {
-  const kw = slug(scope);
   if (autoMigrate) {
     // Fully self-contained card: the verbatim warning line IS the AskUserQuestion question (not prose
     // above it), header chip "Token bloat". Fixed 3-part number line (total / keep / drop): keep =
@@ -545,12 +544,13 @@ function driftNote(dominant, scope, priorPct, autoMigrate, liveContext) {
     `earlier work shipped and is safe to leave behind; never-closed → the ${dominant} thread ` +
     `never quite wrapped up, so migrating only makes sense if they don't plan to come back to it. `;
   return lead +
-    `Then give the ONE-step out as a paste-ready command: in a fresh ` +
-    `session, run \`/migrate-new-session ${kw}\` — it recovers this thread and picks up where ` +
-    `you left off (nothing to prep first). As a brief closing aside, note that if "${scope}" ` +
-    `actually builds on the earlier work, staying put is the right call — a cut only pays ` +
-    `when the threads are independent. NEVER run the command yourself. Then a horizontal rule ` +
-    `before the answer itself.`;
+    `Then give the ONE-step out, ACTION-FIRST (ux copy/action-lines-lead-with-the-action): ` +
+    `"/clear, then /continue to leave the settled ${dominant} work behind and keep this ` +
+    `${scope} thread" — a recovery pointer is already staged, so /continue picks up exactly ` +
+    `this thread; name the two commands, never the pointer. As a brief closing aside, note ` +
+    `that if "${scope}" actually builds on the earlier work, staying put is the right call — ` +
+    `a cut only pays when the threads are independent. NEVER run the commands yourself. Then ` +
+    `a horizontal rule before the answer itself.`;
 }
 
 // Pure fire-rule (exported for fixtures, like meter). Input = ledgerScopes() tenures, the LAST one
@@ -987,12 +987,14 @@ function writeRecoverPointer(projectDir, sid, minutes, boundaryIso) {
 }
 
 // R4 idle-return relay copy (warn mode — the re-upload already landed when the user returned).
-// Prose warning ending on the recovery out: a fresh session + the short `/recover-context
-// pid=N` command (the pointer on disk carries sid + cutoff). The earlier ccr new-terminal
-// Yes/No card was retired 2026-07-18 — spawning a terminal from the model was too hacky.
+// Prose warning ending on the recovery out: /clear, then /continue (the fire path stages a
+// recover-pointer that /continue's ladder consumes; terminal lineage resolves the session).
+// The earlier ccr new-terminal Yes/No card was retired 2026-07-18 — spawning a terminal from
+// the model was too hacky; the /recover-context pid=N wording left the copy 2026-07-21 (one
+// metaphor everywhere: /clear + /continue — the pid pointer stays on disk as the manual out).
 // Copy rules: trigger named, ~20x comparison, never a dollar figure, never the exact idle
-// duration.
-function idleReturnNote(liveContext, recoverCmd) {
+// duration, out written action-first (ux copy/action-lines-lead-with-the-action).
+function idleReturnNote(liveContext) {
   return (
     `idle-return: this session sat untouched for over an hour, longer than the API keeps a ` +
     `conversation cached. Claude Code just re-uploaded all ~${fmtK(liveContext)} tokens ` +
@@ -1003,8 +1005,9 @@ function idleReturnNote(liveContext, recoverCmd) {
     `(that's TMI). Sentence 2, short and separate: Claude Code (by name — the behavior is ` +
     `Claude Code's, not this guard's/CCA's) re-uploaded it all, ending on the ~20x ` +
     `comparison — NEVER a dollar figure (subscription users would read it as a real ` +
-    `charge). Then, on its own line, the out: to continue THIS work cheaply, start a new ` +
-    `session and run "${recoverCmd}" (reloads the last ~15min of this conversation). Then ` +
+    `charge). Then, on its own line, the out ACTION-FIRST: "/clear, then /continue to pick ` +
+    `this work back up cheaply" (a recovery pointer is staged, so /continue reloads the right ` +
+    `slice — name the two commands, never the pointer). Then ` +
     `a horizontal rule before the answer itself.`
   );
 }
@@ -1710,10 +1713,11 @@ async function onUserPromptSubmit(data, projectDir) {
         `${culprit} — every future turn re-reads it: ${bombCost}. Relay as ` +
         `a STANDALONE warning block, never woven into your answer: open with "⚠️ Hey —" and ` +
         `keep a warm conversational voice (helpful friend, not system log), 2-3 plain sentences ` +
-        `naming what landed and the out (a one-time reference belongs in a disposable subagent; ` +
-        `once its useful part is extracted, a fresh session stops the rent — running ` +
-        `/migrate-new-session {scope-keyword} there picks this thread back up, nothing to ` +
-        `prep), then a horizontal rule before the answer itself.`
+        `naming what landed, then the out ACTION-FIRST (ux copy/action-lines-lead-with-the-action): ` +
+        `"/clear, then /continue to drop this weight and keep the thread" (a one-time reference ` +
+        `belongs in a disposable subagent; once its useful part is extracted, /continue picks the ` +
+        `thread back up in the fresh session, nothing to prep). Then a horizontal rule before ` +
+        `the answer itself.`
       );
       if (cfg.bombGateWhenFat && m.liveContext >= cfg.contextWarnTokens) st.bombGateArmed = true;
     } else if (st.approvedPayloadHop && --st.approvedPayloadHop.ttl <= 0) {
@@ -1736,11 +1740,9 @@ async function onUserPromptSubmit(data, projectDir) {
       let i = ts.length - 1;
       for (let acc = 0; i > 0 && acc < 15 * 60000; i--) acc += Math.min(ts[i] - ts[i - 1], 5 * 60000);
       const recoverMin = Math.max(5, Math.ceil((Date.now() - (ts[i] || m.lastTs)) / 300000) * 5);
-      // Pointer written -> the short pid form; write failed -> self-contained fallback
-      // (--session pins recovery to THIS session's transcript, minutes relative to now).
-      const rec = writeRecoverPointer(projectDir, sid, recoverMin);
-      const recoverCmd = rec ? rec.recoverCmd
-        : `/recover-context -${recoverMin}${sid ? ` --session ${sid.slice(0, 8)}` : ''}`;
+      // The pointer feeds /continue's ladder (and /recover-context pid=N stays usable as the
+      // manual form) — staged best-effort; /continue's lineage + walk-back recover without it.
+      writeRecoverPointer(projectDir, sid, recoverMin);
       // idleGate: pre-empt the charge — block THIS submission before anything reaches the API.
       // The message stays in the CLI input history (up-arrow + Enter re-sends), and the
       // one-shot key set above lets that second send pass through silently: charge accepted.
@@ -1755,12 +1757,11 @@ async function onUserPromptSubmit(data, projectDir) {
             `keeps a conversation cached. If you continue here, Claude Code will re-upload ` +
             `all ~${fmtK(m.liveContext)} tokens of it at full price.\n\n` +
             `To continue anyway: press ↑ then Enter. To pick this work up cheaply instead: ` +
-            `start a new session and run "${recoverCmd}" — reloads the last ` +
-            `~15 minutes of this conversation.`,
+            `/clear, then /continue — it reloads the recent thread of this conversation.`,
         }));
         return;
       }
-      notes.push(idleReturnNote(m.liveContext, recoverCmd));
+      notes.push(idleReturnNote(m.liveContext));
     }
   }
 
@@ -1785,8 +1786,8 @@ async function onUserPromptSubmit(data, projectDir) {
   // advisor reads — so drift and advisor can never disagree about what a topic cost. The nudge
   // fires ONLY above driftMinContextTokens (the STAY floor below which a cut can't pay for
   // itself), so at fire time the cut is a foregone conclusion by construction — hand the user
-  // a paste-ready /migrate-new-session {slug(scope)} as the ONE-step out (the keyword is the
-  // current scope; migrate self-packages from the ledger boundary, no prep). The dependency
+  // the action-first /clear + /continue out (a recover-pointer staged at fire time pins the
+  // ledger boundary, so /continue self-packages the thread, no prep). The dependency
   // case drift can't see (a build->article day reads as two scopes, but the article feeds on
   // the build context) is handled in the copy itself: it advises STAYING when the new scope
   // builds on the earlier work. Model relays the block; it NEVER runs the command.
@@ -1823,13 +1824,12 @@ async function onUserPromptSubmit(data, projectDir) {
         notes.push(driftNote(v.dominant, cur.scope, v.priorPct, cfg.driftAutoMigrate, m.liveContext));
         // R11 (revised 2026-07-21): stage a recover-pointer pinned to the current tenure's
         // enteredIso — the drifted thread's exact boundary. /continue's auto mode reads
-        // recover.json before any heuristic rung, so after the card's "/clear + /continue"
-        // the fresh session recovers exactly this thread. (Replaces the retired injection
-        // candidate — see the mothballed block at MIGRATE_CANDIDATE.)
-        if (cfg.driftAutoMigrate) {
-          const ageMin = Math.max(1, Math.round((Date.now() - (Date.parse(cur.enteredIso) || Date.now())) / 60000));
-          writeRecoverPointer(projectDir, sid, ageMin, cur.enteredIso);
-        }
+        // recover.json before any heuristic rung, so after the nudge's "/clear + /continue"
+        // (card and prose branch alike) the fresh session recovers exactly this thread.
+        // (Replaces the retired injection candidate — see the mothballed block at
+        // MIGRATE_CANDIDATE.)
+        const ageMin = Math.max(1, Math.round((Date.now() - (Date.parse(cur.enteredIso) || Date.now())) / 60000));
+        writeRecoverPointer(projectDir, sid, ageMin, cur.enteredIso);
       }
     }
   }
@@ -2161,8 +2161,8 @@ function onPreToolUse(data, projectDir) {
     saveState(projectDir, sid, st);
     return ask('PreToolUse',
       `token-guard: a context bomb just landed at fat context (see warning above) — one-time ` +
-      `confirm before more work compounds on top of it. If the payload isn't needed here, ` +
-      `a fresh session (then /migrate-new-session {scope-keyword} in it) sheds it cleanly.`);
+      `confirm before more work compounds on top of it. If the payload isn't needed here: ` +
+      `/clear, then /continue to shed it and keep this thread.`);
   }
 
   // v1 hard gate on total session spend (v2: fleet-aware total). Default off.

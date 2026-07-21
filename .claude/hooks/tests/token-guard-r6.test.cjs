@@ -38,11 +38,14 @@ test('slug is deterministic (idempotent for the once-per-scope one-shot)', () =>
   assert.equal(slug(s), slug(s));
 });
 
-// ---------- driftNote(): the paste-ready command + escape hatch ----------
+// ---------- driftNote(): the action-first /clear + /continue out + stay-put aside ----------
 
-test('driftNote hands the user a paste-ready /migrate-new-session {slug}', () => {
+test('driftNote hands the user the action-first /clear + /continue out', () => {
   const note = driftNote('title hooks', 'CCA distribution', 90);
-  assert.match(note, /\/migrate-new-session cca-distribution\b/, 'keyword = slug(scope)');
+  assert.match(note, /\/clear, then \/continue/, 'the out leads with the action');
+  assert.match(note, /ACTION-FIRST/, 'relay instruction pins the copy rule');
+  // Swept 2026-07-21: one migration metaphor everywhere — no paste-command alternative.
+  assert.doesNotMatch(note, /migrate-new-session/);
 });
 
 test('driftNote names NO retired command — the dependency case is a STAY advisory', () => {
@@ -60,7 +63,7 @@ test('driftNote names did/costs/out and keeps the standalone-block relay contrac
   assert.match(note, /CCA distribution/);      // to
   assert.match(note, /~90%/);                  // costs
   assert.match(note, /STANDALONE/);            // relay contract preserved
-  assert.match(note, /NEVER run the command yourself/);
+  assert.match(note, /NEVER run the commands yourself/);
 });
 
 // ---------- driftVerdict(): the fire conditions the nudge rides on ----------

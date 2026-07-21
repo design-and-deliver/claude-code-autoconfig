@@ -108,17 +108,14 @@ test('ccr --dry-run prints the launch command; exits 1 with no pointer', () => {
 
 // ---------- idleReturnNote (warn-mode relay copy) ----------
 
-test('idleReturnNote is the prose warning built on the given command — no card, no ccr', () => {
-  const note = idleReturnNote(178000, '/recover-context pid=2');
+test('idleReturnNote ends on the action-first /clear + /continue out — no card, no ccr', () => {
+  const note = idleReturnNote(178000);
   assert.match(note, /STANDALONE warning block/);
   assert.match(note, /~178k tokens/);
-  assert.match(note, /\/recover-context pid=2/);
+  assert.match(note, /\/clear, then \/continue/);      // swept 2026-07-21: one metaphor everywhere
+  assert.match(note, /ACTION-FIRST/);                  // relay instruction pins the copy rule
+  assert.doesNotMatch(note, /recover-context/);        // the pid command left the copy (pointer stays on disk)
   assert.ok(!note.includes('AskUserQuestion'), 'the new-terminal card is retired');
   assert.ok(!note.includes('ccr'), 'ccr is no longer advertised');
   assert.ok(!note.includes('$'), 'never a dollar figure');
-});
-
-test('idleReturnNote carries the fallback command verbatim when given one', () => {
-  const note = idleReturnNote(90000, '/recover-context -20 --session abcd1234');
-  assert.match(note, /\/recover-context -20 --session abcd1234/);
 });
