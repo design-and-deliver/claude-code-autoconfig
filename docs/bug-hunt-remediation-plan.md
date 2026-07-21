@@ -131,20 +131,20 @@ so drive it by faking `process.platform` or by unit-testing the guard; `npm test
 Real user-facing config loss. Touches the plugins ledger (trap 1 additive-only) and hook dedup
 (trap 4). Each fix is a fail-first regression test first.
 
-### ☐ 2.1 · L · ~1.5h — Stop `plugin remove` from deleting the user's OWN config (BH-1)
+### ☑ 2.1 · L · ~1.5h — Stop `plugin remove` from deleting the user's OWN config (BH-1)
 
 `bin/lib/settings-merge.js:136` — `unmergeSettingsFrom` removes any key whose value equals the
 fragment's, but `mergeSettingsInto` is dedup-safe and never records which keys it **actually
 added**, so a key the user already had (env/hook/permission) matching the fragment is wrongly
 deleted on remove.
 
-- [ ] Make merge record the true delta: when `mergeSettingsInto` adds a key/hook/permission, record
+- [x] Make merge record the true delta: when `mergeSettingsInto` adds a key/hook/permission, record
       it (e.g. the plugins ledger entry at `plugins.js:114` gains an **additive optional**
       `addedKeys`/`addedPaths` field — trap 1: old ledgers without it must fall back to today's
       value-equality behavior, so absence ≠ "delete nothing" unless you choose that as the safe
       default; decide and document which).
-- [ ] `unmergeSettingsFrom` removes only what the ledger says was added; never a user-owned key.
-- [ ] Fail-first test (extend `test/plugin-system.test.js`, already end-to-end): fixture user
+- [x] `unmergeSettingsFrom` removes only what the ledger says was added; never a user-owned key.
+- [x] Fail-first test (extend `test/plugin-system.test.js`, already end-to-end): fixture user
       settings with `env.X:"1"` pre-existing → install a plugin whose fragment also sets `env.X:"1"`
       → `plugin remove` → assert `env.X` **survives**. Add the hook (:125) and permission (:145)
       variants. Confirm it fails on HEAD, passes after.
@@ -476,3 +476,32 @@ Append one entry after each substep, newest last. Format:
   on Windows is unchanged (win32 still deletes the artifact); the guard only spares POSIX. No test
   grepped for the inline `cleanupNulFile` (safe to extract). Full suite green (NPM_TEST_EXIT=0,
   incl. hook suites 206/206).
+
+### 2026-07-21 — substep 2.1 — done
+- Commit: 469a031 fix(plugins): plugin remove no longer deletes settings the user set themselves
+- Fail-first: proven RED→GREEN. Added three assertions to `test/plugin-system.test.js` (a fresh
+  project whose settings.json has a user-set `env.SHARED_KEY`, a user Stop hook, and a user
+  `WebSearch` allow rule; a plugin declares the exact same three; install → remove → all three must
+  survive). `git stash push -- bin/lib/settings-merge.js bin/lib/plugins.js` (keeping the test) →
+  all three RED against HEAD (`SHARED_KEY`/Stop hook/WebSearch each deleted); `git stash pop` →
+  16/16 green. Full suite green (NPM_TEST_EXIT=0, hook suites 206/206).
+- Deviations: (1) Named the additive ledger field `added` (not the plan's illustrative
+  `addedKeys`/`addedPaths`) — one object holding the whole delta:
+  `{ env:[key], hooks:{event:[command]}, permissions:{allow:[rule],deny:[rule]} }`. (2) **Decided the
+  trap-1 fallback** the plan left open: a ledger entry with NO `added` field (pre-fix install) falls
+  back to today's **value-equality** behavior on remove — NOT "delete nothing." Rationale: old plugins
+  stay removable exactly as before (no regression, and no orphaned contributions left behind); only
+  NEW installs gain the precise user-config-safe revert. Documented in the `unmergeSettingsFrom`
+  header. (3) `mergeSettingsInto`/`unmergeSettingsFrom` gained an **optional third arg** — the
+  upgrade path (`cli.js:593`, two-arg) and the direct merge tests in `cli-install.test.js` (two-arg)
+  are untouched and record nothing, so behavior there is byte-identical. (4) Re-install unions the
+  new delta onto the prior one (`seedAddedDelta` in plugins.js seeds the accumulator from the prior
+  ledger entry) — a re-install adds nothing, so without the seed a post-re-install remove would
+  revert nothing; the existing idempotency+remove test exercises exactly this path and stays green.
+- Discoveries: `pluginAdd` now reads the ledger ONCE up front (was at old :110, after copy) to get
+  the prior delta; write still happens at the end — no behavior change on the error path (a mid-copy
+  throw still writes no ledger). The BH-4 "push the whole fragment matcher" quirk (2.2) means a
+  multi-hook NEW matcher could otherwise under-record its later commands; guarded here by recording
+  every command in a freshly-pushed matcher (`settings-merge.js` merge branch) — so 2.1's recording
+  is already correct ahead of the 2.2 dedup fix. Note for 2.3 (BH-10): file cleanup on re-install is
+  still unaddressed; the `added` union handles settings only, not orphaned files.
