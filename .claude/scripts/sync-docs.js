@@ -664,11 +664,13 @@ while (i < html.length) {
   }
   i++;
 }
-// Skip past the closing },
-const afterClaudeDir = i + 1;
-// Skip whitespace/comma
-let treeInfoInsertPoint = afterClaudeDir;
-while (treeInfoInsertPoint < html.length && /[\s,]/.test(html[treeInfoInsertPoint])) {
+// Start right after the closing `}`, then consume the trailing comma and any spaces/tabs
+// but STOP at the line break. generateTreeInfo() already indents every line 12 spaces, so
+// consuming the NEXT line's leading indentation here too would double it, growing the
+// whitespace run by +12 on every run (the non-idempotency fixed in substep 3.5). The splice
+// below prepends a single `\n`; the generated block owns the indentation, this side never does.
+let treeInfoInsertPoint = i + 1;
+while (treeInfoInsertPoint < html.length && /[ \t,]/.test(html[treeInfoInsertPoint])) {
   treeInfoInsertPoint++;
 }
 
@@ -680,7 +682,7 @@ if (treeInfoEnd === -1) {
 }
 
 const newTreeInfo = generateTreeInfo(entries);
-html = html.slice(0, treeInfoInsertPoint) + newTreeInfo + '\n        ' + html.slice(treeInfoEnd);
+html = html.slice(0, treeInfoInsertPoint) + '\n' + newTreeInfo + '\n        ' + html.slice(treeInfoEnd);
 
 // 3. Replace fileContents
 //    Keep memory-md and claude-md (structural), replace the rest
@@ -708,9 +710,11 @@ while (i < html.length) {
   }
   i++;
 }
-const afterClaudeMdFc = i + 1;
-let fcInsertPoint = afterClaudeMdFc;
-while (fcInsertPoint < html.length && /[\s,]/.test(html[fcInsertPoint])) {
+// Same idempotency fix as treeInfo above (substep 3.5): stop at the line break after the
+// claude-md entry's `}` + comma. generateFileContents() owns its 12-space indentation; the
+// splice below prepends a single `\n`.
+let fcInsertPoint = i + 1;
+while (fcInsertPoint < html.length && /[ \t,]/.test(html[fcInsertPoint])) {
   fcInsertPoint++;
 }
 
@@ -721,7 +725,7 @@ if (fcEnd === -1) {
 }
 
 const newFileContents = generateFileContents(entries);
-html = html.slice(0, fcInsertPoint) + newFileContents + '\n        ' + html.slice(fcEnd);
+html = html.slice(0, fcInsertPoint) + '\n' + newFileContents + '\n        ' + html.slice(fcEnd);
 
 fs.writeFileSync(docsPath, eol === '\r\n' ? html.replace(/\n/g, '\r\n') : html);
 
