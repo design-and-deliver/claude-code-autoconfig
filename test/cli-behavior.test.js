@@ -417,6 +417,37 @@ test('a pinned project skips the update pull (prints the pin notice, copies noth
   assert(copied.length === 0, `a pinned pull must copy no updates, found: ${copied.join(', ')}`);
 });
 
+// ── nul-cleanup is guarded to Windows (BH-8) ─────────────────────────────────
+// A stray `nul` file is only a Windows `> nul` redirect artifact. On POSIX a file named `nul`
+// is a real file the user created and must survive. Drives the extracted helper directly with an
+// injected platform so the guard is proven on ANY OS — on this Windows box a `--bootstrap` fixture
+// can't demonstrate POSIX survival (win32 would legitimately delete it).
+console.log();
+console.log('nul-cleanup is guarded to Windows (BH-8):');
+
+const { cleanupNulFile } = require('../bin/lib/nul-cleanup.js');
+
+test('a real `nul` file survives cleanup on POSIX (linux + darwin)', () => {
+  const dir = makeProject('nul-posix');
+  cleanups.push(dir);
+  const nulPath = path.join(dir, 'nul');
+  fs.writeFileSync(nulPath, 'user data');
+  cleanupNulFile(dir, 'linux');
+  assert(fs.existsSync(nulPath), 'a `nul` file on Linux must not be deleted');
+  cleanupNulFile(dir, 'darwin');
+  assert(fs.existsSync(nulPath), 'a `nul` file on macOS must not be deleted');
+  fs.unlinkSync(nulPath); // leave the temp dir clean for the recursive remove below
+});
+
+test('the stray `nul` artifact is still removed on Windows', () => {
+  const dir = makeProject('nul-win');
+  cleanups.push(dir);
+  const nulPath = path.join(dir, 'nul');
+  fs.writeFileSync(nulPath, 'redirect artifact');
+  cleanupNulFile(dir, 'win32');
+  assert(!fs.existsSync(nulPath), 'the Windows `nul` artifact must still be cleaned up');
+});
+
 // ── Cleanup ──────────────────────────────────────────────────────────────────
 for (const dir of cleanups) {
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }

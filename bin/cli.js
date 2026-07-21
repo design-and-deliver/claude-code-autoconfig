@@ -8,6 +8,7 @@ const { formatUpdateSummary } = require('./update-summary.js');
 const { runPluginCommand } = require('./lib/plugins.js');
 const { migrateLegacyHookCommands, mergeSettingsInto, unmergeSettingsFrom } = require('./lib/settings-merge.js');
 const { pullUpdates } = require('./lib/updates.js');
+const { cleanupNulFile } = require('./lib/nul-cleanup.js');
 
 const cwd = process.cwd();
 const packageDir = path.dirname(__dirname);
@@ -49,18 +50,8 @@ const ccaConfigCorrupt = ccaConfigResult.corrupt;
 const pinnedVersion = (ccaConfigResult.config || {}).pinVersion || null;
 const installerVersion = require(path.join(packageDir, 'package.json')).version;
 
-// Cleanup any stray 'nul' file immediately on startup (Windows /dev/null artifact)
-function cleanupNulFile() {
-  const nulFile = path.join(cwd, 'nul');
-  if (fs.existsSync(nulFile)) {
-    try {
-      fs.unlinkSync(nulFile);
-    } catch (_) {
-      // Ignore - file might be locked
-    }
-  }
-}
-cleanupNulFile();
+// Cleanup any stray 'nul' file immediately on startup (Windows '> nul' redirect artifact only)
+cleanupNulFile(cwd);
 
 // Reserved Windows device names - never create files with these names
 const WINDOWS_RESERVED = ['CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'COM3', 'COM4',
@@ -816,6 +807,6 @@ rl.question('\x1b[90mPress ENTER to continue...\x1b[0m', () => {
 
   // Cleanup when Claude exits
   claude.on('close', () => {
-    cleanupNulFile();
+    cleanupNulFile(cwd);
   });
 });
