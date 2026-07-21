@@ -81,7 +81,7 @@ From the project root (the directory you were launched in), run:
 
 ```bash
 python3 -c "
-import glob, json, os, re, sys
+import glob, json, os, re, sys, time
 from datetime import datetime, timedelta
 
 def iso(s):
@@ -116,6 +116,32 @@ if not file:
     tdir = os.path.expanduser('~/.claude/projects/' + proj)
     files = sorted(glob.glob(os.path.join(tdir, '*.jsonl')), key=os.path.getmtime, reverse=True)
     files = [p for p in files if os.path.splitext(os.path.basename(p))[0] != sid_now]
+    # Live-twin filter (added 2026-07-21 after auto mode resumed a RUNNING tab's work):
+    # a sid that is some OTHER terminal's current occupant (terminals/ registry) and
+    # showed activity within 3 min (transcript/glyph mtime — the dupe guard's liveness
+    # bar) is a live session, never this tab's dead predecessor — our own SessionStart
+    # dethroned the predecessor from this terminal's record. Quiet occupants stay
+    # eligible so a closed tab's session is still recoverable from a fresh terminal.
+    occupied = set()
+    for d in titles_dirs:
+        for tf in glob.glob(os.path.join(d, 'terminals', '*.json')):
+            try:
+                s = json.load(open(tf, encoding='utf-8')).get('sid')
+                if s and s != sid_now:
+                    occupied.add(s)
+            except Exception:
+                pass
+    def is_live(p):
+        s = os.path.splitext(os.path.basename(p))[0]
+        if s not in occupied:
+            return False
+        m = os.path.getmtime(p)
+        for d in titles_dirs:
+            g = os.path.join(d, s + '.glyph')
+            if os.path.exists(g):
+                m = max(m, os.path.getmtime(g))
+        return time.time() - m < 180
+    files = [p for p in files if not is_live(p)]
     if not files:
         print('NO_PREVIOUS_SESSION'); sys.exit(0)
     file = files[1] if (not sid_now and len(files) > 1) else files[0]
@@ -183,7 +209,7 @@ print('VIA=' + via + ' (' + how + ')')
 - `NO_PREVIOUS_SESSION` → tell the user no previous session exists for this project and stop (offer minutes mode if they meant a different project's work).
 - Otherwise store `$SID`, `$CUTOFF_ISO`, set `$FILES_TO_PARSE` to the `FILE=` path, note `VIA` for the confirmation, and skip to Step 4.
 
-Caveat: the lineage registry makes auto mode terminal-accurate. Only the fallback heuristic can be fooled by ANOTHER live Claude session in the same project — if the result looks like the wrong session, rerun with `pid=N` or minutes mode.
+Caveat: the lineage registry makes auto mode terminal-accurate, and the fallback skips sessions that look LIVE (another terminal's current occupant with transcript/glyph activity in the last 3 min). Residual: a twin that has been quiet longer than 3 min can still be picked — if the result looks like the wrong session, rerun with `pid=N` or minutes mode.
 
 ## Step 2b: Minutes mode — list candidate transcript files
 
