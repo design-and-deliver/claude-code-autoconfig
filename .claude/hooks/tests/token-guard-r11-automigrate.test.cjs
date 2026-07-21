@@ -1,4 +1,6 @@
-// R11 auto-migrate: consent marker + tail recovery + arm-offer copy.
+// R11 drift migration: the /clear + /continue card + recover-pointer staging, plus the
+// MOTHBALLED SessionStart-injection units (retired 2026-07-21 — kept green for revival;
+// see the banner at MIGRATE_CANDIDATE in token-guard.js).
 // Run: node --test token-guard-r11-automigrate.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
@@ -8,7 +10,7 @@ const path = require('path');
 
 const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
 const { driftNote, recoverTail, resolveMarker, writeMigrateCandidate, clearMarker,
-  migrateReceipt } = require(HOOK);
+  migrateReceipt, writeRecoverPointer } = require(HOOK);
 
 function tmpProject() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tg-r11-'));
@@ -18,16 +20,14 @@ function tmpProject() {
 function markerDir(proj) { return path.join(proj, '.claude', 'hooks', '.token-guard'); }
 const CFG = { driftMigrateMarkerTTLmin: 120, driftMigrateMaxInjectTokens: 40000 };
 
-// ---------- driftNote(): the arm-offer branch, and the false-branch unchanged ----------
+// ---------- driftNote(): the /clear + /continue card, and the false-branch unchanged ----------
 
 test('driftNote autoMigrate=true renders the locked self-contained Token-bloat card', () => {
   const note = driftNote('title hooks', 'CCA distribution', 90, true, 117000);
-  assert.match(note, /AskUserQuestion/);                 // clickable buttons instead of "type arm it"
-  assert.match(note, /pending-migrate\.armed/);          // the consent flag the primary pick writes
+  assert.match(note, /AskUserQuestion/);                 // clickable buttons, not prose
   assert.match(note, /~117k of context/);                // total live context, verbatim copy
   assert.match(note, /only needs ~12k/);                 // keep = 117k - round(117k*0.90) = 12k
-  assert.match(note, /reduce token cost/);               // "reduce", not "eliminate"
-  assert.match(note, /truncating the old ~105k/);        // truncate = round(117k*0.90) = 105k
+  assert.match(note, /\/clear \+ \/continue drops the old ~105k/); // drop = round(117k*0.90) = 105k, named via the standard two-step
   assert.match(note, /Continue\?/);                      // the copy's closing question
   assert.match(note, /Token bloat/);                     // header chip (was "Migrate?")
   assert.match(note, /self-contained/);                  // warning lives IN the card, not as prose above
@@ -36,16 +36,19 @@ test('driftNote autoMigrate=true renders the locked self-contained Token-bloat c
   assert.match(note, /TWO options/);                     // exactly two, not three
   assert.match(note, /BOTH options are bare labels with NO/); // both options are bare labels — no subtext on either
   assert.doesNotMatch(note, /Keeps this topic/);         // dropped: the redundant Option-1 grey line
-  assert.doesNotMatch(note, /pick up right where you are/); // ...and its continuity phrase, now superfluous
   assert.doesNotMatch(note, /Leave everything as-is/);   // Cancel's description dropped too — bare label
   assert.match(note, /noise to the user/);               // and the mechanism jargon is explicitly banned
-  assert.match(note, /Now \/clear your session — your current "CCA distribution" context will be preserved/); // post-click line names the pinned scope
+  assert.match(note, /Now run \/clear, then \/continue — your current "CCA distribution" thread comes with you/); // post-click line names the pinned scope + the two-step
   assert.doesNotMatch(note, /most recent context/i);     // the vague phrase (read as the whole session) is gone
-  assert.match(note, /NEVER run/);                       // never-run guard preserved
+  assert.match(note, /NEVER run/);                       // never-run guard preserved (now covers /continue too)
   assert.doesNotMatch(note, /heads up/i);                // dropped — read as redundant
-  assert.doesNotMatch(note, /migrate-new-session/);      // manual-paste path dropped from the auto nudge
+  assert.doesNotMatch(note, /migrate-new-session/);      // manual-paste path stays off the auto nudge
   assert.doesNotMatch(note, /three options/i);           // no longer three
   assert.doesNotMatch(note, /arm it/i);                  // the odd magic word is gone
+  // Retired 2026-07-21 with the SessionStart injection: the consent flag and the truncate metaphor.
+  assert.doesNotMatch(note, /pending-migrate\.armed/);
+  assert.doesNotMatch(note, /truncating/);
+  assert.doesNotMatch(note, /will be preserved/);        // the injection-era promise line is gone
 });
 
 test('driftNote autoMigrate=false is exactly the R6 paste-command copy (no drift)', () => {
@@ -108,7 +111,26 @@ test('recoverTail on a missing transcript degrades to empty, never throws', () =
   assert.deepEqual(r, { messages: 0, tokens: 0, truncated: false, text: '' });
 });
 
-// ---------- resolveMarker(): consent + fresh-source + TTL gating ----------
+// ---------- writeRecoverPointer(): the boundary-pinned pointer the card's Yes relies on ----------
+
+test('writeRecoverPointer pins an explicit boundaryIso as the cutoff (drift staging)', () => {
+  const proj = tmpProject();
+  const rec = writeRecoverPointer(proj, 'SID-9', 42, '2026-07-21T16:34:46.742Z');
+  assert.equal(rec.cutoffIso, '2026-07-21T16:34:46.742Z');
+  const onDisk = JSON.parse(fs.readFileSync(path.join(markerDir(proj), 'recover.json'), 'utf8'));
+  assert.equal(onDisk.cutoffIso, '2026-07-21T16:34:46.742Z');
+  assert.equal(onDisk.sid, 'SID-9');
+});
+
+test('writeRecoverPointer without boundaryIso keeps the minutes-derived cutoff (R4 path unchanged)', () => {
+  const proj = tmpProject();
+  const before = Date.now();
+  const rec = writeRecoverPointer(proj, 'SID-9', 15);
+  const cut = Date.parse(rec.cutoffIso);
+  assert.ok(Math.abs((before - 15 * 60000) - cut) < 5000, 'cutoff ≈ now - 15min');
+});
+
+// ---------- resolveMarker(): consent + fresh-source + TTL gating (MOTHBALLED consumer) ----------
 
 function stage(proj, { armed = true, keyword = 'kw', writtenIso } = {}) {
   const dir = markerDir(proj);
@@ -153,7 +175,7 @@ test('resolveMarker returns null when nothing is staged', () => {
   assert.equal(resolveMarker(proj, 'clear', CFG), null);
 });
 
-// ---------- writeMigrateCandidate() + clearMarker(): staging, invalidation, one-shot ----------
+// ---------- writeMigrateCandidate() + clearMarker(): staging, invalidation, one-shot (MOTHBALLED) ----------
 
 test('writeMigrateCandidate stages the pinned pointer with slug(scope) as keyword', () => {
   const proj = tmpProject();
@@ -187,7 +209,7 @@ test('clearMarker removes both files (one-shot consume)', () => {
   clearMarker(proj); // idempotent, no throw
 });
 
-// ---------- migrateReceipt(): the deterministic visible (systemMessage) line ----------
+// ---------- migrateReceipt(): the deterministic visible (systemMessage) line (MOTHBALLED) ----------
 
 test('migrateReceipt names the pinned scope, no numbers', () => {
   const r = migrateReceipt('migrate UX polish');
