@@ -181,16 +181,16 @@ rewritten and merge then adds the anchored form alongside it.
 **Commit:** `fix(settings): merging a new matcher no longer duplicates an existing hook` + body
 `Changelog: Upgrades no longer register a hook twice when settings share a hook across matchers`.
 
-### ☐ 2.3 · M · ~45m — Make plugin re-install clean up its old files (BH-10)
+### ☑ 2.3 · M · ~45m — Make plugin re-install clean up its old files (BH-10)
 
 `bin/lib/plugins.js:111` — re-install replaces `ledger[name].files` with only the new manifest's
 list, so files a previous version installed become orphans `plugin remove` can never delete.
 
-- [ ] On re-install, diff old vs new file lists and remove files the new manifest dropped (or make
+- [x] On re-install, diff old vs new file lists and remove files the new manifest dropped (or make
       the ledger cumulative). Keep the ledger shape additive (trap 1). Guard against a mid-copy
       throw leaving an untracked orphan (write-ledger-after-copy already exists; consider recording
       intent first).
-- [ ] Fail-first test (extend `test/plugin-system.test.js`): install v1 `[a,b]`, re-install v2
+- [x] Fail-first test (extend `test/plugin-system.test.js`): install v1 `[a,b]`, re-install v2
       `[a]`, `plugin remove` → assert `b` is gone. Red on HEAD, green after.
 
 **Verify:** fail-first proven; `npm test` green.
@@ -529,3 +529,30 @@ Append one entry after each substep, newest last. Format:
   poisoned BH-1's `added` delta — the duplicated command was recorded as plugin-added, so a later
   `plugin remove` would strip the user's own copy; recording only `fresh` hooks fixes that
   interaction for free.
+
+### 2026-07-21 — substep 2.3 — done
+- Commit: dbe199b fix(plugins): re-installing a plugin removes files its old version left behind
+- Fail-first: proven RED→GREEN. Three new assertions in `test/plugin-system.test.js` ("BH-10"
+  section): (a) install v1 `[keep.js, dropped.js]` → re-install v2 `[keep.js]` → `dropped.js`
+  must be cleaned up on re-install; (b) after re-install + remove, NO file from any version
+  remains; (c) an add that fails validation (second declared file missing) copies nothing. All
+  three RED on HEAD (`dropped.js` survived both re-install and remove; `first.js` was copied
+  before the mid-loop throw), green after. Full suite green (NPM_TEST_EXIT=0, hook suites 206/206).
+- Deviations: took the "diff and remove at re-install time" option (not the cumulative ledger) —
+  eager cleanup means a dropped file stops existing (and firing, if hooked) immediately, and the
+  ledger keeps its exact current-snapshot meaning (shape untouched — trap 1). Went beyond the
+  checkbox wording on the mid-copy guard, per its own "consider recording intent first" hint:
+  (1) ALL file entries (and settings.json parseability) validate before any disk write, so the
+  common abort paths now copy nothing at all; (2) for genuine I/O failures mid-copy, an intent
+  ledger entry (files = union(prior, incoming), same shape) is written BEFORE the copy loop, so
+  every possibly-on-disk file stays tracked and `plugin remove` can clean up a partial install.
+- Discoveries: the corrupt-settings backup+refuse (`corrupt-json.test.js` "no ledger written on
+  abort") now fires BEFORE any file copy — its fixture plugin has `files: []` so the test is
+  unaffected, but the behavior is strictly better: a corrupt settings.json no longer strands
+  copied-but-untracked plugin files. The intent record's `added` seed is the PRIOR delta
+  (pre-merge), which is exactly right on the abort path: it reverts only what a prior install
+  actually merged (nothing, on a first install) — `unmergeSettingsFrom` with a present-but-empty
+  delta removes nothing (verified in `settings-merge.js` precise mode). Note for later substeps:
+  `pluginAdd`'s settings read now happens up front (settingsPath/userSettings hoisted above the
+  copy loop) — anything touching pluginAdd should keep validation → intent → copy → cleanup →
+  merge → final-snapshot order.
