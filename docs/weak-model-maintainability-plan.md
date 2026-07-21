@@ -492,6 +492,43 @@ require the module (no more source extraction for these).
 `node bin/cli.js --pull-updates` behaves in a temp fixture.
 **Commit:** `refactor(cli): extract update parsing to bin/lib/updates.js; table-ize sync-docs markers` + `Changelog: none`.
 
+### ☐ 3.5 · L · ~1–1.5h — Make sync-docs.js idempotent; tighten the docs ratchet to byte-for-byte (discharges 3.4's OPEN item + 2.7's contract)
+
+Coda, not a god-file seam: this discharges the **2.7↔3.4 contract debt**. 2.7's ledger required
+3.4 to make sync-docs idempotent and then tighten the ratchet; 3.4 scoped itself to
+marker-hardening and deliberately deferred it (see 3.4's ledger **OPEN** note). Placed under
+Phase 3 because 3.4 incurred the debt — but thematically it's a Phase-2 loudness/correctness fix,
+**not** a `bin/cli.js` shrink, so the Phase-3 preamble's "cli.js only" framing does not cover it.
+
+**The bug (root cause, from 3.4's ledger):** `.claude/scripts/sync-docs.js`'s treeInfo and
+fileContents splices skip the pre-line indentation at their insert points while the generated
+block re-adds its own 12-space indent, so the leading-whitespace run before the first generated
+entry (the boundary lines before `'rules'` and `'autoconfig-update'`) grows **+12 spaces on every
+run**. Raw output is therefore never byte-stable; the docs ratchet in `test/contracts.test.js`
+passes today only because `collapseWsQuirk` normalizes that run away before comparing.
+
+- [ ] Locate the two splice sites **by content, not line number** — the refs have drifted every
+      substep (3.2/3.3/3.4 each found their cited region stale). They sit near the old
+      sync-docs.js:596-609 / 638-650 (~647-650 / ~689-692 after 3.4's marker table). Fix the
+      indentation math so the generated block is not double-indented — the insert point owns the
+      indentation OR the block does, never both.
+- [ ] Regenerate: `node .claude/scripts/sync-docs.js`, then run it **again** — the second run must
+      produce a byte-identical `autoconfig.docs.html` (that IS the fix). Commit the regenerated HTML.
+- [ ] Tighten `collapseWsQuirk` in `test/contracts.test.js` to a real **byte-for-byte** compare
+      (remove the whitespace-collapse tolerance and its `// Tighten to byte-for-byte once 3.4 makes
+      sync-docs idempotent` note) so the ratchet asserts run-output == committed HTML exactly.
+
+⚠ Trap 3 surface: `autoconfig.docs.html` is generated — the ONLY correct way to change it is to fix
+`sync-docs.js` and regenerate; never hand-edit the HTML. The marker table + `assertMarkersUnique`
+that 3.4 added must survive untouched (this fixes indentation, not the splice anchors).
+
+**Verify:** run `node .claude/scripts/sync-docs.js` twice back-to-back → the second run leaves
+`git diff .claude/docs/autoconfig.docs.html` **empty** (idempotent fixed point); `npm test` green
+with the tightened byte-for-byte ratchet; sanity-break the generator once (add a stray space at an
+insert point) → the ratchet fails loudly, then revert.
+**Commit:** `fix(docs): make sync-docs.js idempotent; tighten docs ratchet to byte-for-byte` + body
+`Changelog: none` (whitespace-only change to a generated file; no user-visible docs change).
+
 ---
 
 ## Deferred — considered and deliberately not planned
