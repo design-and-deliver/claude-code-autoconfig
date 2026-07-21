@@ -201,7 +201,7 @@ list, so files a previous version installed become orphans `plugin remove` can n
 
 ## Phase 3 — Update delivery
 
-### ☐ 3.1 · M · ~45m — Don't mark not-yet-run updates as applied on bootstrap (BH-3)
+### ☑ 3.1 · M · ~45m — Don't mark not-yet-run updates as applied on bootstrap (BH-3)
 
 `bin/cli.js:640` — on an upgrade, `copyDir` (:482) overwrites the user's `autoconfig-update.md`
 with the shipped empty-`@applied` copy, then the pre-mark block refills it with **all** bundled
@@ -209,12 +209,12 @@ update ids — so a pending/skipped update is silently marked done and never run
 (all 3 current updates also run via `/autoconfig`), but a real hole for any future instruction-only
 update.
 
-- [ ] Guard the pre-mark: only mark ids as applied when they genuinely have been (mirror the
+- [x] Guard the pre-mark: only mark ids as applied when they genuinely have been (mirror the
       `--pull-updates` path in `bin/lib/updates.js`, which re-injects the user's real `@applied`
       block before copy). Preserve the user's pre-existing `@applied` across the `copyDir` overwrite
       instead of refilling from empty. ⚠ Trap 1 (the `@applied` block is user-serialized) + trap 8
       (no top-level reorder in cli.js).
-- [ ] Fail-first test (extend `test/cli-behavior.test.js`'s upgrade-with-`@applied` fixture): a
+- [x] Fail-first test (extend `test/cli-behavior.test.js`'s upgrade-with-`@applied` fixture): a
       fixture with a **pending** update id not in the user's `@applied` → run `--bootstrap` upgrade
       → assert that id is NOT marked applied (so `--pull-updates` would still deliver it). Red on
       HEAD, green after.
@@ -556,3 +556,27 @@ Append one entry after each substep, newest last. Format:
   `pluginAdd`'s settings read now happens up front (settingsPath/userSettings hoisted above the
   copy loop) — anything touching pluginAdd should keep validation → intent → copy → cleanup →
   merge → final-snapshot order.
+
+### 2026-07-21 — substep 3.1 — done
+- Commit: af08f37 fix(updates): an upgrade no longer marks pending updates as already applied
+- Fail-first: proven RED→GREEN. Extended fixture 2 (upgrade w/ content) in
+  `test/cli-behavior.test.js`: the user's `autoconfig-update.md` has `@applied` 001+003 with
+  bundled 004 PENDING → `--bootstrap` upgrade → new test asserts 004 is NOT marked applied,
+  001/003 survive verbatim, ids are exactly {001,003}, and the command body is still refreshed
+  to the shipped copy. RED on HEAD (`pending update 004 must NOT be pre-marked applied` —
+  copyDir blanked the block, the pre-mark refilled ALL ids), green after. Full suite green
+  (NPM_TEST_EXIT=0, hook suites 206/206).
+- Deviations: none material — took the plan's "preserve across the copyDir overwrite" option:
+  snapshot the user's `@applied` block BEFORE the commands `copyDir` (cli.js, beside the
+  existing gls `@screenshotDir` pre-copy snapshot — same established pattern) and re-inject it
+  after the copy, mirroring `pullUpdates` (`bin/lib/updates.js:69-83`). The pre-mark block
+  itself is untouched except its comment (its empty-only regex is now genuinely safe — an
+  empty block can only mean fresh/pre-update-system). The re-inject uses a replacer FUNCTION
+  (`() => savedAppliedBlock`) so `$`-patterns in a user's block can't corrupt the write.
+- Discoveries: `pullUpdates`' own re-inject (`updates.js:75`) passes the user block as a string
+  replacement, so it carries the latent `$`-pattern quirk this fix avoided — harmless for real
+  update titles, out of scope here; worth folding into any future updates.js touch. Trap-8
+  note: the fix only ADDS statements around the commands copyDir (snapshot must stay before the
+  copy — it reads the file copyDir overwrites); no existing top-level statement moved. One
+  full-suite run timed out at 10min (exit 143, output lost to a pipe); the identical rerun was
+  green in ~3min — transient, no repro, nothing committed between the two.
