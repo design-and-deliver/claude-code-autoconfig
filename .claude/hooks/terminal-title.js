@@ -1387,7 +1387,11 @@ function displayTitle(file, dir, sid, cwd) {
 // both on "Journal open-to-all — …guest-journaling server (Phase A)"). On every UserPromptSubmit —
 // the moment a session is actively working — scan sibling sessions for a LIVE one carrying a
 // near-identical title. Liveness = a fresh {sid}.glyph: setTitle rewrites it on every paint, so its
-// mtime is the per-turn heartbeat, and a closed tab's glyph simply ages out of the window. Modes
+// mtime is the per-turn heartbeat, and a closed tab's glyph simply ages out of the window. Lineage
+// predecessors — the sids this TAB used to be before a /clear ({sid}.lineage.json chain) — are
+// excluded: the new session CARRIES the old title until it authors its own (displayTitle →
+// carriedTitle), so the first prompt after a /clear would otherwise collide with its own ghost,
+// whose glyph is still inside the window (observed 2026-07-21: false "Bug-hunt" twin). Modes
 // (env CLAUDE_TITLE_DUPE): 'off' disables; 'warn' (DEFAULT) surfaces a one-shot systemMessage and
 // lets the turn proceed; 'kill' stands the NEWER session down (blocks its prompt with a reason).
 // We BLOCK, never taskkill, on purpose: a session's claude.exe pid can only be resolved by console
@@ -1461,18 +1465,37 @@ function ensureStartedAt(dir, sid) {
   } catch (_) { /* best-effort */ }
 }
 
+// The sids this session used to BE: walk the prevSid links in {sid}.lineage.json (bounded — rapid
+// /clears can stack several ghosts inside the liveness window). A predecessor lived in THIS
+// terminal by construction, so it can never be a concurrent duplicate tab.
+function lineageAncestors(dir, sid, maxHops) {
+  const out = new Set();
+  let cur = sid;
+  for (let i = 0; i < (maxHops || 5) && cur; i++) {
+    let prev = '';
+    try { prev = (JSON.parse(fs.readFileSync(path.join(dir, `${cur}.lineage.json`), 'utf8')) || {}).prevSid || ''; }
+    catch (_) { break; }
+    if (!prev || prev === sid || out.has(prev)) break;
+    out.add(prev);
+    cur = prev;
+  }
+  return out;
+}
+
 // Sibling sessions that are LIVE (fresh {sid}.glyph) AND carry a colliding title. The cheap glyph
 // stat is checked FIRST so stale sessions (the vast majority of accumulated .txt files) are skipped
-// before their title is even read.
+// before their title is even read. Own lineage ancestors are never twins (see the header note).
 function activeTwins(dir, sid, myTitle, windowMs) {
   const out = [];
   let files = [];
   try { files = fs.readdirSync(dir); } catch (_) { return out; }
+  const ghosts = lineageAncestors(dir, sid);
   const now = Date.now();
   for (const f of files) {
     if (!f.endsWith('.txt')) continue;
     const other = f.slice(0, -4);
     if (!other || other === sid) continue;
+    if (ghosts.has(other)) continue; // my own pre-/clear ghost, not another tab
     let lastSeen = 0;
     try { lastSeen = fs.statSync(path.join(dir, `${other}.glyph`)).mtimeMs; } catch (_) { continue; }
     if (now - lastSeen > windowMs) continue; // stale glyph → treat the tab as closed

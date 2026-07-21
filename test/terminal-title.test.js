@@ -1163,6 +1163,36 @@ test('a lone session never flags itself', () => {
   const { json } = runUPS(cwd, 'soloSid', { CLAUDE_TITLE_DUPE: 'kill' });
   assert(json && !json.decision && !json.systemMessage, 'a lone session must never flag itself');
 });
+// The 2026-07-21 false positive: /clear mints a new sid in the SAME tab; until it authors a title,
+// displayTitle CARRIES the predecessor's title verbatim — which then collided with the
+// predecessor's own still-fresh glyph. The lineage prevSid chain must exempt those ghosts.
+test('own /clear predecessor (lineage prevSid) is NOT a twin', () => {
+  const cwd = mkWorkspace();
+  const tdir = path.join(cwd, '.claude', 'hooks', '.titles');
+  seedTwin(cwd, 'oldSid', MINE, { startedAt: Date.now() - 60000 }); // the pre-/clear ghost, glyph fresh
+  fs.mkdirSync(tdir, { recursive: true });
+  fs.writeFileSync(path.join(tdir, 'newSid.lineage.json'),
+    JSON.stringify({ prevSid: 'oldSid', tid: 't1', source: 'clear', ts: new Date().toISOString() }));
+  // newSid has NO title file of its own → displayTitle carries oldSid's title, the exact repro.
+  const { json } = runUPS(cwd, 'newSid', { CLAUDE_TITLE_DUPE: 'kill' });
+  assert(json && !json.decision, 'a session must not be blocked by its own predecessor');
+  assert(!json.systemMessage, 'a session must not be warned about its own predecessor');
+});
+test('rapid double-/clear: the grandparent ghost is exempt too, a REAL twin still fires', () => {
+  const cwd = mkWorkspace();
+  const tdir = path.join(cwd, '.claude', 'hooks', '.titles');
+  seedTwin(cwd, 'gpSid', MINE, {});
+  seedTwin(cwd, 'oldSid', MINE, {});
+  seedTwin(cwd, 'otherTab', TWIN, { startedAt: Date.now() - 60000 }); // a genuine concurrent tab
+  fs.writeFileSync(path.join(tdir, 'oldSid.lineage.json'), JSON.stringify({ prevSid: 'gpSid' }));
+  fs.writeFileSync(path.join(tdir, 'newSid.lineage.json'), JSON.stringify({ prevSid: 'oldSid' }));
+  const { json } = runUPS(cwd, 'newSid', { CLAUDE_TITLE_DUPE: 'warn' });
+  assert(json && /duplicate/i.test(json.systemMessage || ''), 'the real concurrent tab must still warn');
+  // Exactly ONE twin listed (the guard says "is", not "are") and no ghost title: MINE's "build"
+  // word appears only in the lineage ghosts' titles, so it must be absent from the message.
+  assert(/is\s+active/.test(json.systemMessage || ''), 'only the one real tab should be listed');
+  assert(!/build/i.test(json.systemMessage || ''), 'lineage ghosts must not appear in the warning');
+});
 console.log();
 
 // ============================================================================
