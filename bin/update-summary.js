@@ -20,7 +20,9 @@
 
 const MAX_ITEMS = 12;
 // Conventional-commit types that are housekeeping, not user-facing features/fixes.
-const SKIP_TYPES = new Set(['chore', 'docs', 'test', 'ci', 'build', 'style']);
+// `revert` is here too (BH-9): a leaked `revert:` bullet can still sit in a committed
+// CHANGELOG.md until the next regen drops it — don't surface it on the upgrade screen.
+const SKIP_TYPES = new Set(['chore', 'docs', 'test', 'ci', 'build', 'style', 'revert']);
 
 function parseVersion(v) {
   return String(v || '').replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);

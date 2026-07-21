@@ -70,6 +70,18 @@ test('upgrade drops chore/docs housekeeping bullets', () => {
   assert(!items.some(t => /tidy wording/i.test(t)), 'docs excluded');
 });
 
+test('upgrade drops a revert: bullet already sitting in CHANGELOG.md (BH-9)', () => {
+  // A leaked `revert:` bullet lives in the committed changelog until the next regen;
+  // update-summary must not surface it on the upgrade screen in the meantime.
+  const CL = '# Changelog\n\n## v1.0.200\n'
+    + '- feat(x): a real feature\n'
+    + '- revert: remove /extract-rules from deployed build\n';
+  const out = formatUpdateSummary('1.0.199', '1.0.200', CL);
+  const items = out.filter(s => s.kind === 'item').map(s => s.text);
+  assert(items.some(t => /a real feature/i.test(t)), 'the real feature still shows');
+  assert(!items.some(t => /extract-rules/i.test(t)), 'the revert bullet is dropped');
+});
+
 test('feat/fix classification strips prefix and capitalizes', () => {
   assert(classifyBullet('feat(x): add thing').type === 'feat', 'feat type');
   assert(classifyBullet('fix(y): repair thing').type === 'fix', 'fix type');

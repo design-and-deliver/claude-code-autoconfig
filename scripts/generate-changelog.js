@@ -53,10 +53,16 @@ function bulletFor(hash, subject, body, overrides = OVERRIDES) {
   return subject;
 }
 
-// Version-bump and chore commits never reach the changelog.
+// Version-bump, chore, revert, and merge commits never reach the changelog (BH-9).
+// `revert`/`chore` are matched as conventional-commit types (`type:` or `type(scope):`);
+// `Merge …`/`Revert …` catch git's own default subjects for merge/revert commits (a
+// belt over the `--no-merges` log filter, and it makes reverts drop even when authored
+// as a conventional `revert:` bullet). A feature that merely mentions the word — e.g.
+// `feat(cli): add a revert command` — is NOT housekeeping and must survive.
 function isHousekeeping(subject) {
   return /^\d+\.\d+\.\d+$/.test(subject)
-    || subject.startsWith('chore:') || subject.startsWith('chore(');
+    || /^(chore|revert)(:|\()/.test(subject)
+    || /^(Merge |Revert )/.test(subject);
 }
 
 function main() {
@@ -84,7 +90,7 @@ function main() {
     const older = tags[i + 1];
     // %x1f (unit sep) between fields, %x1e (record sep) between commits — subjects and
     // bodies are free text, so newline-splitting would tear multi-line bodies apart.
-    const raw = run(`git log --format="%H%x1f%s%x1f%b%x1e" ${older}..${newer}`);
+    const raw = run(`git log --no-merges --format="%H%x1f%s%x1f%b%x1e" ${older}..${newer}`);
     const bullets = raw
       .split('\x1e')
       .map(r => r.trim())

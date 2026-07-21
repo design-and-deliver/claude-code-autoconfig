@@ -94,6 +94,19 @@ test('version bumps and chores are housekeeping; feat/fix are not', () => {
   assert(isHousekeeping('feat(x): y') === false, 'feat');
   assert(isHousekeeping('fix: y') === false, 'fix');
 });
+
+test('revert and merge commits are housekeeping (BH-9) — never leak into the changelog', () => {
+  // The confirmed-live leak: CHANGELOG.md shipped `- revert: remove /extract-rules …`.
+  assert(isHousekeeping('revert: remove /extract-rules from deployed build') === true, 'revert:');
+  assert(isHousekeeping('revert(cli): undo the thing') === true, 'revert(scope):');
+  // git-authored default subjects for `git revert` / `git merge`.
+  assert(isHousekeeping('Revert "feat(x): add thing"') === true, 'git Revert "…"');
+  assert(isHousekeeping('Merge branch \'feature\' into main') === true, 'Merge branch');
+  assert(isHousekeeping('Merge pull request #42 from user/topic') === true, 'Merge pull request');
+  // A genuine feature whose scope/subject merely contains those words must survive.
+  assert(isHousekeeping('feat(cli): add a revert command') === false, 'feat mentioning revert stays');
+  assert(isHousekeeping('fix(merge): repair the merge logic') === false, 'fix mentioning merge stays');
+});
 console.log();
 
 console.log('============================================================');
