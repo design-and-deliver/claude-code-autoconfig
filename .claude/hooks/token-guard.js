@@ -545,8 +545,9 @@ function driftNote(dominant, scope, priorPct, autoMigrate, liveContext) {
     `Then give the ONE-step out as a paste-ready command: in a fresh ` +
     `session, run \`/migrate-new-session ${kw}\` — it recovers this thread and picks up where ` +
     `you left off (nothing to prep first). As a brief closing aside, note that if "${scope}" ` +
-    `actually builds on the earlier work, \`/eval-new-session\` instead will judge the cut ` +
-    `boundary. NEVER run either command yourself. Then a horizontal rule before the answer itself.`;
+    `actually builds on the earlier work, staying put is the right call — a cut only pays ` +
+    `when the threads are independent. NEVER run the command yourself. Then a horizontal rule ` +
+    `before the answer itself.`;
 }
 
 // Pure fire-rule (exported for fixtures, like meter). Input = ledgerScopes() tenures, the LAST one
@@ -556,8 +557,8 @@ function driftNote(dominant, scope, priorPct, autoMigrate, liveContext) {
 // window RE-BASES after any watermark SHRINK (auto-compact replaced the context; earlier
 // watermarks describe a context that no longer exists — same rule as terminal-title's /clear
 // advisor). Fires only when ALL hold:
-//   - live context ≥ driftMinContextTokens (below /eval-new-session's own STAY floor the
-//     eval's verdict is known in advance — nudging is pointless by construction)
+//   - live context ≥ driftMinContextTokens (the STAY floor: below it a cut can't pay for
+//     itself — recovery overhead eats the savings — so nudging is pointless by construction)
 //   - the current scope has held ≥2 prompts (a one-prompt title blip is a detour, not a move —
 //     and the transition turn itself is the fat-ctx advisory's beat, not ours)
 //   - the current scope is a FIRST appearance (a return to an earlier scope = multiplexing or
@@ -1693,9 +1694,9 @@ async function onUserPromptSubmit(data, projectDir) {
         `a STANDALONE warning block, never woven into your answer: open with "⚠️ Hey —" and ` +
         `keep a warm conversational voice (helpful friend, not system log), 2-3 plain sentences ` +
         `naming what landed and the out (a one-time reference belongs in a disposable subagent; ` +
-        `once its useful part is extracted, run /eval-new-session — it judges whether a fresh ` +
-        `session pays and preps the structured move), then a horizontal rule before the answer ` +
-        `itself.`
+        `once its useful part is extracted, a fresh session stops the rent — running ` +
+        `/migrate-new-session {scope-keyword} there picks this thread back up, nothing to ` +
+        `prep), then a horizontal rule before the answer itself.`
       );
       if (cfg.bombGateWhenFat && m.liveContext >= cfg.contextWarnTokens) st.bombGateArmed = true;
     } else if (st.approvedPayloadHop && --st.approvedPayloadHop.ttl <= 0) {
@@ -1765,12 +1766,13 @@ async function onUserPromptSubmit(data, projectDir) {
   // session has moved past, every turn pays rent on settled work. Scope data comes from the
   // terminal-title per-title ledger ({sid}.history.jsonl) — the same watermarks its /clear
   // advisor reads — so drift and advisor can never disagree about what a topic cost. The nudge
-  // fires ONLY above driftMinContextTokens (= /eval-new-session's own STAY floor), so at fire
-  // time the cut is a foregone conclusion by construction — hand the user a paste-ready
-  // /migrate-new-session {slug(scope)} as the ONE-step out (the keyword is the current scope;
-  // migrate self-packages from the ledger boundary, no prep). /eval stays the escape hatch for
-  // the dependency case drift can't see (a build->article day reads as two scopes, but the
-  // article feeds on the build context). Model relays the block; it NEVER runs either command.
+  // fires ONLY above driftMinContextTokens (the STAY floor below which a cut can't pay for
+  // itself), so at fire time the cut is a foregone conclusion by construction — hand the user
+  // a paste-ready /migrate-new-session {slug(scope)} as the ONE-step out (the keyword is the
+  // current scope; migrate self-packages from the ledger boundary, no prep). The dependency
+  // case drift can't see (a build->article day reads as two scopes, but the article feeds on
+  // the build context) is handled in the copy itself: it advises STAYING when the new scope
+  // builds on the earlier work. Model relays the block; it NEVER runs the command.
   // Once per scope (nudgedScope).
   if (cfg.driftNudge) {
     const tenures = readLedgerTenures(projectDir, sid);
@@ -2138,7 +2140,7 @@ function onPreToolUse(data, projectDir) {
     return ask('PreToolUse',
       `token-guard: a context bomb just landed at fat context (see warning above) — one-time ` +
       `confirm before more work compounds on top of it. If the payload isn't needed here, ` +
-      `/eval-new-session preps a structured move to a fresh session.`);
+      `a fresh session (then /migrate-new-session {scope-keyword} in it) sheds it cleanly.`);
   }
 
   // v1 hard gate on total session spend (v2: fleet-aware total). Default off.

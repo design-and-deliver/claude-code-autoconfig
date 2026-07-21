@@ -45,12 +45,13 @@ test('driftNote hands the user a paste-ready /migrate-new-session {slug}', () =>
   assert.match(note, /\/migrate-new-session cca-distribution\b/, 'keyword = slug(scope)');
 });
 
-test('driftNote keeps /eval-new-session only as the dependency escape hatch', () => {
+test('driftNote names NO retired command — the dependency case is a STAY advisory', () => {
   const note = driftNote('title hooks', 'CCA distribution', 90);
-  assert.match(note, /\/eval-new-session/);
-  // migrate is the headline out; eval is downstream of it in the copy
-  assert.ok(note.indexOf('/migrate-new-session') < note.indexOf('/eval-new-session'),
-    'migrate must lead, eval is the aside');
+  // /eval-new-session was retired 2026-07-21: migrate is the only command in the copy,
+  // and the dependency escape hatch became an advise-to-stay aside instead of a command.
+  assert.doesNotMatch(note, /eval-new-session/);
+  assert.match(note, /builds on the earlier work/);
+  assert.match(note, /staying put/i);
 });
 
 test('driftNote names did/costs/out and keeps the standalone-block relay contract', () => {
@@ -59,7 +60,7 @@ test('driftNote names did/costs/out and keeps the standalone-block relay contrac
   assert.match(note, /CCA distribution/);      // to
   assert.match(note, /~90%/);                  // costs
   assert.match(note, /STANDALONE/);            // relay contract preserved
-  assert.match(note, /NEVER run either command yourself/);
+  assert.match(note, /NEVER run the command yourself/);
 });
 
 // ---------- driftVerdict(): the fire conditions the nudge rides on ----------
@@ -79,7 +80,7 @@ test('driftVerdict fires when the moved-past scope dominates above the floor', (
   assert.equal(v.priorPct, 90);
 });
 
-test('driftVerdict stays silent below /eval STAY floor (nudge pointless by construction)', () => {
+test('driftVerdict stays silent below the STAY floor (nudge pointless by construction)', () => {
   assert.ok(!driftVerdict(DRIFTED, 90000, CFG).fire);
 });
 

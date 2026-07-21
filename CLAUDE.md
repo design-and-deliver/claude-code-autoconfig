@@ -170,9 +170,9 @@ and a green feeling, then breaks something real:
 - **token-guard's `--analyze` digest wording is a machine interface.** `/analyze-session`
   keys on the literal "live context at end" and the RENT/BOMBS/FLEETS/TTL headers. R6 scope
   data comes from terminal-title's per-title ledger (`.titles/{sid}.history.jsonl`: `ts`,
-  `title`, optional `tokens`), parsed by `ledgerScopes()` and read by `/eval-new-session`
-  and `/migrate-new-session` too. Renaming those ledger fields (they're written by
-  terminal-title.js) silently breaks token-guard drift + both commands.
+  `title`, optional `tokens`), parsed by `ledgerScopes()` and read by `/migrate-new-session`
+  too. Renaming those ledger fields (they're written by terminal-title.js) silently breaks
+  token-guard drift + that command.
 - **`.claude/updates/` numbers are append-only** — next is `005`; `002` is a retired
   tombstone (see `.claude/updates/README.md`). A reused number is silently skipped by
   installs that applied the original.

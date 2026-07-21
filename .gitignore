@@ -24,7 +24,7 @@ tmpclaude-*
 # token-guard runtime cache (official-usage fetch, per-session accumulators — runtime scratch)
 .claude/hooks/.token-guard/
 
-# Session handoff notes (eval-new-session / migrate-new-session — local, never distributed)
+# Session handoff notes (migrate-new-session — local, never distributed)
 .claude/handoff/
 
 # Test temp directories

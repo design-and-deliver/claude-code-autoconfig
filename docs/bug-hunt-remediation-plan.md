@@ -54,7 +54,7 @@ substep that edits a trap surface. The load-bearing ones for THIS plan:
    make an upgrade ADD a duplicate hook (that's the very bug being fixed — regression-test it).
 5. **token-guard `--analyze` digest headers + ledger field names are a frozen machine interface
    (BH-6, BH-7).** `RENT`/`BOMBS`/`FLEETS`/`TTL`/"live context at end" and the `.titles/*.history.jsonl`
-   `ts`/`title`/`tokens` fields are read by `/analyze-session`, `/eval-new-session`,
+   `ts`/`title`/`tokens` fields are read by `/analyze-session` and
    `/migrate-new-session`. Fix the LOGIC that produces/consumes them; never rename them.
 6. **Hooks fail silent by design.** token-guard, terminal-title, auto-guard, format swallow errors
    and exit 0. A regression won't crash — it silently stops warning/painting. "It didn't error"

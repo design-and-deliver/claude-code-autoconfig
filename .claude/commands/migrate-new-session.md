@@ -1,10 +1,10 @@
-<!-- @description Completes a session migration — recovers the old session's conversation tail and its handoff, from one keyword. Works with an /eval-new-session manifest OR self-packages from a bare scope keyword (e.g. one a scope-drift nudge printed). -->
-<!-- @version 3 -->
-<!-- @param keyword | string | required | Migration name from /eval-new-session, OR the scope slug a /migrate-new-session {slug} drift-nudge printed. -->
+<!-- @description Completes a session migration — recovers the old session's conversation tail and its handoff, from one keyword. Works with a previously prepped handoff manifest OR self-packages from a bare scope keyword (e.g. one a scope-drift nudge printed). -->
+<!-- @version 4 -->
+<!-- @param keyword | string | required | Migration name from a prepped handoff manifest, OR the scope slug a /migrate-new-session {slug} drift-nudge printed. -->
 <!-- @response success | Migrated {keyword}: ~{tokens} tokens recovered + handoff internalized. -->
 <!-- @response self-packaged | No manifest for {keyword} — self-packaged from the title-ledger boundary of session {sid8}. -->
 <!-- @sideeffect Reads .claude/handoff/*.manifest.json OR .claude/hooks/.titles/*.history.jsonl (terminal-title ledger); runs the recover-context extraction -->
-<!-- @example /migrate-new-session guard-ux | Manifest prepped by /eval-new-session -->
+<!-- @example /migrate-new-session guard-ux | A previously prepped handoff manifest -->
 <!-- @example /migrate-new-session cca-distribution | No manifest — self-package from the scope keyword a drift nudge printed -->
 
 Run this **in the new session**. It completes the cutover — no manual `/recover-context` args, no

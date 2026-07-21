@@ -404,7 +404,7 @@ const scriptsSrc = path.join(packageDir, '.claude', 'scripts');
 // gated OUT of user installs until R6/R8/R9/R10 are live-baked — see CLAUDE.md "Invariants & Landmines".
 // THIS list (not package.json "files") is what gates installs — new dev-only commands/hooks
 // must be added here. Keep the literal on one line: tests parse it by regex.
-const DEV_ONLY_FILES = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-session.md', 'eval-new-session.md', 'migrate-new-session.md', 'token-guard.js', 'plan-progress.md', 'plan-progress.js'];
+const DEV_ONLY_FILES = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-session.md', 'migrate-new-session.md', 'token-guard.js', 'plan-progress.md', 'plan-progress.js'];
 
 function copyDir(src, dest) {
   fs.mkdirSync(dest, { recursive: true });

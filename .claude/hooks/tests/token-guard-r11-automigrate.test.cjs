@@ -52,7 +52,7 @@ test('driftNote autoMigrate=false is exactly the R6 paste-command copy (no drift
   const note = driftNote('title hooks', 'CCA distribution', 90, false);
   assert.match(note, /paste-ready command/);
   assert.match(note, /\/migrate-new-session cca-distribution\b/);
-  assert.match(note, /NEVER run either command yourself/);
+  assert.match(note, /NEVER run the command yourself/);
   assert.doesNotMatch(note, /arm it/i);
   assert.doesNotMatch(note, /pending-migrate\.armed/);
   // omitting the 4th arg (legacy call sites) must behave like false

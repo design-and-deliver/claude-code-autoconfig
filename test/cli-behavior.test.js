@@ -44,7 +44,7 @@ const PKG_VERSION = require(path.join(PKG_DIR, 'package.json')).version;
 
 // Kept in sync with bin/cli.js by substep 2.2's dev-gate-consistency test — here we only need
 // a representative subset to assert absence.
-const DEV_ONLY_COMMANDS = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-session.md', 'eval-new-session.md', 'migrate-new-session.md'];
+const DEV_ONLY_COMMANDS = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-session.md', 'migrate-new-session.md'];
 const DEPRECATED_ALIASES = ['enable-arcade-beeps.md', 'disable-arcade-beeps.md'];
 const SHIPPED_COMMANDS = ['autoconfig.md', 'autoconfig-update.md', 'continue.md', 'recover-context.md', 'gls.md'];
 
