@@ -492,7 +492,7 @@ require the module (no more source extraction for these).
 `node bin/cli.js --pull-updates` behaves in a temp fixture.
 **Commit:** `refactor(cli): extract update parsing to bin/lib/updates.js; table-ize sync-docs markers` + `Changelog: none`.
 
-### ☐ 3.5 · L · ~1–1.5h — Make sync-docs.js idempotent; tighten the docs ratchet to byte-for-byte (discharges 3.4's OPEN item + 2.7's contract)
+### ☑ 3.5 · L · ~1–1.5h — Make sync-docs.js idempotent; tighten the docs ratchet to byte-for-byte (discharges 3.4's OPEN item + 2.7's contract)
 
 Coda, not a god-file seam: this discharges the **2.7↔3.4 contract debt**. 2.7's ledger required
 3.4 to make sync-docs idempotent and then tighten the ratchet; 3.4 scoped itself to
@@ -507,14 +507,14 @@ entry (the boundary lines before `'rules'` and `'autoconfig-update'`) grows **+1
 run**. Raw output is therefore never byte-stable; the docs ratchet in `test/contracts.test.js`
 passes today only because `collapseWsQuirk` normalizes that run away before comparing.
 
-- [ ] Locate the two splice sites **by content, not line number** — the refs have drifted every
+- [x] Locate the two splice sites **by content, not line number** — the refs have drifted every
       substep (3.2/3.3/3.4 each found their cited region stale). They sit near the old
       sync-docs.js:596-609 / 638-650 (~647-650 / ~689-692 after 3.4's marker table). Fix the
       indentation math so the generated block is not double-indented — the insert point owns the
       indentation OR the block does, never both.
-- [ ] Regenerate: `node .claude/scripts/sync-docs.js`, then run it **again** — the second run must
+- [x] Regenerate: `node .claude/scripts/sync-docs.js`, then run it **again** — the second run must
       produce a byte-identical `autoconfig.docs.html` (that IS the fix). Commit the regenerated HTML.
-- [ ] Tighten `collapseWsQuirk` in `test/contracts.test.js` to a real **byte-for-byte** compare
+- [x] Tighten `collapseWsQuirk` in `test/contracts.test.js` to a real **byte-for-byte** compare
       (remove the whitespace-collapse tolerance and its `// Tighten to byte-for-byte once 3.4 makes
       sync-docs idempotent` note) so the ratchet asserts run-output == committed HTML exactly.
 
@@ -1133,3 +1133,40 @@ Append one entry after each substep, newest last. Format:
   was the last substep of the whole plan.** All three god-file seams are extracted; bin/cli.js is now
   its top-level install flow + the ANSI boxes + `DEV_ONLY_FILES` (trap 4 source-regex surfaces
   untouched throughout).
+
+### 2026-07-20 — substep 3.5 — done
+- Commit: 686e375 `fix(docs): make sync-docs.js idempotent; tighten docs ratchet to byte-for-byte`
+  (ledger commit follows). This coda discharges 3.4's **OPEN** item + the 2.7↔3.4 idempotency
+  contract debt — the plan is now fully complete (3.5 was authored after 3.4 as the true last substep).
+- Root cause (confirmed by evidence before fixing, per the debugging methodology): ran sync-docs
+  against the committed HTML 3× — the two boundary space-runs grew **648 → 660 → 672**, exactly +12
+  per run. The treeInfo/fileContents insert points skipped the pre-line indentation (the `/[\s,]/`
+  skip loops consumed the `\n` + the next line's 12 spaces) while `generateTreeInfo`/`generateFileContents`
+  re-add their own 12-space indent → +12 doubling on the lines before `'rules'` (treeInfo) and
+  `'autoconfig-update'` (fileContents).
+- Deviations from the substep's suggested mechanics (outcome identical): (1) **Minimal 4-edit fix, not a
+  splice-math rewrite.** Rather than re-derive the insert offsets, I narrowed the two skip loops from
+  `/[\s,]/` to `/[ \t,]/` (stop AT the line break instead of consuming through it) and prepended a
+  single `'\n'` in each of the two splices — so the generated block owns its 12-space indentation and
+  the splice side never does (the plan's "insert point owns the indentation OR the block does, never
+  both", resolved in favor of the block). The brace-matcher, `MARKERS` table, and `assertMarkersUnique`
+  (3.4's additions) are **untouched** — this fixed indentation, not the anchors. (2) The plan cited old
+  sync-docs.js:596-609 / 638-650; the real skip loops were at **~668-673 / ~711-715** after 3.4's marker
+  table (located by content — the drift the substep warned about). (3) The ratchet tightening removed the
+  `collapseWsQuirk` helper **entirely** (not just its space-collapse): the CRLF-normalization it also did
+  is unnecessary because both sides derive from the same working-tree bytes and sync-docs preserves EOL
+  on write, so a raw `committed === regenerated` is truly byte-for-byte.
+- Verify (all passed): after the fix, `sync-docs` run 1 collapsed 648→12 with a **whitespace-only** git
+  diff (`git diff --stat` = 2 insertions/2 deletions, both the boundary lines, nothing structural);
+  runs 2 and 3 were **byte-identical** (idempotent fixed point). Sanity-break was non-vacuous — injected
+  `'\n '` (stray space) at the treeInfo splice → the byte-for-byte ratchet **failed loudly** (exit 1),
+  then reverted. Full `npm test` **exit 0** — all top-level suites (contracts **4/4** with the tightened
+  ratchet, cli-install 52, update-system 15, plugin-system 13, cli-behavior 27, …) + hook suites
+  **206/206**; `npm run lint` **exit 0**. No `npm version`/publish (deploy-approval rail intact).
+- Discoveries: (1) The **section-1 tree splice was already idempotent** and needed no change — its
+  `treeContentStart` is `claudeDirClose + '</div>'.length` (never skips trailing whitespace), so it
+  already "owns" nothing on the pre-line side; only the two treeInfo/fileContents loops had the skip bug.
+  (2) sync-docs reports "Synced 30 files to docs." both runs — the fix is whitespace-plumbing only, no
+  change to which entries are emitted. (3) **The whole plan is now complete** — all six Phase-1, nine
+  Phase-2, and five Phase-3 substeps are checked. Nothing is deployed (per the deploy-approval rail, the
+  changes sit committed on `main`, unpublished).
