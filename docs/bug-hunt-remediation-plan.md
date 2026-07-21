@@ -87,19 +87,19 @@ substep that edits a trap surface. The load-bearing ones for THIS plan:
 
 Cheapest real fixes; one is already visible to users today. No serialized-state or trap surface.
 
-### ☐ 1.1 · S · ~15m — Keep `revert:`/merge commits out of the changelog + upgrade screen (BH-9)
+### ☑ 1.1 · S · ~15m — Keep `revert:`/merge commits out of the changelog + upgrade screen (BH-9)
 
 `scripts/generate-changelog.js:57-60` — `isHousekeeping`/`SKIP_TYPES` enumerate
 `chore/docs/test/ci/build/style` but never `revert` or merge commits, so they leak into
 `CHANGELOG.md` and (via `bin/update-summary.js:23` `classifyBullet`) onto users' upgrade screens.
 **Confirmed live:** `CHANGELOG.md:173` currently shows `- revert: remove /extract-rules …`.
 
-- [ ] Add `revert` to `SKIP_TYPES` (or `isHousekeeping`) in `generate-changelog.js`; run the log
+- [x] Add `revert` to `SKIP_TYPES` (or `isHousekeeping`) in `generate-changelog.js`; run the log
       query with `--no-merges` (or filter `^Merge ` / `^Revert ` subjects) so merge commits drop too.
-- [ ] Mirror the same skip in `bin/update-summary.js:classifyBullet` so an already-committed
+- [x] Mirror the same skip in `bin/update-summary.js:classifyBullet` so an already-committed
       `revert:` (like the live one) doesn't surface on upgrade — OR add a `CHANGELOG.md` OVERRIDES
       `null` row in `generate-changelog.js` for the existing leaked bullet (it's already in git).
-- [ ] Extend the changelog-generation test (`test/*changelog*`) with a `revert:` + a `Merge branch`
+- [x] Extend the changelog-generation test (`test/*changelog*`) with a `revert:` + a `Merge branch`
       fixture commit → assert neither appears in the generated output.
 
 **Verify:** the new fixture asserts fail against current code (spot-check), pass after; regenerate
@@ -434,4 +434,20 @@ Append one entry after each substep, newest last. Format:
 - Discoveries: <anything a later step needs, with file:line pointers>
 ```
 
-(No entries yet — begin with 1.1.)
+### 2026-07-21 — substep 1.1 — done
+- Commit: bb84636 fix(changelog): drop revert/merge commits from the changelog and upgrade summary
+- Fail-first: added two red assertions before the fix — `changelog-gen.test.js` (isHousekeeping
+  must catch `revert:`, `revert(scope):`, git `Revert "…"`, `Merge branch`, `Merge pull request`,
+  while a feat/fix merely *mentioning* revert/merge survives) failed with `Error: revert:`, and
+  `update-summary.test.js` (a `revert:` bullet sitting in a committed CHANGELOG.md must not surface
+  on the upgrade screen) failed with `Error: the revert bullet is dropped`. Both green after the fix.
+- Deviations: took BOTH mitigations rather than the "OR". In `generate-changelog.js`, `isHousekeeping`
+  now matches `^(chore|revert)(:|\()` plus git's own `^(Merge |Revert )` subjects, AND the log query
+  runs with `--no-merges` (structural belt for merges whose subject isn't the default). Chose the
+  update-summary `SKIP_TYPES` add over a CHANGELOG.md OVERRIDES `null` row — it drops the leaked
+  bullet from the live upgrade screen immediately without hand-editing the generated CHANGELOG.md
+  (trap: never hand-edit generated files; regen was intentionally NOT run — no `npm version`).
+- Discoveries: the confirmed-live leak is still physically present at `CHANGELOG.md:173`
+  (`- revert: remove /extract-rules from deployed build`). It is now inert (SKIP_TYPES hides it on
+  upgrade; the next `npm version` regen will drop it via isHousekeeping) — no action needed, but a
+  later reader shouldn't be alarmed to still see the line in the file. Full suite green (EXIT=0).
