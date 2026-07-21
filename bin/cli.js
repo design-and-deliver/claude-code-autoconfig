@@ -469,11 +469,28 @@ if (fs.existsSync(glsDest)) {
   if (match) savedScreenshotDir = match[1].trim();
 }
 
+// Preserve the user's @applied block across the copy (BH-3): copyDir overwrites
+// autoconfig-update.md with the shipped empty-@applied copy, and the pre-mark pass below
+// would then refill it with ALL bundled ids — silently marking never-run (pending/skipped)
+// updates as applied. Snapshot pre-copy, re-inject post-copy, mirroring the --pull-updates
+// path (bin/lib/updates.js pullUpdates), which already preserves the block this way.
+const updateCmdDest = path.join(claudeDest, 'commands', 'autoconfig-update.md');
+let savedAppliedBlock = null;
+if (fs.existsSync(updateCmdDest)) {
+  const appliedMatch = fs.readFileSync(updateCmdDest, 'utf8').match(/<!-- @applied[\s\S]*?-->/);
+  if (appliedMatch) savedAppliedBlock = appliedMatch[0];
+}
+
 if (fs.existsSync(commandsSrc)) {
   copyDir(commandsSrc, path.join(claudeDest, 'commands'));
 } else {
   console.log('\x1b[31m%s\x1b[0m', '❌ Error: commands directory not found');
   process.exit(1);
+}
+
+if (savedAppliedBlock && fs.existsSync(updateCmdDest)) {
+  const shippedCmd = fs.readFileSync(updateCmdDest, 'utf8');
+  fs.writeFileSync(updateCmdDest, shippedCmd.replace(/<!-- @applied[\s\S]*?-->/, () => savedAppliedBlock));
 }
 
 // Deprecated command aliases (old names kept as shims after a rename) REPLACE an existing
@@ -627,7 +644,9 @@ if (isUpgrade && (newCommands.length > 0 || updatedCommands.length > 0)) {
 // Pre-mark all bundled updates as applied when the @applied block is empty.
 // On fresh installs, /autoconfig handles their content (e.g., debug methodology in MEMORY.md).
 // On upgrades from pre-update-system versions, these updates are already baked in.
-// The regex only matches an empty @applied block, so this is safe to run unconditionally.
+// The regex only matches an empty @applied block — and the copy above re-injects a user's
+// populated block (BH-3) — so an empty block here genuinely means fresh/pre-update-system,
+// never an upgrade that blanked a user's real applied state.
 {
   const userCmdPath = path.join(claudeDest, 'commands', 'autoconfig-update.md');
   const packageUpdatesDir = path.join(packageDir, '.claude', 'updates');

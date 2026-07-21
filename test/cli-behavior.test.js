@@ -16,7 +16,9 @@
  *                             copied whole, updates/ absent, whats-new NOT written (upgrade-only).
  *   2. upgrade w/ content    — `--bootstrap` over a configured project: user files backed up +
  *                             preserved, managed hooks refreshed, user's own hooks untouched,
- *                             settings.json MERGED not replaced, whats-new written.
+ *                             settings.json MERGED not replaced, whats-new written, and the
+ *                             user's @applied block preserved — a PENDING update id must not
+ *                             be pre-marked applied by the upgrade (BH-3).
  *   3. populated @applied    — `--pull-updates`: already-applied updates are NOT re-copied and
  *                             the user's @applied block is preserved (exercises parseAppliedUpdates
  *                             + pullUpdates' block-preservation for real).
@@ -201,6 +203,11 @@ writeFile(up, '.claude/settings.json', JSON.stringify({
   hooks: { Stop: [{ matcher: '', hooks: [{ type: 'command', command: 'node .claude/hooks/user-own.js' }] }] },
   permissions: { allow: ['Read(./**)'], deny: [] }
 }, null, 2));
+// The user has applied 001 + 003; bundled 004 is still PENDING. The upgrade's copyDir
+// overwrites this file with the shipped empty-@applied copy — the block must be preserved,
+// or the pre-mark pass refills it with ALL bundled ids and 004 never runs (BH-3).
+writeFile(up, '.claude/commands/autoconfig-update.md',
+  '<!-- @description test -->\n<!-- @version 1 -->\n\n<!-- @applied\n001 - Debug Methodology\n003 - Feedback to Rules\n-->\n\nold body\n');
 
 const upResult = runCli(up, ['--bootstrap'], shimDir);
 const upClaude = path.join(up, '.claude');
@@ -253,6 +260,17 @@ test('whats-new JSON is written on upgrade with the correct from/to', () => {
   const j = readJson(wn);
   assert(j.from === '1.0.100', `whats-new .from should be the previous version, got ${j.from}`);
   assert(j.to === PKG_VERSION, `whats-new .to should be the current version ${PKG_VERSION}, got ${j.to}`);
+});
+
+test('a PENDING update id is NOT marked applied by the upgrade (BH-3)', () => {
+  const md = fs.readFileSync(path.join(upClaude, 'commands', 'autoconfig-update.md'), 'utf8');
+  const block = md.match(/<!-- @applied\r?\n([\s\S]*?)-->/);
+  assert(block, 'upgraded autoconfig-update.md should still have an @applied block');
+  const ids = block[1].trim().split('\n').map(l => (l.match(/^(\d{3})/) || [])[1]).filter(Boolean);
+  assert(ids.includes('001') && ids.includes('003'), `the user's applied ids (001, 003) must survive the upgrade, got: ${ids.join(', ') || '(empty)'}`);
+  assert(!ids.includes('004'), 'pending update 004 must NOT be pre-marked applied — it has not run, and --pull-updates must still deliver it');
+  assert(ids.length === 2, `only the user's applied ids belong in the block, got: ${ids.join(', ')}`);
+  assert(!md.includes('old body'), 'the command body itself should still be refreshed to the shipped version');
 });
 
 // ── Fixture 3: --pull-updates preserves a populated @applied block ────────────
