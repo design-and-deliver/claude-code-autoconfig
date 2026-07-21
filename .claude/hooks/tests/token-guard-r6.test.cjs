@@ -179,7 +179,7 @@ test('ledgerScopes on empty/absent text returns [] (feature silently off)', () =
 
 // ---------- the in-turn judge: arithmetic stages, the model holds the render gate ----------
 
-test('driftNote stages the two judged tests AHEAD of the card copy', () => {
+test('driftNote stages the two judged tests AHEAD of the relay copy', () => {
   const note = driftNote('title hooks', 'CCA distribution', 90);
   assert.match(note, /RELATEDNESS/);
   assert.match(note, /RESOLUTION/);
@@ -198,7 +198,7 @@ test('driftNote plain branch gates on relatedness ONLY; resolution picks the fra
   assert.match(note, /never quite wrapped up/);
 });
 
-test('driftNote auto-migrate branch demands BOTH tests (a click truncates context)', () => {
+test('driftNote auto-migrate branch demands BOTH tests (it sends the user straight to /clear)', () => {
   const note = driftNote('title hooks', 'CCA distribution', 90, true, 117000);
   assert.match(note, /UNRELATED to that earlier work AND its threads are RESOLVED/);
   assert.match(note, /any doubt defers/);

@@ -139,10 +139,11 @@
  *   conversation, and defers by writing .token-guard/drift-deferred; the guard snoozes
  *   driftRetryPrompts prompts, then re-arms the one-shot so the card re-offers with a fresh premise.
  *   driftAutoMigrate false · driftMigrateMarkerTTLmin 120 · driftMigrateMaxInjectTokens 40000 — R11
- *   (revised 2026-07-21): the Token-bloat card. When on, the drift nudge renders as a clickable card
- *   whose Yes hands the user the standard two-step — /clear, then /continue — and the fire site
+ *   (simplified 2026-07-21): the Token-bloat one-liner. When on, the drift nudge renders as a single
+ *   locked line handing the user the standard two-step — /clear, then /continue — and the fire site
  *   stages a recover-pointer (recover.json) pinned to the drifted thread's boundary so /continue
- *   recovers exactly that thread. The original SessionStart injection (consent marker + hook-injected
+ *   recovers exactly that thread. (The earlier Yes/Cancel card is retired: its Yes couldn't run
+ *   /clear — only the user can — so the pick just bought a round-trip.) The original SessionStart injection (consent marker + hook-injected
  *   tail) is RETIRED — mothballed at onSessionStart; the TTL/inject knobs only feed that mothballed
  *   path (recoverTail stays live via /migrate-new-session).
  * Per-session state in .claude/hooks/.token-guard/<sid>.json; usage log + meter cache beside it.
@@ -476,25 +477,27 @@ function slug(scope) {
 // The relay instruction the model turns into the standalone warm warning block. Pure + exported so a
 // fixture can assert the out without an E2E. Follows the did/costs/out shape (ux copy/warnings-name-the-
 // trigger): moved scope + rent% + a SINGLE ready out, with a stay-put aside for the
-// cross-scope-dependency case drift can't see. R11 (revised 2026-07-21): when autoMigrate is on, the
-// out is a clickable AskUserQuestion card whose Yes hands the user the standard two-step — /clear,
-// then /continue (a hook-staged recover-pointer makes /continue land on this thread's boundary).
+// cross-scope-dependency case drift can't see. R11 (simplified 2026-07-21): when autoMigrate is on,
+// the out is a single locked one-liner naming the standard two-step — /clear, then /continue (a
+// hook-staged recover-pointer makes /continue land on this thread's boundary). The earlier
+// Yes/Cancel AskUserQuestion card is retired — its Yes couldn't run /clear (only the user can), so
+// the pick just bought a round-trip where the model told them to type it anyway.
 // The lead is identical in both modes.
 // 2026-07-18: the arithmetic only STAGES the card — the in-turn model holds the render gate, because
 // it sees meaning where the hook sees sizes. Two judged tests: RELATEDNESS gates the render (a
 // current prompt that returns to the earlier work = stale premise — the failure we watched live was
 // the card claiming a topic change in the very turn the user pivoted back); RESOLUTION picks the
-// copy's framing (settled-and-safe vs never-closed-but-moved-on). The auto-migrate card demands BOTH
-// (its Yes sends the user to /clear, so the destructive path stays conservative). A refusal is not a
+// copy's framing (settled-and-safe vs never-closed-but-moved-on). The auto-migrate nudge demands BOTH
+// (it sends the user straight to /clear, so the destructive path stays conservative). A refusal is not a
 // kill: the model writes the drift-deferred flag and the caller snoozes, then re-offers.
 function driftJudge(dominant, autoMigrate) {
   const gate = autoMigrate
     ? `Proceed ONLY if this prompt is UNRELATED to that earlier work AND its threads are RESOLVED ` +
-      `(shipped, committed, answered, user-confirmed — nothing still open); a Yes on this card ` +
-      `sends the user to /clear away the old context, so any doubt defers. `
+      `(shipped, committed, answered, user-confirmed — nothing still open); this nudge ` +
+      `sends the user straight to /clear away the old context, so any doubt defers. `
     : `Relay ONLY if this prompt is UNRELATED to that earlier work; RESOLUTION does not gate the ` +
       `relay — it picks the framing below (an unresolved thread the user has moved past still ` +
-      `deserves the card). `;
+      `deserves the nudge). `;
   return `The numbers here are ARITHMETIC — you hold the render gate, because you can see what the ` +
     `hook cannot: meaning. Before relaying anything, judge two tests against the conversation and ` +
     `the user's CURRENT prompt: (1) RELATEDNESS — does this very prompt return to, build on, or ask ` +
@@ -502,35 +505,31 @@ function driftJudge(dominant, autoMigrate) {
     `closed (shipped, committed, answered, user-confirmed), or is something still open? ${gate}` +
     `To DEFER instead: write the contentless flag file ` +
     `".claude/hooks/.token-guard/drift-deferred" (the guard snoozes and re-offers in a few ` +
-    `prompts) and render NOTHING about drift this turn — no card, no aside. `;
+    `prompts) and render NOTHING about drift this turn — no warning block, no aside. `;
 }
 
 function driftNote(dominant, scope, priorPct, autoMigrate, liveContext) {
   if (autoMigrate) {
-    // Fully self-contained card: the verbatim warning line IS the AskUserQuestion question (not prose
-    // above it), header chip "Token bloat". Fixed 3-part number line (total / keep / drop): keep =
-    // the current scope's live share, drop = the prior scopes left behind, both derived from priorPct.
-    // 2026-07-21: the Yes path hands the user the standard two-step — /clear, then /continue —
-    // instead of arming the retired SessionStart injection; the fire site has already staged a
-    // recover-pointer so /continue lands on this thread's exact boundary.
+    // Fixed one-line nudge (no picker): the verbatim warning line printed as a standalone block, not
+    // an AskUserQuestion question. Two-number framing (total / keep): keep = the current scope's live
+    // share; the drop (prior scopes left behind) is named "the unused context", not a third number.
+    // 2026-07-21: names the standard two-step — /clear, then /continue — instead of arming the retired
+    // SessionStart injection; the fire site has already staged a recover-pointer so /continue lands on
+    // this thread's exact boundary. (The earlier Yes/Cancel card is gone — its Yes couldn't run /clear,
+    // only the user can, so the pick just bought a round-trip.)
     const drop = Math.round((liveContext || 0) * priorPct / 100);
     const keep = Math.max(0, (liveContext || 0) - drop);
     return `scope-drift(auto-migrate, staged): this session moved from "${dominant}" to "${scope}", and the ` +
       `earlier scopes are ~${priorPct}% of the live context every turn re-reads. ` +
       driftJudge(dominant, true) +
-      `If proceeding: present it as a SINGLE ` +
-      `self-contained AskUserQuestion card — do NOT render any warning prose above it. The card's ` +
-      `\`question\` field is this line VERBATIM (the agreed copy):\n` +
+      `If proceeding: relay a STANDALONE warning block, never woven into your answer — NOT a picker, ` +
+      `NOT an AskUserQuestion card, just this line printed VERBATIM (the agreed copy), then a ` +
+      `horizontal rule before your answer:\n` +
       `"⚠️ Hey — this session has ~${fmtK(liveContext)} of context, but the current topic only needs ` +
-      `~${fmtK(keep)} of that. A quick /clear + /continue drops the old ~${fmtK(drop)} and keeps this ` +
-      `topic. Continue?"\n` +
-      `Header chip: "Token bloat". TWO options, primary first. Option 1 — label "Yes — Please clean it ` +
-      `up. I don't want to waste tokens." Option 2 — label "Cancel". BOTH options are bare labels with NO ` +
-      `description — the labels say it all, do NOT add subtext to either. NEVER narrate the internal ` +
-      `mechanism anywhere (no recover-pointer, cutoff ladder, or lineage wiring — that plumbing is pure ` +
-      `noise to the user). On the Option 1 pick, print EXACTLY this one line and nothing else: ` +
-      `"Now run /clear, then /continue — your current \"${scope}\" thread comes with you." ` +
-      `On Cancel, dismiss — nothing changes. NEVER run \`/clear\` or \`/continue\` yourself.`;
+      `~${fmtK(keep)} of that. /clear to drop the unused context, then /continue to resume the ` +
+      `conversation."\n` +
+      `NEVER narrate the internal mechanism (no recover-pointer, cutoff ladder, or lineage wiring — ` +
+      `that plumbing is pure noise to the user). NEVER run \`/clear\` or \`/continue\` yourself.`;
   }
   const lead = `scope-drift(staged): this session's work has moved from "${dominant}" to "${scope}", and ` +
     `the earlier scopes still make up ~${priorPct}% of the live context every turn ` +
@@ -1825,7 +1824,7 @@ async function onUserPromptSubmit(data, projectDir) {
         // R11 (revised 2026-07-21): stage a recover-pointer pinned to the current tenure's
         // enteredIso — the drifted thread's exact boundary. /continue's auto mode reads
         // recover.json before any heuristic rung, so after the nudge's "/clear + /continue"
-        // (card and prose branch alike) the fresh session recovers exactly this thread.
+        // (one-liner and prose branch alike) the fresh session recovers exactly this thread.
         // (Replaces the retired injection candidate — see the mothballed block at
         // MIGRATE_CANDIDATE.)
         const ageMin = Math.max(1, Math.round((Date.now() - (Date.parse(cur.enteredIso) || Date.now())) / 60000));

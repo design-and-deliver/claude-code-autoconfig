@@ -1,4 +1,4 @@
-// R11 drift migration: the /clear + /continue card + recover-pointer staging, plus the
+// R11 drift migration: the /clear + /continue nudge + recover-pointer staging, plus the
 // MOTHBALLED SessionStart-injection units (retired 2026-07-21 — kept green for revival;
 // see the banner at MIGRATE_CANDIDATE in token-guard.js).
 // Run: node --test token-guard-r11-automigrate.test.cjs
@@ -20,30 +20,33 @@ function tmpProject() {
 function markerDir(proj) { return path.join(proj, '.claude', 'hooks', '.token-guard'); }
 const CFG = { driftMigrateMarkerTTLmin: 120, driftMigrateMaxInjectTokens: 40000 };
 
-// ---------- driftNote(): the /clear + /continue card, and the false-branch unchanged ----------
+// ---------- driftNote(): the /clear + /continue one-liner, and the false-branch unchanged ----------
 
-test('driftNote autoMigrate=true renders the locked self-contained Token-bloat card', () => {
+test('driftNote autoMigrate=true renders the locked one-line nudge (no picker)', () => {
   const note = driftNote('title hooks', 'CCA distribution', 90, true, 117000);
-  assert.match(note, /AskUserQuestion/);                 // clickable buttons, not prose
+  // The agreed one-liner, verbatim (numbers filled): total live context + keep, then the two-step out.
   assert.match(note, /~117k of context/);                // total live context, verbatim copy
   assert.match(note, /only needs ~12k/);                 // keep = 117k - round(117k*0.90) = 12k
-  assert.match(note, /\/clear \+ \/continue drops the old ~105k/); // drop = round(117k*0.90) = 105k, named via the standard two-step
-  assert.match(note, /Continue\?/);                      // the copy's closing question
-  assert.match(note, /Token bloat/);                     // header chip (was "Migrate?")
-  assert.match(note, /self-contained/);                  // warning lives IN the card, not as prose above
-  assert.match(note, /Yes — Please clean it up/);        // primary button label (verbatim)
-  assert.match(note, /"Cancel"/);                        // second button
-  assert.match(note, /TWO options/);                     // exactly two, not three
-  assert.match(note, /BOTH options are bare labels with NO/); // both options are bare labels — no subtext on either
-  assert.doesNotMatch(note, /Keeps this topic/);         // dropped: the redundant Option-1 grey line
-  assert.doesNotMatch(note, /Leave everything as-is/);   // Cancel's description dropped too — bare label
-  assert.match(note, /noise to the user/);               // and the mechanism jargon is explicitly banned
-  assert.match(note, /Now run \/clear, then \/continue — your current "CCA distribution" thread comes with you/); // post-click line names the pinned scope + the two-step
-  assert.doesNotMatch(note, /most recent context/i);     // the vague phrase (read as the whole session) is gone
-  assert.match(note, /NEVER run/);                       // never-run guard preserved (now covers /continue too)
-  assert.doesNotMatch(note, /heads up/i);                // dropped — read as redundant
+  assert.match(note, /\/clear to drop the unused context, then \/continue to resume the conversation/); // action-first two-step out
+  assert.match(note, /VERBATIM/);                        // the copy is locked — relay it as-is
+  assert.match(note, /STANDALONE warning block/);        // a plain block, not a card and not woven into the answer
+  assert.match(note, /noise to the user/);               // mechanism jargon is explicitly banned
+  assert.match(note, /NEVER run/);                       // never-run guard preserved (covers /continue too)
+  // Retired 2026-07-21: the Yes/Cancel AskUserQuestion picker collapses to a single locked line.
+  assert.doesNotMatch(note, /Yes — Please clean it up/); // primary button label — gone
+  assert.doesNotMatch(note, /"Cancel"/);                 // second button — gone
+  assert.doesNotMatch(note, /TWO options/);              // no options at all now
+  assert.doesNotMatch(note, /BOTH options are bare labels/);
+  assert.doesNotMatch(note, /Token bloat/);              // header chip — gone (no card = no chip)
+  assert.doesNotMatch(note, /Continue\?/);               // the picker's closing question — gone
+  assert.doesNotMatch(note, /Now run \/clear/);          // the post-click line — gone (nothing to click)
+  assert.doesNotMatch(note, /105k/);                     // drop is named "the unused context", not a third number
+  assert.doesNotMatch(note, /Keeps this topic/);
+  assert.doesNotMatch(note, /Leave everything as-is/);
+  assert.doesNotMatch(note, /most recent context/i);
+  assert.doesNotMatch(note, /heads up/i);
   assert.doesNotMatch(note, /migrate-new-session/);      // manual-paste path stays off the auto nudge
-  assert.doesNotMatch(note, /three options/i);           // no longer three
+  assert.doesNotMatch(note, /three options/i);
   assert.doesNotMatch(note, /arm it/i);                  // the odd magic word is gone
   // Retired 2026-07-21 with the SessionStart injection: the consent flag and the truncate metaphor.
   assert.doesNotMatch(note, /pending-migrate\.armed/);
