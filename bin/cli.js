@@ -7,6 +7,7 @@ const { execSync, spawn } = require('child_process');
 const { formatUpdateSummary } = require('./update-summary.js');
 const { runPluginCommand } = require('./lib/plugins.js');
 const { migrateLegacyHookCommands, mergeSettingsInto, unmergeSettingsFrom } = require('./lib/settings-merge.js');
+const { pullUpdates } = require('./lib/updates.js');
 
 const cwd = process.cwd();
 const packageDir = path.dirname(__dirname);
@@ -103,102 +104,16 @@ function formatTimestamp() {
   return `${month}-${day}-${year}_${hour12}-${min}${ampm}`;
 }
 
-// --pull-updates: Copy new update files from package to user's project
-function parseAppliedUpdates(filePath) {
-  if (!fs.existsSync(filePath)) return [];
-  const content = fs.readFileSync(filePath, 'utf8');
-  const match = content.match(/<!-- @applied\r?\n([\s\S]*?)-->/);
-  if (!match) return [];
-
-  return match[1].trim().split('\n')
-    .filter(line => line.trim())
-    .map(line => {
-      const idMatch = line.match(/^(\d{3})/);
-      return idMatch ? parseInt(idMatch[1], 10) : 0;
-    })
-    .filter(id => id > 0);
-}
-
-function getHighestAppliedId(appliedIds) {
-  return appliedIds.length > 0 ? Math.max(...appliedIds) : 0;
-}
-
-function pullUpdates() {
-  if (ccaConfigCorrupt) {
-    // Can't read the pin from a corrupt config — treat as pinned and skip this silent
-    // pull rather than risk dragging a pinned project forward (fail safe).
-    console.log('\x1b[33m%s\x1b[0m', '⚠️  .claude/cca.config.json is present but not valid JSON — skipping this update pull to stay safe. Fix or delete the file, then re-run.');
-    return;
-  }
-  if (pinnedVersion && pinnedVersion !== installerVersion) {
-    console.log('\x1b[90m%s\x1b[0m', `⏸  Pinned to v${pinnedVersion} — skipped the v${installerVersion} update pull (remove "pinVersion" from .claude/cca.config.json to unpin).`);
-    return;
-  }
-  console.log('\x1b[36m%s\x1b[0m', '🔄 Checking for updates...');
-  console.log();
-
-  const userCmdPath = path.join(cwd, '.claude', 'commands', 'autoconfig-update.md');
-  const packageCmdPath = path.join(packageDir, '.claude', 'commands', 'autoconfig-update.md');
-  const packageUpdatesDir = path.join(packageDir, '.claude', 'updates');
-  const userUpdatesDir = path.join(cwd, '.claude', 'updates');
-
-  // Ensure .claude/commands/ exists
-  fs.mkdirSync(path.join(cwd, '.claude', 'commands'), { recursive: true });
-
-  // Refresh autoconfig-update.md (preserve user's @applied block)
-  if (fs.existsSync(packageCmdPath)) {
-    if (fs.existsSync(userCmdPath)) {
-      const userContent = fs.readFileSync(userCmdPath, 'utf8');
-      const packageContent = fs.readFileSync(packageCmdPath, 'utf8');
-      const userApplied = userContent.match(/<!-- @applied[\s\S]*?-->/);
-      if (userApplied) {
-        const merged = packageContent.replace(/<!-- @applied[\s\S]*?-->/, userApplied[0]);
-        fs.writeFileSync(userCmdPath, merged);
-      } else {
-        fs.copyFileSync(packageCmdPath, userCmdPath);
-      }
-    } else {
-      fs.copyFileSync(packageCmdPath, userCmdPath);
-    }
-  }
-
-  // Check for available updates in package
-  if (!fs.existsSync(packageUpdatesDir)) {
-    console.log('\x1b[32m%s\x1b[0m', '✅ Already up to date');
-    return;
-  }
-
-  const appliedIds = parseAppliedUpdates(userCmdPath);
-  const highestApplied = getHighestAppliedId(appliedIds);
-
-  const updateFiles = fs.readdirSync(packageUpdatesDir).filter(f => f.endsWith('.md'));
-  const newUpdates = updateFiles.filter(file => {
-    const match = file.match(/^(\d{3})-/);
-    if (!match) return false;
-    return parseInt(match[1], 10) > highestApplied;
-  });
-
-  if (newUpdates.length === 0) {
-    console.log('\x1b[32m%s\x1b[0m', '✅ Already up to date');
-    return;
-  }
-
-  // Copy new update files
-  fs.mkdirSync(userUpdatesDir, { recursive: true });
-  for (const file of newUpdates) {
-    fs.copyFileSync(
-      path.join(packageUpdatesDir, file),
-      path.join(userUpdatesDir, file)
-    );
-  }
-
-  console.log('\x1b[32m%s\x1b[0m', `✅ Copied ${newUpdates.length} new update${newUpdates.length > 1 ? 's' : ''} to .claude/updates/`);
-  console.log();
-  console.log('Run \x1b[36mclaude /autoconfig-update\x1b[0m to review and install updates.');
-}
-
+// ── Update parsing + --pull-updates ──────────────────────────────────────────
+// Extracted to bin/lib/updates.js (Phase 3 seam 3): parseAppliedUpdates, the @applied
+// regexes (byte-verbatim — trap 6), highest-applied filtering, and pullUpdates. The
+// --pull-updates dispatch (below) and its exit stay here. pullUpdates receives its pin
+// context (cwd / packageDir / pinnedVersion / installerVersion / ccaConfigCorrupt) as a
+// params object — those consts stay module-scope here because the SAME pin also gates the
+// --bootstrap path below (the pin check is duplicated by design); do not re-derive them
+// in the module.
 if (process.argv.includes('--pull-updates')) {
-  pullUpdates();
+  pullUpdates({ cwd, packageDir, pinnedVersion, installerVersion, ccaConfigCorrupt });
   process.exit(0);
 }
 

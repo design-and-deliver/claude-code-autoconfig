@@ -7,6 +7,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
 const CLI_PATH = path.join(__dirname, '..', 'bin', 'cli.js');
 const PACKAGE_CLAUDE_DIR = path.join(__dirname, '..', '.claude');
@@ -155,14 +156,26 @@ test('CLI handles --pull-updates flag', () => {
   assert(content.includes('--pull-updates'), 'CLI should check for --pull-updates flag');
 });
 
-test('CLI has pullUpdates function', () => {
-  const content = fs.readFileSync(CLI_PATH, 'utf8');
-  assert(content.includes('function pullUpdates()'), 'CLI should have pullUpdates function');
+// pullUpdates / parseAppliedUpdates live in bin/lib/updates.js (Phase 3 seam 3). These
+// were `cliCode.includes('function pullUpdates()')` source-greps; converted to require the
+// module directly so they survive the extraction and get stronger (they exercise the real
+// export, and the pin-respect behavior is covered end-to-end by cli-behavior.test.js Fixture 6).
+test('bin/lib/updates.js exports pullUpdates', () => {
+  const updates = require('../bin/lib/updates.js');
+  assert(typeof updates.pullUpdates === 'function', 'updates.js should export a pullUpdates function');
 });
 
-test('CLI has parseAppliedUpdates function', () => {
-  const content = fs.readFileSync(CLI_PATH, 'utf8');
-  assert(content.includes('function parseAppliedUpdates('), 'CLI should have parseAppliedUpdates function');
+test('bin/lib/updates.js exports parseAppliedUpdates and it reads @applied ids', () => {
+  const { parseAppliedUpdates } = require('../bin/lib/updates.js');
+  assert(typeof parseAppliedUpdates === 'function', 'updates.js should export a parseAppliedUpdates function');
+  const tmp = path.join(os.tmpdir(), `cca-updates-parse-${process.pid}.md`);
+  fs.writeFileSync(tmp, '<!-- @applied\n001 - Debug Methodology\n003 - Something Newer\n-->\n');
+  try {
+    const ids = parseAppliedUpdates(tmp);
+    assert(JSON.stringify(ids) === JSON.stringify([1, 3]), `expected [1, 3] applied ids, got ${JSON.stringify(ids)}`);
+  } finally {
+    fs.unlinkSync(tmp);
+  }
 });
 
 test('CLI deliberately excludes updates from AUTOCONFIG_FILES', () => {

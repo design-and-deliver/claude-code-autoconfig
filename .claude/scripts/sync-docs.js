@@ -532,6 +532,70 @@ function generateFileContents(entries) {
 }
 
 // =============================================================================
+// Docs-HTML splice anchors
+// =============================================================================
+// Every string surgery below anchors on one of these UNIQUE landmarks in
+// autoconfig.docs.html. They map to the doc's three generated sections:
+//   treeStart / treeEnd       → the .claude file-tree block            (section 1)
+//   treeInfoPrimary|Alt        → the `treeInfo` JS object; claudeDirInfo is its last
+//                                structural entry, spliced after       (section 2)
+//   fileContents / claudeMdFc  → the `fileContents` JS object; claudeMdFc is its last
+//                                structural entry, spliced after       (section 3)
+// Reformatting the HTML around any of these breaks the next sync (CLAUDE.md trap 3).
+// assertMarkersUnique() runs BEFORE any splice and fails loudly if a section anchor is
+// missing (0) or ambiguous (2+) — the case a bare indexOf would silently mis-anchor.
+const MARKERS = {
+  treeStart: '<span class="folder">.claude</span>',
+  treeEnd: '</div>\n                        </div>\n                        <div class="info-side">',
+  treeInfoPrimary: '// Tree panel info data',
+  treeInfoAlt: 'const treeInfo = {',
+  claudeDirInfo: "'claude-dir': {",
+  fileContents: 'const fileContents = {',
+  claudeMdFc: "'claude-md': {"
+};
+
+function countOccurrences(haystack, needle) {
+  let count = 0, from = 0, idx;
+  while ((idx = haystack.indexOf(needle, from)) !== -1) {
+    count++;
+    from = idx + needle.length;
+  }
+  return count;
+}
+
+function abortMarker(label, detail) {
+  console.error(`sync-docs: splice anchor ${label} in ${docsPath} — ${detail}. The HTML structure moved; refusing to splice (CLAUDE.md trap 3).`);
+  process.exit(1);
+}
+
+// One occurrence of `needle` between `startIdx` and the object's closing `};`. Used for the
+// per-object entry markers, which legitimately RECUR across sections (claudeMdFc appears in
+// both treeInfo and fileContents), so a global count is wrong — scope each to its own body.
+function assertOnceInSection(html, startIdx, needle, label) {
+  const end = html.indexOf('};', startIdx);
+  const section = html.slice(startIdx, end === -1 ? undefined : end);
+  const count = countOccurrences(section, needle);
+  if (count !== 1) abortMarker(label, `expected exactly once inside its object body, found ${count}`);
+}
+
+function assertMarkersUnique(html) {
+  // Section anchors: each must be globally unique.
+  for (const key of ['treeStart', 'treeEnd', 'fileContents']) {
+    const count = countOccurrences(html, MARKERS[key]);
+    if (count !== 1) abortMarker(`'${key}'`, `expected exactly once, found ${count}`);
+  }
+  // treeInfo start has a primary/alternate pair — exactly one must resolve uniquely.
+  const primary = countOccurrences(html, MARKERS.treeInfoPrimary);
+  const alt = countOccurrences(html, MARKERS.treeInfoAlt);
+  const treeInfoIdx = primary === 1 ? html.indexOf(MARKERS.treeInfoPrimary)
+    : alt === 1 ? html.indexOf(MARKERS.treeInfoAlt) : -1;
+  if (treeInfoIdx === -1) abortMarker('treeInfo (primary|alt)', `neither is unique (primary=${primary}, alt=${alt})`);
+  // Entry markers: scope the count to their own object body.
+  assertOnceInSection(html, treeInfoIdx, MARKERS.claudeDirInfo, "'claude-dir' (in treeInfo)");
+  assertOnceInSection(html, html.indexOf(MARKERS.fileContents), MARKERS.claudeMdFc, "'claude-md' (in fileContents)");
+}
+
+// =============================================================================
 // Main
 // =============================================================================
 
@@ -543,9 +607,12 @@ const rawHtml = fs.readFileSync(docsPath, 'utf8');
 const eol = rawHtml.includes('\r\n') ? '\r\n' : '\n';
 let html = rawHtml.replace(/\r\n/g, '\n');
 
+// Fail loudly if any splice anchor is missing or ambiguous, BEFORE touching the HTML.
+assertMarkersUnique(html);
+
 // 1. Replace the file tree (between claude-dir folder row and settings.json closing div)
 //    We find the marker after the claude-dir folder and replace up to the settings div
-const treeStartMarker = '<span class="folder">.claude</span>';
+const treeStartMarker = MARKERS.treeStart;
 const treeStartIdx = html.indexOf(treeStartMarker);
 if (treeStartIdx === -1) {
   console.error('Could not find .claude folder marker in docs HTML');
@@ -556,7 +623,7 @@ const claudeDirClose = html.indexOf('</div>', treeStartIdx);
 const treeContentStart = claudeDirClose + '</div>'.length;
 
 // Find the end of the tree: look for the closing of tree-side/tree-content after settings.json
-const treeEndMarker = '</div>\n                        </div>\n                        <div class="info-side">';
+const treeEndMarker = MARKERS.treeEnd;
 const treeEndIdx = html.indexOf(treeEndMarker, treeContentStart);
 if (treeEndIdx === -1) {
   console.error('Could not find tree end marker in docs HTML');
@@ -568,11 +635,11 @@ html = html.slice(0, treeContentStart) + '\n' + newTreeHtml + '\n               
 
 // 2. Replace treeInfo (between structural entries and closing })
 //    We keep memory-md, root, claude-md, claude-dir and replace everything after
-const treeInfoStartMarker = "// Tree panel info data";
+const treeInfoStartMarker = MARKERS.treeInfoPrimary;
 let treeInfoIdx = html.indexOf(treeInfoStartMarker);
 if (treeInfoIdx === -1) {
   // Try alternate marker
-  treeInfoIdx = html.indexOf("const treeInfo = {");
+  treeInfoIdx = html.indexOf(MARKERS.treeInfoAlt);
 }
 if (treeInfoIdx === -1) {
   console.error('Could not find treeInfo in docs HTML');
@@ -580,7 +647,7 @@ if (treeInfoIdx === -1) {
 }
 
 // Find the claude-dir entry end (last structural entry)
-const claudeDirInfoMarker = "'claude-dir': {";
+const claudeDirInfoMarker = MARKERS.claudeDirInfo;
 const claudeDirInfoIdx = html.indexOf(claudeDirInfoMarker, treeInfoIdx);
 if (claudeDirInfoIdx === -1) {
   console.error('Could not find claude-dir info entry');
@@ -617,7 +684,7 @@ html = html.slice(0, treeInfoInsertPoint) + newTreeInfo + '\n        ' + html.sl
 
 // 3. Replace fileContents
 //    Keep memory-md and claude-md (structural), replace the rest
-const fileContentsMarker = "const fileContents = {";
+const fileContentsMarker = MARKERS.fileContents;
 const fcIdx = html.indexOf(fileContentsMarker);
 if (fcIdx === -1) {
   console.error('Could not find fileContents in docs HTML');
@@ -625,7 +692,7 @@ if (fcIdx === -1) {
 }
 
 // Find claude-md entry end (last structural fileContents entry)
-const claudeMdFcMarker = "'claude-md': {";
+const claudeMdFcMarker = MARKERS.claudeMdFc;
 const claudeMdFcIdx = html.indexOf(claudeMdFcMarker, fcIdx);
 if (claudeMdFcIdx === -1) {
   console.error('Could not find claude-md fileContents entry');

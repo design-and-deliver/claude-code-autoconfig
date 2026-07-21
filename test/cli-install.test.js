@@ -374,10 +374,9 @@ test('version pin freezes silent refreshes but yields to an explicit install', (
     /pinnedVersion && pinnedVersion !== installerVersion[\s\S]*?--bootstrap[\s\S]*?process\.exit\(0\)/.test(cliCode),
     'a pinned project must exit the --bootstrap refresh before any file copying'
   );
-  assert(
-    /function pullUpdates\(\)[\s\S]{0,400}pinnedVersion && pinnedVersion !== installerVersion/.test(cliCode),
-    '--pull-updates must respect the pin (return before refreshing anything)'
-  );
+  // The --pull-updates pin-respect moved to bin/lib/updates.js (Phase 3 seam 3); its
+  // behavior is covered end-to-end by cli-behavior.test.js Fixture 6 (a pinned project
+  // copies nothing). Only the --bootstrap gate and the explicit-unpin below stay in cli.js.
   assert(
     /delete cfg\.pinVersion/.test(cliCode),
     'an explicit interactive install must remove the pin and proceed'
