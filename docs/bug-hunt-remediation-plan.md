@@ -157,7 +157,7 @@ end-to-end must pass).
 **Commit:** `fix(plugins): plugin remove no longer deletes settings the user set themselves` +
 body `Changelog: Removing a plugin now keeps any env/hook/permission you had configured yourself`.
 
-### ☐ 2.2 · M · ~45m — Fix the hook that gets added twice on merge (BH-4, BH-17)
+### ☑ 2.2 · M · ~45m — Fix the hook that gets added twice on merge (BH-4, BH-17)
 
 `bin/lib/settings-merge.js:72` — the per-hook existence scan is event-wide but the insert pushes
 the **whole fragment matcher**, so a hook already present under a different matcher is re-added and
@@ -165,13 +165,13 @@ fires twice. `:36` (BH-17, **low-confidence** — verify first) — `migrateLega
 `$`-anchored regex misses a relative command carrying an arg (`--idle-rescue`), so it isn't
 rewritten and merge then adds the anchored form alongside it.
 
-- [ ] BH-4: merge at hook granularity — when introducing a new matcher, drop hooks whose command
+- [x] BH-4: merge at hook granularity — when introducing a new matcher, drop hooks whose command
       already exists elsewhere in that event (or dedup post-merge). Preserve exact-string dedup
       (trap 4) and the two distinct Notification entries.
-- [ ] BH-17 (verify-first): construct the relative `…terminal-title.js --idle-rescue` input and
+- [x] BH-17 (verify-first): construct the relative `…terminal-title.js --idle-rescue` input and
       confirm the current regex fails to anchor it. If real, widen the pattern to tolerate a
       trailing arg; if no such relative form ever shipped, record that in the Ledger and skip.
-- [ ] Fail-first test (extend `cli-install.test.js`'s settings-merge tests, now `require`-ing
+- [x] Fail-first test (extend `cli-install.test.js`'s settings-merge tests, now `require`-ing
       `bin/lib/settings-merge.js`): a user Notification hook + an overlapping fragment matcher →
       assert the command appears **once** after merge. Red on HEAD, green after.
 
@@ -505,3 +505,27 @@ Append one entry after each substep, newest last. Format:
   every command in a freshly-pushed matcher (`settings-merge.js` merge branch) — so 2.1's recording
   is already correct ahead of the 2.2 dedup fix. Note for 2.3 (BH-10): file cleanup on re-install is
   still unaddressed; the `added` union handles settings only, not orphaned files.
+
+### 2026-07-21 — substep 2.2 — done
+- Commit: a33891a fix(settings): merging a new matcher no longer duplicates an existing hook
+- Fail-first: proven RED→GREEN. New test in `test/cli-install.test.js` ("merge under a NEW matcher
+  adds only genuinely-new hooks, never a re-add (BH-4)"): user runs terminal-title under matcher
+  `""`; fragment ships a `permission_prompt` matcher carrying that same command + arcade-beeps +
+  the `--idle-rescue` variant. RED on HEAD (`existing hook re-added under the new matcher: 2
+  copies of terminal-title`); green after the hook-granularity insert (install suite 53/53). Full
+  suite green (NPM_TEST_EXIT=0, hook suites 206/206).
+- Deviations: BH-17 fix skipped per its own verify-first gate (see Discoveries). Two small
+  hardenings beyond the plan's wording: the new-matcher insert pushes a shallow copy
+  (`{...matcher, hooks: fresh}`) instead of aliasing the fragment's matcher object into user
+  settings, and `fresh` dedups within a single fragment matcher (a degenerate matcher listing the
+  same command twice still lands it once, matching old behavior).
+- Discoveries: BH-17 is REAL as a regex gap (verified live: `node .claude/hooks/terminal-title.js
+  --idle-rescue` survives `migrateLegacyHookCommands` unrewritten) but MOOT in shipped history:
+  `git show 3e17ab9^:.claude/settings.json` (2026-07-08 anchoring commit) shows every relative-era
+  command bare (no args), and `--idle-rescue` first appears in a77e4f6 (2026-07-13) already
+  anchored — no user project can hold a CCA-shipped relative arg-bearing command. LEGACY regex
+  left untouched: widening would also start rewriting user-authored arg-bearing relative commands
+  (the file header's "don't normalize command strings" warning). Bonus: pre-fix, BH-4 also
+  poisoned BH-1's `added` delta — the duplicated command was recorded as plugin-added, so a later
+  `plugin remove` would strip the user's own copy; recording only `fresh` hooks fixes that
+  interaction for free.
