@@ -14,12 +14,14 @@ function tmpTitles() {
 }
 
 // Seed the anchor cache so mechanics tests skip the ~3s ancestry walk and get a known tid.
-function seedAnchor(dir, tid) {
-  process.env.CLAUDE_CODE_SSE_PORT = 'test-port-1';
+// The cache is keyed by SESSION id since 8d274f6 (one entry, rewritten per session — see
+// recordLineage), so each recordLineage call needs a fresh seed for the sid it registers;
+// a same-tab rotation reproduces the same tid under the incoming sid's key.
+function seedAnchor(dir, tid, sid) {
   const tdir = path.join(dir, 'terminals');
   fs.mkdirSync(tdir, { recursive: true });
   fs.writeFileSync(path.join(tdir, '.anchor-cache.json'),
-    JSON.stringify({ key: 'test-port-1', tid }));
+    JSON.stringify({ key: sid, tid }));
 }
 
 function registrations(dir) {
@@ -46,7 +48,7 @@ test('ancestryChain walks the real process tree from self upward', () => {
 
 test('first session in a terminal seeds the registry, writes no lineage', () => {
   const dir = tmpTitles();
-  seedAnchor(dir, '111-11111');
+  seedAnchor(dir, '111-11111', 'sid-first');
   recordLineage(dir, 'sid-first', 'startup');
   assert.deepEqual(registrations(dir), ['111-11111.json']);
   const occ = JSON.parse(fs.readFileSync(path.join(dir, 'terminals', '111-11111.json'), 'utf8'));
@@ -56,8 +58,9 @@ test('first session in a terminal seeds the registry, writes no lineage', () => 
 
 test('rotation in the same terminal stamps the outgoing sid as the new session\'s previous', () => {
   const dir = tmpTitles();
-  seedAnchor(dir, '222-22222');
+  seedAnchor(dir, '222-22222', 'sid-old');
   recordLineage(dir, 'sid-old', 'startup');
+  seedAnchor(dir, '222-22222', 'sid-new'); // same tab, new sid: the /clear re-walk hits the same anchor
   recordLineage(dir, 'sid-new', 'clear'); // same tid -> rotation observed
   const lin = JSON.parse(fs.readFileSync(path.join(dir, 'sid-new.lineage.json'), 'utf8'));
   assert.equal(lin.prevSid, 'sid-old');
@@ -70,10 +73,11 @@ test('rotation in the same terminal stamps the outgoing sid as the new session\'
 
 test('same sid re-entering (compact/resume) does not overwrite lineage with itself', () => {
   const dir = tmpTitles();
-  seedAnchor(dir, '333-33333');
+  seedAnchor(dir, '333-33333', 'sid-a');
   recordLineage(dir, 'sid-a', 'startup');
+  seedAnchor(dir, '333-33333', 'sid-b');
   recordLineage(dir, 'sid-b', 'clear');
-  recordLineage(dir, 'sid-b', 'compact'); // no rotation — lineage for sid-b must survive intact
+  recordLineage(dir, 'sid-b', 'compact'); // same-sid re-fire hits the cache — no rotation, lineage survives
   const lin = JSON.parse(fs.readFileSync(path.join(dir, 'sid-b.lineage.json'), 'utf8'));
   assert.equal(lin.prevSid, 'sid-a');
 });
@@ -86,7 +90,7 @@ test('recordLineage is fail-safe on an empty sid', () => {
 
 test('stale terminal registrations are pruned after 30 days', () => {
   const dir = tmpTitles();
-  seedAnchor(dir, '444-44444');
+  seedAnchor(dir, '444-44444', 'sid-live');
   const stale = path.join(dir, 'terminals', 'dead-terminal.json');
   fs.writeFileSync(stale, JSON.stringify({ tid: 'dead-terminal', sid: 'sid-gone' }));
   const old = (Date.now() - 31 * 86400000) / 1000;
