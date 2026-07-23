@@ -4,6 +4,37 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.218
+- fix(continue): The /continue command now resumes phased plans kept in .claude/plans/ as well as docs/
+- perf(pack): Smaller download on install and update
+- fix(terminal-title): Terminal title: the awaiting half-circle now resets when you Esc a question or permission dialog that sat open longer than 30 minutes.
+
+## v1.0.217
+- feat(terminal-title): - Duplicate-session guard now catches a second tab adopting your work mid-turn, not just at the next prompt
+- fix(recover-context): - /continue and /recover-context auto mode no longer resume work that is actively running in another terminal tab
+- fix(terminal-title): Fixed brand-new terminals inheriting the previous tab's title
+- docs(plan): ledger substep 3.1 — pending updates survive a bootstrap upgrade (BH-3)
+- fix(updates): Configuration updates that haven't run yet are no longer skipped after an upgrade
+- fix(hooks): No more false "duplicate session" warning right after /clear
+- fix(plugins): Reinstalling then removing a plugin no longer leaves orphaned files behind
+- fix(settings): Upgrades no longer register a hook twice when settings share a hook across matchers
+- fix(plugins): Removing a plugin now keeps any env/hook/permission you had configured yourself
+- fix(cli): A file named 'nul' in your project is no longer removed on macOS/Linux
+- fix(changelog): Revert and merge commits no longer clutter the release notes
+- feat(terminal-title): New: duplicate-session guard warns when another Claude tab is already working on the same repo+task (near-identical title) so the two don't clobber each other's edits. Set CLAUDE_TITLE_DUPE=kill to have the newer tab automatically stand down, or =off to disable.
+- fix(cli): Upgrades now preserve your saved /gls screenshot folder from very old installs
+- feat(terminal-title): After /clear, the tab keeps showing your last title (ideal for /continue) instead of briefly flashing the folder name.
+- fix: Node 18 or newer is now required (matches what we test on)
+- fix(cli): A corrupted settings or config file now produces a clear error instead of silent data loss
+- fix(docs): The interactive docs no longer show commands that aren't part of your install
+- fix(token-guard): the "something just loaded a huge payload" warning now gives honest
+- fix(token-guard): Spend-gate confirmations now show token counts instead of dollar amounts when you're on a Claude subscription plan.
+- feat(token-guard): the usage-spike warning now tells you what matters — how long until
+- fix(autoconfig): /autoconfig sets up the format hook in the reliable path-anchored form
+- fix(commands): /validate-cca-install no longer reports false "missing command" errors
+- fix(install): Removed the outdated curl installer — install with npx claude-code-autoconfig instead
+- feat(hooks): auto-guard — opt-in deterministic rails under auto mode
+
 ## v1.0.216
 - docs: regenerate interactive docs after cca- block protocol change
 - feat(commands): preserve flavor-package cca- marker blocks in CLAUDE.md
@@ -169,15 +200,6 @@
 ## v1.0.171
 - feat: /extract-rules v3 — automatic flow, --keep-sources, changelog summary
 
-## v1.0.170
-- revert: remove /extract-rules from deployed build
-
 ## v1.0.169
 - feat: add /extract-rules command
-
-## v1.0.168
-- feat: remove /sync-claude-md command
-
-## v1.0.167
-- fix: postversion creates separate commit instead of amending
 
