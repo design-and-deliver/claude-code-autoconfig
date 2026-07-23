@@ -1835,7 +1835,8 @@ session's context, then RESUME the work — unlike \`/recover-context\`, which r
 waits for direction. No arguments; it figures everything out itself.
 
 It is also **plan-aware**: when the previous session was executing a substep of a phased
-plan doc (the plan-authoring pattern — a \`docs/*.md\` with a \`## Ledger\` section), the plan
+plan doc (the plan-authoring pattern — a \`docs/*.md\` or \`.claude/plans/*.md\` with a
+\`## Ledger\` section), the plan
 doc + Ledger is the handoff, not the transcript. Recovery shrinks to a sliver and this
 session starts the next substep, so \`/clear\` → \`/continue\` is the intended loop between
 plan substeps.
@@ -1856,8 +1857,7 @@ Two cheap probes BEFORE extracting anything:
 
 1. **Last title**: read the final line of \`.claude/hooks/.titles/{$SID}.history.jsonl\`
    (fall back to \`~/.claude/hooks/.titles/\`). Plan-driven sessions title as
-   \`{plan alias} — {area} — {goal}\`.
-2. **Plan docs**: list the plan docs — \`grep -l '^## Ledger' docs/*.md\` (no \`docs/\` or no`
+   \`{plan alias} — {area} — {goal}\`.`
             },
             'disable-arcade-beeps': {
                 filename: 'disable-arcade-beeps.md',
