@@ -28,7 +28,7 @@ echo "Setting up Claude Code, please wait..." && npx claude-code-autoconfig
 Write-Host "Setting up Claude Code, please wait..."; npx claude-code-autoconfig
 ```
 
-The first run downloads the tool and can take several seconds before anything appears on screen; repeat runs are near-instant.
+Expect a few seconds of silence before anything appears on screen — that's npx starting up; the first run (which also downloads the tool) takes the longest.
 
 ## After Install
 
