@@ -16,9 +16,19 @@ Claude Code is powerful out of the box, but every new project means manually wri
 
 Run it from a regular terminal — not from inside a Claude Code session (the installer detects that and asks you to switch to a separate terminal).
 
+**macOS / Linux** (bash, zsh):
+
 ```bash
-npx claude-code-autoconfig
+echo "Setting up Claude Code, please wait..." && npx claude-code-autoconfig
 ```
+
+**Windows** (PowerShell):
+
+```powershell
+Write-Host "Setting up Claude Code, please wait..."; npx claude-code-autoconfig
+```
+
+The first run downloads the tool and can take several seconds before anything appears on screen; repeat runs are near-instant.
 
 ## After Install
 
