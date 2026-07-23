@@ -13,6 +13,21 @@ const { cleanupNulFile } = require('./lib/nul-cleanup.js');
 const cwd = process.cwd();
 const packageDir = path.dirname(__dirname);
 
+// ── Phase timings ────────────────────────────────────────────────────────────
+// mark(label) records the ms since the previous mark, partitioning the run into named
+// sequential phases. Rendered as one dim Timings line right before the READY box; the
+// --bootstrap path exits before that render, so it never prints there. Cosmetic-only:
+// a timing failure must never affect the install.
+const timings = [];
+let lastMark = process.hrtime.bigint();
+function mark(label) {
+  try {
+    const now = process.hrtime.bigint();
+    timings.push({ label, ms: Number(now - lastMark) / 1e6 });
+    lastMark = now;
+  } catch (_) { /* cosmetic only */ }
+}
+
 // ── Version pin ──────────────────────────────────────────────────────────────
 // A project pinned via .claude/cca.config.json { "pinVersion": "1.0.186" } freezes
 // SILENT refreshes: /autoconfig's `npx ...@latest --bootstrap` and /autoconfig-update's
@@ -225,9 +240,13 @@ function installClaude() {
 }
 
 if (!isClaudeInstalled()) {
+  mark('claude-check');
   if (!installClaude()) {
     process.exit(1);
   }
+  mark('claude-install');
+} else {
+  mark('claude-check');
 }
 
 console.log('\x1b[32m%s\x1b[0m', '✅ Claude Code detected');
@@ -362,6 +381,7 @@ cp .claude/migration/${timestamp}/settings.json .claude/settings.json
     fs.rmdirSync(migrationPath, { recursive: true });
   }
 }
+mark('backup');
 
 // Read previous installed version (before copying overwrites it)
 const versionFile = path.join(claudeDest, '.autoconfig-version');
@@ -583,6 +603,7 @@ const soundsSrc = path.join(packageDir, '.claude', 'sounds');
 if (fs.existsSync(soundsSrc)) {
   copyDir(soundsSrc, path.join(claudeDest, 'sounds'));
 }
+mark('copy');
 
 // Note: updates directory is no longer copied to user projects.
 // Update files are only used by --pull-updates (for /autoconfig-update).
@@ -618,6 +639,7 @@ if (fs.existsSync(settingsSrc)) {
     }
   }
 }
+mark('settings');
 
 console.log('\x1b[32m%s\x1b[0m', '✅ Prepared /autoconfig command');
 
@@ -752,6 +774,16 @@ const bootstrapMode = process.argv.includes('--bootstrap');
 if (bootstrapMode) {
   process.exit(0);
 }
+
+// Timings line — dim diagnostic, same style as the pre-install block above. Placed after
+// the --bootstrap exit so bootstrap runs never print it. Total is measured from process
+// start (uptime), so Node boot + module loading are included; phase buckets partition
+// only the marked installer work.
+try {
+  const phases = timings.map(t => `${t.label} ${Math.round(t.ms)}ms`).join(' · ');
+  console.log();
+  console.log('\x1b[90m%s\x1b[0m', `⏱  total ${process.uptime().toFixed(1)}s  (${phases})`);
+} catch (_) { /* cosmetic only — never block the install */ }
 
 // Step 4: Show "READY" message
 console.log();
