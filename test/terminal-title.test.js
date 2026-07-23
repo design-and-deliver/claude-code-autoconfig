@@ -1356,12 +1356,14 @@ if (process.platform !== 'win32') {
   // "esc to cancel" (permission dialog / question card open), 'blind' = no determination
   // (painter missing / attach denied). A fake node parent has no CC console to read, so
   // every probing case must force one of the four.
-  function runWatch(transcript, pid, nonce, live) {
+  function runWatch(transcript, pid, nonce, live, deadlineMs) {
     const payload = JSON.stringify({
       sid: wsid, dir: wdir, file: path.join(wdir, `${wsid}.txt`), cwd: wcwd,
       nonce, transcript, ppid: pid, sessionPid: pid,
     });
-    const env = live === undefined ? process.env : { ...process.env, CLAUDE_TITLE_TEST_LIVE: live };
+    const env = { ...process.env };
+    if (live !== undefined) env.CLAUDE_TITLE_TEST_LIVE = live;
+    if (deadlineMs !== undefined) env.CLAUDE_TITLE_TEST_DEADLINE_MS = String(deadlineMs);
     const c = spawn(process.execPath, [HOOK, '--turn-watch', payload], { detached: true, stdio: 'ignore', env });
     watchProcs.push(c);
     return c;
@@ -1502,6 +1504,29 @@ if (process.platform !== 'win32') {
     assert(wglyph() === 'working|PostToolUse', `an assistant-tail dead read must never rescue, glyph="${wglyph()}"`);
     assert(!fs.existsSync(path.join(wdir, `${wsid}.probe`)), 'an assistant-tail dead read must not drop a breadcrumb');
     setState({ watch: 'n2i-superseded' });
+  });
+
+  // --- 2j. deadline roll: a dialog parked on the user (◐ awaiting|Notification) must outlive
+  // the watch deadline. The 2026-07-22 stuck-◐: an AskUserQuestion sat open past the 30min
+  // deadline, the watchdog stood down ('watch-exit deadline'), and the user's Esc an hour later
+  // flushed a cancel marker no watcher was left alive to read — the ◐ stayed stuck until the
+  // next prompt. The deadline ROLLS while the dialog is up, so the marker still rescues.
+  // FAILS on pre-roll code (deadline exit with the dialog open). ---
+  test('watchdog: awaiting|Notification rolls the deadline — alive past it, Esc marker still rescues', () => {
+    setState({ glyph: 'awaiting|Notification', watch: 'n2j' });
+    const tp2j = mkWTranscript('t2j', 'assistant');
+    const wd2j = runWatch(tp2j, wIdlePid, 'n2j', '0', 1500);
+    sleepSync(5000); // > 3x the 1.5s test deadline
+    assert(!waitDead(wd2j.pid, 250), 'the watchdog must stay alive past the deadline while a dialog is parked on the user');
+    // the user Esc's the dialog: the interrupt marker flushes -> instant rescue, glyph resets
+    fs.appendFileSync(tp2j, JSON.stringify({ type: 'user', timestamp: new Date().toISOString(), message: { role: 'user', content: [{ type: 'text', text: '[Request interrupted by user for tool use]' }] } }) + '\n');
+    assert(waitWGlyph('idle|TurnWatch', 8), `an Esc'd dialog must rescue to idle, glyph="${wglyph()}"`);
+    assert(waitDead(wd2j.pid, 4000), 'the watchdog should self-exit once it has rescued');
+  });
+  test('watchdog: a working glyph does NOT roll the deadline (the backstop still bounds runaways)', () => {
+    setState({ glyph: 'working|PostToolUse', watch: 'n2k' });
+    const wd2k = runWatch(mkWTranscript('t2k', 'assistant'), wIdlePid, 'n2k', '0', 1500);
+    assert(waitDead(wd2k.pid, 8000), 'without a dialog the deadline must still stand the watchdog down');
   });
 
   // --- 3. stalled prompt + probe dead + BUSY parent -> NO rescue. The rename-belt: if CC

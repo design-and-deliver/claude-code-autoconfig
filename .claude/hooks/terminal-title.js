@@ -1124,7 +1124,10 @@ function paintViaConsole(dir, ppid, text) {
 //     quiet screen is also what a long silent Bash tool looks like — never rescue those without a
 //     marker. Assistant tails DO get a gentle ~2s dialog-only scan (mid-turn permission dialogs),
 //     whose dead/blind reads carry no evidence.
-// Stand-down: glyph concluded (✻ / ◐-from-Stop), nonce superseded, session gone, or a 30min deadline.
+// Stand-down: glyph concluded (✻ / ◐-from-Stop), nonce superseded, session gone, or a 30min
+// deadline — ROLLED while ◐ awaiting|Notification: a dialog parked on the user is not a runaway
+// turn, and the watchdog must outlive it to read the cancel marker if the user Esc's it hours
+// later (2026-07-22: a stuck ◐ — the Esc landed ~65min in, ~35min after watch-exit deadline).
 async function turnWatch(payloadJson) {
   let p;
   try { p = JSON.parse(payloadJson); } catch (_) { return; }
@@ -1157,14 +1160,16 @@ async function turnWatch(payloadJson) {
   const CPU_THRESH = 6.0; // 300ms — still < 6%); active 9–19% → 6% separates (LIVE-measured 2026-07-12).
   const GRACE_MS = 150;   // 300ms window ×2 samples is the floor; smaller windows lose tick headroom.
   const FALLBACK_AGE_MS = 120 * 1000; // probe-blind: no CPU-only rescue before this (thinking runs minutes)
-  const started = Date.now();
+  // Test seam (CLAUDE_TITLE_TEST_DEADLINE_MS): the 30min stand-down is untestable at real scale.
+  const DEADLINE_MS = Number(process.env.CLAUDE_TITLE_TEST_DEADLINE_MS) || 30 * 60 * 1000;
+  let deadline = Date.now() + DEADLINE_MS;
   let lastSize = -1;
   let quietStreak = 0;
   let deadStreak = 0;
   let lastProbe = 0;
   let polls = 0;
   try {
-    while (Date.now() - started < 30 * 60 * 1000) {
+    while (Date.now() < deadline) {
       await delay(150);
       polls++;
       if (readTitle(watchFile) !== nonce) { watchLog('watch-exit', 'superseded'); return; }
@@ -1173,6 +1178,10 @@ async function turnWatch(payloadJson) {
         watchLog('watch-exit', `concluded glyph=${painted.join('|')}`);
         return;
       }
+      // A dialog parked on the user rolls the deadline (2026-07-22: an AskUserQuestion sat open
+      // past 30min, the watchdog deadlined, and the Esc an hour later flushed a marker no watcher
+      // was left alive to read — the ◐ stayed stuck until the next prompt repainted it).
+      if (painted[0] === 'awaiting' && painted[1] === 'Notification') deadline = Date.now() + DEADLINE_MS;
       if (!sessionPid) {
         sessionPid = resolveSessionPid(dir, sid, file, cwd);
         if (sessionPid) watchLog('watch', `session resolved pid=${sessionPid}`);
