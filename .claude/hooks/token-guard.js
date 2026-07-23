@@ -2098,19 +2098,19 @@ function onPreToolUse(data, projectDir) {
       const hardCap = cfg.fanHardCap || DEFAULTS.fanHardCap;
       if (fan.level === 'block') {
         return deny('PreToolUse',
-          `token-guard: blocked — this Workflow declares ${fan.signals.join('; ')}, at or over ` +
+          `⚠️ Hey — blocked: this Workflow declares ${fan.signals.join('; ')}, at or over ` +
           `your hard fan cap of ${hardCap} agents. A fan this wide is far more often an ` +
           `over-provisioning bug than real parallel work, and fleets bill outside the visible ` +
           `transcript (${estimate}). Cut the fan, or raise fanHardCap in cca.config.json to allow it.`);
       }
       return ask('PreToolUse',
-        `token-guard: this Workflow looks over-fanned for one task — ${fan.signals.join('; ')}` +
+        `⚠️ Hey — this Workflow looks over-fanned for one task — ${fan.signals.join('; ')}` +
         `${fan.estimate ? ` — ${fan.estimate}` : ''}. A narrow question rarely needs more than ` +
         `~${cfg.fanWarnAgents || DEFAULTS.fanWarnAgents} agents, and fleets bill outside the ` +
         `visible transcript (${estimate}). Cut the fan first, or approve to launch as-is.`);
     }
     return ask('PreToolUse',
-      `token-guard: Workflow launch — ${estimate}; fleets spend outside the visible transcript. ` +
+      `⚠️ Hey — Workflow launch — ${estimate}; fleets spend outside the visible transcript. ` +
       `Approve to launch.`);
   }
 
@@ -2132,11 +2132,11 @@ function onPreToolUse(data, projectDir) {
       if (v.door === 'skill') st.approvedPayloadHop.skill = String(ti.skill || '');
       saveState(projectDir, sid, st);
       return ask('PreToolUse', v.door === 'skill'
-        ? `token-guard: loading the ${ti.skill} skill adds ${v.floor ? 'at least ' : ''}` +
+        ? `⚠️ Hey — loading the ${ti.skill} skill adds ${v.floor ? 'at least ' : ''}` +
           `~${fmtK(v.estTokens)} tokens to this conversation permanently — every later message ` +
           `re-reads them. If you only need an answer from it, a disposable subagent can read ` +
           `it and return just the conclusion. Approve to load it here anyway.`
-        : `token-guard: reading ${path.basename(String(ti.file_path || ''))} in full adds ` +
+        : `⚠️ Hey — reading ${path.basename(String(ti.file_path || ''))} in full adds ` +
           `~${fmtK(v.estTokens)} tokens to this conversation permanently — every later message ` +
           `re-reads them. A ranged Read (offset/limit) or a disposable subagent keeps it out. ` +
           `Approve to read it in full anyway.`);
@@ -2149,7 +2149,7 @@ function onPreToolUse(data, projectDir) {
     st.miniBombGateArmed = false;
     saveState(projectDir, sid, st);
     return ask('PreToolUse',
-      `token-guard: this turn's tool results have already piled up ~${fmtK(st.turnPayloadTok)} ` +
+      `⚠️ Hey — this turn's tool results have already piled up ~${fmtK(st.turnPayloadTok)} ` +
       `tokens of new context — bomb-sized in aggregate, and every later message re-reads it. ` +
       `Approve to keep going here; a disposable subagent or ranged reads keep the rest out.`);
   }
@@ -2159,7 +2159,7 @@ function onPreToolUse(data, projectDir) {
     st.bombGateArmed = false;
     saveState(projectDir, sid, st);
     return ask('PreToolUse',
-      `token-guard: a context bomb just landed at fat context (see warning above) — one-time ` +
+      `⚠️ Hey — a context bomb just landed at fat context (see warning above) — one-time ` +
       `confirm before more work compounds on top of it. If the payload isn't needed here: ` +
       `/clear, then /continue to shed it and keep this thread.`);
   }
@@ -2173,7 +2173,7 @@ function onPreToolUse(data, projectDir) {
   saveState(projectDir, sid, st);
   if (wantDollars(cfg)) {
     return ask('PreToolUse',
-      `token-guard: session estimate ${fmtUSD(m.usd)} ≥ ${fmtUSD(gate)} gate. ` +
+      `⚠️ Hey — session estimate ${fmtUSD(m.usd)} ≥ ${fmtUSD(gate)} gate. ` +
       `Approve to continue (next check at ${fmtUSD(st.gateArmedAt)}), or /clear for a fresh session.`);
   }
   // Subscription copy: the gate still fires (it's a backstop the user armed), but the message is
@@ -2183,7 +2183,7 @@ function onPreToolUse(data, projectDir) {
   const tok = sessionTokens(m);
   const perUSD = m.usd > 0 ? tok / m.usd : 0;
   return ask('PreToolUse',
-    `token-guard: session estimate ${fmtK(tok)} tokens ≥ the ~${fmtK(gate * perUSD)}-token gate. ` +
+    `⚠️ Hey — session estimate ${fmtK(tok)} tokens ≥ the ~${fmtK(gate * perUSD)}-token gate. ` +
     `Approve to continue (next check ≈ ${fmtK(st.gateArmedAt * perUSD)} tokens), or /clear for a ` +
     `fresh session.`);
 }
