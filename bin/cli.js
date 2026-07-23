@@ -74,7 +74,7 @@ const WINDOWS_RESERVED = ['CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'COM3', 'C
   'LPT6', 'LPT7', 'LPT8', 'LPT9'];
 
 // Files/folders installed by autoconfig - don't backup these
-const AUTOCONFIG_FILES = ['commands', 'docs', 'agents', 'migration', 'hooks', 'scripts', 'sounds', 'rules', 'feedback', 'settings.json', 'settings.local.json', '.mcp.json', '.autoconfig-version', '.autoconfig-plugins.json', 'cca.config.json', '.autoconfig-whats-new.json'];
+const AUTOCONFIG_FILES = ['commands', 'docs', 'agents', 'migration', 'hooks', 'scripts', 'sounds', 'rules', 'feedback', 'settings.json', 'settings.local.json', '.mcp.json', '.autoconfig-version', '.autoconfig-plugins.json', 'cca.config.json', '.autoconfig-whats-new.json', '.autoconfig-timing.jsonl'];
 
 function isReservedName(name) {
   const baseName = name.replace(/\.[^.]*$/, '').toUpperCase();
@@ -769,9 +769,33 @@ if (isUpgrade && previousVersion !== currentVersion) {
 
 const launchCommand = isUpgrade ? '/autoconfig-update' : '/autoconfig';
 
+// Opt-in timing log: behind --timing or CCA_TIMING=1 only, append one JSON line per run
+// to .claude/.autoconfig-timing.jsonl so regressions/hangs are visible across runs.
+// Default users never create the file. Append-only, never read back. The filename is
+// registered in AUTOCONFIG_FILES (hasUserContent) and negated in package.json "files".
+function persistTimings() {
+  try {
+    if (!process.argv.includes('--timing') && process.env.CCA_TIMING !== '1') return;
+    const phases = {};
+    for (const t of timings) phases[t.label] = Math.round(t.ms);
+    fs.appendFileSync(
+      path.join(claudeDest, '.autoconfig-timing.jsonl'),
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        version: currentVersion,
+        isUpgrade,
+        insideClaude,
+        totalMs: Math.round(process.uptime() * 1000),
+        phases
+      }) + '\n'
+    );
+  } catch (_) { /* cosmetic only — never block the install */ }
+}
+
 // --bootstrap: copy files only, exit silently (used by /autoconfig inside Claude)
 const bootstrapMode = process.argv.includes('--bootstrap');
 if (bootstrapMode) {
+  persistTimings(); // file write, not output — the no-new-output contract holds
   process.exit(0);
 }
 
@@ -784,6 +808,7 @@ try {
   console.log();
   console.log('\x1b[90m%s\x1b[0m', `⏱  total ${process.uptime().toFixed(1)}s  (${phases})`);
 } catch (_) { /* cosmetic only — never block the install */ }
+persistTimings();
 
 // Step 4: Show "READY" message
 console.log();
