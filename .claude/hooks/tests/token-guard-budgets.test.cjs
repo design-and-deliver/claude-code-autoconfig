@@ -146,9 +146,13 @@ test('E2E: R3 bomb note prices re-reads at cache weight, not ×50 full price (20
   const out = runHook(dir, prompt);
   assert.match(out, /context-bomb/);
   assert.match(out, /per cache-warm turn/);                  // warm re-reads at ~10% weight
-  assert.match(out, /break longer than the cache TTL/);      // full price only after a gap
-  assert.match(out, /context-window headroom/);              // occupancy is the third cost
+  assert.match(out, /context-window headroom/);              // occupancy is the other cost
   assert.doesNotMatch(out, /50 more turns/, 'the ×50 full-price extrapolation was cut 2026-07-20');
+  // The break-penalty pre-warning was cut 2026-07-23 — R4 idle-return already warns about the
+  // full re-read in real time when a gap actually happens, so pre-announcing it here was noise.
+  assert.doesNotMatch(out, /break longer than the cache TTL/, 'break-penalty pre-warning cut 2026-07-23 (R4 owns it live)');
+  // And the culprit no longer prints a char count — tokens are the only unit that matters.
+  assert.doesNotMatch(out, /chars\)/, 'culprit char-count cut 2026-07-23 (chars are noise; tokens are the currency)');
 });
 
 test('E2E: R3 attribution Skill(name) records an observed row alongside the warn', () => {

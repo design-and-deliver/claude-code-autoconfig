@@ -1696,7 +1696,7 @@ async function onUserPromptSubmit(data, projectDir) {
       st.approvedPayloadHop = null;
     } else if (jump > cfg.bombJumpTokens) {
       const who = attributeJump(data.transcript_path, st.scanOffset);
-      const culprit = who ? ` (largest payload: ${who.label}, ~${fmtK(who.chars)} chars)` : '';
+      const culprit = who ? ` (largest payload: ${who.label})` : '';
       // Attribution named a skill -> record the measured landing so door 1 can gate it next
       // time (built-ins never hit the pre-gate: no files to stat until a landing prices them).
       const skillHit = who && /^Skill\((.+)\)$/.exec(who.label);
@@ -1705,8 +1705,7 @@ async function onUserPromptSubmit(data, projectDir) {
         ? `the per-turn floor is now ≥ ${fmtUSD(m.turnFloorUSD)} (50 more turns ≈ ` +
           `${fmtUSD(m.turnFloorUSD * 50)})`
         : `~${fmtK(Math.round(jump * 0.1))} tokens per cache-warm turn (a cache read, ~10% ` +
-          `weight), the full ~${fmtK(jump)} again on the first turn after a break longer than ` +
-          `the cache TTL, and ${fmtK(jump)} of context-window headroom gone until trimmed`;
+          `weight), and ${fmtK(jump)} of context-window headroom gone until trimmed`;
       notes.push(
         `context-bomb: something just loaded +${fmtK(jump)} tokens into this conversation` +
         `${culprit} — every future turn re-reads it: ${bombCost}. Relay as ` +
