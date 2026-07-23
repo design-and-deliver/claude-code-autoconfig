@@ -4,6 +4,13 @@ Any multi-session remediation/feature plan written in this repo (e.g. by /up-to-
 this structure. The plan is a self-contained doc a fresh session can execute with zero prior
 conversation context.
 
+## Where plans live
+
+`docs/*.md` (tracked — Ledger history rides in git) or `.claude/plans/*.md` (local working
+plans; gitignored in this repo). Tooling that discovers plans (/continue's plan probe,
+/plan-progress) must scan BOTH directories. A gitignored plan's Ledger-only "commit" steps
+are no-ops — there the Ledger entry itself is the durable record, so skip those commits.
+
 ## Structure
 
 1. **Header**: goal, links to source audits/evidence, and "how to execute" (one substep per

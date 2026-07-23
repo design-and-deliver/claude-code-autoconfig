@@ -1,5 +1,5 @@
 <!-- @description Continues where your previous session in this terminal left off — recovers its context and resumes the work. Plan-aware: if that session was executing a substep of a plan doc, resumes from the plan's Ledger instead of the transcript. -->
-<!-- @version 2 -->
+<!-- @version 3 -->
 <!-- @param --show | flag | optional | Opens the recovered transcript in your default editor. -->
 <!-- @response success | Picking up where we left off — {what we were doing}. Then the work resumes. -->
 <!-- @response plan | Picking up where we left off — {plan alias}: substep {N.k} done ({hash}); starting {next}. Then the next substep runs. -->
@@ -13,7 +13,8 @@ session's context, then RESUME the work — unlike `/recover-context`, which rec
 waits for direction. No arguments; it figures everything out itself.
 
 It is also **plan-aware**: when the previous session was executing a substep of a phased
-plan doc (the plan-authoring pattern — a `docs/*.md` with a `## Ledger` section), the plan
+plan doc (the plan-authoring pattern — a `docs/*.md` or `.claude/plans/*.md` with a
+`## Ledger` section), the plan
 doc + Ledger is the handoff, not the transcript. Recovery shrinks to a sliver and this
 session starts the next substep, so `/clear` → `/continue` is the intended loop between
 plan substeps.
@@ -35,13 +36,17 @@ Two cheap probes BEFORE extracting anything:
 1. **Last title**: read the final line of `.claude/hooks/.titles/{$SID}.history.jsonl`
    (fall back to `~/.claude/hooks/.titles/`). Plan-driven sessions title as
    `{plan alias} — {area} — {goal}`.
-2. **Plan docs**: list the plan docs — `grep -l '^## Ledger' docs/*.md` (no `docs/` or no
-   hits → not plan-driven).
+2. **Plan docs**: list the plan docs — `grep -l '^## Ledger' docs/*.md .claude/plans/*.md
+   2>/dev/null` (no hits in either place → not plan-driven). `.claude/plans/` is typically
+   gitignored — a plan doc there still counts, and its edits will NOT show in `git status`.
 
 **Plan-driven** = a Ledger-bearing plan doc exists AND the last title's first segment reads
 as an alias of that doc (the alias's words appear in the doc's filename or title). If the
-title is missing or ambiguous, tiebreak by grepping the previous transcript's final ~100
-lines for the plan doc's filename. When NOT plan-driven, continue to Step 3 unchanged.
+title is missing, ambiguous, or matches NO plan doc, do not conclude "not plan-driven" yet —
+tiebreak by grepping the previous transcript's final ~100 lines for each plan doc's filename
+(an Edit/Write touching a plan doc there is decisive: that session WAS plan-driven; sessions
+don't always title by the plan-alias convention). Only when both probes and the tiebreak come
+up empty is the session NOT plan-driven — then continue to Step 3 unchanged.
 
 When plan-driven, shrink the recovery window — the Ledger is the handoff and the transcript
 is only color: raise `$CUTOFF_ISO` to (the transcript's last timestamp − 10 minutes) if that
