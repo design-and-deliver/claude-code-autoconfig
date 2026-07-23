@@ -58,6 +58,8 @@
     "!.claude/commands/migrate-new-session.md",
     "!.claude/commands/plan-progress.md",
     "!.claude/scripts/plan-progress.js",
+    "!.claude/commands/whats-happening.md",
+    "!.claude/scripts/whats-happening.js",
     "!.claude/plans",
     "!.claude/sounds/*.enabled",
     "CLAUDE.md",
