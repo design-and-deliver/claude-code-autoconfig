@@ -4,6 +4,9 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.219
+- fix(terminal-title): /clear now resets the tab title to "New session" instead of carrying the old session's title; /continue still restores it
+
 ## v1.0.218
 - fix(continue): The /continue command now resumes phased plans kept in .claude/plans/ as well as docs/
 - perf(pack): Smaller download on install and update
@@ -199,7 +202,4 @@
 
 ## v1.0.171
 - feat: /extract-rules v3 — automatic flow, --keep-sources, changelog summary
-
-## v1.0.169
-- feat: add /extract-rules command
 
