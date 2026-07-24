@@ -10,15 +10,18 @@
  * through the Phase-3 extractions: it exercises the install flow end to end and checks the
  * files, settings.json, and markers that actually land on disk.
  *
- * Six fixtures:
+ * Fixtures:
  *   1. fresh project        — `--bootstrap` into an empty dir: shipped commands present,
  *                             DEV_ONLY_FILES absent, deprecated aliases pruned, settings.json
- *                             copied whole, updates/ absent, whats-new NOT written (upgrade-only).
+ *                             copied whole, updates/ absent, whats-new NOT written (upgrade-only),
+ *                             version marker written, run reported as fresh.
  *   2. upgrade w/ content    — `--bootstrap` over a configured project: user files backed up +
  *                             preserved, managed hooks refreshed, user's own hooks untouched,
- *                             settings.json MERGED not replaced, whats-new written, and the
- *                             user's @applied block preserved — a PENDING update id must not
- *                             be pre-marked applied by the upgrade (BH-3).
+ *                             settings.json MERGED not replaced, whats-new written (with the
+ *                             rendered segments), version marker advanced, upgrade detection
+ *                             reported, no unsupported-version notice, and the user's @applied
+ *                             block preserved — a PENDING update id must not be pre-marked
+ *                             applied by the upgrade (BH-3).
  *   3. populated @applied    — `--pull-updates`: already-applied updates are NOT re-copied and
  *                             the user's @applied block is preserved (exercises parseAppliedUpdates
  *                             + pullUpdates' block-preservation for real).
@@ -35,6 +38,16 @@
  *   8. --force overwrite     — `--bootstrap --force`: the preserved classes ARE refreshed and
  *                             settings.json is REPLACED with the template (no merge) — while
  *                             the user's OWN files still survive (--force is not a wipe).
+ *   9. docs-HTML detection   — upgrade is detected from autoconfig.docs.html ALONE (no
+ *                             CLAUDE.md): the second upgrade indicator, proven behaviorally
+ *                             by the upgrade-only whats-new artifact appearing (clean-code 2.1b).
+ *  10. same-version re-run   — an upgrade whose version marker already matches the installer
+ *                             writes NO whats-new (the version-changed gate).
+ *  11. unsupported old ver   — old version marker + never-configured project: the "no longer
+ *                             supported" notice prints AND the sweep to latest still proceeds.
+ *  12. interactive launch    — the real no-flag flow, ENTER piped to stdin: READY TO CONFIGURE
+ *                             + /autoconfig on fresh vs READY TO UPDATE + /autoconfig-update on
+ *                             upgrade (the launched `claude` is the PATH shim, so it's instant).
  *
  * The `claude` binary is shimmed onto PATH so isClaudeInstalled() passes without a real install —
  * without the shim, a machine lacking Claude Code (CI) would trigger `npm install -g` mid-test.
@@ -220,6 +233,17 @@ test('whats-new JSON is NOT written on a fresh install (it is an upgrade-only ar
   assert(!fs.existsSync(path.join(fresh, '.claude', '.autoconfig-whats-new.json')), 'whats-new must not be written on a fresh install');
 });
 
+test('the version marker is written with the installer version', () => {
+  const marker = path.join(fresh, '.claude', '.autoconfig-version');
+  assert(fs.existsSync(marker), '.autoconfig-version should be written on install');
+  const v = fs.readFileSync(marker, 'utf8').trim();
+  assert(v === PKG_VERSION, `version marker should be ${PKG_VERSION}, got ${v}`);
+});
+
+test('the run reports itself as a fresh install (not an upgrade)', () => {
+  assert(/Install type: fresh/.test(freshResult.out), `expected the fresh-install report line, got:\n${freshResult.out}`);
+});
+
 // ── Fixture 2: upgrade over a configured project ─────────────────────────────
 console.log();
 console.log('upgrade over a configured project (--bootstrap):');
@@ -291,12 +315,29 @@ test('settings.json is MERGED, not replaced (user env + hook kept; shipped contr
   assert(JSON.stringify(merged) !== JSON.stringify(pkg), 'merged settings must not equal the shipped template verbatim');
 });
 
-test('whats-new JSON is written on upgrade with the correct from/to', () => {
+test('whats-new JSON is written on upgrade with the correct from/to and rendered segments', () => {
   const wn = path.join(upClaude, '.autoconfig-whats-new.json');
   assert(fs.existsSync(wn), 'whats-new JSON should be written on upgrade');
   const j = readJson(wn);
   assert(j.from === '1.0.100', `whats-new .from should be the previous version, got ${j.from}`);
   assert(j.to === PKG_VERSION, `whats-new .to should be the current version ${PKG_VERSION}, got ${j.to}`);
+  assert(Array.isArray(j.segments) && j.segments.length > 0, 'whats-new should carry the rendered summary segments for /autoconfig-update to display');
+  assert(j.segments.every(s => typeof s.kind === 'string' && typeof s.text === 'string'), 'each whats-new segment should be a {kind, text} pair');
+});
+
+test('upgrade is detected via the CLAUDE.md marker (and reported)', () => {
+  assert(/Upgrade detected: CLAUDE\.md has autoconfig marker/.test(upResult.out),
+    `expected the CLAUDE.md-marker detection line, got:\n${upResult.out}`);
+});
+
+test('the version marker is advanced to the installer version', () => {
+  const v = fs.readFileSync(path.join(upClaude, '.autoconfig-version'), 'utf8').trim();
+  assert(v === PKG_VERSION, `version marker should advance 1.0.100 → ${PKG_VERSION}, got ${v}`);
+});
+
+test('a routine upgrade of a configured project prints no unsupported-version notice', () => {
+  assert(!/no longer supported/.test(upResult.out),
+    `the unsupported-version notice must not fire on a configured project, got:\n${upResult.out}`);
 });
 
 test('a PENDING update id is NOT marked applied by the upgrade (BH-3)', () => {
@@ -565,6 +606,157 @@ test("--force never deletes the user's own files", () => {
   assert(hook === '// USER HOOK — survives --force\n', "user's own hook must survive --force verbatim");
   const notes = fs.readFileSync(path.join(forced, '.claude', 'my-notes.md'), 'utf8');
   assert(notes === 'USER NOTES — survive --force\n', "user's own top-level file must survive --force verbatim");
+});
+
+// ── Fixture 9: upgrade detection via docs HTML alone ─────────────────────────
+// The SECOND upgrade indicator: no CLAUDE.md at all, but .claude/docs/autoconfig.docs.html
+// exists (a unique autoconfig artifact). The run must behave as an upgrade — proven by the
+// detection report AND by the upgrade-only whats-new artifact appearing. With no version
+// marker, whats-new .from is unknown (null) — deliberately not pinned here.
+console.log();
+console.log('upgrade detection via docs HTML alone (--bootstrap):');
+
+const docsOnly = makeProject('docs-only');
+cleanups.push(docsOnly);
+writeFile(docsOnly, '.claude/docs/autoconfig.docs.html', '<html>stale docs</html>\n');
+
+const docsOnlyResult = runCli(docsOnly, ['--bootstrap'], shimDir);
+
+test('exits 0', () => {
+  assert(docsOnlyResult.code === 0, `expected exit 0, got ${docsOnlyResult.code}\n${docsOnlyResult.out}`);
+});
+
+test('upgrade is detected via the docs HTML (and reported)', () => {
+  assert(/Upgrade detected: autoconfig\.docs\.html exists/.test(docsOnlyResult.out),
+    `expected the docs-html detection line, got:\n${docsOnlyResult.out}`);
+});
+
+test('the upgrade-only whats-new artifact is written (proves isUpgrade behaviorally)', () => {
+  const wn = path.join(docsOnly, '.claude', '.autoconfig-whats-new.json');
+  assert(fs.existsSync(wn), 'whats-new should be written — docs-html detection makes this run an upgrade');
+  assert(readJson(wn).to === PKG_VERSION, `whats-new .to should be ${PKG_VERSION}`);
+});
+
+// ── Fixture 10: same-version re-run writes no whats-new ──────────────────────
+// whats-new is written only when the version actually CHANGES; an upgrade re-run whose
+// marker already matches the installer must not fabricate one. Together with Fixture 2
+// (old marker → written) this pins the version-changed gate behaviorally.
+console.log();
+console.log('same-version re-run (--bootstrap upgrade, marker already current):');
+
+const rerun = makeProject('rerun');
+cleanups.push(rerun);
+writeFile(rerun, 'CLAUDE.md', CONFIGURED_CLAUDE_MD);
+writeFile(rerun, '.claude/.autoconfig-version', PKG_VERSION);
+
+const rerunResult = runCli(rerun, ['--bootstrap'], shimDir);
+
+test('exits 0', () => {
+  assert(rerunResult.code === 0, `expected exit 0, got ${rerunResult.code}\n${rerunResult.out}`);
+});
+
+test('no whats-new is written when the installed version is already current', () => {
+  assert(!fs.existsSync(path.join(rerun, '.claude', '.autoconfig-whats-new.json')),
+    'a same-version re-run must not write whats-new');
+});
+
+// ── Fixture 11: unsupported old explicit install — announced, then swept ─────
+// The signature "old version marker + project never configured" means someone explicitly
+// installed an old version and /autoconfig hasn't run yet. The CLI must SAY the old version
+// is unsupported and that latest is installing instead — and then still proceed (the notice
+// never aborts the sweep). Routine upgrades of configured projects skip the notice
+// (Fixture 2 asserts its absence).
+console.log();
+console.log('unsupported old explicit install (--bootstrap, unconfigured project):');
+
+const oldExplicit = makeProject('old-explicit');
+cleanups.push(oldExplicit);
+writeFile(oldExplicit, '.claude/.autoconfig-version', '1.0.50');
+
+const oldExplicitResult = runCli(oldExplicit, ['--bootstrap'], shimDir);
+
+test('exits 0', () => {
+  assert(oldExplicitResult.code === 0, `expected exit 0, got ${oldExplicitResult.code}\n${oldExplicitResult.out}`);
+});
+
+test('the old version is announced as unsupported, naming both versions', () => {
+  assert(oldExplicitResult.out.includes('claude-code-autoconfig v1.0.50 is no longer supported'),
+    `expected the unsupported notice naming v1.0.50, got:\n${oldExplicitResult.out}`);
+  assert(oldExplicitResult.out.includes(`installing the latest version (v${PKG_VERSION}) instead`),
+    `the notice should name the version being installed (v${PKG_VERSION})`);
+});
+
+test('the notice does not abort — the sweep to latest still proceeds', () => {
+  for (const c of SHIPPED_COMMANDS) {
+    assert(fs.existsSync(path.join(oldExplicit, '.claude', 'commands', c)), `expected shipped command ${c} after the sweep`);
+  }
+  const v = fs.readFileSync(path.join(oldExplicit, '.claude', '.autoconfig-version'), 'utf8').trim();
+  assert(v === PKG_VERSION, `version marker should be swept 1.0.50 → ${PKG_VERSION}, got ${v}`);
+});
+
+// ── Fixture 12: interactive READY messaging + launch command ─────────────────
+// The full interactive path (no --bootstrap): one ENTER is piped to stdin so the run sails
+// through the prompt and "launches Claude" — which resolves to the PATH shim, so the spawn
+// is instant and harmless. Pins the isUpgrade fork of the user-facing flow: READY TO
+// CONFIGURE + /autoconfig on fresh vs READY TO UPDATE + /autoconfig-update on upgrade.
+console.log();
+console.log('interactive READY messaging + launch command (fresh vs upgrade):');
+
+function runCliInteractive(projectDir, shimDir) {
+  const env = { ...process.env, CLAUDECODE: '' };
+  const pathKey = Object.keys(env).find(k => k.toLowerCase() === 'path') || 'PATH';
+  env[pathKey] = shimDir + path.delimiter + (env[pathKey] || '');
+  try {
+    const stdout = execFileSync('node', [CLI_PATH], {
+      cwd: projectDir,
+      encoding: 'utf8',
+      input: '\n', // answer the "Press ENTER to continue..." prompt
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 120000, // fail loud, never hang, if the prompt flow regresses
+      env
+    });
+    return { code: 0, out: stdout };
+  } catch (e) {
+    return { code: e.status == null ? 1 : e.status, out: (e.stdout || '') + (e.stderr || '') };
+  }
+}
+
+const interFresh = makeProject('inter-fresh');
+cleanups.push(interFresh);
+const interFreshResult = runCliInteractive(interFresh, shimDir);
+
+test('(fresh) interactive run exits 0', () => {
+  assert(interFreshResult.code === 0, `expected exit 0, got ${interFreshResult.code}\n${interFreshResult.out}`);
+});
+
+test('(fresh) shows READY TO CONFIGURE and launches /autoconfig', () => {
+  const out = interFreshResult.out;
+  assert(out.includes('READY TO CONFIGURE'), `expected the READY TO CONFIGURE box, got:\n${out}`);
+  // NB: 'auto-run /autoconfig' is a prefix of the upgrade string — exclude it explicitly.
+  assert(out.includes('auto-run /autoconfig') && !out.includes('auto-run /autoconfig-update'),
+    'the box must offer /autoconfig, not /autoconfig-update');
+  assert(out.includes('Launching Claude Code with /autoconfig...'),
+    `expected the /autoconfig launch line, got:\n${out}`);
+  assert(/approve a few file prompts/.test(out), 'the fresh-only approval hint should print');
+});
+
+const interUp = makeProject('inter-upgrade');
+cleanups.push(interUp);
+writeFile(interUp, 'CLAUDE.md', CONFIGURED_CLAUDE_MD);
+writeFile(interUp, '.claude/.autoconfig-version', '1.0.100');
+const interUpResult = runCliInteractive(interUp, shimDir);
+
+test('(upgrade) interactive run exits 0', () => {
+  assert(interUpResult.code === 0, `expected exit 0, got ${interUpResult.code}\n${interUpResult.out}`);
+});
+
+test('(upgrade) shows READY TO UPDATE and launches /autoconfig-update', () => {
+  const out = interUpResult.out;
+  assert(out.includes('READY TO UPDATE'), `expected the READY TO UPDATE box, got:\n${out}`);
+  assert(out.includes('auto-run /autoconfig-update'), 'the box must offer /autoconfig-update');
+  assert(out.includes('Launching Claude Code with /autoconfig-update...'),
+    `expected the /autoconfig-update launch line, got:\n${out}`);
+  assert(!/approve a few file prompts/.test(out), 'the fresh-only approval hint must not print on upgrade');
 });
 
 // ── nul-cleanup is guarded to Windows (BH-8) ─────────────────────────────────
