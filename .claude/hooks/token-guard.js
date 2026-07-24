@@ -169,6 +169,20 @@ const FALLBACK_PRICE = { inp: 5, out: 25 };
 const WEB_SEARCH_USD_EACH = 0.01;
 const USD_PER_AGENT_RULE_OF_THUMB = 0.5; // forensic fleet: 1.05M writes / 45 agents ≈ 23k × $20/MTok
 
+// Sizing constants, declared at module top because their first USE is ~500 lines below
+// (payloadVerdict) while their historical home was the R7 analyzer section ~1,700 lines
+// further down — a TDZ landmine: any future module-eval-time call would have thrown
+// ReferenceError (2026-07-24 review).
+const CHARS_PER_TOKEN = 2.6; // observed across the July forensics; R5 uses the same constant
+// Flat per-image token estimate. The model bills images by PIXEL DIMENSIONS, not bytes: cost is
+// ⌈w/28⌉ × ⌈h/28⌉ visual tokens (28px patches), after downscaling over-cap images. The per-image
+// cap is tier-dependent — 1568 tok (standard) up to 4784 tok (high-res: Opus 4.8, Sonnet 5,
+// Fable 5); a typical screenshot lands ~2–2.5k. Sizing a base64 blob as chars/2.6 instead over-
+// counts ~2 orders of magnitude (a ~370KB /gls PNG read as ~189k "tokens", 2026-07-15). One flat
+// figure can't match every tier, so this leans to the high-res typical: it won't under-warn on
+// standard tier and stays close to real on high-res. (Verified against the vision docs, 2026-07-15.)
+const IMAGE_TOK_EST = 2500;
+
 const DEFAULTS = {
   tokenSaver: false,                // Cost Control: single on/off toggle. Off = this light default posture;
                                     // on overlays the aggressive TOKEN_SAVER preset (blocks + tighter thresholds).
@@ -2329,15 +2343,8 @@ function scanWindow(cutoff) {
 // thing you can't paste into a conversation to ask "why was this expensive"). Thresholds
 // reuse the live guards' keys (bombJumpTokens, idleWarnMinutes, contextWarnTokens): the
 // post-mortem has to agree with the warnings it explains.
-const CHARS_PER_TOKEN = 2.6; // observed across the July forensics; R5 uses the same constant
-// Flat per-image token estimate. The model bills images by PIXEL DIMENSIONS, not bytes: cost is
-// ⌈w/28⌉ × ⌈h/28⌉ visual tokens (28px patches), after downscaling over-cap images. The per-image
-// cap is tier-dependent — 1568 tok (standard) up to 4784 tok (high-res: Opus 4.8, Sonnet 5,
-// Fable 5); a typical screenshot lands ~2–2.5k. Sizing a base64 blob as chars/2.6 instead over-
-// counts ~2 orders of magnitude (a ~370KB /gls PNG read as ~189k "tokens", 2026-07-15). One flat
-// figure can't match every tier, so this leans to the high-res typical: it won't under-warn on
-// standard tier and stays close to real on high-res. (Verified against the vision docs, 2026-07-15.)
-const IMAGE_TOK_EST = 2500;
+// (CHARS_PER_TOKEN and IMAGE_TOK_EST — used by this analyzer AND the live payload
+// guards — are declared with the other sizing constants at the top of the file.)
 
 function analyzeSession(transcriptPath, cfg) {
   const m = meterSession(transcriptPath, {});
@@ -2547,6 +2554,9 @@ function resolveTranscript(arg) {
 // conversation, and are skipped. Over maxTokens (chars/4 proxy) it keeps the MOST-RECENT messages (the
 // boundary of the thread that matters) and flags truncated. Exported for fixtures + the migrate command.
 function recoverTail(transcriptPath, cutoffIso, maxTokens) {
+  // Deliberately NOT CHARS_PER_TOKEN (2.6): that constant sizes dense JSON/code payloads;
+  // the recovered tail is plain prose, which runs ~4 chars/token.
+  const PROSE_CHARS_PER_TOKEN = 4;
   const empty = { messages: 0, tokens: 0, truncated: false, text: '' };
   const cutoff = Date.parse(cutoffIso) || 0;
   let raw;
@@ -2579,19 +2589,19 @@ function recoverTail(transcriptPath, cutoffIso, maxTokens) {
   const cap = maxTokens || 40000;
   let kept = rows;
   let truncated = false;
-  if (Math.ceil(rows.reduce((n, r) => n + fmt(r).length + 2, 0) / 4) > cap) {
+  if (Math.ceil(rows.reduce((n, r) => n + fmt(r).length + 2, 0) / PROSE_CHARS_PER_TOKEN) > cap) {
     truncated = true;
     kept = [];
     let acc = 0;
     for (let i = rows.length - 1; i >= 0; i--) {
-      const cost = Math.ceil((fmt(rows[i]).length + 2) / 4);
+      const cost = Math.ceil((fmt(rows[i]).length + 2) / PROSE_CHARS_PER_TOKEN);
       if (acc + cost > cap && kept.length) break;
       kept.unshift(rows[i]);
       acc += cost;
     }
   }
   const text = kept.map(fmt).join('\n\n');
-  return { messages: kept.length, tokens: Math.ceil(text.length / 4), truncated, text };
+  return { messages: kept.length, tokens: Math.ceil(text.length / PROSE_CHARS_PER_TOKEN), truncated, text };
 }
 
 // ---------------------------------------------------------------------------
