@@ -155,8 +155,7 @@ const os = require('os');
 const path = require('path');
 
 // ---------------------------------------------------------------------------
-// pricing — API list prices per MILLION tokens. Cache read = 0.1x input;
-// cache write = 1.25x (5m TTL) / 2x (1h TTL). Web search $10 per 1k searches.
+// pricing — API list prices per MILLION tokens. Web search $10 per 1k searches.
 // First matching regex wins; unknown models fall back to Opus pricing (safe: overcounts never
 // undercounts for cheaper tiers... except Fable — hence fable/mythos listed first).
 const PRICES = [
@@ -166,6 +165,9 @@ const PRICES = [
   { re: /haiku/i, inp: 1, out: 5 },
 ];
 const FALLBACK_PRICE = { inp: 5, out: 25 };
+const CACHE_READ_X = 0.1;       // cache read = 0.1x the model's input list price
+const CACHE_WRITE_5M_X = 1.25;  // cache write, 5-minute TTL
+const CACHE_WRITE_1H_X = 2;     // cache write, 1-hour TTL (also prices the R7 TTL-gap rewrite estimate)
 const WEB_SEARCH_USD_EACH = 0.01;
 const USD_PER_AGENT_RULE_OF_THUMB = 0.5; // forensic fleet: 1.05M writes / 45 agents ≈ 23k × $20/MTok
 
@@ -182,6 +184,17 @@ const CHARS_PER_TOKEN = 2.6; // observed across the July forensics; R5 uses the 
 // figure can't match every tier, so this leans to the high-res typical: it won't under-warn on
 // standard tier and stays close to real on high-res. (Verified against the vision docs, 2026-07-15.)
 const IMAGE_TOK_EST = 2500;
+
+// Bounds & floors, named 2026-07-24 (clean-code plan 1.2) — renames only, values unchanged.
+const SID_SHORT_LEN = 8;                     // session-id prefix in log lines / rollup labels
+const SKILL_SCAN_MAX_FILES = 64;             // skillPayloadChars: reference-chase file budget
+const SKILL_SCAN_CHASE_MAX_BYTES = 2e6;      // skillPayloadChars: bigger files are counted, never read
+const USAGE_LOG_ROTATE_BYTES = 256 * 1024;   // usage.log rolls to .1 past this
+const SPEND_LEDGER_PRUNE_BYTES = 128 * 1024; // spend-ledger.jsonl: lazy 6h prune trigger (was spelled 131072)
+const BUSY_SESSION_DUST_USD = 0.02;          // spikeAttribution: below this a session "idled through"
+const LEDGER_ENTRY_DUST_USD = 0.001;         // Stop path: no-op turns stay out of the spend ledger
+const ROLLUP_DUST_USD = 0.005;               // 5h rollup: rows / agent splits below this are noise
+const SPIKE_SOLO_SHARE_FLOOR = 0.85;         // spikeCopyMode materiality: above this share the solo story holds
 
 const DEFAULTS = {
   tokenSaver: false,                // Cost Control: single on/off toggle. Off = this light default posture;
@@ -306,7 +319,7 @@ function meter(transcriptPath, sinceMs) {
     const searches = (u.server_tool_use && u.server_tool_use.web_search_requests) || 0;
 
     const usd =
-      (inp * p.inp + outT * p.out + cr * p.inp * 0.1 + cw5m * p.inp * 1.25 + cw1h * p.inp * 2) / 1e6 +
+      (inp * p.inp + outT * p.out + cr * p.inp * CACHE_READ_X + cw5m * p.inp * CACHE_WRITE_5M_X + cw1h * p.inp * CACHE_WRITE_1H_X) / 1e6 +
       searches * WEB_SEARCH_USD_EACH;
 
     const m = out.perModel[model] || (out.perModel[model] = { inp: 0, out: 0, cr: 0, cw: 0, searches: 0, usd: 0 });
@@ -321,7 +334,7 @@ function meter(transcriptPath, sinceMs) {
       (last.cache_creation_input_tokens || 0);
     // Floor for the NEXT turn: today's context re-read at cache-read rates on the priciest
     // model seen this session (cheap, honest lower bound — output/thinking comes on top).
-    out.turnFloorUSD = (out.liveContext * out.maxInp * 0.1) / 1e6;
+    out.turnFloorUSD = (out.liveContext * out.maxInp * CACHE_READ_X) / 1e6;
   }
   return out;
 }
@@ -876,14 +889,14 @@ function skillPayloadChars(dir) {
   const seen = new Set();
   const queue = [path.join(root, 'SKILL.md')];
   let total = 0, guard = 0;
-  while (queue.length && guard++ < 64) {
+  while (queue.length && guard++ < SKILL_SCAN_MAX_FILES) {
     const fp = path.resolve(queue.shift());
     const key = fp.toLowerCase();
     if (seen.has(key) || (fp !== path.join(root, 'SKILL.md') && !fp.startsWith(root + path.sep))) continue;
     seen.add(key);
     let size; try { size = fs.statSync(fp).size; } catch (_) { continue; }
     total += size;
-    if (!/\.(md|txt)$/i.test(fp) || size > 2e6) continue;
+    if (!/\.(md|txt)$/i.test(fp) || size > SKILL_SCAN_CHASE_MAX_BYTES) continue;
     let text; try { text = fs.readFileSync(fp, 'utf8'); } catch (_) { continue; }
     // Split-then-test, never a global scan: an unbounded [\w.-]+ prefix backtracks
     // quadratically on long unbroken runs (a 200k-char line = ~4e10 steps — measured hang).
@@ -1041,7 +1054,7 @@ function logLine(projectDir, msg) {
     const dir = stateDir(projectDir);
     fs.mkdirSync(dir, { recursive: true });
     const log = path.join(dir, 'usage.log');
-    try { if (fs.statSync(log).size > 256 * 1024) fs.renameSync(log, `${log}.1`); } catch (_) { /* none yet */ }
+    try { if (fs.statSync(log).size > USAGE_LOG_ROTATE_BYTES) fs.renameSync(log, `${log}.1`); } catch (_) { /* none yet */ }
     fs.appendFileSync(log, `${new Date().toISOString()}  ${msg}\n`);
   } catch (_) { /* logging must never throw */ }
 }
@@ -1366,7 +1379,7 @@ function appendSpendLedger(entry) {
     fs.appendFileSync(p, JSON.stringify(entry) + '\n');
     // prune lazily, only once the file is big enough to matter (keeps the Stop path cheap);
     // trailing 6h covers the 5h window + slack
-    if (fs.statSync(p).size > 131072) {
+    if (fs.statSync(p).size > SPEND_LEDGER_PRUNE_BYTES) {
       const keepAfter = Date.now() - 6 * 3600 * 1000;
       const kept = fs.readFileSync(p, 'utf8').split('\n').filter(l => {
         if (!l) return false;
@@ -1405,7 +1418,7 @@ function spikeAttribution(entries, sid) {
     else others[e.sid] = (others[e.sid] || 0) + e.usd;
   }
   const otherUsd = Object.values(others).reduce((a, v) => a + v, 0);
-  const busyOthers = Object.values(others).filter(v => v >= 0.02).length;
+  const busyOthers = Object.values(others).filter(v => v >= BUSY_SESSION_DUST_USD).length;
   const total = thisUsd + otherUsd;
   if (total <= 0) return null;
   return { thisUsd, otherUsd, busyOthers, sessions: busyOthers + 1, share: thisUsd / total };
@@ -1416,7 +1429,7 @@ function spikeAttribution(entries, sid) {
 // is the materiality bar: below it the single-turn story still holds. Pure + exported for tests.
 function spikeCopyMode(attr) {
   if (!attr) return 'unknown';
-  if (attr.busyOthers >= 1 && attr.share <= 0.85) return 'multi';
+  if (attr.busyOthers >= 1 && attr.share <= SPIKE_SOLO_SHARE_FLOOR) return 'multi';
   return 'solo';
 }
 
@@ -1656,7 +1669,7 @@ async function onUserPromptSubmit(data, projectDir) {
       const bombCost = usd$
         ? `the per-turn floor is now ≥ ${fmtUSD(m.turnFloorUSD)} (50 more turns ≈ ` +
           `${fmtUSD(m.turnFloorUSD * 50)})`
-        : `~${fmtK(Math.round(jump * 0.1))} tokens per cache-warm turn (a cache read, ~10% ` +
+        : `~${fmtK(Math.round(jump * CACHE_READ_X))} tokens per cache-warm turn (a cache read, ~10% ` +
           `weight), and ${fmtK(jump)} of context-window headroom gone until trimmed`;
       notes.push(
         `context-bomb: something just loaded +${fmtK(jump)} tokens into this conversation` +
@@ -1755,7 +1768,7 @@ async function onUserPromptSubmit(data, projectDir) {
       } else {
         st.curScope = cur.scope; st.curScopePrompts = 1;
         if (tenures.length > 1) logLine(projectDir,
-          `sid=${sid.slice(0, 8)} scope="${cur.scope}" ctx=${fmtK(m.liveContext)}`);
+          `sid=${sid.slice(0, SID_SHORT_LEN)} scope="${cur.scope}" ctx=${fmtK(m.liveContext)}`);
       }
       cur.prompts = st.curScopePrompts;
       // Defer loop: consume a model-written drift-deferred flag (the in-turn judge refused the
@@ -1764,13 +1777,13 @@ async function onUserPromptSubmit(data, projectDir) {
       const deferred = consumeDriftDeferred(projectDir);
       driftDeferralTick(st, deferred, cfg.driftRetryPrompts);
       if (deferred && st.driftSnooze) logLine(projectDir,
-        `sid=${sid.slice(0, 8)} drift-deferred scope="${st.driftSnooze.scope}" retry@${st.driftSnooze.retryAtPrompts}p`);
+        `sid=${sid.slice(0, SID_SHORT_LEN)} drift-deferred scope="${st.driftSnooze.scope}" retry@${st.driftSnooze.retryAtPrompts}p`);
       const v = driftVerdict(tenures, m.liveContext, cfg);
       if (v.fire && st.nudgedScope !== cur.scope) {
         st.nudgedScope = cur.scope;
         st.driftSnooze = null;
         logLine(projectDir,
-          `sid=${sid.slice(0, 8)} drift-nudge from="${v.dominant}" to="${cur.scope}" prior=${v.priorPct}%`);
+          `sid=${sid.slice(0, SID_SHORT_LEN)} drift-nudge from="${v.dominant}" to="${cur.scope}" prior=${v.priorPct}%`);
         notes.push(driftNote(v.dominant, cur.scope, v.priorPct, cfg.driftAutoMigrate, m.liveContext));
         // R11 (revised 2026-07-21): stage a recover-pointer pinned to the current tenure's
         // enteredIso — the drifted thread's exact boundary. /continue's auto mode reads
@@ -1940,7 +1953,7 @@ function onStop(data, projectDir) {
   st.lastTurnDeltaUsd = Math.max(0, delta);
   // R12a attribution ledger — this turn's spend, visible to every OTHER session's spike check
   // (the meter is account-level; see spendLedgerPath). Dust floor keeps no-op turns out.
-  if (cfg.windowSpikeWarn && delta > 0.001) {
+  if (cfg.windowSpikeWarn && delta > LEDGER_ENTRY_DUST_USD) {
     appendSpendLedger({ ts: new Date().toISOString(), sid,
       proj: path.basename(projectDir || ''), usd: Math.round(delta * 10000) / 10000 });
   }
@@ -1967,7 +1980,7 @@ function onStop(data, projectDir) {
   const agentsPart = m.agents.files
     ? ` agents=${fmtUSD(m.agents.usd)}/${m.agents.files}f` : '';
   logLine(projectDir,
-    `sid=${sid.slice(0, 8)} turn=+${fmtUSD(Math.max(0, delta))} session=${fmtUSD(m.usd)} ` +
+    `sid=${sid.slice(0, SID_SHORT_LEN)} turn=+${fmtUSD(Math.max(0, delta))} session=${fmtUSD(m.usd)} ` +
     `tok=${fmtK(sessionTokens(m))}${agentsPart} ctx=${fmtK(m.liveContext)} ` +
     `floor=${fmtUSD(m.turnFloorUSD)}/turn turns=${m.turns} ${models}`);
 }
@@ -2212,11 +2225,11 @@ function scanWindow(cutoff) {
       }
       if (!fresh) continue;
       const m = meterSession(fp, { sinceMs: cutoff });
-      if (m.usd < 0.005) continue;
+      if (m.usd < ROLLUP_DUST_USD) continue;
       out.usd += m.usd;
       out.tokens += sessionTokens(m);
       out.rows.push({
-        label: `${proj.replace(/^C--/, '')}/${f.slice(0, 8)}`, sid: f.slice(0, 8),
+        label: `${proj.replace(/^C--/, '')}/${f.slice(0, SID_SHORT_LEN)}`, sid: f.slice(0, SID_SHORT_LEN),
         usd: m.usd, tok: sessionTokens(m),
         agentsUsd: m.agents.usd, agentsTok: tokensOf(m.agents.perModel),
       });
@@ -2342,7 +2355,7 @@ function analyzeSession(transcriptPath, cfg) {
     const gapMin = (reqs[i].ts - reqs[i - 1].ts) / 60000;
     if (gapMin > cfg.idleWarnMinutes && reqs[i - 1].ctx >= cfg.contextWarnTokens) {
       res.ttlGaps.push({ gapMin: Math.round(gapMin), endTs: reqs[i].ts, ctx: reqs[i - 1].ctx,
-        rewriteUSD: (reqs[i - 1].ctx * priceFor(reqs[i].model).inp * 2) / 1e6 });
+        rewriteUSD: (reqs[i - 1].ctx * priceFor(reqs[i].model).inp * CACHE_WRITE_1H_X) / 1e6 });
     }
   }
 
@@ -2366,7 +2379,7 @@ const estTok = chars => Math.round(chars / CHARS_PER_TOKEN);
 function renderAnalysis(a, usd$) {
   const lines = [];
   const t = a.totals;
-  lines.push(`SESSION ${a.sid.slice(0, 8)} · ${a.project}`);
+  lines.push(`SESSION ${a.sid.slice(0, SID_SHORT_LEN)} · ${a.project}`);
   lines.push(`  ${fmtWhen(a.startTs)} → ${fmtWhen(a.endTs)} · ${fmtDur(a.endTs - a.startTs)} wall · ` +
     `${a.requests} API requests · models: ${a.models.map(shortModel).join(', ') || '?'}`);
   lines.push('', 'TOTALS');
@@ -2430,7 +2443,7 @@ function resolveTranscript(arg) {
     let files; try { files = fs.readdirSync(path.join(projects, proj)); } catch (_) { continue; }
     for (const f of files) {
       if (f.endsWith('.jsonl') && f.startsWith(arg)) {
-        hits.push({ fp: path.join(projects, proj, f), label: `${proj.replace(/^C--/, '')}/${f.slice(0, 8)}` });
+        hits.push({ fp: path.join(projects, proj, f), label: `${proj.replace(/^C--/, '')}/${f.slice(0, SID_SHORT_LEN)}` });
       }
     }
   }
@@ -2547,7 +2560,7 @@ async function report(transcriptPath) {
     for (const r of win.rows.slice(0, 8)) {
       const amt = (usd$ ? fmtUSD(r.usd) : fmtK(r.tok)).padStart(7);
       const ag = usd$
-        ? (r.agentsUsd >= 0.005 ? ` (agents ${fmtUSD(r.agentsUsd)})` : '')
+        ? (r.agentsUsd >= ROLLUP_DUST_USD ? ` (agents ${fmtUSD(r.agentsUsd)})` : '')
         : (r.agentsTok ? ` (agents ${fmtK(r.agentsTok)})` : '');
       lines.push(`  ${amt}  ${r.label}${ag}` +
         (cfg.analyzeHint ? ` · /analyze-session ${r.sid}` : ''));
