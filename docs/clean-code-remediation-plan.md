@@ -80,12 +80,12 @@ assume. **Verify:** `npm test`; `grep -rn "resolveMarker\|migrateReceipt" --incl
 
 **Verify:** `npm test`. **Commit:** `Changelog: none`.
 
-### ☐ 1.4 · M · ~30 min — sync-docs escape hardening
+### ☑ 1.4 · M · ~30 min — sync-docs escape hardening (DONE 2026-07-24, see Ledger)
 
-- [ ] Replace the single-quote-only escapes (`replace(/'/g, "\\'")` sites in
+- [x] Replace the single-quote-only escapes (`replace(/'/g, "\\'")` sites in
       `generateTreeInfo` / tree HTML) with one `jsEscape` helper that also handles backslash
       and newline; reuse the existing `escapeTemplateLiteral` where it fits.
-- [ ] Regenerate docs; the ratchet demands byte-parity — with today's inputs the output must
+- [x] Regenerate docs; the ratchet demands byte-parity — with today's inputs the output must
       not change (no current desc contains a backslash; if one does, the regen diff is the fix
       working — commit it with the code).
 
@@ -342,3 +342,20 @@ manual smoke: one prompt in a scratch session paints working→idle correctly.
     exists (the `return stale` only covers missing-token and non-OK paths) — behavior change,
     would need its own item.
   - Deviations: none. Next: 1.4.
+
+- **2026-07-24 — 1.4 sync-docs escape hardening — DONE.** Commit `d3310f1`, `npm test` green
+  before and after (full chain, 206 hook tests), `npx eslint .` clean.
+  - New `jsEscape(str)` helper beside `escapeTemplateLiteral` (`.claude/scripts/sync-docs.js:244`):
+    backslash first, then `'`, `\r`, `\n` — replacing all five single-quote-only sites (four in
+    `generateTreeInfo`: empty-folder desc, folder desc, file `escapedDesc`, trigger; one in
+    `generateFileContents`: emptyMessage). The template-literal sites already used
+    `escapeTemplateLiteral` — untouched, as the item anticipated. Values/output unchanged.
+  - Byte-parity held: regen after the edit produced an empty `git diff --stat .claude/docs`
+    (no current desc/trigger/emptyMessage contains a backslash or newline), so nothing to
+    commit under `.claude/docs`.
+  - Sanity-checked beyond the suite: round-trip eval of a hostile string (Windows path
+    backslashes, apostrophe, CRLF, trailing backslash) survives jsEscape; the old escape
+    SyntaxErrors on the same input. Note for anyone re-checking by shell one-liner: Git Bash
+    eats the backslashes in inline `node -e` args — use a script file.
+  - Deviations: none. Next: 2.1 (Phase 2 — split a/b/c; consider dedicating the session to
+    2.1a alone, the substep is L and pre-split).
