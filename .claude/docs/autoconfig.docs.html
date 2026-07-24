@@ -2511,12 +2511,12 @@ Maintain it across the session:
  *                       systemMessage when the topics buried behind the current one outweigh 2× the
  *                       session's fixed overhead — the point where a /clear pays for itself in a
  *                       handful of turns (see clearAdvice)
- *   SessionStart     -> ✻ idle "Claude Code — New session" (or an existing title on resume/compact)
+ *   SessionStart     -> ✻ idle "Claude Code — New session" after a /clear (a /continue re-arms the
+ *                       carry of the previous title); an existing/carried title on resume/compact/relaunch
  *                       + inject the FULL RULES block — once per session instead of every prompt
  *                       (~90% less directive overhead); resume/compact re-inject so a squeezed
  *                       context re-learns the rules.
- *
- * Dedupe: when this file is the USER-LEVEL copy (~/.claude/hooks) and the project ships its own`
+ *`
             },
             'feedback-feedback': {
                 filename: 'FEEDBACK.md',

@@ -520,20 +520,22 @@ test('compact source re-injects the FULL rules (a squeezed context re-learns the
 console.log();
 
 // ---- Title carry-over across a /clear (lineage -> previous session's last title) ----
-// recordLineage stamps {sid}.lineage.json{prevSid} on a rotation; a fresh session with no title of
-// its own paints the PREVIOUS session's last title ({prevSid}.txt) instead of the bare folder name,
-// so /clear + /continue keeps showing the work. carriedTitle/displayTitle centralize this, and the
-// carried title must NOT seed the file (else BASELINE stops firing and the model can't re-author).
+// recordLineage stamps {sid}.lineage.json{prevSid,source} on a rotation. A same-tab RELAUNCH
+// (source 'startup') carries the previous session's last title unconditionally — the tab is still
+// that work. A /CLEAR (source 'clear') does NOT carry: the next context could be anything, so the
+// tab shows the New-session placeholder until a /continue prompt stamps {sid}.continued and re-arms
+// the carry. carriedTitle/displayTitle centralize this, and the carried title must NOT seed the
+// file (else BASELINE stops firing and the model can't re-author).
 console.log('Title carry-over (lineage):');
 
-function writeLineage(cwd, sid, prevSid) {
+function writeLineage(cwd, sid, prevSid, source = 'clear') {
   const file = path.join(cwd, '.claude', 'hooks', '.titles', `${sid}.lineage.json`);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(
-    { prevSid, tid: 't-test', source: 'clear', ts: '2026-07-20T00:00:00.000Z' }));
+    { prevSid, tid: 't-test', source, ts: '2026-07-20T00:00:00.000Z' }));
 }
 
-test('fresh session with a predecessor -> carries the previous session\'s last title (not the folder name)', () => {
+test('post-/clear /continue -> re-arms the carry: stamps {sid}.continued + paints the previous title', () => {
   const cwd = mkWorkspace();
   const sid = 'carry-1', prevSid = 'carry-prev-1';
   writeTitle(cwd, prevSid, 'Title Hooks — Carry Last Title');   // the previous session's final title
@@ -541,17 +543,33 @@ test('fresh session with a predecessor -> carries the previous session\'s last t
   const r = runHook({ hook_event_name: 'UserPromptSubmit', session_id: sid, cwd, prompt: '/continue' });
   assert(titleText(r.shown) === 'Title Hooks — Carry Last Title',
     `expected the carried title, got "${titleText(r.shown)}"`);
+  const flag = path.join(cwd, '.claude', 'hooks', '.titles', `${sid}.continued`);
+  assert(fs.existsSync(flag), '/continue must stamp {sid}.continued');
+  const r2 = runHook({ hook_event_name: 'UserPromptSubmit', session_id: sid, cwd, prompt: 'keep going' });
+  assert(titleText(r2.shown) === 'Title Hooks — Carry Last Title',
+    `the carry must stay armed on later prompts, got "${titleText(r2.shown)}"`);
 });
 
-test('SessionStart with a predecessor -> idle glyph + carried title (kills the folder-name flicker)', () => {
+test('SessionStart with a relaunch predecessor -> idle glyph + carried title (kills the folder-name flicker)', () => {
   const cwd = mkWorkspace();
   const sid = 'carry-2', prevSid = 'carry-prev-2';
   writeTitle(cwd, prevSid, 'Journal Modal — Fix Overflow');
-  writeLineage(cwd, sid, prevSid);
+  writeLineage(cwd, sid, prevSid, 'startup');
   const r = runHook({ hook_event_name: 'SessionStart', session_id: sid, cwd, source: 'startup' });
   assert(leadsWithGlyph(r.codepoints, IDLE), `expected idle glyph, got ${r.shown}`);
   assert(titleText(r.shown) === 'Journal Modal — Fix Overflow',
     `expected the carried title over the placeholder, got "${titleText(r.shown)}"`);
+});
+
+test('SessionStart after a /clear -> New-session placeholder, NOT the old title', () => {
+  const cwd = mkWorkspace();
+  const sid = 'carry-5', prevSid = 'carry-prev-5';
+  writeTitle(cwd, prevSid, 'GWS Domain Reclaim — Diagnose Association');
+  writeLineage(cwd, sid, prevSid);                              // source: 'clear'
+  const r = runHook({ hook_event_name: 'SessionStart', session_id: sid, cwd, source: 'clear' });
+  assert(leadsWithGlyph(r.codepoints, IDLE), `expected idle glyph, got ${r.shown}`);
+  assert(/New session/.test(titleText(r.shown)),
+    `expected the New-session placeholder, got "${titleText(r.shown)}"`);
 });
 
 test('carry-over does NOT seed the title file -> BASELINE still fires (model re-authors)', () => {
@@ -562,6 +580,8 @@ test('carry-over does NOT seed the title file -> BASELINE still fires (model re-
   const r = runHook({ hook_event_name: 'UserPromptSubmit', session_id: sid, cwd, prompt: 'start a new thing' });
   assert(!fs.existsSync(titleFileFor(cwd, sid)), 'carry-over must not pre-create the title file');
   assert(r.directive && r.directive.length > 0, 'the first-turn directive must still be injected');
+  assert(titleText(r.shown) !== 'Old Scope — Old Goal',
+    'a post-/clear prompt that is not /continue must not wear the old title');
 });
 
 test('the session\'s own authored title wins over a carried title', () => {
@@ -583,6 +603,15 @@ test('carriedTitle() unit: no lineage -> empty; lineage + prev file -> that titl
   fs.writeFileSync(path.join(dir, 'orphan.lineage.json'), JSON.stringify({ prevSid: 'p' }));
   fs.writeFileSync(path.join(dir, 'p.txt'), 'Prev — Title');
   assert(carriedTitle(dir, 'orphan') === 'Prev — Title', 'carriedTitle should read {prevSid}.txt');
+  // /clear-stamped lineage suppresses the carry until {sid}.continued re-arms it; relaunch/resume
+  // sources — and legacy stamps with no source at all (above) — carry unconditionally.
+  fs.writeFileSync(path.join(dir, 'orphan.lineage.json'), JSON.stringify({ prevSid: 'p', source: 'clear' }));
+  assert(carriedTitle(dir, 'orphan') === '', 'a /clear lineage must not carry before /continue');
+  fs.writeFileSync(path.join(dir, 'orphan.continued'), '1');
+  assert(carriedTitle(dir, 'orphan') === 'Prev — Title', 'the .continued flag must re-arm the carry');
+  fs.unlinkSync(path.join(dir, 'orphan.continued'));
+  fs.writeFileSync(path.join(dir, 'orphan.lineage.json'), JSON.stringify({ prevSid: 'p', source: 'startup' }));
+  assert(carriedTitle(dir, 'orphan') === 'Prev — Title', 'a relaunch lineage must carry unconditionally');
 });
 
 // Regression (2026-07-21): the anchor cache was keyed by CLAUDE_CODE_SSE_PORT, which is per

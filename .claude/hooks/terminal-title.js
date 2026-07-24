@@ -22,7 +22,8 @@
  *                       systemMessage when the topics buried behind the current one outweigh 2× the
  *                       session's fixed overhead — the point where a /clear pays for itself in a
  *                       handful of turns (see clearAdvice)
- *   SessionStart     -> ✻ idle "Claude Code — New session" (or an existing title on resume/compact)
+ *   SessionStart     -> ✻ idle "Claude Code — New session" after a /clear (a /continue re-arms the
+ *                       carry of the previous title); an existing/carried title on resume/compact/relaunch
  *                       + inject the FULL RULES block — once per session instead of every prompt
  *                       (~90% less directive overhead); resume/compact re-inject so a squeezed
  *                       context re-learns the rules.
@@ -140,6 +141,12 @@ async function handle(data) {
     const askFile = path.join(dir, `${sid}.ask`);
     if (fileExists(askFile)) { try { fs.unlinkSync(askFile); } catch (_) { /* ignore */ } }
     ensureStartedAt(dir, sid); // belt for sessions that predate the guard (no SessionStart stamp)
+    // /continue re-arms the post-/clear title carry (see carriedTitle): the user is explicitly
+    // resuming the previous session's work, so its title becomes right again. One-way stamp,
+    // BEFORE the title resolves below so the restored title paints on this very turn.
+    if (/^\s*\/continue(?:\s|$)/.test(String(data.prompt || ''))) {
+      try { fs.writeFileSync(path.join(dir, `${sid}.continued`), '1'); } catch (_) { /* best-effort */ }
+    }
     const title = normalize(displayTitle(file, dir, sid, cwd));
     // Duplicate-session guard: is another tab already live on this exact work? (see dupeGuardResult)
     const guard = dupeGuardResult(dir, sid, title, cwd);
@@ -208,8 +215,9 @@ async function handle(data) {
     // Stamp this session's birth time (ordering token for the duplicate-session guard's kill mode).
     ensureStartedAt(dir, sid);
     // Fresh-session title: this session's own (preferred on resume/compact), else the previous
-    // session's last title carried over so a /clear + /continue keeps showing the work instead of
-    // the bare folder name (the first turn's BASELINE authoring supersedes it), else the placeholder.
+    // session's last title carried over on a same-tab relaunch (the first turn's BASELINE authoring
+    // supersedes it), else the placeholder. A /clear-born session gets the PLACEHOLDER, not the
+    // carry — the next prompt could be anything; /continue re-arms the carry (see carriedTitle).
     const title = normalize(readTitle(file) || carriedTitle(dir, sid) || 'Claude Code - New session');
     const out = setTitle(GLYPH.idle, title);
     // Inject the FULL rulebook here — once per session — instead of on every prompt. All sources
@@ -1419,14 +1427,19 @@ function folderName(cwd) {
 // The last title the PREVIOUS session in THIS terminal showed. SessionStart's recordLineage stamps
 // {sid}.lineage.json with prevSid on a /clear or same-tab relaunch; that session's persisted title
 // file ({prevSid}.txt) still holds its final title (title files aren't pruned). Returns '' when there
-// is no predecessor (a brand-new terminal) or its file is gone. Deterministic for the life of the
-// session — both inputs are frozen once written — so every paint AND the byte-identical console-match
-// needle (resolveSessionPid) agree on it.
+// is no predecessor (a brand-new terminal) or its file is gone. A /clear-born session does NOT carry:
+// a /clear is a deliberate reset and the next prompt could be anything, so the tab shows the
+// new-session placeholder — until the user runs /continue, whose UserPromptSubmit stamps
+// {sid}.continued and re-arms the carry (the predecessor's title IS what's being resumed). Relaunch
+// and resume keep the unconditional carry: nothing was reset, the tab is still that work. All inputs
+// (lineage, flag, prev title) live on disk and only move forward, so every paint AND the byte-identical
+// console-match needle (resolveSessionPid) agree at any instant.
 function carriedTitle(dir, sid) {
   try {
     if (!sid) return '';
     const lin = JSON.parse(fs.readFileSync(path.join(dir, `${sid}.lineage.json`), 'utf8'));
     if (!lin || !lin.prevSid) return '';
+    if ((lin.source || '') === 'clear' && !fileExists(path.join(dir, `${sid}.continued`))) return '';
     return readTitle(path.join(dir, `${lin.prevSid}.txt`));
   } catch (_) { return ''; }
 }
@@ -1447,7 +1460,8 @@ function displayTitle(file, dir, sid, cwd) {
 // mtime is the per-turn heartbeat, and a closed tab's glyph simply ages out of the window. Lineage
 // predecessors — the sids this TAB used to be before a /clear ({sid}.lineage.json chain) — are
 // excluded: the new session CARRIES the old title until it authors its own (displayTitle →
-// carriedTitle), so the first prompt after a /clear would otherwise collide with its own ghost,
+// carriedTitle; after a /continue re-arm or a same-tab relaunch), so it would otherwise collide
+// with its own ghost,
 // whose glyph is still inside the window (observed 2026-07-21: false "Bug-hunt" twin). Modes
 // (env CLAUDE_TITLE_DUPE): 'off' disables; 'warn' (DEFAULT) surfaces a one-shot systemMessage and
 // lets the turn proceed; 'kill' stands the NEWER session down (blocks its prompt with a reason).
