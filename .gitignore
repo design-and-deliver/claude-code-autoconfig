@@ -35,3 +35,7 @@ ARTICLES/
 
 # Local feature pilots / experiments (not distributed)
 pilots/
+
+# Per-machine terminal-title fleet list (personal repo paths — never committed;
+# see scripts/sync-terminal-title.js)
+scripts/terminal-title-fleet.local.json

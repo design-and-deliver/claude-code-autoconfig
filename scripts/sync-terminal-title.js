@@ -10,10 +10,12 @@
  *   node scripts/sync-terminal-title.js           # CHECK: report drift, exit 1 if any (pre-commit / CI friendly)
  *   node scripts/sync-terminal-title.js --write   # WRITE: copy the canonical over every drifted target
  *
- * This is NOT shipped to users (scripts/ is outside package.json "files"), so the personal fleet list
- * below stays private. Edit TARGETS when you add or drop a repo. A missing target is skipped, not failed
- * (that repo may not be checked out here). The live-twin-parity test is the CI-side guard for the
- * ~/.claude twin on the dev box; this script is the actuator that puts every copy back in sync.
+ * This is NOT shipped to users (scripts/ is outside package.json "files"). The per-machine repo
+ * list lives in the gitignored sibling scripts/terminal-title-fleet.local.json — this file IS
+ * tracked in a public repo, so personal paths must never be hardcoded here (they were, until the
+ * 2026-07-24 review). A missing target is skipped, not failed (that repo may not be checked out
+ * here). The live-twin-parity test is the CI-side guard for the ~/.claude twin on the dev box;
+ * this script is the actuator that puts every copy back in sync.
  */
 const fs = require('fs');
 const os = require('os');
@@ -23,12 +25,23 @@ const path = require('path');
 const CANONICAL_FILES = ['terminal-title.js', 'terminal-title.directive.md'];
 const canonicalFor = f => path.join(__dirname, '..', '.claude', 'hooks', f);
 
-// Personal fleet — the copies that must stay byte-derived from the canonical. Edit as repos change.
+// Personal fleet — the copies that must stay byte-derived from the canonical. The ~/.claude twin
+// is universal; the machine-specific repo list comes from the gitignored local file:
+//   scripts/terminal-title-fleet.local.json
+//   [{ "label": "my-repo", "dir": "C:\\path\\to\\repo\\.claude\\hooks" }, ...]
+// Absent/invalid local file just means the fleet is the ~/.claude twin alone.
+const LOCAL_FLEET_FILE = path.join(__dirname, 'terminal-title-fleet.local.json');
+function readLocalFleet() {
+  try {
+    const list = JSON.parse(fs.readFileSync(LOCAL_FLEET_FILE, 'utf8'));
+    return Array.isArray(list)
+      ? list.filter(t => t && typeof t.label === 'string' && typeof t.dir === 'string')
+      : [];
+  } catch (_) { return []; }
+}
 const TARGET_DIRS = [
   { label: 'global (~/.claude)',  dir: path.join(os.homedir(), '.claude', 'hooks') },
-  { label: 'job-agent-extension', dir: 'C:\\CODE\\job-agent-extension\\.claude\\hooks' },
-  { label: 'wifi-app',            dir: 'C:\\CODE\\wifi-app\\.claude\\hooks' },
-  { label: 'test',                dir: 'C:\\CODE\\test\\.claude\\hooks' },
+  ...readLocalFleet(),
 ];
 const TARGETS = TARGET_DIRS.flatMap(t =>
   CANONICAL_FILES.map(f => ({ label: `${t.label} ${f === 'terminal-title.js' ? '' : '(directive)'}`.trim(),
