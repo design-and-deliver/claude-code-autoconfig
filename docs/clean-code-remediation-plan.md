@@ -1,0 +1,281 @@
+# Clean-code remediation plan
+
+**Goal:** work off the 2026-07-24 full-repo code review (four parallel reviewers + an ESLint
+complexity census: 67 functions at CC ≥ 10, four files over the repo's own 500-LOC rule) without
+breaking the conventions this package's production users depend on.
+
+**Sources:** `ARTICLES/what-the-code-quality-haters-would-knock.html` (the review),
+`ARTICLES/first-pass-fixes-what-landed-and-what-waits.html` (the executed first pass),
+plus the census data embedded in the review page. The first pass (2026-07-24, see Ledger)
+already landed the safe bug/lie/privacy fixes with new regression suites.
+
+**How to execute:** one substep per fresh session. Read the ⛔ traps below before ANY item.
+Each substep: make it green (`npm test` before and after), run its **Verify** commands, commit
+with a `Changelog:` trailer (dev-gated work → `Changelog: none`), append a Ledger entry, then
+`/clear` + `/continue` (plan-aware; resumes at the next unchecked substep).
+
+---
+
+## ⛔ Standing trap warnings — read before ANY item
+
+- **`.claude/hooks/terminal-title.js` is the fleet-synced canonical.** Edit only this copy, then
+  `node scripts/sync-terminal-title.js --write`. It must stay a SINGLE standalone file — hooks
+  are copied file-by-file into user projects and to `~/.claude`; a multi-file split breaks
+  deployment. Same constraint for every `.claude/hooks/*.js`.
+- **token-guard's `--analyze` digest wording is a machine interface** ("live context at end",
+  RENT/BOMBS/FLEETS/TTL headers) and the `.titles/{sid}.history.jsonl` ledger field names
+  (`ts`, `title`, `tokens`) are read by `/analyze-session` and `/migrate-new-session`. Never
+  rename either side.
+- **Tests parse `bin/cli.js` literals by regex** (`DEV_ONLY_FILES` etc. must stay one-line,
+  single-quoted) until substep 2.1 replaces them. Until then, any cli.js refactor that moves
+  those literals breaks the suite — and that is the tests' fault, not a license to reformat.
+- **Stored-state / serialized shapes are additive-only** (plugins ledger, settings.json,
+  recover.json, update markers). No renames, no type changes, no reordering.
+- **Hooks fail silent by design** (swallow + exit 0). "It didn't error" proves nothing — run
+  `npm test` (the hook suites only run there) after every hook edit.
+- **Generated files:** `CHANGELOG.md` and `.claude/docs/autoconfig.docs.html` are rebuilt by
+  scripts; never hand-edit. Any change under `.claude/` needs `node .claude/scripts/sync-docs.js`
+  + committing the regenerated docs (the ratchet test enforces byte-parity).
+- **`test/golden-endings.json` and `.claude/updates/` numbering are append-only.**
+- **The 3-rule eslint floor is a documented decision** (weak-model plan substep 2.6). Substep 2.3
+  below must reconcile with it explicitly, not silently override it.
+
+---
+
+## Phase 1 — finish stopping the repo from lying (cheap, no product logic)
+
+### ☑ 1.0 · M · ~60 min — First pass (DONE 2026-07-24, see Ledger)
+
+Bug/honesty/privacy fixes + 3 new regression suites. Details in the Ledger entry.
+
+### ☐ 1.1 · M · ~45 min — Retire the mothballed R11 block from token-guard
+
+- [ ] Verify the R11 dispatch is still commented out and `resolveMarker` / `clearMarker` /
+      `onSessionStart` / `migrateReceipt` / `writeMigrateCandidate` have no live callers
+      (grep each name across the repo INCLUDING `.claude/commands/*.md` prose — a command
+      file may instruct Claude to call one).
+- [ ] Delete the retired block and its exports; git history is the museum (the banner
+      already names the retirement date).
+- [ ] Re-run the hook suites; update the file-header comment.
+
+⚠ Trap: `/migrate-new-session` reads the drift *ledger*, not these functions — confirm, don't
+assume. **Verify:** `npm test`; `grep -rn "resolveMarker\|migrateReceipt" --include="*.md" --include="*.js" .claude bin test` returns only the plan/articles.
+**Commit:** `refactor(token-guard): delete retired R11 migration block` + `Changelog: none`.
+
+### ☐ 1.2 · M · ~45 min — Name token-guard's magic numbers
+
+- [ ] One constants block near the top: dust floors (0.02 / 0.001 / 0.005), materiality 0.85,
+      cache-read 0.1× / write 1.25× / 2× multipliers, prune caps (unify `131072` vs `256 * 1024`
+      — pick one spelling, keep values), `guard++ < 64`, `2e6`, sid-slice 8.
+- [ ] Values unchanged — this substep renames, never retunes.
+
+**Verify:** `npm test` (hook suites cover the touched paths); `npx eslint .`.
+**Commit:** `refactor(token-guard): name the sizing/threshold constants` + `Changelog: none`.
+
+### ☐ 1.3 · S · ~15 min — Stop hardcoding the impersonated client version
+
+- [ ] `CLAUDE_CODE_UA = 'claude-code/2.1.207'` (token-guard `fetchOfficialUsage`): derive from
+      the installed Claude Code version if cheaply discoverable, else keep the pin but add a
+      dated comment with the rotation rule and a test that the fetch degrades silently.
+
+**Verify:** `npm test`. **Commit:** `Changelog: none`.
+
+### ☐ 1.4 · M · ~30 min — sync-docs escape hardening
+
+- [ ] Replace the single-quote-only escapes (`replace(/'/g, "\\'")` sites in
+      `generateTreeInfo` / tree HTML) with one `jsEscape` helper that also handles backslash
+      and newline; reuse the existing `escapeTemplateLiteral` where it fits.
+- [ ] Regenerate docs; the ratchet demands byte-parity — with today's inputs the output must
+      not change (no current desc contains a backslash; if one does, the regen diff is the fix
+      working — commit it with the code).
+
+**Verify:** `node .claude/scripts/sync-docs.js && git diff --stat .claude/docs` then `npm test`.
+**Commit:** `fix(sync-docs): escape backslashes/newlines in generated JS strings` + `Changelog: none`.
+
+---
+
+## Phase 2 — make wrong edits fail loudly (unblocks Phase 3)
+
+### ☐ 2.1 · L · ~2 hr (split a/b/c) — Replace the 44 source-grep assertions with behavior
+
+The single highest-leverage item: `test/cli-install.test.js` asserts literal source strings
+("pass VACUOUSLY" per `cli-behavior.test.js:7-9`), which both misses real breakage and blocks
+every cli.js refactor. Pattern to copy: `cli-behavior.test.js` (drives the real binary against
+temp fixtures).
+
+- [ ] 2.1a — copy/force semantics: behavioral tests for fresh install vs `--force` overwrite
+      vs preserve-user-edits, per file class.
+- [ ] 2.1b — upgrade vs first-install flows (version marker, `/autoconfig-update` vs
+      `/autoconfig` messaging) as behavior.
+- [ ] 2.1c — delete each grep assertion ONLY as its behavioral replacement lands (map them
+      1:1 in the commit message); keep the DEV_ONLY_FILES literal-parsing helpers — those are
+      a data contract (contracts.test.js), not vacuous.
+
+**Verify:** `npm test`; then mutation-check one behavior per cluster (e.g. flip `copyDirIfMissing`
+to `copyDir` locally → the new tests must fail; revert).
+**Commit:** per sub-item, `test(cli): replace source-grep assertions with behavior — <cluster>` + `Changelog: none`.
+
+### ☐ 2.2 · M · ~60 min — One shared test harness for `test/*.js`
+
+- [ ] Extract `test/_harness.js` (`test`, `assert`, counters, exit summary, `runCli`) and
+      migrate the 12 copy-pasted harnesses to it. Keep the `node --test` hook suites as-is
+      (their runner bridge is fine) — document that the repo has exactly TWO frameworks on
+      purpose: one for CLI suites, `node:test` for hooks.
+
+**Verify:** `npm test` (same pass counts per suite as before the migration).
+**Commit:** `test: extract the shared harness` + `Changelog: none`.
+
+### ☐ 2.3 · M · ~45 min — Complexity ratchet (reconcile with the 3-rule lint decision)
+
+- [ ] Decision first (record in this plan's Ledger): the 3-rule eslint floor is documented as
+      deliberate. The ratchet that fits that philosophy is NOT a style rule but a no-growth
+      gate: a test that runs eslint's `complexity` rule programmatically and asserts the
+      violation count/set does not GROW past the checked-in baseline (67 as of 2026-07-24).
+- [ ] Add `test/complexity-ratchet.test.js` + `test/complexity-baseline.json`; shrinking the
+      baseline is allowed and updates the file in the same commit.
+
+**Verify:** `npm test`; add a scratch function with CC 12 → suite must fail; remove it.
+**Commit:** `test: complexity no-growth ratchet` + `Changelog: none`.
+
+### ☐ 2.4 · S · ~20 min — Coverage visibility (c8, no thresholds yet)
+
+- [ ] `npm i -D c8`, `npm run coverage` script wrapping the existing chain; record the
+      baseline number in the Ledger. No gating yet — visibility first.
+
+**Verify:** `npm run coverage` prints a summary; `npm test` unaffected.
+**Commit:** `chore: add c8 coverage script` + `Changelog: none`.
+
+### ☐ 2.5 · M · ~45 min — Tests for plan-progress (the last untested script with logic)
+
+- [ ] Characterization tests for `parsePlan` / `render` against fixture plan docs (this file
+      is a natural fixture: effort tags, microsteps, Ledger).
+
+**Verify:** `npm test`. **Commit:** `test(plan-progress): characterization suite` + `Changelog: none`.
+
+---
+
+## Phase 3 — shrink the god files (each substep shippable; order matters)
+
+### ☐ 3.1 · L · ~2 hr — cli.js grows a `main()` (after 2.1 — not before)
+
+- [ ] Wrap the require-time flow in `function main()` + `if (require.main === module) main();`
+      with NO other change; the literals the contract tests parse stay put.
+- [ ] Delete the two "cannot require cli.js back" apology comments (plugins.js,
+      update-summary.js) once requiring is safe, replacing the `deps` injection only if
+      trivially safe — otherwise leave `deps` and note it.
+
+⚠ Trap: module-scope mutable variables become function-scope — verify no helper defined
+outside `main()` closes over them. **Verify:** `npm test` (post-2.1 suites are behavioral);
+`node bin/cli.js --help`-equivalent smoke in a temp dir; `require('./bin/cli.js')` in `node -e`
+must now be side-effect-free.
+**Commit:** `refactor(cli): move the install flow into main()` + `Changelog: none`.
+
+### ☐ 3.2 · M · ~60 min — cli.js: one `copyTree`, one `boxLine`, one color helper
+
+- [ ] Collapse `copyDirForBackup` / `copyDir` / `copyDirIfMissing` + the inline docs-copy
+      loop into `copyTree(src, dest, {filter, overwrite})`.
+- [ ] `boxLine(text)` (padEnd-based) replaces hand-counted box spaces; box tests keep passing
+      unchanged (they assert rendered width, which is the point).
+- [ ] `paint(color, text)` helper for the 61 raw ANSI literals in cli.js.
+
+**Verify:** `npm test` (box + install suites); visual smoke of the READY box in a temp dir.
+**Commit:** `refactor(cli): copyTree/boxLine/paint helpers` + `Changelog: none`.
+
+### ☐ 3.3 · L · ~2 hr each — token-guard: decompose the three worst handlers in place
+
+Single-file constraint stands (hook deployment); the split is INTO per-rule functions within
+the file, anchored on the pure verdict functions that already exist.
+
+- [ ] 3.3a — `onUserPromptSubmit` (CC 88): one `r<N>...Guard(ctx)` function per rule
+      (R8, R9, meter, R2, R3, R4, fat-context, R6, R12a, R12b, spend-step), each returning
+      `{notes, block}`; the handler becomes a fold over them. Digest wording byte-identical.
+- [ ] 3.3b — `onPreToolUse` (CC 38): same shape.
+- [ ] 3.3c — `analyzeSession` (CC 52): extract the per-concern accumulators; dedupe the
+      region-attribution logic it shares with `attributeJump` into one helper.
+
+**Verify:** `npm test` after EACH sub-item (207 hook tests); `--analyze` output on a real
+transcript diffed byte-for-byte against pre-refactor output.
+**Commit:** one per sub-item + `Changelog: none`.
+
+### ☐ 3.4 · L · ~2 hr — terminal-title: explicit event dispatch + handle() split
+
+⚠ Highest-trap substep: fleet-synced file, cross-process sidecar protocol.
+
+- [ ] First, the safety fix from the review: `handle()`'s fall-through treats ANY unknown
+      event as Stop — add an explicit `event === 'Stop'` guard (unknown events exit quietly)
+      with a hook-suite test.
+- [ ] Then split `handle()` into `onUserPromptSubmit` / `onPostToolUse` / `onNotification` /
+      `onStop` functions in-file; `turnWatch()` stays as-is this substep.
+- [ ] `node scripts/sync-terminal-title.js --write` after; live-twin parity green.
+
+**Verify:** `npm test`; `node scripts/sync-terminal-title.js` (check mode, zero drift);
+manual smoke: one prompt in a scratch session paints working→idle correctly.
+**Commit:** `fix(terminal-title): explicit Stop dispatch; split handle()` +
+`Changelog: More reliable terminal tab status updates`.
+
+### ☐ 3.5 · M · ~60 min — settings-merge: per-domain split
+
+- [ ] `mergeSettingsInto` / `unmergeSettingsFrom` (CC 30 each) → `mergeEnv/mergeHooks/
+      mergePermissions` + unmerge twins; the `added`-delta contract (BH-1) is byte-frozen —
+      plugin-system suite is the guard.
+
+**Verify:** `npm test` (plugin suite incl. the 2026-07-24 corrupt-settings tests).
+**Commit:** `refactor(settings-merge): per-domain helpers` + `Changelog: none`.
+
+---
+
+## Deferred — considered, deliberately not planned
+
+- **Shared hook-lib for the stdin/rotation/delay duplication across hooks** — hooks deploy as
+  standalone files (copyDir + fleet sync); a require()'d lib breaks that model. Revisit only
+  with a build step, which this repo deliberately doesn't have.
+- **arcade-beeps grader dedup with terminal-title** — same standalone-file constraint; the
+  drift risk is real but accepted. A cheaper alternative (parity test asserting the two QTAIL
+  regexes match) can ride along with 3.4 if trivial.
+- **TypeScript / `checkJs`** — high churn across 13k LOC for a repo whose contracts are mostly
+  runtime JSONL shapes; revisit after Phase 3 shrinks the surfaces.
+- **Prettier reformat** — would break sync-docs' exact string markers and destroy blame across
+  the whole repo. At most an `.editorconfig` later.
+- **Changing exit-0-on-refusal paths in cli.js to exit 1** — visible behavior change for
+  production users' scripts; needs an explicit product decision + changelog entry first.
+- **Replacing the embedded C# painter (PAINTER_CS)** — works, version-bump protocol documented;
+  a rewrite risks the one Win32 capability the repo can't test in CI.
+- **Unifying the two test frameworks into one** — 2.2 documents the two-framework split
+  instead; `node:test` is right for hooks, the shared harness is right for CLI suites.
+
+---
+
+## Ledger
+
+- **2026-07-24 — 1.0 first pass — DONE.** Commits `27b1dc4` (plugins), `b751fa4` (ccr),
+  `23146fd` (gls-downscale), `b570d8d` (whats-happening), `3814be6` (token-guard),
+  `37fb79a` (sync-docs), `1919a5e` (fleet privacy), `20f4e2e` (test chain), plus the
+  docs/plan commit that follows. Landed, all with `npm test` green (full suite + 207 hook tests):
+  - `bin/lib/plugins.js` — `pluginRemove` no longer claims success when the settings revert
+    fails: keeps the ledger entry (retryable), warns, exits non-zero. 3 new tests in
+    `test/plugin-system.test.js` (red on HEAD → green).
+  - `bin/ccr.js` — `SAFE_RECOVER_CMD` regex now ENFORCES the "no quotes/metacharacters"
+    property the old comment merely asserted. New `test/ccr.test.js` (6 tests; metachar
+    rejection was red on HEAD).
+  - `.claude/hooks/token-guard.js` — TDZ landmine defused: `CHARS_PER_TOKEN` / `IMAGE_TOK_EST`
+    hoisted to module top (were declared 1,685 lines after first use); `recoverTail`'s bare
+    `/4` named `PROSE_CHARS_PER_TOKEN` (value unchanged, deliberately ≠ CHARS_PER_TOKEN — see
+    comment).
+  - `.claude/scripts/gls-downscale.js` — SKIP note now prints pre-computed `$m` instead of
+    reading `$img.Width` after `Dispose()`. **Discovery:** the review's "confirmed latent bug"
+    claim did NOT reproduce on real Windows PowerShell — the SKIP path worked on HEAD; this is
+    hardening, not a bug fix. New `test/gls-downscale.test.js` (5 behavioral tests, win32-real,
+    CI-skips elsewhere).
+  - `.claude/scripts/whats-happening.js` — `readTitles`/`allTitles` 30-line duplication merged
+    into `scanTitles(predicate)`. New `test/whats-happening.test.js` (5 characterization tests,
+    written green on HEAD before the refactor).
+  - `.claude/scripts/sync-docs.js` — dead comment-only loop branch in `generateTreeInfo`
+    removed; regen byte-identical (ratchet green).
+  - `scripts/sync-terminal-title.js` — personal repo paths moved out of the tracked file into
+    gitignored `scripts/terminal-title-fleet.local.json` (created on this box with the current
+    3 targets; check mode verified: 8/8 targets in sync). Header's false "stays private" claim
+    corrected. **Note:** the old paths remain in git HISTORY; scrubbing history was judged not
+    worth it (they reveal folder names only).
+  - `CLAUDE.md` — Node requirement corrected to `>=18.0.0` (docs now match package.json).
+  - `package.json` — the three new suites wired into the `npm test` chain (before hook-tests).
+  - Deviations: none. Next: 1.1.

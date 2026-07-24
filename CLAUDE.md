@@ -6,7 +6,7 @@ CLI tool that auto-configures Claude Code for any project. One command analyzes 
 
 ## Tech Stack
 
-- **Runtime:** Node.js (>=16.0.0)
+- **Runtime:** Node.js (>=18.0.0)
 - **Type:** npm CLI package
 - **Entry:** `bin/cli.js`
 
