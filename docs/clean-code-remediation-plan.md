@@ -96,7 +96,7 @@ assume. **Verify:** `npm test`; `grep -rn "resolveMarker\|migrateReceipt" --incl
 
 ## Phase 2 — make wrong edits fail loudly (unblocks Phase 3)
 
-### ☐ 2.1 · L · ~2 hr (split a/b/c) — Replace the 44 source-grep assertions with behavior
+### ☑ 2.1 · L · ~2 hr (split a/b/c) — Replace the 44 source-grep assertions with behavior
 
 The single highest-leverage item: `test/cli-install.test.js` asserts literal source strings
 ("pass VACUOUSLY" per `cli-behavior.test.js:7-9`), which both misses real breakage and blocks
@@ -107,9 +107,9 @@ temp fixtures).
       vs preserve-user-edits, per file class. (DONE 2026-07-24, see Ledger)
 - [x] 2.1b — upgrade vs first-install flows (version marker, `/autoconfig-update` vs
       `/autoconfig` messaging) as behavior. (DONE 2026-07-24, see Ledger)
-- [ ] 2.1c — delete each grep assertion ONLY as its behavioral replacement lands (map them
+- [x] 2.1c — delete each grep assertion ONLY as its behavioral replacement lands (map them
       1:1 in the commit message); keep the DEV_ONLY_FILES literal-parsing helpers — those are
-      a data contract (contracts.test.js), not vacuous.
+      a data contract (contracts.test.js), not vacuous. (DONE 2026-07-24, see Ledger)
 
 **Verify:** `npm test`; then mutation-check one behavior per cluster (e.g. flip `copyDirIfMissing`
 to `copyDir` locally → the new tests must fail; revert).
@@ -413,3 +413,33 @@ manual smoke: one prompt in a scratch session paints working→idle correctly.
   - Deviations: none. Next: 2.1c (delete the superseded grep assertions 1:1 — the map is
     in `ab740ef`'s commit body; keep the DEV_ONLY_FILES literal-parsing helpers and the
     command-file prose asserts).
+
+- **2026-07-24 — 2.1c delete the superseded grep assertions — DONE.** Commit `12bbacb`,
+  `npm test` green before and after (full chain, 206 hook tests; cli-behavior holds at 59).
+  Substep 2.1 now fully checked.
+  - `test/cli-install.test.js` 53 → 40 tests: the 13 mapped source-greps deleted (the union
+    of `de23723`'s and `ab740ef`'s maps, restated 1:1 in `12bbacb`'s body), plus
+    `assertCliCopies` (its last user went with them). The two MIXED tests were trimmed, not
+    deleted: the whats-new test kept only its autoconfig-update.md prose half (renamed
+    "/autoconfig-update renders + consumes the what's-new file"), the unsupported-notice
+    test kept only the autoconfig.md relay half — each with a comment naming the fixtures
+    that now own the cli.js halves.
+  - Deviation (deliberate, small): `'CLI copies commands/'` was in NEITHER prior map but
+    rode along — its behavioral twin (F1 "shipped commands are present") predates 2.1a, and
+    keeping it would have kept the dead helper alive. Mapped in the commit body like the rest.
+  - Kept, per the item: the DEV_ONLY_FILES literal-parsing docs-sync tests (data contract),
+    all command-file prose asserts, and five cli.js greps with NO full behavioral twin yet —
+    MANAGED_HOOKS list shape, the --bootstrap pin gate, deprecated-alias pruning logic, the
+    insideClaude guard condition, migrate-before-merge ordering. These are now enumerated in
+    the file header; Phase 3 sessions: they assert literal names/shapes, so 3.1's main()
+    wrap is safe but 3.2-style renames will hit them — replace behaviorally as you go.
+  - Mutation checks re-run AFTER the deletions (proving the surviving net, not the greps,
+    catches breakage): `copyDirIfMissing`→`copyDir` at both copyFn sites → the two F7
+    preserve tests fail (+ collateral F11 failures); `launchCommand` hardcoded → exactly
+    F12(upgrade) fails. Both reverted, `git diff bin/cli.js` empty.
+  - Environment note: repo-wide `npx eslint .` currently fails on an UNCOMMITTED
+    token-guard.js edit (unused `PLAN_STEER_TOK`) belonging to a live twin session's R13
+    work — not this substep's file; left strictly untouched, eslint verified clean on the
+    changed file alone.
+  - Next: 2.2 (extract the shared test harness — the CLI suites still carry 12 copy-pasted
+    `test`/`assert` harnesses).
