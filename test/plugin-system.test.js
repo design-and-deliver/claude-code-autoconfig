@@ -312,6 +312,44 @@ test('a failing add copies nothing (no untracked orphan from a mid-copy abort)',
   assert(!fs.existsSync(path.join(proj4, '.claude', 'hooks', 'first.js')), 'no file may be copied before validation completes (orphan with no ledger record)');
 });
 
+console.log();
+console.log('remove with a corrupt settings.json must not pretend success:');
+
+// 2026-07-24 review: pluginRemove swallowed a settings-revert failure, deleted the ledger
+// entry anyway, and printed "✅ Removed" — leaving the plugin's hooks live in settings.json
+// with no undo record and a green checkmark. It must fail loudly, keep the ledger entry,
+// and stay retryable once settings.json is fixed. (Red on HEAD, green after.)
+const proj5 = path.join(tmpRoot, 'project5');
+const claude5 = path.join(proj5, '.claude');
+fs.mkdirSync(claude5, { recursive: true });
+fs.writeFileSync(path.join(claude5, 'settings.json'), JSON.stringify({ env: {} }, null, 2));
+runCli(proj5, ['plugin', 'add', pluginDir]);
+const mergedSettings = fs.readFileSync(path.join(claude5, 'settings.json'), 'utf8');
+fs.writeFileSync(path.join(claude5, 'settings.json'), '{ this is not JSON');
+
+test('remove exits non-zero and does NOT claim success when settings cannot be reverted', () => {
+  let threw = false, out = '';
+  try { runCli(proj5, ['plugin', 'remove', 'myplugin']); }
+  catch (e) { threw = true; out = (e.stdout || '') + (e.stderr || ''); }
+  assert(threw, 'remove must exit non-zero when settings.json is unparsable');
+  assert(!out.includes('✅ Removed'), 'must not print the success line after a failed revert');
+});
+
+test('the ledger entry survives a failed remove (so the removal can be retried)', () => {
+  const ledger = readJson(path.join(claude5, '.autoconfig-plugins.json'));
+  assert(ledger.myplugin, 'ledger must still list myplugin after the failed remove');
+});
+
+test('after fixing settings.json, retrying the remove succeeds and reverts everything', () => {
+  fs.writeFileSync(path.join(claude5, 'settings.json'), mergedSettings);
+  const out = runCli(proj5, ['plugin', 'remove', 'myplugin']);
+  assert(out.includes('Removed myplugin'), 'retry should succeed');
+  const s = readJson(path.join(claude5, 'settings.json'));
+  assert(countCommand(s, 'Stop', PLUGIN_CMD) === 0, 'plugin Stop hook reverted on retry');
+  const ledger = readJson(path.join(claude5, '.autoconfig-plugins.json'));
+  assert(!ledger.myplugin, 'ledger entry removed after the successful retry');
+});
+
 // --- Cleanup ----------------------------------------------------------------
 try { fs.rmSync(tmpRoot, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
 

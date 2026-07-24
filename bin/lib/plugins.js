@@ -215,7 +215,15 @@ function pluginRemove(name, claudeDir, deps) {
         deps.unmergeSettingsFrom(userSettings, entry.settings, entry.added);
         fs.writeFileSync(settingsPath, JSON.stringify(userSettings, null, 2));
         console.log('\x1b[90m%s\x1b[0m', '   ✎ reverted settings.json contributions');
-      } catch { /* leave settings intact if unparsable */ }
+      } catch (e) {
+        // Settings could not be reverted (unparsable/unwritable settings.json). Leave the
+        // ledger entry in place so the removal stays retryable — dropping it here would
+        // strand the plugin's hooks in settings.json forever while reporting success.
+        // The file deletions above are idempotent, so a retry is safe.
+        console.log('\x1b[33m%s\x1b[0m', `⚠️  Could not revert settings.json contributions (${e.message}).`);
+        console.log('\x1b[33m%s\x1b[0m', `   ${name}'s files were deleted, but its settings entries remain. Fix .claude/settings.json, then re-run: claude-code-autoconfig plugin remove ${name}`);
+        throw new Error(`"${name}" is only partially removed — settings.json could not be updated (retry after fixing it)`);
+      }
     }
   }
 
