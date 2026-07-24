@@ -48,15 +48,15 @@ with a `Changelog:` trailer (dev-gated work → `Changelog: none`), append a Led
 
 Bug/honesty/privacy fixes + 3 new regression suites. Details in the Ledger entry.
 
-### ☐ 1.1 · M · ~45 min — Retire the mothballed R11 block from token-guard
+### ☑ 1.1 · M · ~45 min — Retire the mothballed R11 block from token-guard
 
-- [ ] Verify the R11 dispatch is still commented out and `resolveMarker` / `clearMarker` /
+- [x] Verify the R11 dispatch is still commented out and `resolveMarker` / `clearMarker` /
       `onSessionStart` / `migrateReceipt` / `writeMigrateCandidate` have no live callers
       (grep each name across the repo INCLUDING `.claude/commands/*.md` prose — a command
       file may instruct Claude to call one).
-- [ ] Delete the retired block and its exports; git history is the museum (the banner
+- [x] Delete the retired block and its exports; git history is the museum (the banner
       already names the retirement date).
-- [ ] Re-run the hook suites; update the file-header comment.
+- [x] Re-run the hook suites; update the file-header comment.
 
 ⚠ Trap: `/migrate-new-session` reads the drift *ledger*, not these functions — confirm, don't
 assume. **Verify:** `npm test`; `grep -rn "resolveMarker\|migrateReceipt" --include="*.md" --include="*.js" .claude bin test` returns only the plan/articles.
@@ -193,8 +193,8 @@ the file, anchored on the pure verdict functions that already exist.
 - [ ] 3.3c — `analyzeSession` (CC 52): extract the per-concern accumulators; dedupe the
       region-attribution logic it shares with `attributeJump` into one helper.
 
-**Verify:** `npm test` after EACH sub-item (207 hook tests); `--analyze` output on a real
-transcript diffed byte-for-byte against pre-refactor output.
+**Verify:** `npm test` after EACH sub-item (196 hook tests as of substep 1.1); `--analyze`
+output on a real transcript diffed byte-for-byte against pre-refactor output.
 **Commit:** one per sub-item + `Changelog: none`.
 
 ### ☐ 3.4 · L · ~2 hr — terminal-title: explicit event dispatch + handle() split
@@ -279,3 +279,24 @@ manual smoke: one prompt in a scratch session paints working→idle correctly.
   - `CLAUDE.md` — Node requirement corrected to `>=18.0.0` (docs now match package.json).
   - `package.json` — the three new suites wired into the `npm test` chain (before hook-tests).
   - Deviations: none. Next: 1.1.
+
+- **2026-07-24 — 1.1 retire the mothballed R11 block — DONE.** Commit `d59e6a7`, `npm test`
+  green (full chain; hook suites now **196** tests — the 11 mothballed-unit tests went with
+  the code).
+  - Deleted from `.claude/hooks/token-guard.js`: the mothball banner, `MIGRATE_CANDIDATE` /
+    `MIGRATE_ARMED`, `writeMigrateCandidate`, `resolveMarker`, `clearMarker`, `migrateReceipt`,
+    `onSessionStart`, the commented-out SessionStart dispatch in `main()`, their exports, and
+    the two knobs only that path read (`driftMigrateMarkerTTLmin`, `driftMigrateMaxInjectTokens`
+    — dropped from DEFAULTS; a user config still setting them is silently ignored, no crash).
+    `driftAutoMigrate` stays (drives `driftNote`'s one-liner branch), and `recoverTail` / `slug`
+    / `writeRecoverPointer` stay live (`/migrate-new-session`, R6 keyword contract, drift
+    staging). File-header R11 paragraph + the fire-site comment updated to name the deletion.
+  - `.claude/hooks/tests/token-guard-r11-automigrate.test.cjs` trimmed to the live units
+    (driftNote / recoverTail / writeRecoverPointer); header rewritten.
+  - Verified before deleting: dispatch was still commented out; the five names had zero live
+    callers anywhere incl. `.claude/commands/*.md` prose (the ⚠ trap held —
+    `/migrate-new-session` reads the drift ledger, not these functions). Verify grep now
+    returns only this plan doc. `sync-docs` regen: byte-identical, nothing to commit.
+  - Doc fix riding along: 3.3's Verify said "207 hook tests" — updated to 196 so a future
+    session doesn't chase a phantom count.
+  - Deviations: none. Next: 1.2.
