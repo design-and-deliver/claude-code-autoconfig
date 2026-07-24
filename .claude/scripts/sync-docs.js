@@ -242,6 +242,18 @@ function escapeTemplateLiteral(str) {
 }
 
 /**
+ * Escape a string for use inside a single-quoted JS string literal.
+ * Backslash goes first so the escapes added below aren't themselves re-escaped.
+ */
+function jsEscape(str) {
+  return str
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n');
+}
+
+/**
  * Scan .claude/ and collect file entries.
  */
 function scanFiles() {
@@ -381,7 +393,7 @@ function generateTreeInfo(entries) {
     if (!entry.isEmptyFolder) continue;
     lines.push(`            '${entry.key}': {`);
     lines.push(`                title: '${entry.key}/',`);
-    lines.push(`                desc: '${entry.desc.replace(/'/g, "\\'")}'`);
+    lines.push(`                desc: '${jsEscape(entry.desc)}'`);
     lines.push(`            },`);
   }
 
@@ -401,7 +413,7 @@ function generateTreeInfo(entries) {
       const desc = folderDescs[entry.folder] || `Files in ${entry.folder}/`;
       lines.push(`            '${entry.folder}': {`);
       lines.push(`                title: '${entry.folder}/',`);
-      lines.push(`                desc: '${desc.replace(/'/g, "\\'")}'`);
+      lines.push(`                desc: '${jsEscape(desc)}'`);
       lines.push(`            },`);
     }
   }
@@ -414,12 +426,12 @@ function generateTreeInfo(entries) {
     if (entry.swaggerHtml) {
       fullDesc += entry.swaggerHtml;
     }
-    const escapedDesc = fullDesc.replace(/'/g, "\\'");
+    const escapedDesc = jsEscape(fullDesc);
     lines.push(`            '${entry.key}': {`);
     lines.push(`                title: '${entry.file}',`);
     lines.push(`                desc: '${escapedDesc}'${entry.trigger ? ',' : ''}`);
     if (entry.trigger) {
-      lines.push(`                trigger: '${entry.trigger.replace(/'/g, "\\'")}'`);
+      lines.push(`                trigger: '${jsEscape(entry.trigger)}'`);
     }
     lines.push(`            },`);
   }
@@ -467,7 +479,7 @@ function generateFileContents(entries) {
       lines.push(`                filename: '${entry.key}/',`);
       lines.push(`                content: null,`);
       lines.push(`                empty: true,`);
-      lines.push(`                emptyMessage: '${entry.emptyMessage.replace(/'/g, "\\'")}'`);
+      lines.push(`                emptyMessage: '${jsEscape(entry.emptyMessage)}'`);
       lines.push(`            },`);
       continue;
     }
