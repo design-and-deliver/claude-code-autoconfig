@@ -1,6 +1,6 @@
-// R11 drift migration: the /clear + /continue nudge + recover-pointer staging, plus the
-// MOTHBALLED SessionStart-injection units (retired 2026-07-21 — kept green for revival;
-// see the banner at MIGRATE_CANDIDATE in token-guard.js).
+// R11 drift migration: the /clear + /continue nudge + recover-pointer staging.
+// (The mothballed SessionStart-injection units and their tests were deleted 2026-07-24 —
+// git history is the museum.)
 // Run: node --test token-guard-r11-automigrate.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
@@ -9,8 +9,7 @@ const os = require('os');
 const path = require('path');
 
 const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
-const { driftNote, recoverTail, resolveMarker, writeMigrateCandidate, clearMarker,
-  migrateReceipt, writeRecoverPointer } = require(HOOK);
+const { driftNote, recoverTail, writeRecoverPointer } = require(HOOK);
 
 function tmpProject() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tg-r11-'));
@@ -18,7 +17,6 @@ function tmpProject() {
   return dir;
 }
 function markerDir(proj) { return path.join(proj, '.claude', 'hooks', '.token-guard'); }
-const CFG = { driftMigrateMarkerTTLmin: 120, driftMigrateMaxInjectTokens: 40000 };
 
 // ---------- driftNote(): the /clear + /continue one-liner, and the false-branch unchanged ----------
 
@@ -131,93 +129,4 @@ test('writeRecoverPointer without boundaryIso keeps the minutes-derived cutoff (
   const rec = writeRecoverPointer(proj, 'SID-9', 15);
   const cut = Date.parse(rec.cutoffIso);
   assert.ok(Math.abs((before - 15 * 60000) - cut) < 5000, 'cutoff ≈ now - 15min');
-});
-
-// ---------- resolveMarker(): consent + fresh-source + TTL gating (MOTHBALLED consumer) ----------
-
-function stage(proj, { armed = true, keyword = 'kw', writtenIso } = {}) {
-  const dir = markerDir(proj);
-  fs.writeFileSync(path.join(dir, 'pending-migrate.json'), JSON.stringify({
-    keyword, sid: '89496bec-6fe9-4b3f', boundaryIso: '2026-07-13T17:13:39.743Z',
-    scope: 'token guard R11', writtenIso: writtenIso || new Date().toISOString(),
-  }));
-  if (armed) fs.writeFileSync(path.join(dir, 'pending-migrate.armed'), '1');
-}
-
-test('resolveMarker returns the candidate on a fresh clear with consent', () => {
-  const proj = tmpProject(); stage(proj);
-  const m = resolveMarker(proj, 'clear', CFG);
-  assert.ok(m && m.sid && m.boundaryIso, 'candidate returned');
-  assert.equal(m.keyword, 'kw');
-});
-
-test('resolveMarker honors startup as a fresh context too', () => {
-  const proj = tmpProject(); stage(proj);
-  assert.ok(resolveMarker(proj, 'startup', CFG));
-});
-
-test('resolveMarker rejects resume/compact (context is retained — would double-inject)', () => {
-  const proj = tmpProject(); stage(proj);
-  assert.equal(resolveMarker(proj, 'resume', CFG), null);
-  assert.equal(resolveMarker(proj, 'compact', CFG), null);
-});
-
-test('resolveMarker requires the armed flag (candidate alone is inert)', () => {
-  const proj = tmpProject(); stage(proj, { armed: false });
-  assert.equal(resolveMarker(proj, 'clear', CFG), null);
-});
-
-test('resolveMarker rejects a stale arm past the TTL', () => {
-  const proj = tmpProject();
-  stage(proj, { writtenIso: new Date(Date.now() - 999 * 60000).toISOString() });
-  assert.equal(resolveMarker(proj, 'clear', CFG), null);
-});
-
-test('resolveMarker returns null when nothing is staged', () => {
-  const proj = tmpProject();
-  assert.equal(resolveMarker(proj, 'clear', CFG), null);
-});
-
-// ---------- writeMigrateCandidate() + clearMarker(): staging, invalidation, one-shot (MOTHBALLED) ----------
-
-test('writeMigrateCandidate stages the pinned pointer with slug(scope) as keyword', () => {
-  const proj = tmpProject();
-  writeMigrateCandidate(proj, 'SID-123', 'token-guard R11', '2026-07-13T17:13:39.743Z');
-  const c = JSON.parse(fs.readFileSync(path.join(markerDir(proj), 'pending-migrate.json'), 'utf8'));
-  assert.equal(c.keyword, 'token-guard-r11');
-  assert.equal(c.sid, 'SID-123');
-  assert.equal(c.boundaryIso, '2026-07-13T17:13:39.743Z');
-});
-
-test('a new-scope candidate invalidates prior consent (re-arm must be explicit)', () => {
-  const proj = tmpProject();
-  stage(proj, { keyword: 'old-scope' });           // armed for old scope
-  writeMigrateCandidate(proj, 'SID-123', 'brand new scope', '2026-07-13T18:00:00.000Z');
-  assert.ok(!fs.existsSync(path.join(markerDir(proj), 'pending-migrate.armed')), 'armed flag dropped');
-  assert.equal(resolveMarker(proj, 'clear', CFG), null, 'no consent until re-armed');
-});
-
-test('the same-scope candidate leaves an existing consent intact', () => {
-  const proj = tmpProject();
-  stage(proj, { keyword: 'token-guard-r11' });
-  writeMigrateCandidate(proj, 'SID-123', 'token-guard R11', '2026-07-13T18:00:00.000Z');
-  assert.ok(fs.existsSync(path.join(markerDir(proj), 'pending-migrate.armed')), 'consent kept');
-});
-
-test('clearMarker removes both files (one-shot consume)', () => {
-  const proj = tmpProject(); stage(proj);
-  clearMarker(proj);
-  assert.ok(!fs.existsSync(path.join(markerDir(proj), 'pending-migrate.json')));
-  assert.ok(!fs.existsSync(path.join(markerDir(proj), 'pending-migrate.armed')));
-  clearMarker(proj); // idempotent, no throw
-});
-
-// ---------- migrateReceipt(): the deterministic visible (systemMessage) line (MOTHBALLED) ----------
-
-test('migrateReceipt names the pinned scope, no numbers', () => {
-  const r = migrateReceipt('migrate UX polish');
-  assert.equal(r, 'Your "migrate UX polish" context from last session has been preserved.');
-  assert.doesNotMatch(r, /\d/);                 // no token numbers — measured before→after was dropped
-  assert.doesNotMatch(r, /migrated|cleared/i);  // the before→after verbs are gone too
-  assert.doesNotMatch(r, /most recent context/i); // the vague phrase that read as the whole session is gone
 });

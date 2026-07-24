@@ -138,14 +138,14 @@
  *   and RESOLUTION (earlier threads actually closed → picks the copy's framing) against the live
  *   conversation, and defers by writing .token-guard/drift-deferred; the guard snoozes
  *   driftRetryPrompts prompts, then re-arms the one-shot so the card re-offers with a fresh premise.
- *   driftAutoMigrate false · driftMigrateMarkerTTLmin 120 · driftMigrateMaxInjectTokens 40000 — R11
+ *   driftAutoMigrate false — R11
  *   (simplified 2026-07-21): the Token-bloat one-liner. When on, the drift nudge renders as a single
  *   locked line handing the user the standard two-step — /clear, then /continue — and the fire site
  *   stages a recover-pointer (recover.json) pinned to the drifted thread's boundary so /continue
  *   recovers exactly that thread. (The earlier Yes/Cancel card is retired: its Yes couldn't run
- *   /clear — only the user can — so the pick just bought a round-trip.) The original SessionStart injection (consent marker + hook-injected
- *   tail) is RETIRED — mothballed at onSessionStart; the TTL/inject knobs only feed that mothballed
- *   path (recoverTail stays live via /migrate-new-session).
+ *   /clear — only the user can — so the pick just bought a round-trip.) The original SessionStart
+ *   injection (consent marker + hook-injected tail) was retired 2026-07-21 and its mothballed code
+ *   deleted 2026-07-24 — git history is the museum (recoverTail stays live via /migrate-new-session).
  * Per-session state in .claude/hooks/.token-guard/<sid>.json; usage log + meter cache beside it.
  *
  * Fail-safe like every hook in this family: any error -> exit 0, emit nothing, never break a turn.
@@ -211,8 +211,6 @@ const DEFAULTS = {
   driftRetryPrompts: 4,             // R6 defer loop: prompts to snooze after a model-judged deferral
                                     // before the one-shot re-arms and the card may re-stage
   driftAutoMigrate: false,
-  driftMigrateMarkerTTLmin: 120,
-  driftMigrateMaxInjectTokens: 40000,
   planDetect: true,
   showDollars: 'auto',
   officialUsageFetch: true,
@@ -1025,66 +1023,6 @@ function idleReturnNote(liveContext) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// RETIRED 2026-07-21 — R11 SessionStart injection, MOTHBALLED (kept compiled + unit-tested so a
-// revival starts green, not as rot). Decision: /clear + /continue is the one migration metaphor;
-// the drift card now stages a recover-pointer at its fire site instead (writeRecoverPointer with
-// an explicit boundaryIso). This consumer was in fact never registered for SessionStart in any
-// settings file — the silent wiring gap that surfaced the decision. To revive: uncomment the
-// onSessionStart dispatch in main(), register token-guard for SessionStart in settings, and
-// restore the card's arm-flag copy from git history (pre-2026-07-21).
-// Mothballed units: MIGRATE_CANDIDATE/MIGRATE_ARMED, writeMigrateCandidate, resolveMarker,
-// clearMarker, migrateReceipt, onSessionStart. (recoverTail is NOT mothballed — it stays live
-// via /migrate-new-session.)
-// ---------------------------------------------------------------------------
-// R11 auto-migrate consent marker (two files under stateDir): the CANDIDATE carries the deterministic
-// {keyword, sid, boundaryIso} the hook already knows at nudge time; the ARMED flag is contentless proof
-// the model wrote only after the user opted in. Both required to consume — the candidate alone is inert.
-const MIGRATE_CANDIDATE = 'pending-migrate.json';
-const MIGRATE_ARMED = 'pending-migrate.armed';
-
-// Stage the candidate when the drift nudge fires (best-effort; the paste-command out still works if it
-// fails). A candidate for a DIFFERENT scope invalidates any prior consent — re-arm must be explicit for
-// the thread you'd actually migrate now.
-function writeMigrateCandidate(projectDir, sid, scope, boundaryIso) {
-  const dir = stateDir(projectDir);
-  try {
-    fs.mkdirSync(dir, { recursive: true });
-    const kw = slug(scope);
-    try {
-      const prev = JSON.parse(fs.readFileSync(path.join(dir, MIGRATE_CANDIDATE), 'utf8'));
-      if (prev.keyword !== kw) fs.unlinkSync(path.join(dir, MIGRATE_ARMED));
-    } catch (_) { /* no prior candidate/flag to invalidate */ }
-    const now = new Date().toISOString();
-    fs.writeFileSync(path.join(dir, MIGRATE_CANDIDATE), JSON.stringify({
-      keyword: kw, sid, boundaryIso: boundaryIso || now, scope, writtenIso: now,
-    }));
-  } catch (_) { /* staging is best-effort */ }
-}
-
-// Return the candidate iff consent (armed flag) exists, the SessionStart lands in a FRESH context
-// (clear/startup — never resume/compact, which retain context and would double-inject), and the arm is
-// within TTL (a forgotten arm can't hijack a much-later unrelated clear). Otherwise null. Pure-ish (reads).
-function resolveMarker(projectDir, source, cfg) {
-  if (source && source !== 'clear' && source !== 'startup') return null;
-  const dir = stateDir(projectDir);
-  let cand;
-  try { cand = JSON.parse(fs.readFileSync(path.join(dir, MIGRATE_CANDIDATE), 'utf8')); } catch (_) { return null; }
-  if (!fs.existsSync(path.join(dir, MIGRATE_ARMED))) return null; // no opt-in
-  if (!cand || !cand.sid || !cand.boundaryIso) return null;
-  const ttlMin = cfg.driftMigrateMarkerTTLmin || 120;
-  const ageMin = (Date.now() - (Date.parse(cand.writtenIso) || 0)) / 60000;
-  if (ageMin > ttlMin) return null; // stale arm — leave for reaping
-  return cand;
-}
-
-function clearMarker(projectDir) {
-  const dir = stateDir(projectDir);
-  for (const f of [MIGRATE_CANDIDATE, MIGRATE_ARMED]) {
-    try { fs.unlinkSync(path.join(dir, f)); } catch (_) { /* already gone */ }
-  }
-}
-
 // R2 history lives at project level, not session level — "what did the LAST fleet here cost"
 // must survive across sessions to be worth quoting.
 function wfHistoryPath(projectDir) { return path.join(stateDir(projectDir), 'workflow-history.json'); }
@@ -1838,8 +1776,8 @@ async function onUserPromptSubmit(data, projectDir) {
         // enteredIso — the drifted thread's exact boundary. /continue's auto mode reads
         // recover.json before any heuristic rung, so after the nudge's "/clear + /continue"
         // (one-liner and prose branch alike) the fresh session recovers exactly this thread.
-        // (Replaces the retired injection candidate — see the mothballed block at
-        // MIGRATE_CANDIDATE.)
+        // (Replaces the retired SessionStart-injection candidate, deleted 2026-07-24 —
+        // git history is the museum.)
         const ageMin = Math.max(1, Math.round((Date.now() - (Date.parse(cur.enteredIso) || Date.now())) / 60000));
         writeRecoverPointer(projectDir, sid, ageMin, cur.enteredIso);
       }
@@ -1987,54 +1925,6 @@ async function onUserPromptSubmit(data, projectDir) {
       },
     }));
   }
-}
-
-// The visible receipt, printed straight to the user via the `systemMessage` channel on /clear.
-// User-chosen copy: names the pinned scope — the bare "most recent context" read as the whole
-// session, the opposite of what migrate keeps. No numbers. Pure + exported so a test can pin it.
-function migrateReceipt(scope) {
-  return `Your "${scope}" context from last session has been preserved.`;
-}
-
-// RETIRED 2026-07-21 (mothballed, never dispatched — see the banner at MIGRATE_CANDIDATE).
-// R11 consumer — on a /clear (or fresh tab) that carries an ARMED consent marker, do the migration in
-// the hook itself: recover the pinned tail and inject it + a synthesize-handoff directive as
-// additionalContext, then consume the one-shot marker. Never throws; any miss emits nothing so a fresh
-// session stays clean. The marker pins (sid, boundaryIso), so this is robust to /clear rotating the id.
-function onSessionStart(data, projectDir) {
-  const cfg = loadConfig(projectDir);
-  if (!cfg.driftAutoMigrate) return;
-  const cand = resolveMarker(projectDir, data.source || '', cfg);
-  if (!cand) return;
-  const r = resolveTranscript(cand.sid);
-  if (!r || !r.fp) { clearMarker(projectDir); return; } // old transcript gone -> nothing to recover
-  const tail = recoverTail(r.fp, cand.boundaryIso, cfg.driftMigrateMaxInjectTokens);
-  clearMarker(projectDir); // one-shot: consume regardless so a re-clear can't double-inject
-  if (!tail.messages) return;
-  const kw = cand.keyword || slug(cand.scope || '');
-  const sid8 = String(cand.sid).slice(0, 8);
-  logLine(projectDir,
-    `sid=${sid8} auto-migrate kw="${kw}" msgs=${tail.messages} tok=${fmtK(tail.tokens)}` +
-    `${tail.truncated ? ' (trunc)' : ''}`);
-  const receipt = migrateReceipt(cand.scope);
-  const directive =
-    `<token-guard-automigrate>\n` +
-    `You just ran /clear to migrate the "${cand.scope}" thread into this fresh context ` +
-    `(keyword "${kw}", from session ${sid8}${tail.truncated ? '; tail truncated to the most-recent slice' : ''}). ` +
-    `The recovered conversation tail is below — TREAT IT AS YOUR OWN MEMORY of what you were doing, not ` +
-    `as a document to summarize. From it, silently reconstruct: the active task + current state, ` +
-    `decisions not yet written to repo docs, files touched (cross-check \`git status --short\` — ` +
-    `deterministic), any temp-state gotchas, and the next actions. The user has ALREADY seen a ` +
-    `standalone system-message receipt ("${receipt}") — do NOT restate it. Open your reply with ` +
-    `a SINGLE line naming the top next action and nothing above it, in a warm plain voice, e.g.:\n` +
-    `"Next up: {top next-action}." ` +
-    `Then WAIT for the user to direct you — do not start work unprompted.\n` +
-    `--- RECOVERED TAIL (${tail.messages} messages, oldest first) ---\n${tail.text}\n` +
-    `</token-guard-automigrate>`;
-  process.stdout.write(JSON.stringify({
-    systemMessage: receipt,
-    hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: directive },
-  }));
 }
 
 function onStop(data, projectDir) {
@@ -2716,9 +2606,6 @@ if (require.main === module) {
         else if (ev === 'Stop') onStop(data, projectDir);
         else if (ev === 'PreToolUse') onPreToolUse(data, projectDir);
         else if (ev === 'PostToolUse') onPostToolUse(data, projectDir);
-        // RETIRED 2026-07-21: the R11 SessionStart injection is mothballed — /clear + /continue
-        // is the standard migration path (the drift card stages a recover-pointer instead).
-        // else if (ev === 'SessionStart') onSessionStart(data, projectDir);
       } catch (_) { /* fail-safe: emit nothing */ }
       process.exit(0);
     });
@@ -2727,9 +2614,8 @@ if (require.main === module) {
 
 module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, ledgerScopes, officialLines,
   analyzeSession, renderAnalysis, payloadVerdict, fanVerdict, workflowSource, skillSizes, recordObservedSkill,
-  generateBudgets, slug, driftNote, driftDeferralTick, recoverTail, resolveMarker,
-  writeMigrateCandidate, clearMarker, writeRecoverPointer, idleReturnNote,
-  migrateReceipt, onSessionStart, resolveConfig, TOKEN_SAVER,
+  generateBudgets, slug, driftNote, driftDeferralTick, recoverTail,
+  writeRecoverPointer, idleReturnNote, resolveConfig, TOKEN_SAVER,
   fiveHourWindow, tightestWindow, windowSpikeVerdict, windowThresholdVerdict, effectiveWarn,
   spikeAttribution, spikeCopyMode,
   windowSpikeNote, windowSpikeConfirmNote, windowRunway, windowThresholdNote, windowThresholdGateReason };
