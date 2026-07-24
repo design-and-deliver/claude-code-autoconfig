@@ -62,12 +62,12 @@ Bug/honesty/privacy fixes + 3 new regression suites. Details in the Ledger entry
 assume. **Verify:** `npm test`; `grep -rn "resolveMarker\|migrateReceipt" --include="*.md" --include="*.js" .claude bin test` returns only the plan/articles.
 **Commit:** `refactor(token-guard): delete retired R11 migration block` + `Changelog: none`.
 
-### ☐ 1.2 · M · ~45 min — Name token-guard's magic numbers
+### ☑ 1.2 · M · ~45 min — Name token-guard's magic numbers (DONE 2026-07-24, see Ledger)
 
-- [ ] One constants block near the top: dust floors (0.02 / 0.001 / 0.005), materiality 0.85,
+- [x] One constants block near the top: dust floors (0.02 / 0.001 / 0.005), materiality 0.85,
       cache-read 0.1× / write 1.25× / 2× multipliers, prune caps (unify `131072` vs `256 * 1024`
       — pick one spelling, keep values), `guard++ < 64`, `2e6`, sid-slice 8.
-- [ ] Values unchanged — this substep renames, never retunes.
+- [x] Values unchanged — this substep renames, never retunes.
 
 **Verify:** `npm test` (hook suites cover the touched paths); `npx eslint .`.
 **Commit:** `refactor(token-guard): name the sizing/threshold constants` + `Changelog: none`.
@@ -300,3 +300,21 @@ manual smoke: one prompt in a scratch session paints working→idle correctly.
   - Doc fix riding along: 3.3's Verify said "207 hook tests" — updated to 196 so a future
     session doesn't chase a phantom count.
   - Deviations: none. Next: 1.2.
+
+- **2026-07-24 — 1.2 name token-guard's magic numbers — DONE.** Commit `209104b`, `npm test`
+  green before and after (full chain, 196 hook tests), `npx eslint .` clean, sync-docs regen
+  byte-identical.
+  - Pure rename, zero value changes. Cache multipliers (`CACHE_READ_X` 0.1 / `CACHE_WRITE_5M_X`
+    1.25 / `CACHE_WRITE_1H_X` 2) now live beside `PRICES`; the rest in one block after
+    `IMAGE_TOK_EST` (~`token-guard.js:186`): `SID_SHORT_LEN` 8, `SKILL_SCAN_MAX_FILES` 64,
+    `SKILL_SCAN_CHASE_MAX_BYTES` 2e6, `USAGE_LOG_ROTATE_BYTES` 256·1024,
+    `SPEND_LEDGER_PRUNE_BYTES` 128·1024 (the old `131072`, respelled — the two byte caps are
+    DIFFERENT values, 128K vs 256K; "unify the spelling" meant the notation, not the numbers),
+    `BUSY_SESSION_DUST_USD` 0.02, `LEDGER_ENTRY_DUST_USD` 0.001, `ROLLUP_DUST_USD` 0.005
+    (covers both the rollup row skip and the agents-display floor), `SPIKE_SOLO_SHARE_FLOOR` 0.85.
+  - Discoveries: the analyzer's TTL-gap `rewriteUSD` (`* 2`, token-guard.js:2345 pre-edit) is
+    the same 1h cache-write rate — folded into `CACHE_WRITE_1H_X`. The report's
+    `win.rows.slice(0, 8)` is a top-8 DISPLAY cap, not a sid slice — deliberately left literal.
+    Verified no test parses token-guard source literals before renaming (the cli.js regex trap
+    does not extend to hooks).
+  - Deviations: none. Next: 1.3.
