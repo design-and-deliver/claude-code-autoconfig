@@ -23,16 +23,22 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
+// The only shape token-guard ever writes: a slash command of letters/digits/space/_=.:-
+// (e.g. "/recover-context pid=12345 sid=abc123de"). Enforcing it HERE is what makes
+// buildLaunch's plain quote-wrap safe by construction — no quotes, no shell
+// metacharacters can reach the `shell: true` spawn, even from a tampered pointer file.
+const SAFE_RECOVER_CMD = /^\/[A-Za-z0-9][A-Za-z0-9 _=.:-]*$/;
+
 function readPointer(projectDir) {
   const file = path.join(projectDir, '.claude', 'hooks', '.token-guard', 'recover.json');
   try {
     const rec = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return rec && typeof rec.recoverCmd === 'string' && rec.recoverCmd.startsWith('/') ? rec : null;
+    return rec && typeof rec.recoverCmd === 'string' && SAFE_RECOVER_CMD.test(rec.recoverCmd) ? rec : null;
   } catch (_) { return null; }
 }
 
-// recoverCmd never contains double quotes (slash command + digits + hex sid), so plain
-// wrapping is safe. One string through the shell so the Windows .cmd shim resolves too.
+// recoverCmd is validated against SAFE_RECOVER_CMD above, so plain wrapping is safe.
+// One string through the shell so the Windows .cmd shim resolves too.
 function buildLaunch(recoverCmd) { return `claude "${recoverCmd}"`; }
 
 function main() {
