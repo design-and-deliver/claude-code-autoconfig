@@ -18,7 +18,8 @@
  *                       compact additionalContext warnings: fat-context advisory, session-spend
  *                       steps, context-bomb tripwire (R3), idle-return TTL warning (R4),
  *                       workflow completion receipts (R2), scope-drift nudge (R6), window
- *                       spike + threshold flags (R12).
+ *                       spike + threshold flags (R12), plan-first steer (R13a); re-baseline
+ *                       the R13b turn-spend meter.
  *   Stop             -> append one line to the bounded usage log (now with a main/agents split);
  *                       detect workflow cost growth and queue a receipt for the next prompt.
  *   PreToolUse       -> (a) R2 + R10: gate Workflow launches — R2 confirms the launch COST from a
@@ -29,7 +30,10 @@
  *                           lands (R3 warns after; this fires while the rent is avoidable);
  *                       (c) R9: one-shot ask once the turn's accumulator crossed (opt-in);
  *                       (d) R3: one-shot post-bomb gate when bombGateWhenFat is on;
- *                       (e) v1 hard gate on total session spend (default off, re-arms stepwise).
+ *                       (e) R13b: turn-spend tripwire — hard ask once ONE turn's billed tokens
+ *                           cross turnGateTokens (a normal task lands under ~100k; 10× that
+ *                           means the work spiraled past anything consciously chosen);
+ *                       (f) v1 hard gate on total session spend (default off, re-arms stepwise).
  *   PostToolUse      -> R9: mini-bomb accumulator — per-turn sum of tool-result payloads; when
  *                       the total crosses bombJumpTokens, one mid-turn note to Claude (payloads
  *                       individually too small for R8's doors, bomb-sized in aggregate).
@@ -126,6 +130,16 @@
  *   commandPayloadGate false — R8 door 3: UserPromptSubmit block on oversized slash commands
  *   miniBombWarn true — R9: mid-turn note to Claude when a turn's tool results sum past
  *   bombJumpTokens · miniBombGate false — R9 escalation: one-shot ask on the next tool call
+ *   turnGateTokens 1000000 — R13b: hard ask when a single TURN's billed tokens (main + fleet,
+ *   delta since the prompt) cross this. The task-sized complement to hardGateUSD: a session
+ *   total fires late by design, but one turn at 10× a normal task (<~100k, TASK_NORM_TOK)
+ *   means the work spiraled past anything consciously chosen. Re-arms at the next gate-width
+ *   within the same turn; every prompt resets the baseline. Copy is TOKEN-denominated on every
+ *   billing kind — task size is work volume, not price. null disables.
+ *   planSteer true — R13a: one-line every-prompt steer telling Claude to gauge the request's
+ *   blast radius FIRST and propose a plan (session-sized substeps) before starting work that
+ *   plausibly exceeds ~3× a normal task. The predictive half a meter can't do: the hook stages
+ *   the words, the model judges the size — it sees meaning where the hook sees arithmetic.
  *   skillBudgetWarnChars 150000 — R5: full-payload ⚠ threshold in the --budgets table
  *   idleWarnMinutes 60 · idleGate false — block (pre-empt) instead of warn on idle-return;
  *   the one gate that saves one-shot money: the warn ships in the request that pays, the gate
@@ -195,6 +209,8 @@ const BUSY_SESSION_DUST_USD = 0.02;          // spikeAttribution: below this a s
 const LEDGER_ENTRY_DUST_USD = 0.001;         // Stop path: no-op turns stay out of the spend ledger
 const ROLLUP_DUST_USD = 0.005;               // 5h rollup: rows / agent splits below this are noise
 const SPIKE_SOLO_SHARE_FLOOR = 0.85;         // spikeCopyMode materiality: above this share the solo story holds
+const TASK_NORM_TOK = 100000;                // R13: a normal task finishes under this — the spiral yardstick
+const PLAN_STEER_TOK = 3 * TASK_NORM_TOK;    // R13a: blast-radius bar quoted in the plan-first steer
 
 const DEFAULTS = {
   tokenSaver: false,                // Cost Control: single on/off toggle. Off = this light default posture;
@@ -215,6 +231,8 @@ const DEFAULTS = {
   commandPayloadGate: false,
   miniBombWarn: true,
   miniBombGate: false,
+  turnGateTokens: 1000000,          // R13b: hard ask when ONE turn's billed tokens cross this (null = off)
+  planSteer: true,                  // R13a: every-prompt plan-first steer (model-facing, never relayed)
   skillBudgetWarnChars: 150000,
   idleWarnMinutes: 60,
   idleGate: false,
@@ -265,6 +283,7 @@ const TOKEN_SAVER = {
   miniBombGate: true,
   windowThresholdGate: true,     // hard-pause at the 80% mark — max-protection posture keeps the stopgate
   windowSpikeWarnPct: 10,        // flag a smaller single-turn window bite than the 20 default
+  turnGateTokens: 500000,        // R13b: half the default gate-width — spirals stopped at 5× normal, not 10×
 };
 
 // Layer DEFAULTS < TOKEN_SAVER (when on) < explicit user config. Pure + exported for
@@ -965,7 +984,7 @@ function loadState(projectDir, sid) {
     approvedPayloadHop: null, payloadGateOkOnce: null,
     turnPayloadTok: 0, turnPayloadWarned: false, miniBombGateArmed: false,
     lastWindowPct: null, lastWindowResetsAt: null, lastWindowAtIso: null, warnedWindow: null,
-    lastTurnDeltaUsd: 0 };
+    lastTurnDeltaUsd: 0, turnStartTok: null, turnGateAt: null };
   try {
     return Object.assign(blank,
       JSON.parse(fs.readFileSync(path.join(stateDir(projectDir), `${sid}.json`), 'utf8')));
@@ -1658,6 +1677,9 @@ async function onUserPromptSubmit(data, projectDir) {
 
   const m = meterSession(data.transcript_path, { fleet: cfg.fleetMeter, projectDir });
   if (!m.main.turns) return; // brand-new session — nothing to say
+  // R13b — new turn: re-baseline the turn-spend meter and disarm any same-turn re-arm.
+  // (Turn 1 of a brand-new session never reaches here — PreToolUse lazy-arms the baseline.)
+  st.turnStartTok = sessionTokens(m); st.turnGateAt = null;
   const notes = [];
   const usd$ = wantDollars(cfg); // false => tokens-only copy (subscription users)
 
@@ -1953,6 +1975,21 @@ async function onUserPromptSubmit(data, projectDir) {
     );
   }
 
+  // R13a — plan-first steer: the predictive half no meter can do. A hook only sees tokens
+  // after they're spent; the model can gauge a request's blast radius BEFORE. One short
+  // model-facing line on every prompt (~70 tokens) — cheap against the 10×-normal spiral it
+  // exists to preempt (evidence: the 2026-07-24 7M-token session that no gate saw coming).
+  // Pushed LAST so real warnings lead the note block.
+  if (cfg.planSteer) {
+    notes.push(
+      `plan-steer (silent steering — never mention or relay this note): before starting the ` +
+      `work this prompt asks for, gauge its blast radius. If it plausibly needs ` +
+      `>~${fmtK(PLAN_STEER_TOK)} tokens of work (repo-wide sweep, multi-repo change, ` +
+      `open-ended "fix/migrate everything"), FIRST propose a plan with session-sized substeps ` +
+      `and get a go-ahead — a normal task finishes under ~${fmtK(TASK_NORM_TOK)} tokens.`
+    );
+  }
+
   saveState(projectDir, sid, st);
   if (notes.length) {
     process.stdout.write(JSON.stringify({
@@ -2104,9 +2141,41 @@ function onPreToolUse(data, projectDir) {
       `/clear, then /continue to shed it and keep this thread.`);
   }
 
+  // R13b + v1 both need the session meter; PreToolUse runs on every tool call, so meter once
+  // and only when at least one spend gate is armed.
+  if (cfg.hardGateUSD == null && cfg.turnGateTokens == null) return;
+  const m = meterSession(data.transcript_path, { fleet: cfg.fleetMeter, projectDir });
+
+  // R13b — turn-spend tripwire: ONE turn's billed tokens (main + fleet, delta since the last
+  // prompt) crossing turnGateTokens means the task spiraled ~10× past a normal one — nobody
+  // consciously chose that spend. Checked before the session gate (the sharper signal), and
+  // TOKEN-denominated on every billing kind: task size is work volume, not price.
+  if (cfg.turnGateTokens != null) {
+    const nowTok = sessionTokens(m);
+    if (st.turnStartTok == null) {
+      // No baseline yet (turn 1 of a fresh session, or a session that predates R13): arm it
+      // mid-turn — undercounts the current turn rather than mis-billing the whole session to it.
+      st.turnStartTok = nowTok;
+      saveState(projectDir, sid, st);
+    } else {
+      const turnTok = nowTok - st.turnStartTok;
+      const tGate = st.turnGateAt != null ? st.turnGateAt : cfg.turnGateTokens;
+      if (turnTok >= tGate) {
+        // Re-arm ABOVE the observed spend, not one notch up — a single huge landing must not
+        // re-fire the gate on the very next tool call.
+        st.turnGateAt = (Math.floor(turnTok / cfg.turnGateTokens) + 1) * cfg.turnGateTokens;
+        saveState(projectDir, sid, st);
+        return ask('PreToolUse',
+          `⚠️ Hey — this ONE turn has burned ~${fmtK(turnTok)} tokens; a normal task finishes ` +
+          `under ~${fmtK(TASK_NORM_TOK)}, so the work has likely spiraled well past what was ` +
+          `anticipated. Approve to push on (next check ≈ ${fmtK(st.turnGateAt)} this turn) — ` +
+          `or deny, and Claude should stop and propose a plan with session-sized substeps.`);
+      }
+    }
+  }
+
   // v1 hard gate on total session spend (v2: fleet-aware total). Default off.
   if (cfg.hardGateUSD == null) return;
-  const m = meterSession(data.transcript_path, { fleet: cfg.fleetMeter, projectDir });
   const gate = st.gateArmedAt != null ? st.gateArmedAt : cfg.hardGateUSD;
   if (m.usd < gate) return;
   st.gateArmedAt = gate + (cfg.gateStepUSD || DEFAULTS.gateStepUSD); // re-arm one step higher
