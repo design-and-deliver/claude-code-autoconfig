@@ -376,17 +376,13 @@ function generateTreeHtml(entries) {
 function generateTreeInfo(entries) {
   const lines = [];
 
+  // Empty-folder info cards. (File-backed entries get their folder + file cards below.)
   for (const entry of entries) {
-    if (entry.isEmptyFolder) {
-      lines.push(`            '${entry.key}': {`);
-      lines.push(`                title: '${entry.key}/',`);
-      lines.push(`                desc: '${entry.desc.replace(/'/g, "\\'")}'`);
-      lines.push(`            },`);
-      continue;
-    }
-
-    // Folder-level info card
-    // (we emit these once per folder)
+    if (!entry.isEmptyFolder) continue;
+    lines.push(`            '${entry.key}': {`);
+    lines.push(`                title: '${entry.key}/',`);
+    lines.push(`                desc: '${entry.desc.replace(/'/g, "\\'")}'`);
+    lines.push(`            },`);
   }
 
   // Emit folder info cards
