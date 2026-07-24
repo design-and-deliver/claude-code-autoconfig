@@ -1,8 +1,19 @@
 #!/usr/bin/env node
 
 /**
- * Tests for CLI install process
- * Validates that all expected files are copied to downstream projects
+ * Package-content and contract tests for the CLI install.
+ *
+ * What lives here: source-files-exist checks, command-file prose contracts (the .md files
+ * Claude executes), shipped settings/package.json content, docs-sync completeness (which
+ * parses the DEV_ONLY_FILES literal — a data contract, kept deliberately), and the
+ * settings-merge unit tests.
+ *
+ * What does NOT live here anymore: source-grep assertions on bin/cli.js copy/upgrade
+ * behavior — those passed vacuously under refactoring and were replaced 1:1 by the
+ * behavioral fixtures in cli-behavior.test.js (clean-code plan substep 2.1). The few
+ * remaining cli.js source greps (MANAGED_HOOKS shape, pin gate, alias pruning, insideClaude
+ * guard, migrate-before-merge ordering) have no full behavioral twin yet — delete one only
+ * when its replacement lands.
  */
 
 const fs = require('fs');
@@ -33,13 +44,6 @@ function assert(condition, msg) {
 function assertExists(filePath, msg) {
   if (!fs.existsSync(filePath)) {
     throw new Error(`${msg || 'File should exist'}: ${filePath}`);
-  }
-}
-
-function assertCliCopies(pattern, description) {
-  const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
-  if (!cliCode.includes(pattern)) {
-    throw new Error(`CLI should copy ${description}`);
   }
 }
 
@@ -97,62 +101,10 @@ test('autoconfig-update.md exists in commands/', () => {
 console.log();
 
 // -----------------------------------------------------------------------------
-// CLI Copy Operations
-// -----------------------------------------------------------------------------
-
-console.log('CLI Copy Operations:');
-
-test('CLI copies commands/', () => {
-  assertCliCopies("copyDir(commandsSrc, path.join(claudeDest, 'commands'))", 'commands/');
-});
-
-test('CLI copies docs/ (html only)', () => {
-  const content = fs.readFileSync(CLI_PATH, 'utf8');
-  assert(content.includes("file.endsWith('.html')"), 'CLI should filter docs to .html files only');
-});
-
-test('CLI copies agents/', () => {
-  assertCliCopies("copyDir(agentsSrc, path.join(claudeDest, 'agents'))", 'agents/');
-});
-
-test('CLI copies feedback/', () => {
-  assertCliCopies("copyFn(feedbackSrc, path.join(claudeDest, 'feedback'))", 'feedback/');
-});
-
-test('CLI copies hooks/', () => {
-  assertCliCopies("copyFn(hooksSrc, path.join(claudeDest, 'hooks'))", 'hooks/');
-});
-
-test('CLI copies settings.json', () => {
-  assertCliCopies("fs.copyFileSync(settingsSrc, settingsDest)", 'settings.json');
-});
-
-console.log();
-
-// -----------------------------------------------------------------------------
-// Settings.json Content
-// -----------------------------------------------------------------------------
-
-// -----------------------------------------------------------------------------
 // Smart Re-install Protection
 // -----------------------------------------------------------------------------
 
 console.log('Smart Re-install Protection:');
-
-test('CLI has copyDirIfMissing function', () => {
-  const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
-  assert(cliCode.includes('function copyDirIfMissing('), 'CLI should have copyDirIfMissing function');
-});
-
-test('CLI uses copyDirIfMissing for feedback/', () => {
-  const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
-  assert(cliCode.includes("forceMode ? copyDir : copyDirIfMissing") && cliCode.includes("copyFn(feedbackSrc"), 'CLI should use copyDirIfMissing for feedback');
-});
-
-test('CLI uses copyDirIfMissing for hooks/', () => {
-  const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
-  assert(cliCode.includes("forceMode ? copyDir : copyDirIfMissing") && cliCode.includes("copyFn(hooksSrc"), 'CLI should use copyDirIfMissing for hooks');
-});
 
 test('CLI always refreshes the managed title hooks (so fixes reach existing installs)', () => {
   const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
@@ -299,12 +251,9 @@ test('shipped project settings templates never set defaultMode', () => {
   }
 });
 
-test('upgrades persist a what\'s-new summary and /autoconfig-update renders + consumes it', () => {
-  const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
-  assert(
-    /isUpgrade && previousVersion !== currentVersion[\s\S]*?\.autoconfig-whats-new\.json[\s\S]*?formatUpdateSummary/.test(cliCode),
-    'CLI should write .autoconfig-whats-new.json (via formatUpdateSummary) when the version changes'
-  );
+test('/autoconfig-update renders + consumes the what\'s-new file (one-shot)', () => {
+  // The cli.js half (whats-new written only when the version changes) lives behaviorally
+  // in cli-behavior.test.js Fixtures 2, 9, and 10.
   const updateCmd = fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'commands', 'autoconfig-update.md'), 'utf8');
   assert(
     updateCmd.includes('.autoconfig-whats-new.json') && /delete `.claude\/\.autoconfig-whats-new\.json`/i.test(updateCmd),
@@ -351,16 +300,9 @@ test('local opt-in flags can never ship in the npm tarball', () => {
   );
 });
 
-test('explicitly installed old versions are announced as unsupported, then swept to latest', () => {
-  const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
-  assert(
-    /noticeUnsupportedOldInstall[\s\S]*?\.autoconfig-version[\s\S]*?AUTO-GENERATED BY \/autoconfig[\s\S]*?no longer supported/.test(cliCode),
-    'CLI should print the "no longer supported" notice when an old version marker exists on a not-yet-configured project'
-  );
-  assert(
-    !/process\.exit\(0\)[\s\S]{0,200}$/.test(cliCode.match(/function noticeUnsupportedOldInstall[\s\S]*?\}\)\(\);/)[0]),
-    'the notice must not abort the install — the sweep to latest still proceeds'
-  );
+test('/autoconfig relays the unsupported-version warning to the user', () => {
+  // The cli.js halves (notice prints on an old marker + the sweep still proceeds) live
+  // behaviorally in cli-behavior.test.js Fixtures 11 and 2 (no-notice-on-configured).
   const autoconfig = fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'commands', 'autoconfig.md'), 'utf8');
   assert(
     /no longer supported/.test(autoconfig),
@@ -397,32 +339,12 @@ test('CLI never introduces deprecated aliases — they only replace a pre-existi
 
 console.log();
 
-test('CLI supports --force flag', () => {
-  const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
-  assert(cliCode.includes("'--force'"), 'CLI should support --force flag');
-});
-
-test('CLI detects upgrade via CLAUDE.md marker', () => {
-  const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
-  assert(cliCode.includes("AUTO-GENERATED BY /autoconfig"), 'CLI should check for autoconfig marker in CLAUDE.md');
-});
-
 test('autoconfig + sync-claude-md preserve flavor-package cca- blocks', () => {
   for (const cmd of ['autoconfig.md', 'sync-claude-md.md']) {
     const cmdCode = fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'commands', cmd), 'utf8');
     assert(cmdCode.includes('cca-<name>:begin'), `${cmd} should document the cca- managed-block protocol`);
     assert(/never edit, move, or delete/i.test(cmdCode), `${cmd} should forbid touching cca- blocks`);
   }
-});
-
-test('CLI detects upgrade via docs HTML', () => {
-  const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
-  assert(cliCode.includes("autoconfig.docs.html"), 'CLI should check for docs HTML as upgrade indicator');
-});
-
-test('CLI launches /autoconfig-update for upgrades', () => {
-  const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
-  assert(cliCode.includes("isUpgrade ? '/autoconfig-update' : '/autoconfig'"), 'CLI should launch /autoconfig-update for upgrades');
 });
 
 console.log();
