@@ -103,8 +103,8 @@ The single highest-leverage item: `test/cli-install.test.js` asserts literal sou
 every cli.js refactor. Pattern to copy: `cli-behavior.test.js` (drives the real binary against
 temp fixtures).
 
-- [ ] 2.1a — copy/force semantics: behavioral tests for fresh install vs `--force` overwrite
-      vs preserve-user-edits, per file class.
+- [x] 2.1a — copy/force semantics: behavioral tests for fresh install vs `--force` overwrite
+      vs preserve-user-edits, per file class. (DONE 2026-07-24, see Ledger)
 - [ ] 2.1b — upgrade vs first-install flows (version marker, `/autoconfig-update` vs
       `/autoconfig` messaging) as behavior.
 - [ ] 2.1c — delete each grep assertion ONLY as its behavioral replacement lands (map them
@@ -359,3 +359,25 @@ manual smoke: one prompt in a scratch session paints working→idle correctly.
     eats the backslashes in inline `node -e` args — use a script file.
   - Deviations: none. Next: 2.1 (Phase 2 — split a/b/c; consider dedicating the session to
     2.1a alone, the substep is L and pre-split).
+
+- **2026-07-24 — 2.1a copy/force behavioral tests — DONE.** Commit `de23723`, `npm test`
+  green before and after (full chain, 206 hook tests), `npx eslint .` clean. Took ~M, not L —
+  the harness (shim + runCli + fixtures) already existed in `cli-behavior.test.js`; extending
+  it beat a new file (which would have added a 13th copy-pasted harness for 2.2 to migrate).
+  - `test/cli-behavior.test.js` 30 → 42 tests: Fixture 1 gains per-class presence (docs html,
+    agents, feedback, format.js, terminal-title.js, sync-docs.js, sounds), dev-gated scripts
+    absent (`whats-happening.js`/`plan-progress.js`), and an html-only docs pin (weak — package
+    ships only .html today; comment in the test says so). New Fixture 7 (upgrade, no --force):
+    user-edited FEEDBACK.md + format.js preserved; user-edited `continue.md` + `sync-docs.js`
+    refreshed to shipped bytes. New Fixture 8 (`--bootstrap --force`): feedback + format.js
+    refreshed, settings.json REPLACED byte-identical (no merge, MY_VAR gone), user's own
+    hook/file survive (--force is not a wipe).
+  - Mutation-checked per Verify: `copyDirIfMissing` → always-overwrite failed exactly the two
+    preserve tests; dropping `forceMode` from the settings branch failed exactly the
+    force-replace test. Both reverted, `git diff bin/cli.js` empty.
+  - Fixture traps discovered (bake into 2.1b): the FEEDBACK.md→Discoveries migration fires on
+    upgrade fixtures whose CLAUDE.md lacks `## Discoveries` — both new fixtures include it to
+    stay on the copy layer. `--force` without `--bootstrap` hangs on the interactive ENTER
+    prompt; always pair them in runCli. The commit body carries the grep→behavior map 2.1c
+    will delete against.
+  - Deviations: none. Next: 2.1b (upgrade vs first-install flows as behavior).
