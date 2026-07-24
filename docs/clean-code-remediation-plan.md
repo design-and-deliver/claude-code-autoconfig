@@ -105,8 +105,8 @@ temp fixtures).
 
 - [x] 2.1a — copy/force semantics: behavioral tests for fresh install vs `--force` overwrite
       vs preserve-user-edits, per file class. (DONE 2026-07-24, see Ledger)
-- [ ] 2.1b — upgrade vs first-install flows (version marker, `/autoconfig-update` vs
-      `/autoconfig` messaging) as behavior.
+- [x] 2.1b — upgrade vs first-install flows (version marker, `/autoconfig-update` vs
+      `/autoconfig` messaging) as behavior. (DONE 2026-07-24, see Ledger)
 - [ ] 2.1c — delete each grep assertion ONLY as its behavioral replacement lands (map them
       1:1 in the commit message); keep the DEV_ONLY_FILES literal-parsing helpers — those are
       a data contract (contracts.test.js), not vacuous.
@@ -381,3 +381,35 @@ manual smoke: one prompt in a scratch session paints working→idle correctly.
     prompt; always pair them in runCli. The commit body carries the grep→behavior map 2.1c
     will delete against.
   - Deviations: none. Next: 2.1b (upgrade vs first-install flows as behavior).
+
+- **2026-07-24 — 2.1b upgrade vs first-install flows — DONE.** Commit `ab740ef`, `npm test`
+  green before and after (full chain, 206 hook tests), `npx eslint .` clean, `bin/cli.js`
+  untouched (mutations all reverted; `git diff bin/cli.js` empty).
+  - `test/cli-behavior.test.js` 42 → 59 tests: Fixture 1 gains the version-marker write
+    (`.autoconfig-version` == installer version) + the "Install type: fresh" report line;
+    Fixture 2 gains the CLAUDE.md-marker detection line, the marker advance
+    (1.0.100 → current), whats-new `segments` ({kind, text} array — the formatUpdateSummary
+    output /autoconfig-update renders), and no-unsupported-notice-on-configured. New
+    Fixture 9 (docs-html-only project → upgrade detected + upgrade-only whats-new appears;
+    `.from` deliberately unpinned — it is null with no marker), Fixture 10 (marker already
+    current → NO whats-new; pins the `previousVersion !== currentVersion` gate), Fixture 11
+    (old marker + unconfigured → "no longer supported" notice names both versions AND the
+    sweep still lands commands + advances the marker), Fixture 12 (interactive no-flag runs,
+    fresh + upgrade: READY box fork, `auto-run` line, `Launching Claude Code with …` line,
+    fresh-only approval hint).
+  - Mutation checks (each failed EXACTLY its intended test, then reverted): `launchCommand`
+    hardcoded → F12(upgrade); whats-new gate widened to bare `isUpgrade` → F10; notice's
+    `if (configured) return` removed → F2's no-notice test.
+  - Discovery: the interactive path IS drivable headlessly — `execFileSync` with
+    `input: '\n'` answers the ENTER prompt, and the PATH shim absorbs the
+    `spawn('claude', [launchCommand])` instantly (F12's `runCliInteractive`, with a 120s
+    timeout so a prompt-flow regression fails loud instead of hanging). 2.1a's
+    "always pair --force with --bootstrap" trap note stands as the default, but it is a
+    convenience, not a hard limit — use the interactive runner when the messaging itself
+    is under test.
+  - Trap for F12-style assertions: `auto-run /autoconfig` is a string PREFIX of
+    `auto-run /autoconfig-update` — the fresh-box assert must also exclude the latter
+    (regex `\b` does not help: `-` is a word boundary).
+  - Deviations: none. Next: 2.1c (delete the superseded grep assertions 1:1 — the map is
+    in `ab740ef`'s commit body; keep the DEV_ONLY_FILES literal-parsing helpers and the
+    command-file prose asserts).
