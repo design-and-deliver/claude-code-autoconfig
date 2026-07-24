@@ -1138,7 +1138,31 @@ function planLine(info) {
 // any failure -> stale cache or null (callers fall back to labeled estimates or omit).
 // Never throws, never logs the token.
 const OFFICIAL_USAGE_TTL_MS = 180 * 1000;
-const CLAUDE_CODE_UA = 'claude-code/2.1.207';
+
+// The UA must look like a real Claude Code build or the endpoint serves the aggressively
+// rate-limited bucket. Derived from the RUNNING install at fetch time (at most one fs read
+// per cache miss, never a spawn):
+//   1. CLAUDE_CODE_EXECPATH → the npm package's own package.json (absent on native installs,
+//      where nothing sits beside the binary);
+//   2. the AI_AGENT stamp Claude Code puts in hook env ("claude-code_2-1-210_agent");
+//   3. the dated pin — last resort. Rotation rule: whenever you touch this area, re-pin to
+//      the current `claude --version` and re-date. Last verified 2026-07-24 against 2.1.210.
+const CLAUDE_CODE_UA_PIN = 'claude-code/2.1.210';
+
+function claudeCodeUA(env = process.env) {
+  try {
+    if (env.CLAUDE_CODE_EXECPATH) {
+      const pkgPath = path.join(path.dirname(env.CLAUDE_CODE_EXECPATH), '..', 'package.json');
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      if (pkg.name === '@anthropic-ai/claude-code' && /^\d+\.\d+\.\d+/.test(String(pkg.version))) {
+        return `claude-code/${pkg.version}`;
+      }
+    }
+  } catch (_) { /* native install or moved package — fall through */ }
+  const m = /^claude-code[_-](\d+)-(\d+)-(\d+)/.exec(String(env.AI_AGENT || ''));
+  if (m) return `claude-code/${m[1]}.${m[2]}.${m[3]}`;
+  return CLAUDE_CODE_UA_PIN;
+}
 
 function officialUsageCachePath(projectDir) { return path.join(stateDir(projectDir), 'official-usage.json'); }
 
@@ -1161,7 +1185,7 @@ async function fetchOfficialUsage(projectDir) {
         headers: {
           Authorization: `Bearer ${tok}`,
           'anthropic-beta': 'oauth-2025-04-20',
-          'User-Agent': CLAUDE_CODE_UA,
+          'User-Agent': claudeCodeUA(),
         },
         signal: ctl.signal,
       });
@@ -2626,6 +2650,7 @@ if (require.main === module) {
 }
 
 module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, ledgerScopes, officialLines,
+  claudeCodeUA, fetchOfficialUsage,
   analyzeSession, renderAnalysis, payloadVerdict, fanVerdict, workflowSource, skillSizes, recordObservedSkill,
   generateBudgets, slug, driftNote, driftDeferralTick, recoverTail,
   writeRecoverPointer, idleReturnNote, resolveConfig, TOKEN_SAVER,
