@@ -74,9 +74,9 @@ function titleDirs() {
 }
 
 // ---- 1. title substring -> candidate sids -----------------------------
-// Scan every title tier; first tier to name a sid wins (project before home).
-function readTitles() {
-  const q = opts.query.trim().toLowerCase();
+// One scan across every title tier, deduped by sid (first tier to name a sid wins —
+// project before home). An optional predicate filters which titles are collected.
+function scanTitles(matches) {
   const bySid = new Map();
   for (const dir of titleDirs()) {
     let files = [];
@@ -86,28 +86,19 @@ function readTitles() {
       if (sid === opts.excludeSid || bySid.has(sid)) continue;
       let title = '';
       try { title = fs.readFileSync(path.join(dir, f), 'utf8').trim(); } catch { continue; }
-      if (title.toLowerCase().includes(q)) bySid.set(sid, { sid, title });
+      if (!matches || matches(title)) bySid.set(sid, { sid, title });
     }
   }
   return [...bySid.values()];
 }
 
-// All sessions across tiers (for --list), deduped by sid.
-function allTitles() {
-  const bySid = new Map();
-  for (const dir of titleDirs()) {
-    let files = [];
-    try { files = fs.readdirSync(dir).filter((f) => f.endsWith('.txt')); } catch { continue; }
-    for (const f of files) {
-      const sid = f.slice(0, -4);
-      if (sid === opts.excludeSid || bySid.has(sid)) continue;
-      let title = '';
-      try { title = fs.readFileSync(path.join(dir, f), 'utf8').trim(); } catch { continue; }
-      bySid.set(sid, { sid, title });
-    }
-  }
-  return [...bySid.values()];
+function readTitles() {
+  const q = opts.query.trim().toLowerCase();
+  return scanTitles((title) => title.toLowerCase().includes(q));
 }
+
+// All sessions across tiers (for --list).
+function allTitles() { return scanTitles(); }
 
 // glob ~/.claude/projects/*/<sid>.jsonl without extra deps
 function findTranscript(sid) {
