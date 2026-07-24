@@ -1103,6 +1103,29 @@ function paintViaConsole(dir, ppid, text) {
   }
 }
 
+// Read <pid>'s console title back via painter --get (AttachConsole + GetConsoleTitle → the file).
+// A DEBUG-ONLY self-check: after a paint, comparing this to what we intended tells a stale VS Code
+// tab (console title correct → the host/ConPTY ignored it) apart from a title that never got set at
+// all. Returns the trimmed title on status 0, or null on any failure / painter absent — no
+// PowerShell fallback (kept minimal; null is a fine "couldn't read"). Wrapped so it can never throw
+// into the watchdog. Only ever called from the one-shot concluded exit under CLAUDE_TITLE_DEBUG=1.
+function readConsoleTitle(dir, pid) {
+  try {
+    const exe = painterPath(dir);
+    if (!fileExists(exe)) return null;
+    const out = path.join(dir, `${pid}.titlecheck`);
+    try { fs.unlinkSync(out); } catch (_) { /* ignore */ }
+    const r = require('child_process').spawnSync(exe, [String(pid), '--get', out],
+      { windowsHide: true, timeout: 5000 });
+    if (!r || r.status !== 0) return null;
+    const title = fs.readFileSync(out, 'utf8').trim();
+    try { fs.unlinkSync(out); } catch (_) { /* ignore */ }
+    return title;
+  } catch (_) {
+    return null;
+  }
+}
+
 // The watchdog itself. A canceled turn is invisible to hooks AND (for a thinking-phase cancel)
 // leaves the transcript untouched, so the watchdog triangulates liveness from the OUTSIDE:
 //   - marker tail ("[Request interrupted…]", flushed on tool-phase cancels) → rescue instantly.
@@ -1154,7 +1177,8 @@ async function turnWatch(payloadJson) {
     logCtx.diag = diag;
     titleLog(GLYPH.working, normalize(displayTitle(file, dir, sid, cwd)), false);
   };
-  watchLog('watch-start', `ppid=${ppid} session=${sessionPid || 'resolve'}`);
+  watchLog('watch-start', `ppid=${ppid} session=${sessionPid || 'resolve'}`
+    + ` term=${process.env.TERM_PROGRAM || '-'}/${process.env.TERM_PROGRAM_VERSION || '-'}`);
 
   const CPU_MS = 300;   // sample window: idle claude ~0% (single-scheduler-tick spike ≤ ~5.2% at
   const CPU_THRESH = 6.0; // 300ms — still < 6%); active 9–19% → 6% separates (LIVE-measured 2026-07-12).
@@ -1175,7 +1199,20 @@ async function turnWatch(payloadJson) {
       if (readTitle(watchFile) !== nonce) { watchLog('watch-exit', 'superseded'); return; }
       const painted = readTitle(glyphFile).split('|');
       if (painted[0] === 'idle' || (painted[0] === 'awaiting' && painted[1] !== 'Notification')) {
-        watchLog('watch-exit', `concluded glyph=${painted.join('|')}`);
+        // Concluded ~150ms after the Stop paint — sessionPid is resolved and the painter is warm, so
+        // this is the ideal one-shot moment to READ THE CONSOLE TITLE BACK and record whether the
+        // console actually carries what we intended. MISMATCH → the paint reached the console but the
+        // host (VS Code/ConPTY) is showing a stale tab; unread → couldn't read (painter absent / not
+        // debug). Debug-gated because it costs one extra --get spawn; only here, never in the hot poll.
+        let diag = `concluded glyph=${painted.join('|')}`;
+        if (process.env.CLAUDE_TITLE_DEBUG === '1') {
+          const intended = `${GLYPH[painted[0]]} ${normalize(displayTitle(file, dir, sid, cwd))}`;
+          const actual = sessionPid ? readConsoleTitle(dir, sessionPid) : null;
+          const verdict = actual == null ? 'unread' : (actual === intended ? 'MATCH' : 'MISMATCH');
+          diag += actual == null ? ' verify=unread'
+            : ` verify=${verdict} intended="${intended}" actual="${actual}"`;
+        }
+        watchLog('watch-exit', diag);
         return;
       }
       // A dialog parked on the user rolls the deadline (2026-07-22: an AskUserQuestion sat open
