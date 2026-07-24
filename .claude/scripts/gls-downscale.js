@@ -69,7 +69,7 @@ try {
       'Add-Type -AssemblyName System.Drawing',
       `$img=[System.Drawing.Image]::FromFile('${q(input)}')`,
       '$m=[Math]::Max($img.Width,$img.Height)',
-      `if($m -le ${maxEdge}){$img.Dispose();Write-Output ('SKIP '+$img.Width);exit 0}`,
+      `if($m -le ${maxEdge}){$img.Dispose();Write-Output ('SKIP '+$m);exit 0}`,
       `$s=${maxEdge}/$m; $nw=[int]($img.Width*$s); $nh=[int]($img.Height*$s)`,
       '$bmp=New-Object System.Drawing.Bitmap $nw,$nh',
       '$g=[System.Drawing.Graphics]::FromImage($bmp)',
