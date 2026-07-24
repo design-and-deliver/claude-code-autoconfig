@@ -72,9 +72,9 @@ assume. **Verify:** `npm test`; `grep -rn "resolveMarker\|migrateReceipt" --incl
 **Verify:** `npm test` (hook suites cover the touched paths); `npx eslint .`.
 **Commit:** `refactor(token-guard): name the sizing/threshold constants` + `Changelog: none`.
 
-### ☐ 1.3 · S · ~15 min — Stop hardcoding the impersonated client version
+### ☑ 1.3 · S · ~15 min — Stop hardcoding the impersonated client version (DONE 2026-07-24, see Ledger)
 
-- [ ] `CLAUDE_CODE_UA = 'claude-code/2.1.207'` (token-guard `fetchOfficialUsage`): derive from
+- [x] `CLAUDE_CODE_UA = 'claude-code/2.1.207'` (token-guard `fetchOfficialUsage`): derive from
       the installed Claude Code version if cheaply discoverable, else keep the pin but add a
       dated comment with the rotation rule and a test that the fetch degrades silently.
 
@@ -318,3 +318,27 @@ manual smoke: one prompt in a scratch session paints working→idle correctly.
     Verified no test parses token-guard source literals before renaming (the cli.js regex trap
     does not extend to hooks).
   - Deviations: none. Next: 1.3.
+
+- **2026-07-24 — 1.3 stop hardcoding the impersonated client version — DONE.** Commit
+  `36badc7`, `npm test` green (full chain; hook suites now **206** tests — 10 new),
+  `npx eslint .` clean, sync-docs regen byte-identical.
+  - The version IS cheaply discoverable — two ways, both wired in as a ladder in the new
+    `claudeCodeUA(env)` (token-guard.js, replaces the `CLAUDE_CODE_UA` const): (1) the
+    `CLAUDE_CODE_EXECPATH` env var points inside the npm package, so `dirname/../package.json`
+    is one fs read (guarded: name must be `@anthropic-ai/claude-code`, version must be
+    semver-shaped); (2) the `AI_AGENT` env stamp (`claude-code_2-1-210_agent`) parses to the
+    version; (3) dated pin fallback `CLAUDE_CODE_UA_PIN`, re-pinned 2.1.207 → 2.1.210 with the
+    rotation rule in its comment. Derivation runs only on cache miss (≤1 per 180s TTL), never
+    spawns a process. Exports grew `claudeCodeUA` + `fetchOfficialUsage` (additive, for tests).
+  - New `.claude/hooks/tests/token-guard-official-usage.test.cjs` (10 tests, auto-discovered
+    by the runner): the 6 derivation-ladder cases (pin asserted by SHAPE, not value, so
+    re-pinning never breaks it) + 4 silent-degradation cases for `fetchOfficialUsage`
+    (no credentials → null, network throw → null, non-OK → stale cache, fresh cache → no
+    network), with `os.homedir` + `global.fetch` swapped out so tests can't touch real
+    credentials or the endpoint.
+  - Discoveries: the hardcoded pin was already stale (running install is 2.1.210); the
+    on-disk `lastOnboardingVersion` in `~/.claude.json` is NOT a usable source (says 1.0.128).
+    Noted, out of scope: a network-level fetch failure returns null even when a stale cache
+    exists (the `return stale` only covers missing-token and non-OK paths) — behavior change,
+    would need its own item.
+  - Deviations: none. Next: 1.4.
