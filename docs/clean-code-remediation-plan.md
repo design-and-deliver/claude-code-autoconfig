@@ -117,9 +117,9 @@ temp fixtures).
 to `copyDir` locally → the new tests must fail; revert).
 **Commit:** per sub-item, `test(cli): replace source-grep assertions with behavior — <cluster>` + `Changelog: none`.
 
-### ☐ 2.2 · M · ~60m — One shared test harness for `test/*.js`
+### ☑ 2.2 · M · ~60m — One shared test harness for `test/*.js` (DONE 2026-07-24, see Ledger)
 
-- [ ] Extract `test/_harness.js` (`test`, `assert`, counters, exit summary, `runCli`) and
+- [x] Extract `test/_harness.js` (`test`, `assert`, counters, exit summary, `runCli`) and
       migrate the 12 copy-pasted harnesses to it. Keep the `node --test` hook suites as-is
       (their runner bridge is fine) — document that the repo has exactly TWO frameworks on
       purpose: one for CLI suites, `node:test` for hooks.
@@ -557,3 +557,32 @@ detached child — run on the dev box; CI green proves nothing here.
     headings to the parser grammar (3.3 retagged `~6h` total, was "2 hr each"; 2.1's
     parenthetical moved into the title); `.claude/rules/plan-authoring.md` now documents the
     grammar. Verified: plan-progress renders 19% · 6/20 · next → 2.2.
+
+- **2026-07-24 — 2.2 one shared test harness — DONE.** Commit `08be629`, `npm test` green,
+  `npx eslint .` clean. Executed as a reconciliation: the working tree arrived carrying the
+  full migration uncommitted from a session that died pre-commit (plus the evening plan
+  amendment, committed separately first as `079b5ec`); this session verified the work per
+  the Verify line and landed it rather than redoing it.
+  - `test/_harness.js` (new): `test` / `assert` / `assertExists` / counters / `summary`,
+    plus `makeClaudeShim` / `runCli` lifted verbatim from cli-behavior.test.js. Its header
+    documents the deliberate two-framework split (this harness for CLI suites, `node:test`
+    for hooks) and the standalone exceptions (box-alignment, live-twin-parity, the
+    hook-tests bridge). **15** suites migrated — the substep said "the 12 copy-pasted
+    harnesses"; the real count was 15.
+  - Deliberately NOT unified (different contracts, kept local with comments):
+    plugin-system's `runCli` (returns stdout, THROWS on non-zero exit) and corrupt-json's
+    (shimless). Cosmetic output change: auto-guard / dev-gate / contracts now print the
+    standard `ALL TESTS PASSED (N tests)` banner instead of their bespoke summaries.
+  - Verify: per-suite pass counts byte-compared pre/post — baseline `npm test` in a temp
+    worktree at HEAD + HEAD versions of the last four suites re-run in the main tree
+    (`git show HEAD:test/<f> > tmp`, run, delete). Identical:
+    40/13/15/22/122/62/1/9/10/4/4/59/4/5/6/5, hooks 213 (up from 2.1c's 206 via the twin
+    session's R13 commits `38cc78c`/`7e8cffb`/`03c3922`, already at HEAD — not this substep).
+  - **Discovery (load-bearing for re-verifiers): the docs ratchet (contracts.test.js)
+    cannot pass in a fresh worktree/checkout on this box** — byte-parity is line-ending
+    sensitive twice over: a fresh autocrlf checkout smudges `autoconfig.docs.html` to CRLF
+    (regen writes LF → whole-file mismatch), and after forcing an all-LF checkout the regen
+    STILL diverges (format.js's `@description` parse yielded the fallback desc under LF).
+    Baseline-testing old revisions must run inside the real dev tree, not a scratch clone.
+  - Deviations: none beyond the reconciliation framing. Next: 2.3 (complexity ratchet —
+    decision about the 3-rule lint floor goes in this Ledger).
