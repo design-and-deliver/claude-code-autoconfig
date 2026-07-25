@@ -50,3 +50,14 @@ test('--analyze exits 0 and emits the machine-interface digest headers', () => {
       `--analyze digest is missing the literal "${literal}" that /analyze-session parses (trap T2)\n--- output ---\n${out}`);
   }
 });
+
+// The substep-done recap convention quotes this line verbatim into plan Ledgers — pin its
+// wording and the split math (fixture: 100k cache reads of 108.2k total → 92%; effective
+// = 5000 inp + 700 out + 2500 cw + 100k*0.1 cr = 18.2k).
+test('--analyze TOTALS breaks out the cached re-read share and effective spend', () => {
+  const { out } = runAnalyze();
+  assert.ok(out.includes('92% cached re-reads (billed at 0.1x input)'),
+    `digest is missing the cached re-read share line\n--- output ---\n${out}`);
+  assert.ok(out.includes('effective ≈ 18k token-equivalents'),
+    `digest is missing the effective token-equivalents figure\n--- output ---\n${out}`);
+});

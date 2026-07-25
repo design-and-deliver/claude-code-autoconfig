@@ -2358,6 +2358,9 @@ function scanWindow(cutoff) {
 function analyzeSession(transcriptPath, cfg) {
   const m = meterSession(transcriptPath, {});
   const sid = path.basename(transcriptPath).replace(/\.jsonl$/i, '');
+  const split = { inp: 0, out: 0, cr: 0, cw: 0 };
+  for (const pm of [m.main.perModel, m.agents.perModel])
+    for (const v of Object.values(pm)) { split.inp += v.inp; split.out += v.out; split.cr += v.cr; split.cw += v.cw; }
   const res = {
     sid, project: path.basename(path.dirname(transcriptPath)).replace(/^C--/, ''),
     startTs: 0, endTs: m.lastTs, requests: 0, models: Object.keys(m.main.perModel),
@@ -2365,6 +2368,7 @@ function analyzeSession(transcriptPath, cfg) {
       tokens: sessionTokens(m), mainTok: tokensOf(m.main.perModel),
       agentsTok: tokensOf(m.agents.perModel), agentFiles: m.agents.files,
       usd: m.usd, mainUsd: m.main.usd, agentsUsd: m.agents.usd, liveContext: m.liveContext,
+      split, effectiveTok: Math.round(workTokens(m)),
     },
     rent: null, bombs: [], topPayloads: [], fleets: m.agents.perWorkflow, ttlGaps: [],
     cfgBombJump: cfg.bombJumpTokens, cfgIdleMin: cfg.idleWarnMinutes,
@@ -2492,6 +2496,12 @@ function renderAnalysis(a, usd$) {
   lines.push(`  ${fmtK(t.tokens)} tokens processed` +
     (t.agentFiles ? ` = main ${fmtK(t.mainTok)} + agents ${fmtK(t.agentsTok)} (${t.agentFiles} transcripts)` : '') +
     (usd$ ? ` · ≈ ${fmtUSD(t.usd)} API-list` : ''));
+  // "effective" weights each category by its input-rate multiple (re-reads 0.1x) — a scale
+  // intuition, not exact billing; the $ figure above carries the per-model/output weighting.
+  if (t.split && t.tokens) {
+    lines.push(`  ${Math.round((t.split.cr / t.tokens) * 100)}% cached re-reads (billed at 0.1x input) → ` +
+      `effective ≈ ${fmtK(t.effectiveTok)} token-equivalents`);
+  }
   lines.push(`  live context at end: ${fmtK(t.liveContext)} tokens`);
 
   if (a.rent) {
