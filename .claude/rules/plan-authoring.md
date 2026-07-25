@@ -35,6 +35,13 @@ are no-ops — there the Ledger entry itself is the durable record, so skip thos
    | **M** | a few files or one new test; bounded logic | ~30–60 min |
    | **L** | new test suite(s), several coordinated edits, **or** any edit inside a ⛔ trap surface | 1–2 hr |
 
+   **The `~<time>` grammar is machine-parsed** (`/plan-progress`'s SUBSTEP regex is the
+   contract): a single `~<N>m` or `~<N>h` token — `~45m`, `~2h`, `~1.5h` — with the ` — `
+   IMMEDIATELY after it. `~45 min`, `~2 hr`, `~2h each`, or `~2h (split a/b)` all fail the
+   regex, and a plan whose substeps don't parse is silently invisible to `/plan-progress`
+   AND `/continue`'s plan probe (discovered 2026-07-24: the clean-code plan shipped unparseable
+   and would never have auto-resumed). Qualifiers belong in the title, after the dash.
+
    The letter leads because it is stable; the time trails because it is only a hint — a step
    balloons the moment it hits a trap, which is exactly why size, not wall-clock, is the anchor.
    **There is no XL**: a substep that sizes XL is too big for one session — split it into

@@ -8,6 +8,8 @@ breaking the conventions this package's production users depend on.
 `ARTICLES/first-pass-fixes-what-landed-and-what-waits.html` (the executed first pass),
 plus the census data embedded in the review page. The first pass (2026-07-24, see Ledger)
 already landed the safe bug/lie/privacy fixes with new regression suites.
+`ARTICLES/cyclomatic-complexity-report.html` (2026-07-24 evening re-census, top-10 table)
+drove the Phase 3 acceptance bar and substeps 3.6–3.10.
 
 **How to execute:** one substep per fresh session. Read the ⛔ traps below before ANY item.
 Each substep: make it green (`npm test` before and after), run its **Verify** commands, commit
@@ -44,11 +46,11 @@ with a `Changelog:` trailer (dev-gated work → `Changelog: none`), append a Led
 
 ## Phase 1 — finish stopping the repo from lying (cheap, no product logic)
 
-### ☑ 1.0 · M · ~60 min — First pass (DONE 2026-07-24, see Ledger)
+### ☑ 1.0 · M · ~60m — First pass (DONE 2026-07-24, see Ledger)
 
 Bug/honesty/privacy fixes + 3 new regression suites. Details in the Ledger entry.
 
-### ☑ 1.1 · M · ~45 min — Retire the mothballed R11 block from token-guard
+### ☑ 1.1 · M · ~45m — Retire the mothballed R11 block from token-guard
 
 - [x] Verify the R11 dispatch is still commented out and `resolveMarker` / `clearMarker` /
       `onSessionStart` / `migrateReceipt` / `writeMigrateCandidate` have no live callers
@@ -62,7 +64,7 @@ Bug/honesty/privacy fixes + 3 new regression suites. Details in the Ledger entry
 assume. **Verify:** `npm test`; `grep -rn "resolveMarker\|migrateReceipt" --include="*.md" --include="*.js" .claude bin test` returns only the plan/articles.
 **Commit:** `refactor(token-guard): delete retired R11 migration block` + `Changelog: none`.
 
-### ☑ 1.2 · M · ~45 min — Name token-guard's magic numbers (DONE 2026-07-24, see Ledger)
+### ☑ 1.2 · M · ~45m — Name token-guard's magic numbers (DONE 2026-07-24, see Ledger)
 
 - [x] One constants block near the top: dust floors (0.02 / 0.001 / 0.005), materiality 0.85,
       cache-read 0.1× / write 1.25× / 2× multipliers, prune caps (unify `131072` vs `256 * 1024`
@@ -72,7 +74,7 @@ assume. **Verify:** `npm test`; `grep -rn "resolveMarker\|migrateReceipt" --incl
 **Verify:** `npm test` (hook suites cover the touched paths); `npx eslint .`.
 **Commit:** `refactor(token-guard): name the sizing/threshold constants` + `Changelog: none`.
 
-### ☑ 1.3 · S · ~15 min — Stop hardcoding the impersonated client version (DONE 2026-07-24, see Ledger)
+### ☑ 1.3 · S · ~15m — Stop hardcoding the impersonated client version (DONE 2026-07-24, see Ledger)
 
 - [x] `CLAUDE_CODE_UA = 'claude-code/2.1.207'` (token-guard `fetchOfficialUsage`): derive from
       the installed Claude Code version if cheaply discoverable, else keep the pin but add a
@@ -80,7 +82,7 @@ assume. **Verify:** `npm test`; `grep -rn "resolveMarker\|migrateReceipt" --incl
 
 **Verify:** `npm test`. **Commit:** `Changelog: none`.
 
-### ☑ 1.4 · M · ~30 min — sync-docs escape hardening (DONE 2026-07-24, see Ledger)
+### ☑ 1.4 · M · ~30m — sync-docs escape hardening (DONE 2026-07-24, see Ledger)
 
 - [x] Replace the single-quote-only escapes (`replace(/'/g, "\\'")` sites in
       `generateTreeInfo` / tree HTML) with one `jsEscape` helper that also handles backslash
@@ -96,7 +98,7 @@ assume. **Verify:** `npm test`; `grep -rn "resolveMarker\|migrateReceipt" --incl
 
 ## Phase 2 — make wrong edits fail loudly (unblocks Phase 3)
 
-### ☑ 2.1 · L · ~2 hr (split a/b/c) — Replace the 44 source-grep assertions with behavior
+### ☑ 2.1 · L · ~2h — Replace the 44 source-grep assertions with behavior (split a/b/c)
 
 The single highest-leverage item: `test/cli-install.test.js` asserts literal source strings
 ("pass VACUOUSLY" per `cli-behavior.test.js:7-9`), which both misses real breakage and blocks
@@ -115,7 +117,7 @@ temp fixtures).
 to `copyDir` locally → the new tests must fail; revert).
 **Commit:** per sub-item, `test(cli): replace source-grep assertions with behavior — <cluster>` + `Changelog: none`.
 
-### ☐ 2.2 · M · ~60 min — One shared test harness for `test/*.js`
+### ☐ 2.2 · M · ~60m — One shared test harness for `test/*.js`
 
 - [ ] Extract `test/_harness.js` (`test`, `assert`, counters, exit summary, `runCli`) and
       migrate the 12 copy-pasted harnesses to it. Keep the `node --test` hook suites as-is
@@ -125,7 +127,7 @@ to `copyDir` locally → the new tests must fail; revert).
 **Verify:** `npm test` (same pass counts per suite as before the migration).
 **Commit:** `test: extract the shared harness` + `Changelog: none`.
 
-### ☐ 2.3 · M · ~45 min — Complexity ratchet (reconcile with the 3-rule lint decision)
+### ☐ 2.3 · M · ~45m — Complexity ratchet (reconcile with the 3-rule lint decision)
 
 - [ ] Decision first (record in this plan's Ledger): the 3-rule eslint floor is documented as
       deliberate. The ratchet that fits that philosophy is NOT a style rule but a no-growth
@@ -137,7 +139,7 @@ to `copyDir` locally → the new tests must fail; revert).
 **Verify:** `npm test`; add a scratch function with CC 12 → suite must fail; remove it.
 **Commit:** `test: complexity no-growth ratchet` + `Changelog: none`.
 
-### ☐ 2.4 · S · ~20 min — Coverage visibility (c8, no thresholds yet)
+### ☐ 2.4 · S · ~20m — Coverage visibility (c8, no thresholds yet)
 
 - [ ] `npm i -D c8`, `npm run coverage` script wrapping the existing chain; record the
       baseline number in the Ledger. No gating yet — visibility first.
@@ -145,7 +147,7 @@ to `copyDir` locally → the new tests must fail; revert).
 **Verify:** `npm run coverage` prints a summary; `npm test` unaffected.
 **Commit:** `chore: add c8 coverage script` + `Changelog: none`.
 
-### ☐ 2.5 · M · ~45 min — Tests for plan-progress (the last untested script with logic)
+### ☐ 2.5 · M · ~45m — Tests for plan-progress (the last untested script with logic)
 
 - [ ] Characterization tests for `parsePlan` / `render` against fixture plan docs (this file
       is a natural fixture: effort tags, microsteps, Ledger).
@@ -156,7 +158,15 @@ to `copyDir` locally → the new tests must fail; revert).
 
 ## Phase 3 — shrink the god files (each substep shippable; order matters)
 
-### ☐ 3.1 · L · ~2 hr — cli.js grows a `main()` (after 2.1 — not before)
+**Acceptance bar for every complexity substep (3.3–3.10):** the substep's target function(s)
+AND every helper extracted from them end at **CC ≤ 9**, measured by
+`npx eslint --no-config-lookup --rule '{"complexity":["warn",9]}' <file>` — zero hits for the
+touched functions. If the first cut leaves a piece ≥ 10, split that piece further — a
+"decomposed" function still over the repo's own limit does not close its box. Once 2.3 lands,
+the ratchet baseline must SHRINK by exactly the substep's cleared violations in the same
+commit. Behavior stays frozen: byte-identical outputs wherever a Verify says so.
+
+### ☐ 3.1 · L · ~2h — cli.js grows a `main()` (after 2.1 — not before)
 
 - [ ] Wrap the require-time flow in `function main()` + `if (require.main === module) main();`
       with NO other change; the literals the contract tests parse stay put.
@@ -170,7 +180,7 @@ outside `main()` closes over them. **Verify:** `npm test` (post-2.1 suites are b
 must now be side-effect-free.
 **Commit:** `refactor(cli): move the install flow into main()` + `Changelog: none`.
 
-### ☐ 3.2 · M · ~60 min — cli.js: one `copyTree`, one `boxLine`, one color helper
+### ☐ 3.2 · M · ~60m — cli.js: one `copyTree`, one `boxLine`, one color helper
 
 - [ ] Collapse `copyDirForBackup` / `copyDir` / `copyDirIfMissing` + the inline docs-copy
       loop into `copyTree(src, dest, {filter, overwrite})`.
@@ -181,39 +191,44 @@ must now be side-effect-free.
 **Verify:** `npm test` (box + install suites); visual smoke of the READY box in a temp dir.
 **Commit:** `refactor(cli): copyTree/boxLine/paint helpers` + `Changelog: none`.
 
-### ☐ 3.3 · L · ~2 hr each — token-guard: decompose the three worst handlers in place
+### ☐ 3.3 · L · ~6h — token-guard: decompose the three worst handlers in place (~2h per sub-item)
 
 Single-file constraint stands (hook deployment); the split is INTO per-rule functions within
 the file, anchored on the pure verdict functions that already exist.
 
-- [ ] 3.3a — `onUserPromptSubmit` (CC 88): one `r<N>...Guard(ctx)` function per rule
-      (R8, R9, meter, R2, R3, R4, fat-context, R6, R12a, R12b, spend-step), each returning
-      `{notes, block}`; the handler becomes a fold over them. Digest wording byte-identical.
-- [ ] 3.3b — `onPreToolUse` (CC 38): same shape.
+- [ ] 3.3a — `onUserPromptSubmit` (CC 89, 2026-07-24 re-census): one `r<N>...Guard(ctx)`
+      function per rule (R8, R9, meter, R2, R3, R4, fat-context, R6, R12a, R12b, spend-step),
+      each returning `{notes, block}`; the handler becomes a fold over them. Digest wording
+      byte-identical.
+- [ ] 3.3b — `onPreToolUse` (CC 44, 2026-07-24 re-census): same shape.
 - [ ] 3.3c — `analyzeSession` (CC 52): extract the per-concern accumulators; dedupe the
       region-attribution logic it shares with `attributeJump` into one helper.
 
-**Verify:** `npm test` after EACH sub-item (196 hook tests as of substep 1.1); `--analyze`
-output on a real transcript diffed byte-for-byte against pre-refactor output.
+**Verify:** `npm test` after EACH sub-item (206 hook tests as of substep 1.3); `--analyze`
+output on a real transcript diffed byte-for-byte against pre-refactor output; the Phase 3
+CC ≤ 9 bar on each cleared function + its helpers.
 **Commit:** one per sub-item + `Changelog: none`.
 
-### ☐ 3.4 · L · ~2 hr — terminal-title: explicit event dispatch + handle() split
+### ☐ 3.4 · L · ~2h — terminal-title: explicit event dispatch + handle() split
 
 ⚠ Highest-trap substep: fleet-synced file, cross-process sidecar protocol.
 
 - [ ] First, the safety fix from the review: `handle()`'s fall-through treats ANY unknown
       event as Stop — add an explicit `event === 'Stop'` guard (unknown events exit quietly)
       with a hook-suite test.
-- [ ] Then split `handle()` into `onUserPromptSubmit` / `onPostToolUse` / `onNotification` /
-      `onStop` functions in-file; `turnWatch()` stays as-is this substep.
+- [ ] Then split `handle()` (CC 97 — the repo's worst) into `onUserPromptSubmit` /
+      `onPostToolUse` / `onNotification` / `onStop` functions in-file; each resulting handler
+      + its helpers must meet the Phase 3 CC ≤ 9 bar — a 97 split four ways can still leave a
+      25, so expect per-event helper extraction too. `turnWatch()` waits for 3.6.
 - [ ] `node scripts/sync-terminal-title.js --write` after; live-twin parity green.
 
 **Verify:** `npm test`; `node scripts/sync-terminal-title.js` (check mode, zero drift);
+the Phase 3 CC ≤ 9 bar on `handle`'s replacements;
 manual smoke: one prompt in a scratch session paints working→idle correctly.
 **Commit:** `fix(terminal-title): explicit Stop dispatch; split handle()` +
 `Changelog: More reliable terminal tab status updates`.
 
-### ☐ 3.5 · M · ~60 min — settings-merge: per-domain split
+### ☐ 3.5 · M · ~60m — settings-merge: per-domain split
 
 - [ ] `mergeSettingsInto` / `unmergeSettingsFrom` (CC 30 each) → `mergeEnv/mergeHooks/
       mergePermissions` + unmerge twins; the `added`-delta contract (BH-1) is byte-frozen —
@@ -221,6 +236,81 @@ manual smoke: one prompt in a scratch session paints working→idle correctly.
 
 **Verify:** `npm test` (plugin suite incl. the 2026-07-24 corrupt-settings tests).
 **Commit:** `refactor(settings-merge): per-domain helpers` + `Changelog: none`.
+
+### ☐ 3.6 · L · ~2h — terminal-title: decompose turnWatch (CC 79)
+
+⚠ Same trap surface as 3.4 (fleet-synced single file, cross-process sidecar protocol) —
+execute right after it, while that session's traps are fresh.
+
+- [ ] First seam is free: the grace+recheck+rescue tail is DUPLICATED verbatim today
+      (~1329–1335 ≈ ~1354–1360) — extract one `confirmStallAndRescue(...)`.
+- [ ] Extract per-verdict handlers out of the probe dispatch: `classifyProbeEligibility`,
+      `handleDeadStreak`, `handleCpuQuiet`, plus the debug-gated console-title readback.
+- [ ] Byte-frozen strings: glyph-file tokens (`working` / `idle` / the awaiting token — must
+      stay byte-identical to the real Notification paint), watch-log note names
+      (`watch-start`, `watch-exit`, `dialog-flip`, `int-rescue` — `audit-titles` /
+      `show-title-history` parse them), sidecar filenames
+      (`.glyph/.watch/.probe/.needle/.found/.cpu/.live/.ask`).
+- [ ] `node scripts/sync-terminal-title.js --write`; live-twin parity green.
+
+⚠ The turn-watch E2E (test/terminal-title.test.js) is Windows-only and spawns the real
+detached child — run on the dev box; CI green proves nothing here.
+**Verify:** `npm test`; check-mode sync (zero drift); the Phase 3 CC ≤ 9 bar.
+**Commit:** `refactor(terminal-title): decompose turnWatch` + `Changelog: none`.
+
+### ☐ 3.7 · L · ~2h — token-guard: meter (CC 33) + fanVerdict (CC 31)
+
+- [ ] Test FIRST — `meter` has no direct unit test (coverage today is incidental through the
+      event handlers): fixture transcript → exact `perModel` keys (`inp/out/cr/cw/searches/usd`),
+      the 5m/1h cache-write TTL split, web-search surcharge, `liveContext` / `turnFloorUSD`.
+      Written green on HEAD before touching the function.
+- [ ] Extract from `meter`: `collectUsageById` (line scan + last-wins dedupe), `costOfUsage`
+      (the pricing fold — `CACHE_READ_X` / `CACHE_WRITE_5M_X` / `CACHE_WRITE_1H_X` stay the
+      single source), `deriveLiveFloor`. The returned struct's field names are a contract —
+      `meterSession`, `report`, and `renderAnalysis` all read them.
+- [ ] Extract from `fanVerdict`: `scanFanConstants` / `detectMultiplicativeFan` /
+      `composeCeiling` / `scanLiteralFans` / `tierVerdict`. The returned
+      `{level, signals, estimate, ceiling, concrete}` shape and the `block|high|warn` enum are
+      pinned by token-guard-fan.test.cjs — keep both.
+
+**Verify:** `npm test` after each function; the Phase 3 CC ≤ 9 bar.
+**Commit:** one per function + `Changelog: none`.
+
+### ☐ 3.8 · L · ~90m — token-guard: the --report renderer (CC 32) — test first, it has none
+
+- [ ] Characterization test spawning `--report` on a fixture transcript with `global.fetch` +
+      credentials stubbed (reuse the 1.3 pattern in token-guard-official-usage.test.cjs). Pin
+      the `ALLOCATION` / `THIS SESSION` / `LAST 5 HOURS` headers and the
+      `/analyze-session <sid>` hint format — usage-report.md and analyze-session.md consume
+      those literally.
+- [ ] Extract `allocationLines` / `sessionLines` / `formatModelRow` / `windowLines` /
+      `formatWindowRow`; the dollars-vs-tokens display branch collapses into ONE place.
+
+**Verify:** `npm test`; `--report` on a real transcript diffed byte-for-byte pre/post
+(fetch stubbed to the cached allocation so the diff is deterministic); the Phase 3 CC ≤ 9 bar.
+**Commit:** `refactor(token-guard): decompose the --report renderer` + `Changelog: none`.
+
+### ☐ 3.9 · M · ~45m — whats-happening: decompose analyze (CC 33)
+
+- [ ] Extract `sliceCurrentTurn` / `buildResultMap` / `buildSteps` / `classifyState`. The
+      `state` enum (`running-tool` | `thinking` | `idle-or-done`) and the `--json` object keys
+      are the contract — call sites branch on the former, the skill consumes the latter.
+- [ ] The 5 CLI characterization tests (test/whats-happening.test.js) pass unchanged.
+
+**Verify:** `npm test`; the Phase 3 CC ≤ 9 bar.
+**Commit:** `refactor(whats-happening): decompose analyze` + `Changelog: none`.
+
+### ☐ 3.10 · M · ~45m — plan-progress: decompose render (CC 32) — after 2.5, never before
+
+- [ ] Hard dependency: 2.5's characterization suite is the only safety net this file gets —
+      do not start this substep without it landed.
+- [ ] Extract `computeProgress` / `renderHeader` / `renderPhase` / `windowDoneSubs` /
+      `renderSub` / `renderMicrosteps`. Output is human Markdown (no machine contract); the
+      INPUT format (`### ☐ N.k · S|M|L · ~time — title`, `## Ledger`) is `parsePlan`'s
+      contract and stays untouched.
+
+**Verify:** `npm test`; the Phase 3 CC ≤ 9 bar.
+**Commit:** `refactor(plan-progress): decompose render` + `Changelog: none`.
 
 ---
 
@@ -443,3 +533,27 @@ manual smoke: one prompt in a scratch session paints working→idle correctly.
     changed file alone.
   - Next: 2.2 (extract the shared test harness — the CLI suites still carry 12 copy-pasted
     `test`/`assert` harnesses).
+
+- **2026-07-24 (evening) — plan amendment, no substep executed.** Trigger: a fresh ESLint v9
+  complexity census (`ARTICLES/cyclomatic-complexity-report.html` — 1,203 functions, 58 files,
+  54 over CC 10, avg 2.84) + an explicit ask to get the top-10 under CC 10. Top-10:
+  `handle` 97, `onUserPromptSubmit` 89, `turnWatch` 79, `analyzeSession` 52, `onPreToolUse` 44,
+  `meter` 33, `analyze` (whats-happening) 33, `report` 32, `render` (plan-progress) 32,
+  `fanVerdict` 31. Five of those had no substep — added 3.6–3.10 (turnWatch; meter+fanVerdict;
+  --report; analyze; render), seams from a code profile of each (dup rescue-tail in turnWatch
+  at ~1329/~1354 is the first free extraction). Added the Phase 3 CC ≤ 9 acceptance bar
+  (targets + extracted helpers; ratchet baseline shrinks per substep once 2.3 lands) and wired
+  it into 3.3/3.4 Verify. Refreshed stale numbers: 3.3a CC 88→89, 3.3b CC 38→44, 3.3's hook
+  count 196→206. Census caveat: run on a tree carrying the twin session's uncommitted
+  token-guard R13 edit, so token-guard numbers may move ±1–2. Coverage findings for the new
+  substeps: `meter` and `report` have NO direct tests (test-first items baked in);
+  `fanVerdict` is unit-pinned; `analyze` has 5 CLI tests; `render` waits on 2.5.
+  Execution order unchanged: 2.2 is still next unchecked.
+  - **Discovery (load-bearing): this plan was INVISIBLE to /plan-progress and /continue's
+    plan probe until tonight.** The SUBSTEP regex (`plan-progress.js:50`) accepts only
+    `~<N>m` / `~<N>h` time tags with ` — ` immediately after; this doc used `~45 min` /
+    `~2 hr` / `~2 hr each` / `~2 hr (split a/b/c)`, so zero substeps parsed and the doc was
+    silently skipped — `/clear` + `/continue` would never have resumed it. Fixed all 20
+    headings to the parser grammar (3.3 retagged `~6h` total, was "2 hr each"; 2.1's
+    parenthetical moved into the title); `.claude/rules/plan-authoring.md` now documents the
+    grammar. Verified: plan-progress renders 19% · 6/20 · next → 2.2.
