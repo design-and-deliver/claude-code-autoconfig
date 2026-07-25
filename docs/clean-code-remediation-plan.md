@@ -180,13 +180,14 @@ outside `main()` closes over them. **Verify:** `npm test` (post-2.1 suites are b
 must now be side-effect-free.
 **Commit:** `refactor(cli): move the install flow into main()` + `Changelog: none`.
 
-### ☐ 3.2 · M · ~60m — cli.js: one `copyTree`, one `boxLine`, one color helper
+### ☑ 3.2 · M · ~60m — cli.js: one `copyTree`, one `boxLine`, one color helper (DONE 2026-07-24, see Ledger)
 
-- [ ] Collapse `copyDirForBackup` / `copyDir` / `copyDirIfMissing` + the inline docs-copy
+- [x] Collapse `copyDirForBackup` / `copyDir` / `copyDirIfMissing` + the inline docs-copy
       loop into `copyTree(src, dest, {filter, overwrite})`.
-- [ ] `boxLine(text)` (padEnd-based) replaces hand-counted box spaces; box tests keep passing
-      unchanged (they assert rendered width, which is the point).
-- [ ] `paint(color, text)` helper for the 61 raw ANSI literals in cli.js.
+- [x] `boxLine(text)` (padEnd-based) replaces hand-counted box spaces; box tests keep passing
+      unchanged (they assert rendered width, which is the point — but see the Ledger: the
+      extraction side was source-grep and had to go behavioral).
+- [x] `paint(color, text)` helper for the 61 raw ANSI literals in cli.js.
 
 **Verify:** `npm test` (box + install suites); visual smoke of the READY box in a temp dir.
 **Commit:** `refactor(cli): copyTree/boxLine/paint helpers` + `Changelog: none`.
@@ -686,3 +687,38 @@ detached child — run on the dev box; CI green proves nothing here.
     2.2 discovery); scripted transforms must detect and preserve EOL, or the diff
     explodes.
   - Next: 3.2 (cli.js: one `copyTree`, one `boxLine`, one color helper).
+
+- **2026-07-24 — 3.2 cli.js: copyTree/boxLine/paint — DONE.** Commit `8a94b78`, `npm test`
+  green before and after (full chain, 213 hook tests), `npx eslint .` clean, ratchet green
+  with the baseline UNTOUCHED (every deleted helper was under CC 10; every new helper lands
+  under the Phase 3 bar — `main` stays the sole cli.js entry, identity-matched).
+  - `copyTree(src, dest, {filter, overwrite})` replaces more than the item listed: besides
+    `copyDirForBackup` / `copyDir` / `copyDirIfMissing` + the docs loop, the per-entry
+    backup loop collapsed into ONE `copyTree(claudeDest, migrationPath, …)` — the
+    SKIP_BACKUP/AUTOCONFIG_FILES filter applies at every depth and excluding 'migration'
+    keeps the backup from nesting into itself. The filter is REQUIRED (all 8 call sites
+    pass one): the first cut with optional filter + defaulted opts measured CC 10 — one
+    over the bar — and dropping the two unused branches fixed it honestly.
+  - `paint(color, text)` + the ANSI name map: the 38 `'\x1b[NNm%s\x1b[0m'` sites were
+    converted by a scripted within-line transform (CRLF untouched — the 3.1 EOL trap held);
+    the embedded-literal sites, whats-new segment renderer, and `rl.question` by hand.
+    Raw `\x1b` literals left in cli.js: exactly 2 (paint's body, boxLine's stripper).
+  - `boxLine`/`printReadyBox` collapse the duplicated 9-line box halves to one function;
+    non-blank box lines verified byte-identical to the old literals (raw title line
+    inspected); blank border lines shifted color placement (border-only vs whole-line
+    yellow) — same 46-char render, invisible to stripAnsi width checks.
+  - **Deviation (load-bearing): the item's "box tests keep passing unchanged" was wrong
+    about the extraction side.** test/box-alignment.test.js regex-extracted box literals
+    from cli.js SOURCE (`console.log('…║…')`), with an explicit ≥2-boxes vacuous-pass
+    guard — runtime-built boxes would have failed it with zero boxes found. Rewrote it
+    behavioral per 2.1c's standing note: it now runs the real CLI twice (fresh + configured
+    fixture, ENTER piped, claude shim on PATH — the F12 pattern), extracts box lines from
+    stdout, and keeps the same width/structure assertions plus an explicit
+    `EXPECTED_WIDTH = 46` pin. It borrows `makeClaudeShim` from `test/_harness.js`
+    (header updated) but keeps its bespoke whole-run structure.
+  - Docs updated in-substep: CLAUDE.md Box Drawing Guidelines rewritten for
+    boxLine/paint + the behavioral test; Update System Guidelines `copyDir` → `copyTree`;
+    stale in-file comment references (BH-3 @applied, hooks preserve rationale) reworded.
+  - sync-docs regen: nothing under `.claude/` changed; contracts ratchet green in the suite.
+  - Next: 3.3 (token-guard: decompose the three worst handlers — dedicate the session to
+    3.3a alone; the substep is L and pre-split a/b/c).
