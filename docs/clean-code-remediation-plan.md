@@ -166,11 +166,11 @@ touched functions. If the first cut leaves a piece ≥ 10, split that piece furt
 the ratchet baseline must SHRINK by exactly the substep's cleared violations in the same
 commit. Behavior stays frozen: byte-identical outputs wherever a Verify says so.
 
-### ☐ 3.1 · L · ~2h — cli.js grows a `main()` (after 2.1 — not before)
+### ☑ 3.1 · L · ~2h — cli.js grows a `main()` (after 2.1 — not before) (DONE 2026-07-24, see Ledger)
 
-- [ ] Wrap the require-time flow in `function main()` + `if (require.main === module) main();`
+- [x] Wrap the require-time flow in `function main()` + `if (require.main === module) main();`
       with NO other change; the literals the contract tests parse stay put.
-- [ ] Delete the two "cannot require cli.js back" apology comments (plugins.js,
+- [x] Delete the two "cannot require cli.js back" apology comments (plugins.js,
       update-summary.js) once requiring is safe, replacing the `deps` injection only if
       trivially safe — otherwise leave `deps` and note it.
 
@@ -654,3 +654,35 @@ detached child — run on the dev box; CI green proves nothing here.
   - Coverage note (ties off 2.4's discovery): plan-progress.js was ABSENT from the c8 table
     because nothing loaded it; it now appears via the spawned child runs.
   - Deviations: none. Phase 2 complete. Next: 3.1 (cli.js grows a `main()` — Phase 3 opens).
+
+- **2026-07-24 — 3.1 cli.js grows a main() — DONE.** Commit `3afefc4`, `npm test` green
+  before and after (full chain, 213 hook tests), `npx eslint .` clean on the touched files.
+  Took ~S, not L — the wrap was scripted (uniform re-indent), and every contract grep
+  proved indentation-tolerant on inspection before the edit.
+  - The wrap: everything after the requires — constants, helpers, AND flow, interleaved
+    as they were — moved verbatim into `function main()` + `if (require.main === module)
+    main();`. Nothing but the requires remains at module scope, which satisfies the ⚠
+    closure trap trivially: there IS no helper outside main() left to close over anything
+    (`persistTimings`/`mark`, the risky closures, moved in with their state). No statement
+    reordering; hoisting semantics unchanged (all function declarations sat at top level,
+    now at main()'s top level).
+  - Verified per the item: `require('./bin/cli.js')` in a clean temp dir → exit 0, no
+    output, ZERO files created; `--bootstrap` smoke in a temp dir → exit 0, full install
+    tree; the five surviving cli.js source greps + DEV_ONLY_FILES parsers all green
+    (their regexes are unanchored, as 2.1c's ledger predicted).
+  - **Deviation (deliberate, documented): the complexity baseline GREW by exactly one
+    entry** — `bin/cli.js: Function 'main'` (64 → 65, `--write-baseline`, diff inspected).
+    Measurement artifact, not new complexity: eslint's `complexity` rule only measures
+    functions, so the flow's ~50 branches were invisible at module top level and became
+    visible inside main(). The Phase 3 CC ≤ 9 bar scopes 3.3–3.10 (not 3.1); 3.2 starts
+    shrinking main(). Anyone tempted to "fix" the growth: the alternative was leaving the
+    installer's complexity unmeasured forever.
+  - Apology comments deleted (plugins.js header, update-summary.js header); the `deps`
+    injection STAYS — cli.js requires plugins.js at the top, so plugins.js requiring
+    cli.js back would be a circular require (partial exports), not the "trivially safe"
+    replacement the item required. cli.js's own plugin-boundary + pull-updates comments
+    reworded to match reality.
+  - Note for 3.2+: the working-copy cli.js is CRLF on this box (autocrlf smudge — same
+    2.2 discovery); scripted transforms must detect and preserve EOL, or the diff
+    explodes.
+  - Next: 3.2 (cli.js: one `copyTree`, one `boxLine`, one color helper).
