@@ -1,8 +1,11 @@
-// R13 — task-sized budgeting, both halves. R13b: the turn-spend tripwire (ONE turn's billed
+// R13 — task-sized budgeting, both halves. R13b: the turn-spend tripwire (ONE turn's WORK
 // tokens ≥ turnGateTokens ⇒ PreToolUse ask; re-arms ABOVE observed spend; every prompt
-// re-baselines). R13a: the plan-first steer (every-prompt model-facing line asking Claude to
-// gauge blast radius and propose a plan before >3×-normal work). Copy contract: R13b is
-// TOKEN-denominated on every billing kind — task size is work volume, not price.
+// re-baselines). Work tokens = input + output + cache writes at full weight, cache re-reads
+// at their 0.1x billing weight — re-reads are rent (context × round trips), and unweighted
+// they cross any gate on routine multi-tool-call turns. R13a: the plan-first steer
+// (every-prompt model-facing line asking Claude to gauge blast radius and propose a plan
+// before >3×-normal work). Copy contract: R13b is TOKEN-denominated on every billing kind —
+// task size is work volume, not price.
 // Run: node --test token-guard-r13.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
@@ -15,6 +18,9 @@ const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
 
 const usageLine = (id, inp) => JSON.stringify({ type: 'assistant',
   message: { id, model: 'claude-fable-5', usage: { input_tokens: inp, output_tokens: 10 } } }) + '\n';
+const cacheReadLine = (id, cr) => JSON.stringify({ type: 'assistant',
+  message: { id, model: 'claude-fable-5',
+    usage: { input_tokens: 100, output_tokens: 10, cache_read_input_tokens: cr } } }) + '\n';
 
 function mkFixture(guardCfg) {
   const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'tg13-'));
@@ -74,6 +80,24 @@ test('R13b lazy-arms the baseline when none exists — never bills the session t
   // From that mid-turn baseline, another 300k landing IS a turn-spend crossing.
   fs.appendFileSync(fix.tp, usageLine('m3', 300000));
   assert.equal(gateOut(preToolUse(fix)).permissionDecision, 'ask');
+});
+
+test('R13b weighs cache re-reads at 0.1x — a rent-heavy turn does not fire', () => {
+  const fix = mkFixture();
+  promptSubmit(fix);
+  // 600k of cache re-reads ≈ ten 60k-context round trips: 60k work tokens, under the 100k
+  // gate. Unweighted this was 6 gate-widths — the routine-turn false fire the weighting kills.
+  fs.appendFileSync(fix.tp, cacheReadLine('m2', 600000));
+  assert.equal(gateOut(preToolUse(fix)).permissionDecision, undefined);
+});
+
+test('R13b still counts cache re-reads — at a tenth, 1M of them crosses a 100k gate', () => {
+  const fix = mkFixture();
+  promptSubmit(fix);
+  fs.appendFileSync(fix.tp, cacheReadLine('m2', 1000000)); // 0.1x ⇒ ~100k work tokens
+  const out = gateOut(preToolUse(fix));
+  assert.equal(out.permissionDecision, 'ask');
+  assert.match(out.permissionDecisionReason, /ONE turn has burned ~100k tokens/);
 });
 
 test('R13b: turnGateTokens null disables the tripwire', () => {

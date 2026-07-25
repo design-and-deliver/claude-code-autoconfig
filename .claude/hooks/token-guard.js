@@ -30,8 +30,9 @@
  *                           lands (R3 warns after; this fires while the rent is avoidable);
  *                       (c) R9: one-shot ask once the turn's accumulator crossed (opt-in);
  *                       (d) R3: one-shot post-bomb gate when bombGateWhenFat is on;
- *                       (e) R13b: turn-spend tripwire — hard ask once ONE turn's billed tokens
- *                           cross turnGateTokens (a normal task lands under ~100k; 10× that
+ *                       (e) R13b: turn-spend tripwire — hard ask once ONE turn's work tokens
+ *                           (cache re-reads weighted at their 0.1x billing rate) cross
+ *                           turnGateTokens (a normal task lands under ~100k; 10× that
  *                           means the work spiraled past anything consciously chosen);
  *                       (f) v1 hard gate on total session spend (default off, re-arms stepwise).
  *   PostToolUse      -> R9: mini-bomb accumulator — per-turn sum of tool-result payloads; when
@@ -130,12 +131,16 @@
  *   commandPayloadGate false — R8 door 3: UserPromptSubmit block on oversized slash commands
  *   miniBombWarn true — R9: mid-turn note to Claude when a turn's tool results sum past
  *   bombJumpTokens · miniBombGate false — R9 escalation: one-shot ask on the next tool call
- *   turnGateTokens 1000000 — R13b: hard ask when a single TURN's billed tokens (main + fleet,
+ *   turnGateTokens 1000000 — R13b: hard ask when a single TURN's work tokens (main + fleet,
  *   delta since the prompt) cross this. The task-sized complement to hardGateUSD: a session
  *   total fires late by design, but one turn at 10× a normal task (<~100k, TASK_NORM_TOK)
- *   means the work spiraled past anything consciously chosen. Re-arms at the next gate-width
- *   within the same turn; every prompt resets the baseline. Copy is TOKEN-denominated on every
- *   billing kind — task size is work volume, not price. null disables.
+ *   means the work spiraled past anything consciously chosen. Work tokens = input + output +
+ *   cache writes at full weight, cache re-reads at 0.1x (their billing weight): unweighted,
+ *   re-reads are rent — context size × round trips — and cross 1M in ~16 ordinary tool calls
+ *   at a 60k context with zero heavy work, so the gate would fire on routine turns instead of
+ *   spirals. Re-arms at the next gate-width within the same turn; every prompt resets the
+ *   baseline. Copy is TOKEN-denominated on every billing kind — task size is work volume,
+ *   not price. null disables.
  *   planSteer true — R13a: one-line every-prompt steer telling Claude to gauge the request's
  *   blast radius FIRST and propose a plan (session-sized substeps) before starting work that
  *   plausibly exceeds ~3× a normal task. The predictive half a meter can't do: the hook stages
@@ -231,7 +236,7 @@ const DEFAULTS = {
   commandPayloadGate: false,
   miniBombWarn: true,
   miniBombGate: false,
-  turnGateTokens: 1000000,          // R13b: hard ask when ONE turn's billed tokens cross this (null = off)
+  turnGateTokens: 1000000,          // R13b: hard ask when ONE turn's work tokens cross this (null = off)
   planSteer: true,                  // R13a: every-prompt plan-first steer (model-facing, never relayed)
   skillBudgetWarnChars: 150000,
   idleWarnMinutes: 60,
@@ -984,7 +989,7 @@ function loadState(projectDir, sid) {
     approvedPayloadHop: null, payloadGateOkOnce: null,
     turnPayloadTok: 0, turnPayloadWarned: false, miniBombGateArmed: false,
     lastWindowPct: null, lastWindowResetsAt: null, lastWindowAtIso: null, warnedWindow: null,
-    lastTurnDeltaUsd: 0, turnStartTok: null, turnGateAt: null };
+    lastTurnDeltaUsd: 0, turnStartWorkTok: null, turnGateAt: null };
   try {
     return Object.assign(blank,
       JSON.parse(fs.readFileSync(path.join(stateDir(projectDir), `${sid}.json`), 'utf8')));
@@ -1623,6 +1628,12 @@ const fmtK = v => v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1000 ? `${Math.ro
 const tokOne = v => v.inp + v.out + v.cr + v.cw;
 const tokensOf = pm => Object.values(pm).reduce((a, v) => a + tokOne(v), 0);
 const sessionTokens = m => tokensOf(m.main.perModel) + tokensOf(m.agents.perModel);
+// R13b work-volume meter: what a turn actually DID — new input, output, and cache writes at
+// full weight; cache re-reads at their 0.1x billing weight. Unweighted, re-reads are rent
+// (context size × round trips) and dwarf real work ~16 tool calls into any fat-context turn.
+const workOne = v => v.inp + v.out + v.cw + v.cr * CACHE_READ_X;
+const workTokensOf = pm => Object.values(pm).reduce((a, v) => a + workOne(v), 0);
+const workTokens = m => workTokensOf(m.main.perModel) + workTokensOf(m.agents.perModel);
 const shortModel = k => k.split('-')[1] || k;
 function mergedPerModel(m) {
   const out = {};
@@ -1679,7 +1690,7 @@ async function onUserPromptSubmit(data, projectDir) {
   if (!m.main.turns) return; // brand-new session — nothing to say
   // R13b — new turn: re-baseline the turn-spend meter and disarm any same-turn re-arm.
   // (Turn 1 of a brand-new session never reaches here — PreToolUse lazy-arms the baseline.)
-  st.turnStartTok = sessionTokens(m); st.turnGateAt = null;
+  st.turnStartWorkTok = workTokens(m); st.turnGateAt = null;
   const notes = [];
   const usd$ = wantDollars(cfg); // false => tokens-only copy (subscription users)
 
@@ -2146,19 +2157,21 @@ function onPreToolUse(data, projectDir) {
   if (cfg.hardGateUSD == null && cfg.turnGateTokens == null) return;
   const m = meterSession(data.transcript_path, { fleet: cfg.fleetMeter, projectDir });
 
-  // R13b — turn-spend tripwire: ONE turn's billed tokens (main + fleet, delta since the last
+  // R13b — turn-spend tripwire: ONE turn's work tokens (main + fleet, delta since the last
   // prompt) crossing turnGateTokens means the task spiraled ~10× past a normal one — nobody
   // consciously chose that spend. Checked before the session gate (the sharper signal), and
-  // TOKEN-denominated on every billing kind: task size is work volume, not price.
+  // TOKEN-denominated on every billing kind: task size is work volume, not price — which is
+  // exactly why cache re-reads ride at 0.1x here (rent measures context size, not task size).
   if (cfg.turnGateTokens != null) {
-    const nowTok = sessionTokens(m);
-    if (st.turnStartTok == null) {
-      // No baseline yet (turn 1 of a fresh session, or a session that predates R13): arm it
-      // mid-turn — undercounts the current turn rather than mis-billing the whole session to it.
-      st.turnStartTok = nowTok;
+    const nowTok = workTokens(m);
+    if (st.turnStartWorkTok == null) {
+      // No baseline yet (turn 1 of a fresh session, or a session whose baseline predates the
+      // work-token unit): arm it mid-turn — undercounts the current turn rather than
+      // mis-billing the whole session to it (or mixing units across the recalibration).
+      st.turnStartWorkTok = nowTok;
       saveState(projectDir, sid, st);
     } else {
-      const turnTok = nowTok - st.turnStartTok;
+      const turnTok = nowTok - st.turnStartWorkTok;
       const tGate = st.turnGateAt != null ? st.turnGateAt : cfg.turnGateTokens;
       if (turnTok >= tGate) {
         // Re-arm ABOVE the observed spend, not one notch up — a single huge landing must not
