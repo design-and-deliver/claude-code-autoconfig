@@ -7,10 +7,18 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
+// In-process calls (recordObservedSkill / skillSizes) must not touch the real home either —
+// the machine-wide observed table lives there. os.homedir() reads USERPROFILE/HOME per call,
+// so redirecting them here isolates every unit-level table read/write in this process.
+const UNIT_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'tgb-unit-home-'));
+process.env.USERPROFILE = UNIT_HOME;
+process.env.HOME = UNIT_HOME;
+
 const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
 const { recordObservedSkill, skillSizes } = require(HOOK);
 
 const CFG = { bombJumpTokens: 50000, skillBudgetWarnChars: 150000 };
+const SHARED_TABLE = path.join(UNIT_HOME, '.claude', '.token-guard', 'observed-skills.md');
 
 function mkProject() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tgb-'));
@@ -61,6 +69,30 @@ test('observed row under threshold gets no ⚠', () => {
     /^tg-small {2}≈ 12k tok {2}\(observed /m);
 });
 
+// ---------- unit: machine-wide observed table + seeds ----------
+
+test('observed row mirrors machine-wide; a table-less project prices it from there', () => {
+  recordObservedSkill(mkProject(), 'tg-shared', 88000, null, CFG);
+  assert.match(fs.readFileSync(SHARED_TABLE, 'utf8'),
+    /^tg-shared {2}≈ 88k tok {2}⚠ {2}\(observed /m);
+  // a different project with no budgets table of its own reads the shared price
+  assert.deepEqual(skillSizes(mkProject(), 'tg-shared'), { skillTok: 88000, skillFloor: false });
+});
+
+test('project budgets table outranks the shared observed row', () => {
+  const dir = mkProject();
+  recordObservedSkill(mkProject(), 'tg-rank', 90000, null, CFG); // shared row from elsewhere
+  fs.writeFileSync(path.join(dir, '.claude', 'skill-budgets.md'), 'tg-rank  ≈ 33k tok\n');
+  assert.deepEqual(skillSizes(dir, 'tg-rank'), { skillTok: 33000, skillFloor: false });
+});
+
+test('seed prices a never-observed built-in; a measured row outranks the seed', () => {
+  const dir = mkProject();
+  assert.deepEqual(skillSizes(dir, 'claude-api'), { skillTok: 245000, skillFloor: false });
+  recordObservedSkill(mkProject(), 'claude-api', 260000, null, CFG);
+  assert.deepEqual(skillSizes(dir, 'claude-api'), { skillTok: 260000, skillFloor: false });
+});
+
 // ---------- E2E: --budgets static scan ----------
 
 function mkScanFixture() {
@@ -96,6 +128,17 @@ test('E2E --budgets: scans project/user/plugin skills, flags heavies, keeps obse
   assert.match(table, /^tg-user-skill {2}3k chars ≈ 1k tok$/m);
   assert.match(table, /^myplug:alpha {2}26k chars ≈ 10k tok$/m); // 0.44.0 won, not 0.9.0
   assert.match(table, /^tg-builtin {2}≈ 302k tok {2}⚠ {2}\(observed 2026-07-11\)$/m);
+});
+
+test('E2E: door 1 gates the claude-api built-in from the shipped seed on a virgin machine', () => {
+  const proj = mkProject();
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tgb-virgin-'));
+  const out = runHook(proj, { hook_event_name: 'PreToolUse', tool_name: 'Skill',
+    tool_input: { skill: 'claude-api' }, session_id: 'sid-seed' }, home);
+  const j = JSON.parse(out);
+  assert.equal(j.hookSpecificOutput.permissionDecision, 'ask');
+  assert.match(j.hookSpecificOutput.permissionDecisionReason, /~245k tokens/);
+  assert.match(j.hookSpecificOutput.permissionDecisionReason, /disposable subagent/);
 });
 
 test('E2E: door 1 gates a built-in from its observed row (the blindness fix)', () => {
@@ -172,4 +215,8 @@ test('E2E: R3 attribution Skill(name) records an observed row alongside the warn
   assert.match(out, /Skill\(tg-skill-x\)/);
   const table = fs.readFileSync(path.join(dir, '.claude', 'skill-budgets.md'), 'utf8');
   assert.match(table, /^tg-skill-x {2}\d+k chars ≈ 60k tok {2}⚠ {2}\(observed /m);
+  // and the spawned hook mirrored the row machine-wide (into ITS isolated home)
+  const shared = fs.readFileSync(
+    path.join(TMP_HOME, '.claude', '.token-guard', 'observed-skills.md'), 'utf8');
+  assert.match(shared, /^tg-skill-x {2}\d+k chars ≈ 60k tok {2}⚠ {2}\(observed /m);
 });

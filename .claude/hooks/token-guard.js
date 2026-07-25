@@ -47,6 +47,8 @@
  *                       .claude/skill-budgets.md (door 1's lookup table). Rows marked
  *                       (observed ...) came from measured landings and survive regeneration —
  *                       the ONLY source that can price built-in skills, which ship no files.
+ *                       Observed rows also mirror to ~/.claude/.token-guard/observed-skills.md:
+ *                       machine-wide, so one project's tuition prices the skill everywhere.
  *
  * METERING (R1): the main transcript is only part of the bill. Agent transcripts live in a
  * sibling directory named after the session id (layout verified 2026-07-11):
@@ -701,28 +703,47 @@ function payloadVerdict(toolName, toolInput, sizes, cfg) {
   return null;
 }
 
-// Skill payload estimate: prefer .claude/skill-budgets.md (R5's audit output doubles as the
-// runtime lookup table — zero scanning); else stat SKILL.md and mark it a floor (referenced
-// files are unknowable pre-expansion). Unknown/plugin-namespaced -> null: never guess.
-function skillSizes(projectDir, name) {
-  if (!name) return null;
+// Skill payload estimate, best source first: the project's .claude/skill-budgets.md (R5's audit
+// output doubles as the runtime lookup table — zero scanning); else the machine-wide observed
+// table (a landing measured in ANY project prices the skill here before this project pays the
+// tuition itself); else stat SKILL.md and mark it a floor (referenced files are unknowable
+// pre-expansion — and a name that resolves on disk is the skill that actually loads, so the
+// floor outranks any seed); else a shipped seed for known-fat built-ins. Everything else ->
+// null: never guess.
+function budgetTableLookup(filePath, name) {
   try {
-    const table = fs.readFileSync(path.join(projectDir, '.claude', 'skill-budgets.md'), 'utf8');
-    for (const line of table.split('\n')) {
+    for (const line of fs.readFileSync(filePath, 'utf8').split('\n')) {
       const mt = line.match(/^(\S+)\s+.*?≈\s*([\d.]+)\s*(k|M)?\s*tok/);
       if (mt && mt[1] === name) {
         const mul = mt[3] === 'M' ? 1e6 : mt[3] === 'k' ? 1e3 : 1;
         return { skillTok: Math.round(parseFloat(mt[2]) * mul), skillFloor: false };
       }
     }
-  } catch (_) { /* no table — fall through to the stat floor */ }
+  } catch (_) { /* no table */ }
+  return null;
+}
+
+function sharedObservedPath() {
+  return path.join(os.homedir(), '.claude', '.token-guard', 'observed-skills.md');
+}
+
+// Shipped priors for built-in skills, which ship no files to stat — without one, the machine's
+// very FIRST landing of a fat built-in is ungateable (null -> never guess -> silent). Any
+// measured row outranks a seed. claude-api: ~245k, observed live 2026-07-25.
+const SEED_SKILL_TOK = { 'claude-api': 245000 };
+
+function skillSizes(projectDir, name) {
+  if (!name) return null;
+  const hit = budgetTableLookup(budgetsPath(projectDir), name)
+    || budgetTableLookup(sharedObservedPath(), name);
+  if (hit) return hit;
   for (const dir of [projectDir, os.homedir()]) {
     try {
       const bytes = fs.statSync(path.join(dir, '.claude', 'skills', name, 'SKILL.md')).size;
       return { skillTok: Math.round(bytes / CHARS_PER_TOKEN), skillFloor: true };
     } catch (_) { /* try next */ }
   }
-  return null;
+  return SEED_SKILL_TOK[name] ? { skillTok: SEED_SKILL_TOK[name], skillFloor: false } : null;
 }
 
 function readSizes(filePath) {
@@ -849,22 +870,32 @@ function workflowSource(toolInput) {
 //     R8-approved hop, or R3's Skill(name) attribution), the MEASURED jump is recorded. This
 //     is the only source that can price built-in skills (claude-api ships no files to stat —
 //     verified 2026-07-12), and a measured landing beats any static guess, so observed rows
-//     survive regeneration.
+//     survive regeneration. Each observed row is also mirrored to the machine-wide table
+//     (~/.claude/.token-guard/observed-skills.md, read by skillSizes after the project table):
+//     built-ins cost the same everywhere, so one project's tuition prices them for all.
 function budgetsPath(projectDir) { return path.join(projectDir, '.claude', 'skill-budgets.md'); }
+
+function upsertObservedRow(filePath, name, row) {
+  let lines = [];
+  try { lines = fs.readFileSync(filePath, 'utf8').split('\n'); } catch (_) { /* new table */ }
+  const at = lines.findIndex(l => l.split(/\s+/)[0] === name);
+  if (at >= 0) lines[at] = row; else {
+    while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+    lines.push(row, '');
+  }
+  fs.writeFileSync(filePath, lines.join('\n'));
+}
 
 function recordObservedSkill(projectDir, name, tok, chars, cfg) {
   try {
     if (!name || !tok) return;
-    let lines = [];
-    try { lines = fs.readFileSync(budgetsPath(projectDir), 'utf8').split('\n'); } catch (_) { /* new table */ }
     const row = `${name}  ${chars ? `${fmtK(chars)} chars ` : ''}≈ ${fmtK(tok)} tok` +
       `${tok > cfg.bombJumpTokens ? '  ⚠' : ''}  (observed ${new Date().toISOString().slice(0, 10)})`;
-    const at = lines.findIndex(l => l.split(/\s+/)[0] === name);
-    if (at >= 0) lines[at] = row; else {
-      while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
-      lines.push(row, '');
-    }
-    fs.writeFileSync(budgetsPath(projectDir), lines.join('\n'));
+    upsertObservedRow(budgetsPath(projectDir), name, row);
+    try {
+      fs.mkdirSync(path.dirname(sharedObservedPath()), { recursive: true });
+      upsertObservedRow(sharedObservedPath(), name, row);
+    } catch (_) { /* shared mirror is best-effort — the project row already landed */ }
   } catch (_) { /* table update is best-effort — the warn already shipped */ }
 }
 
