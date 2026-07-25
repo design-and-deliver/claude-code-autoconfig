@@ -197,15 +197,15 @@ must now be side-effect-free.
 Single-file constraint stands (hook deployment); the split is INTO per-rule functions within
 the file, anchored on the pure verdict functions that already exist.
 
-- [ ] 3.3a — `onUserPromptSubmit` (CC 89, 2026-07-24 re-census): one `r<N>...Guard(ctx)`
+- [x] 3.3a — `onUserPromptSubmit` (CC 89, 2026-07-24 re-census): one `r<N>...Guard(ctx)`
       function per rule (R8, R9, meter, R2, R3, R4, fat-context, R6, R12a, R12b, spend-step),
       each returning `{notes, block}`; the handler becomes a fold over them. Digest wording
-      byte-identical.
+      byte-identical. (DONE 2026-07-25, see Ledger)
 - [ ] 3.3b — `onPreToolUse` (CC 44, 2026-07-24 re-census): same shape.
 - [ ] 3.3c — `analyzeSession` (CC 52): extract the per-concern accumulators; dedupe the
       region-attribution logic it shares with `attributeJump` into one helper.
 
-**Verify:** `npm test` after EACH sub-item (206 hook tests as of substep 1.3); `--analyze`
+**Verify:** `npm test` after EACH sub-item (217 hook tests as of substep 3.3a); `--analyze`
 output on a real transcript diffed byte-for-byte against pre-refactor output; the Phase 3
 CC ≤ 9 bar on each cleared function + its helpers.
 **Commit:** one per sub-item + `Changelog: none`.
@@ -724,3 +724,37 @@ detached child — run on the dev box; CI green proves nothing here.
   - sync-docs regen: nothing under `.claude/` changed; contracts ratchet green in the suite.
   - Next: 3.3 (token-guard: decompose the three worst handlers — dedicate the session to
     3.3a alone; the substep is L and pre-split a/b/c).
+
+- **2026-07-25 — 3.3a decompose onUserPromptSubmit — DONE.** Commit `5722145`, `npm test`
+  green before and after (full chain; hook suites now **217** tests — up from 3.2's 213 via
+  the twin session's analyze-session/R13 commits already at HEAD), `npx eslint .` clean,
+  sync-docs regen: nothing to commit.
+  - The CC-89 handler is now ~30 lines: `r8CommandPayloadGuard` runs pre-meter as its own
+    call (its ok-once mid-flight `saveState` preserved inside the guard), then a fold over
+    `PROMPT_GUARDS` = [r2ReceiptGuard, r3ContextBombGuard, r4IdleReturnGuard,
+    fatContextGuard, r6ScopeDriftGuard, officialUsagePrep, r12aWindowSpikeGuard,
+    r12bWindowThresholdGuard, spendStepGuard, r13aPlanSteerGuard], each reading/mutating a
+    shared per-turn ctx and returning `{notes, block}`; `emitBlock()` centralizes the three
+    gates' save+block+return beat. `officialUsagePrep` is the one non-rule member: it
+    computes `ctx.crossed` + `ctx.official` once so R12a/R12b/spend-step share a single
+    fetch, at the exact point in rule order the inline code fetched.
+  - Second-level extractions the CC ≤ 9 bar forced: `bombLandingNote` (R3's landed-bomb
+    branch), `recoverWindowMinutes` (R4's walk-back), `trackScopeResidency` +
+    `fireDriftNudge` (R6), `crossedSpendSteps`, `spikeNoteFor` (R12a), `sessionStatLines` +
+    `windowStatLines` (spend-step). Handler CC 6; no new function above 8.
+  - Verify per the item: `--analyze` byte-identical pre/post on the 41.9M-token `13065f1d`
+    transcript; live UserPromptSubmit smoke (sandboxed CLAUDE_PROJECT_DIR, real fat
+    transcript) composed R4 idle-return + fat-context + plan-steer in the original order;
+    ratchet baseline shrank by exactly `Async function 'onUserPromptSubmit'` (65 → 64,
+    `--write-baseline` in the same commit).
+  - CRLF trap held (3.1's note): the file is fully CRLF, so the refactor went in as a
+    marker-anchored splice script, not hand edits; zero stray LFs after, syntax-checked.
+  - Deviation (tiny, deliberate): fixed a PRE-EXISTING `no-empty` lint error at
+    `projectNameOf`'s bare catch (shipped in `2fe95a4` by a different session) with the
+    house-style fail-silent comment — `npx eslint .` was red on HEAD without it.
+  - Flake note (not this change): one full-suite run had cli-behavior fail 2 tests
+    transiently; twice green in isolation immediately after and green in both later full
+    runs, `bin/cli.js` untouched here. If it recurs, suspect environment (temp-dir /
+    interactive timing), not token-guard.
+  - Doc fix riding along: 3.3's Verify hook count refreshed 206 → 217.
+  - Next: 3.3b (`onPreToolUse`, CC 44 — same guard shape).
