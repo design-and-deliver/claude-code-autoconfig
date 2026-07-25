@@ -147,9 +147,9 @@ to `copyDir` locally → the new tests must fail; revert).
 **Verify:** `npm run coverage` prints a summary; `npm test` unaffected.
 **Commit:** `chore: add c8 coverage script` + `Changelog: none`.
 
-### ☐ 2.5 · M · ~45m — Tests for plan-progress (the last untested script with logic)
+### ☑ 2.5 · M · ~45m — Tests for plan-progress (the last untested script with logic) (DONE 2026-07-24, see Ledger)
 
-- [ ] Characterization tests for `parsePlan` / `render` against fixture plan docs (this file
+- [x] Characterization tests for `parsePlan` / `render` against fixture plan docs (this file
       is a natural fixture: effort tags, microsteps, Ledger).
 
 **Verify:** `npm test`. **Commit:** `test(plan-progress): characterization suite` + `Changelog: none`.
@@ -633,3 +633,24 @@ detached child — run on the dev box; CI green proves nothing here.
     default exclude globs (`test/**`, `**/*.test.*`) — no config needed.
   - Deviations: none. Next: 2.5 (tests for plan-progress — the characterization suite
     that 3.10 hard-depends on).
+
+- **2026-07-24 — 2.5 tests for plan-progress — DONE.** Commit `9e2e639`, `npm test` green
+  before and after (full chain, 213 hook tests), `npx eslint .` clean.
+  - New `test/plan-progress.test.js` (20 tests, shared harness): the script exports nothing
+    (parses/renders at require time), so the suite spawns it as a child process against
+    fixture plan docs in temp dirs — the cli-behavior pattern, not unit tests of `parsePlan`
+    / `render` directly. Wired into `npm test` between whats-happening and hook-tests.
+  - The load-bearing test for 3.10: **full render pinned byte-exact** on a full-featured
+    fixture (goal line, collapsed done phase, done-substep elision `_… 1 earlier done_`,
+    `▶ … ← you are here` marker, 1/3 microstep widget). Its failure message names the first
+    diverging line. Also pinned: effort-weighted (57% = 180/315 min) vs count-based vs
+    mixed-tag percent + both caveat lines, not-started/complete status suffixes, next-pointer
+    suppression when complete, filename-fallback title + `(unphased)` phase, title truncation,
+    CRLF parsing, discovery in all three scan locations, in-progress-first sort, and the
+    invisibility contract (no `## Ledger` → not a plan; `~45 min` grammar → doc invisible —
+    the 2026-07-24 plan-amendment discovery is now a regression test).
+  - Mutation check: dropping the elision logic failed exactly the elision + byte-exact tests;
+    reverted, `git diff .claude/scripts/plan-progress.js` empty.
+  - Coverage note (ties off 2.4's discovery): plan-progress.js was ABSENT from the c8 table
+    because nothing loaded it; it now appears via the spawned child runs.
+  - Deviations: none. Phase 2 complete. Next: 3.1 (cli.js grows a `main()` — Phase 3 opens).
