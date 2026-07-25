@@ -4,8 +4,7 @@
  * update-summary.js — renders the "what changed" summary shown on the installer's
  * upgrade path (right before the ENTER prompt).
  *
- * Pure + side-effect free so it can be unit-tested without executing the installer
- * (cli.js runs its whole flow on require, so its inline logic can't be imported).
+ * Pure + side-effect free so it can be unit-tested without executing the installer.
  *
  * formatUpdateSummary() returns an array of { kind, text } segments; the caller
  * (cli.js) maps kind -> color + indent:

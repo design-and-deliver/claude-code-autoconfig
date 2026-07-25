@@ -73,6 +73,9 @@
       "Function 'analyze'",
       "Function 'summarizeInput'"
     ],
+    "bin/cli.js": [
+      "Function 'main'"
+    ],
     "bin/lib/plugins.js": [
       "Function 'pluginAdd'",
       "Function 'runPluginCommand'",

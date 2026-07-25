@@ -16,10 +16,10 @@
 // cleanly undoes both the copied files and the settings contributions. The free core
 // ships only this generic loader — paid/closed plugins live and are delivered separately.
 //
-// Extracted from bin/cli.js (Phase 3 seam 1). A few module-scope helpers this subsystem
-// needs still live in cli.js (cwd, isReservedName, mergeSettingsInto, unmergeSettingsFrom);
-// because cli.js runs its whole install flow on require (no main()), this module cannot
-// require it back — so cli.js injects those via a `deps` object at the dispatch boundary.
+// Extracted from bin/cli.js (Phase 3 seam 1). A few helpers this subsystem needs still
+// live in cli.js (cwd, isReservedName, mergeSettingsInto, unmergeSettingsFrom); cli.js
+// requires this module at the top, so requiring it back would be circular (partial
+// exports) — cli.js instead injects those via a `deps` object at the dispatch boundary.
 // The .autoconfig-plugins.json ledger shape is frozen (additive-only — trap 1).
 // ============================================================================
 
