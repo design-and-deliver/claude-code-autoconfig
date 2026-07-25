@@ -90,7 +90,7 @@ The cost of a wrong fix is high: wasted time, unnecessary code complexity, and p
 
 The `.claude/updates/` directory is for updates that **require Claude to execute instructions** — writing to MEMORY.md, modifying user config, running migrations, etc.
 
-**Do NOT create update files for simple command file drops.** Command files in `.claude/commands/` are automatically installed/updated by `copyDir` in the CLI. The CLI detects new and modified commands and reports them in the console output. Creating an update file for a command that's already shipped via `copyDir` is redundant.
+**Do NOT create update files for simple command file drops.** Command files in `.claude/commands/` are automatically installed/updated by `copyTree` in the CLI. The CLI detects new and modified commands and reports them in the console output. Creating an update file for a command that's already shipped via `copyTree` is redundant.
 
 **Rule:** If the update is just a file → put it in the right directory and let the CLI copy it. If the update needs instructions → create a `NNN-*.md` update file.
 
@@ -188,9 +188,12 @@ and a green feeling, then breaks something real:
 
 ### Box Drawing Guidelines
 
-When modifying the "READY TO CONFIGURE" box in `bin/cli.js`:
+When modifying the "READY ..." boxes in `bin/cli.js`:
 
 1. All lines must be exactly 46 visible characters wide (including the `║` borders)
 2. ANSI escape codes (`\x1b[...m`) don't count toward visible width
-3. Place color codes outside content spacing: `\x1b[33m║\x1b[0m` + 44 chars of content + `\x1b[33m║\x1b[0m`
-4. Always run `npm test` after any box modifications
+3. The boxes are rendered by `boxLine(text)` / `printReadyBox(title, command)` inside
+   `main()` — `boxLine` pads the visible text (ANSI stripped) to 44 chars between the
+   borders, so never hand-count spaces; wrap colored spans with `paint(color, text)`
+4. Always run `npm test` after any box modifications — `test/box-alignment.test.js` runs
+   the real CLI (fresh + upgrade) and asserts the rendered width/structure of both boxes

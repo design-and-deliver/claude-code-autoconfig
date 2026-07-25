@@ -9,7 +9,8 @@
  * subtest/skip semantics fit the hook corpus; this harness fits linear script suites.
  *
  * Not every test/*.js file uses it: box-alignment.test.js and live-twin-parity.test.js have
- * bespoke whole-run pass/fail structures (and their own environment skips) and stay standalone;
+ * bespoke whole-run pass/fail structures (and their own environment skips) and stay standalone
+ * (box-alignment borrows makeClaudeShim from here but keeps its own structure);
  * hook-tests.test.js is only the node:test runner bridge.
  *
  * Usage:
