@@ -1650,40 +1650,422 @@ function mergedPerModel(m) {
 
 // ---------------------------------------------------------------------------
 // event handlers
+// UserPromptSubmit is a fold over the per-rule guards below: each guard reads/mutates the
+// shared per-turn ctx {data, projectDir, cfg, sid, st, m, usd$, crossed, official} and returns
+// {notes, block}. Notes accumulate into one <token-guard> injection at the end of the fold; a
+// truthy block pre-empts the turn instead (state saved, {decision:'block'} emitted, later
+// guards never run).
+
+// R8 door 3 — user-typed slash command whose payload is bomb-sized. UserPromptSubmit has no
+// "ask", and an annotation would ship in the same request as the payload — so the preventive
+// form is a block, idleGate-style: ↑ then Enter re-sends, and the one-shot key lets that
+// second send pass. Block reason is USER-facing (Claude never sees it). Default OFF.
+function r8CommandPayloadGuard(ctx) {
+  const { cfg, st, projectDir } = ctx;
+  const cmd = /^\/([\w:-]+)/.exec(String(ctx.data.prompt || '').trim());
+  if (!cfg.commandPayloadGate || !cmd) return { notes: [], block: null };
+  if (st.payloadGateOkOnce === cmd[1]) {
+    st.payloadGateOkOnce = null; // charge accepted
+    saveState(projectDir, ctx.sid, st);
+    return { notes: [], block: null };
+  }
+  const tok = commandPayloadTokens(projectDir, cmd[1]);
+  if (tok == null || tok <= cfg.bombJumpTokens) return { notes: [], block: null };
+  st.payloadGateOkOnce = cmd[1];
+  // ttl 2: the payload lands only on the re-send's request, so the first post-block
+  // prompt legitimately sees no jump — don't let it disarm the R3 suppression early.
+  st.approvedPayloadHop = { est: tok, ttl: 2 };
+  return { notes: [], block:
+    `⚠️ Hey — running /${cmd[1]} will load ~${fmtK(tok)} tokens into this conversation ` +
+    `permanently; every message after it will re-read them.\n\n` +
+    `To run it anyway: press ↑ then Enter. To keep this session lean: run it in a ` +
+    `throwaway session instead, or ask here for just its conclusion via a subagent.` };
+}
+
+// R2 receipt — a fleet finished since the last prompt; show the bill once.
+function r2ReceiptGuard(ctx) {
+  const notes = [];
+  if (ctx.st.pendingWfReceipt) {
+    notes.push(ctx.st.pendingWfReceipt);
+    ctx.st.pendingWfReceipt = null;
+  }
+  return { notes, block: null };
+}
+
+// R3 context-bomb tripwire — single-hop jump beyond bombJumpTokens since the last prompt.
+// Priced by the turns that will re-read it, not the hop itself — at CACHE-READ weight
+// (~10%), the same basis as turnFloorUSD: warm turns re-read the payload from prompt cache,
+// and full price only recurs on the first turn after a gap longer than the cache TTL (R4's
+// story). Numbers stay "~" — the plan meter's exact cache weighting isn't published.
+// (Andrew, 2026-07-20: the old ×50 full-price extrapolation overstated ~10× on warm loops.)
+function r3ContextBombGuard(ctx) {
+  const { cfg, st, m } = ctx;
+  const notes = [];
+  if (st.lastLiveContext != null) {
+    const jump = m.liveContext - st.lastLiveContext;
+    if (jump > cfg.bombJumpTokens && st.approvedPayloadHop) {
+      // R8: the user already decided this payload at the pre-gate — one decision, one surface.
+      // (Known hole, accepted: an unrelated bomb inside the ttl window rides the suppression.)
+      // The landing upgrades the budgets table: measured jump replaces door 1's stat floor.
+      if (st.approvedPayloadHop.skill) {
+        recordObservedSkill(ctx.projectDir, st.approvedPayloadHop.skill, jump, null, cfg);
+      }
+      st.approvedPayloadHop = null;
+    } else if (jump > cfg.bombJumpTokens) {
+      notes.push(bombLandingNote(ctx, jump));
+    } else if (st.approvedPayloadHop && --st.approvedPayloadHop.ttl <= 0) {
+      st.approvedPayloadHop = null; // R8 gate fired but nothing landed (denied) — disarm
+    }
+  }
+  st.lastLiveContext = m.liveContext;
+  st.scanOffset = m.main.rawLength;
+  return { notes, block: null };
+}
+
+// A bomb landed: attribute it, record a skill landing for R8 door 1, arm the fat-context
+// escalation, and word the warning.
+function bombLandingNote(ctx, jump) {
+  const { cfg, st, m } = ctx;
+  const who = attributeJump(ctx.data.transcript_path, st.scanOffset);
+  const culprit = who ? ` (largest payload: ${who.label})` : '';
+  // Attribution named a skill -> record the measured landing so door 1 can gate it next
+  // time (built-ins never hit the pre-gate: no files to stat until a landing prices them).
+  const skillHit = who && /^Skill\((.+)\)$/.exec(who.label);
+  if (skillHit) recordObservedSkill(ctx.projectDir, skillHit[1], jump, who.chars, cfg);
+  if (cfg.bombGateWhenFat && m.liveContext >= cfg.contextWarnTokens) st.bombGateArmed = true;
+  const bombCost = ctx.usd$
+    ? `the per-turn floor is now ≥ ${fmtUSD(m.turnFloorUSD)} (50 more turns ≈ ` +
+      `${fmtUSD(m.turnFloorUSD * 50)})`
+    : `~${fmtK(Math.round(jump * CACHE_READ_X))} tokens per cache-warm turn (a cache read, ~10% ` +
+      `weight), and ${fmtK(jump)} of context-window headroom gone until trimmed`;
+  return (
+    `context-bomb: something just loaded +${fmtK(jump)} tokens into this conversation` +
+    `${culprit} — every future turn re-reads it: ${bombCost}. Relay as ` +
+    `a STANDALONE warning block, never woven into your answer: open with "⚠️ Hey —" and ` +
+    `keep a warm conversational voice (helpful friend, not system log), 2-3 plain sentences ` +
+    `naming what landed, then the out ACTION-FIRST (ux copy/action-lines-lead-with-the-action): ` +
+    `"/clear, then /continue to drop this weight and keep the thread" (a one-time reference ` +
+    `belongs in a disposable subagent; once its useful part is extracted, /continue picks the ` +
+    `thread back up in the fresh session, nothing to prep). Then a horizontal rule before ` +
+    `the answer itself.`
+  );
+}
+
+// R4 idle-return — cache TTL ≈ 1h; a fat stale context re-WRITES at full write rates.
+// One-shot per gap (keyed on the timestamp we returned to). Thin contexts refill for pennies.
+function r4IdleReturnGuard(ctx) {
+  const { cfg, m, st } = ctx;
+  if (!m.lastTs || m.liveContext < cfg.contextWarnTokens) return { notes: [], block: null };
+  const gapMin = (Date.now() - m.lastTs) / 60000;
+  if (gapMin <= cfg.idleWarnMinutes || st.warnedIdleAt === m.lastTs) return { notes: [], block: null };
+  st.warnedIdleAt = m.lastTs;
+  // The pointer feeds /continue's ladder (and /recover-context pid=N stays usable as the
+  // manual form) — staged best-effort; /continue's lineage + walk-back recover without it.
+  writeRecoverPointer(ctx.projectDir, ctx.sid, recoverWindowMinutes(m));
+  // idleGate: pre-empt the charge — block THIS submission before anything reaches the API.
+  // The message stays in the CLI input history (up-arrow + Enter re-sends), and the
+  // one-shot key set above lets that second send pass through silently: charge accepted.
+  // Block reason is USER-facing text (Claude never sees it), so it follows the warning
+  // copy rules directly — future tense, since nothing has been paid yet.
+  if (cfg.idleGate) {
+    return { notes: [], block:
+      `⚠️ Hey — you left this session sitting for over an hour, longer than the API ` +
+      `keeps a conversation cached. If you continue here, Claude Code will re-upload ` +
+      `all ~${fmtK(m.liveContext)} tokens of it at full price.\n\n` +
+      `To continue anyway: press ↑ then Enter. To pick this work up cheaply instead: ` +
+      `/clear, then /continue — it reloads the recent thread of this conversation.` };
+  }
+  return { notes: [idleReturnNote(m.liveContext)], block: null };
+}
+
+// Recovery window: walk back until ~15min of real interaction is covered (gaps
+// count at most 5min so idle stretches don't eat the budget), then round the wall-clock
+// offset up to the nearest 5min.
+function recoverWindowMinutes(m) {
+  const ts = m.main.tsList || [];
+  let i = ts.length - 1;
+  for (let acc = 0; i > 0 && acc < 15 * 60000; i--) acc += Math.min(ts[i] - ts[i - 1], 5 * 60000);
+  return Math.max(5, Math.ceil((Date.now() - (ts[i] || m.lastTs)) / 300000) * 5);
+}
+
+// Fat-context advisory — the core "1 question in a 5h window" guard. Injected on EVERY prompt
+// past the threshold (it's ~50 tokens; the decision is per-prompt by nature).
+function fatContextGuard(ctx) {
+  const m = ctx.m;
+  if (m.liveContext < ctx.cfg.contextWarnTokens) return { notes: [], block: null };
+  const floorPart = ctx.usd$
+    ? `has a ≥ ${fmtUSD(m.turnFloorUSD)} re-read floor before any work happens`
+    : `re-reads all ~${fmtK(m.liveContext)} tokens of it against the plan window before any ` +
+      `work happens`;
+  return { notes: [
+    `live context ≈ ${fmtK(m.liveContext)} tokens — every turn in this session now ` +
+    `${floorPart}. If the user's prompt is a quick one-off unrelated to the ongoing work, ` +
+    `answer it, but ALSO tell them it would be much ${ctx.usd$ ? 'cheaper' : 'lighter on their ' +
+    'usage window'} asked in a fresh session (this context is re-sent on every turn).`
+  ], block: null };
+}
+
+// R6 scope-drift nudge — when the dominant share of live context belongs to scopes the
+// session has moved past, every turn pays rent on settled work. Scope data comes from the
+// terminal-title per-title ledger ({sid}.history.jsonl) — the same watermarks its /clear
+// advisor reads — so drift and advisor can never disagree about what a topic cost. The nudge
+// fires ONLY above driftMinContextTokens (the STAY floor below which a cut can't pay for
+// itself), so at fire time the cut is a foregone conclusion by construction — hand the user
+// the action-first /clear + /continue out (a recover-pointer staged at fire time pins the
+// ledger boundary, so /continue self-packages the thread, no prep). The dependency
+// case drift can't see (a build->article day reads as two scopes, but the article feeds on
+// the build context) is handled in the copy itself: it advises STAYING when the new scope
+// builds on the earlier work. Model relays the block; it NEVER runs the command.
+// Once per scope (nudgedScope).
+function r6ScopeDriftGuard(ctx) {
+  const { cfg, st, projectDir, sid } = ctx;
+  const notes = [];
+  if (!cfg.driftNudge) return { notes, block: null };
+  const tenures = readLedgerTenures(projectDir, sid);
+  const cur = tenures[tenures.length - 1];
+  if (!cur) return { notes, block: null };
+  trackScopeResidency(ctx, cur, tenures);
+  cur.prompts = st.curScopePrompts;
+  // Defer loop: consume a model-written drift-deferred flag (the in-turn judge refused the
+  // staged card — stale premise or open threads), snooze, and re-arm the one-shot when the
+  // snooze expires; driftVerdict then re-stages and the model re-judges with a fresh premise.
+  const deferred = consumeDriftDeferred(projectDir);
+  driftDeferralTick(st, deferred, cfg.driftRetryPrompts);
+  if (deferred && st.driftSnooze) logLine(projectDir,
+    `sid=${sid.slice(0, SID_SHORT_LEN)} drift-deferred scope="${st.driftSnooze.scope}" retry@${st.driftSnooze.retryAtPrompts}p`);
+  const v = driftVerdict(tenures, ctx.m.liveContext, cfg);
+  if (v.fire && st.nudgedScope !== cur.scope) notes.push(fireDriftNudge(ctx, cur, v));
+  return { notes, block: null };
+}
+
+// Prompt residency is the one thing the ledger can't carry — counted here in state. The
+// ledger gains the new-scope line at the shift turn's first paint after the title write,
+// so this counter starts on the guard's next prompt — the same "first seen on turn 2"
+// beat the old scopeLog had.
+function trackScopeResidency(ctx, cur, tenures) {
+  const st = ctx.st;
+  if (st.curScope === cur.scope) {
+    st.curScopePrompts = (st.curScopePrompts || 0) + 1;
+  } else {
+    st.curScope = cur.scope; st.curScopePrompts = 1;
+    if (tenures.length > 1) logLine(ctx.projectDir,
+      `sid=${ctx.sid.slice(0, SID_SHORT_LEN)} scope="${cur.scope}" ctx=${fmtK(ctx.m.liveContext)}`);
+  }
+}
+
+// The nudge fires: one-shot the scope, word the note, and stage the recover-pointer.
+function fireDriftNudge(ctx, cur, v) {
+  const { st, projectDir, sid } = ctx;
+  st.nudgedScope = cur.scope;
+  st.driftSnooze = null;
+  logLine(projectDir,
+    `sid=${sid.slice(0, SID_SHORT_LEN)} drift-nudge from="${v.dominant}" to="${cur.scope}" prior=${v.priorPct}%`);
+  const note = driftNote(v.dominant, cur.scope, v.priorPct, ctx.cfg.driftAutoMigrate, ctx.m.liveContext);
+  // R11 (revised 2026-07-21): stage a recover-pointer pinned to the current tenure's
+  // enteredIso — the drifted thread's exact boundary. /continue's auto mode reads
+  // recover.json before any heuristic rung, so after the nudge's "/clear + /continue"
+  // (one-liner and prose branch alike) the fresh session recovers exactly this thread.
+  // (Replaces the retired SessionStart-injection candidate, deleted 2026-07-24 —
+  // git history is the museum.)
+  const ageMin = Math.max(1, Math.round((Date.now() - (Date.parse(cur.enteredIso) || Date.now())) / 60000));
+  writeRecoverPointer(projectDir, sid, ageMin, cur.enteredIso);
+  return note;
+}
+
+// Spend-step check-ins are API-billed-only (2026-07-18): on a subscription the $-equivalent
+// steps map to nothing the user experiences — the R12 window flags below carry the plan-meter
+// story there. Unknown billing keeps the check-ins (the dollars may be real).
+function crossedSpendSteps(cfg, m, st) {
+  if (billingKind() === 'subscription') return [];
+  return (cfg.sessionWarnUSD || []).filter(s => m.usd >= s && st.warnedUSD < s);
+}
+
+// Anthropic's own window meter — fetched at most ONCE per prompt (cached >=180s, so most prompts
+// are cache-served; the network hit is only every few minutes). Shared by the two window flags
+// below AND the spend-step check-in, so the fetch never happens twice in a turn.
+async function officialUsagePrep(ctx) {
+  const cfg = ctx.cfg;
+  ctx.crossed = crossedSpendSteps(cfg, ctx.m, ctx.st);
+  ctx.official = null;
+  if (cfg.officialUsageFetch &&
+      (cfg.windowSpikeWarn || cfg.windowThresholdWarn || cfg.windowThresholdGate ||
+       ctx.crossed.length)) {
+    const off = await fetchOfficialUsage(ctx.projectDir);
+    if (off && off.data) ctx.official = off.data;
+  }
+  return { notes: [], block: null };
+}
+
+// R12 — window guards, both grounded in that meter. The stake here is a THROTTLE (lost access
+// until reset), which is unsayable in dollars, so the copy is always window-% and never $.
+//   R12a window-spike: one turn ate a big slice of the 5h window (the delta of the meter's own
+//     %, so it self-calibrates — no budget to set).
+//   R12b window-threshold: the tightest live window (5h or weekly) crossed the high-water mark
+//     — once per window cycle; re-arms when that window resets. windowThresholdGate (opt-in)
+//     escalates that same one-shot from a note to a BLOCK (mirrors idleGate).
+function r12aWindowSpikeGuard(ctx) {
+  const { cfg, st } = ctx;
+  const notes = [];
+  if (!cfg.windowSpikeWarn) return { notes, block: null };
+  const now5h = fiveHourWindow(ctx.official);
+  const prev = st.lastWindowPct != null
+    ? { pct: st.lastWindowPct, resetsAt: st.lastWindowResetsAt } : null;
+  const sv = windowSpikeVerdict(now5h, prev, st.lastTurnDeltaUsd || 0, cfg);
+  // windowSpikeConfirm upgrades the passive note to an interactive AskUserQuestion card — a SOFT
+  // relay, never a decision:'block', so it can't stall the turn. Off -> the standalone note.
+  if (sv.fire) {
+    const spikeNote = spikeNoteFor(ctx, sv, now5h);
+    if (spikeNote) notes.push(spikeNote);
+  }
+  // advance the baseline whenever the meter is live (fired or not) so the next delta is fresh
+  if (now5h) {
+    st.lastWindowPct = now5h.pct; st.lastWindowResetsAt = now5h.resetsAt;
+    st.lastWindowAtIso = new Date().toISOString();
+  }
+  return { notes, block: null };
+}
+
+// Attribute the interval's spend across sessions before wording the flag — the meter is
+// account-level, so "that last turn" is only sayable when the ledger shows we were alone.
+// The confirm card returns null when the window resets before projected exhaustion —
+// provably no throttle risk, so nothing is relayed at all (threshold ladder still runs).
+function spikeNoteFor(ctx, sv, now5h) {
+  const st = ctx.st;
+  const attr = spikeAttribution(readSpendLedger(st.lastWindowAtIso), ctx.sid);
+  const mins = st.lastWindowAtIso && Number.isFinite(Date.parse(st.lastWindowAtIso))
+    ? Math.max(1, Math.round((Date.now() - Date.parse(st.lastWindowAtIso)) / 60000)) : null;
+  return ctx.cfg.windowSpikeConfirm
+    ? windowSpikeConfirmNote(sv, now5h, ctx.sid, attr, mins)
+    : windowSpikeNote(sv, now5h, attr, mins);
+}
+
+function r12bWindowThresholdGuard(ctx) {
+  const { cfg, st } = ctx;
+  if (!cfg.windowThresholdWarn && !cfg.windowThresholdGate) return { notes: [], block: null };
+  const worst = tightestWindow(ctx.official);
+  const warned = effectiveWarn(worst, worst ? loadWindowWarn(worst.name) : null, st.warnedWindow);
+  const tv = windowThresholdVerdict(worst, warned, cfg);
+  if (!tv.fire) return { notes: [], block: null };
+  st.warnedWindow = { name: tv.name, resetsAt: tv.resetsAt, rung: tv.rung };
+  saveWindowWarn(tv.name, st.warnedWindow);
+  // Gate: pre-empt the turn before anything reaches the API — TOP rung only (lower rungs
+  // are FYI bearings and never block). The one-shot key set above lets the ↑+Enter re-send
+  // pass through silently next time (charge accepted). Note is the fallback.
+  if (cfg.windowThresholdGate && tv.rung === tv.topRung) {
+    return { notes: [], block: windowThresholdGateReason(tv) };
+  }
+  return { notes: cfg.windowThresholdWarn ? [windowThresholdNote(tv, cfg)] : [], block: null };
+}
+
+// Session-spend steps — announce once per crossed step. v2: total includes fleets.
+// The trigger stays dollar-weighted (cross-model normalization); the MESSAGE leads with
+// tokens, one metric per line. The 5h scan is fresh-parse (no cache) — acceptable only
+// because step crossings are rare by design.
+function spendStepGuard(ctx) {
+  if (!ctx.crossed.length) return { notes: [], block: null };
+  ctx.st.warnedUSD = Math.max(...ctx.crossed);
+  // Anthropic's own percentages lead when reachable — the definitive measures; everything
+  // after is supporting detail (Andrew 2026-07-12).
+  const ol = ctx.official ? officialLines(ctx.official) : [];
+  const statLines = [...ol, ...sessionStatLines(ctx), ...windowStatLines(ctx, ol.length > 0)];
+  if (ctx.cfg.planDetect) {
+    const pl = planLine(planInfo());
+    if (pl) statLines.push(pl);
+  }
+  return { notes: [
+    `token check-in: relay to the user in your next reply as a STANDALONE stat block — ` +
+    `one metric per line exactly as given (labels, numbers, and indentation verbatim), ` +
+    `no drama, no commentary between the lines:\n${statLines.join('\n')}`
+  ], block: null };
+}
+
+// The check-in's session lines: total (main + fleets), then qualifiers only when they change
+// the reading, so the block stays scannable.
+function sessionStatLines(ctx) {
+  const m = ctx.m;
+  const split = m.agents.files
+    ? ` = main ${fmtK(tokensOf(m.main.perModel))} + ${m.agents.files} agents ` +
+      `${fmtK(tokensOf(m.agents.perModel))}` : '';
+  const lines = [
+    `This session: ${fmtK(sessionTokens(m))} tokens${split}` +
+      (ctx.usd$ ? ` (≈ ${fmtUSD(m.usd)} API-list)` : ''),
+  ];
+  const pm = mergedPerModel(m);
+  const tot = tokensOf(pm);
+  const cr = Object.values(pm).reduce((a, v) => a + v.cr, 0);
+  if (tot && cr / tot > 0.7) {
+    // raw total dominated by cache re-reads reads scarier than it is (re-reads are
+    // discounted against plan limits and billed at a tenth on API)
+    lines.push(`  ↳ ${fmtK(cr)} of those are cached re-reads (weigh far less against ` +
+      `your plan) · fresh work ${fmtK(tot - cr)}`);
+  }
+  const byModel = Object.entries(pm)
+    .map(([k, v]) => ({ name: shortModel(k), tok: tokOne(v) }))
+    .filter(x => tot && x.tok / tot >= 0.05)
+    .sort((a, b) => b.tok - a.tok);
+  if (byModel.length > 1) {
+    // a Haiku token != a Fable token — flag mixed-model totals
+    lines.push(`  ↳ models: ${byModel.map(x => `${x.name} ${fmtK(x.tok)}`).join(' · ')}`);
+  }
+  return lines;
+}
+
+// The check-in's cross-session lines: the 5h window scan, plus the budget-estimate fallback
+// only when the official meter is unreachable.
+function windowStatLines(ctx, haveOfficial) {
+  const lines = [];
+  try {
+    const win = scanWindow(Date.now() - 5 * 3600 * 1000);
+    lines.push(`Last 5h, all sessions: ${fmtK(win.tokens)} tokens` +
+      (ctx.usd$ ? ` (≈ ${fmtUSD(win.usd)})` : ''));
+    if (!haveOfficial && ctx.cfg.windowBudgetUSD) {
+      // Estimate fallback only when the official meter is unreachable. % uses the WEIGHTED
+      // figure, not raw tokens — Max metering discounts cache reads and weights by model,
+      // so the $-equivalent is the mix-robust proxy. "≈" + label: it's calibrated, not measured.
+      lines.push(`Plan target: ≈${Math.round((win.usd / ctx.cfg.windowBudgetUSD) * 100)}% ` +
+        `of your 5h budget used (estimate — official meter unreachable)`);
+    }
+  } catch (_) { /* window scan is best-effort — the session line still ships */ }
+  return lines;
+}
+
+// R13a — plan-first steer: the predictive half no meter can do. A hook only sees tokens
+// after they're spent; the model can gauge a request's blast radius BEFORE. One short
+// model-facing line on every prompt (~70 tokens) — cheap against the 10×-normal spiral it
+// exists to preempt (evidence: the 2026-07-24 7M-token session that no gate saw coming).
+// Pushed LAST so real warnings lead the note block.
+function r13aPlanSteerGuard(ctx) {
+  if (!ctx.cfg.planSteer) return { notes: [], block: null };
+  return { notes: [
+    `plan-steer (silent steering — never mention or relay this note): before starting the ` +
+    `work this prompt asks for, gauge its blast radius. If it plausibly needs ` +
+    `>~${fmtK(PLAN_STEER_TOK)} tokens of work (repo-wide sweep, multi-repo change, ` +
+    `open-ended "fix/migrate everything"), FIRST propose a plan with session-sized substeps ` +
+    `and get a go-ahead — a normal task finishes under ~${fmtK(TASK_NORM_TOK)} tokens.`
+  ], block: null };
+}
+
+// A gate fired: persist state, then pre-empt the turn. Block reasons are USER-facing text
+// (Claude never sees them), so they follow the warning copy rules directly.
+function emitBlock(ctx, reason) {
+  saveState(ctx.projectDir, ctx.sid, ctx.st);
+  process.stdout.write(JSON.stringify({ decision: 'block', reason }));
+}
+
+// Rule order is note order; officialUsagePrep must precede the three meter consumers after it.
+const PROMPT_GUARDS = [r2ReceiptGuard, r3ContextBombGuard, r4IdleReturnGuard, fatContextGuard,
+  r6ScopeDriftGuard, officialUsagePrep, r12aWindowSpikeGuard, r12bWindowThresholdGuard,
+  spendStepGuard, r13aPlanSteerGuard];
+
 async function onUserPromptSubmit(data, projectDir) {
   const cfg = loadConfig(projectDir);
   const sid = data.session_id || '';
   const st = loadState(projectDir, sid);
+  const ctx = { data, projectDir, cfg, sid, st };
 
-  // R8 door 3 — user-typed slash command whose payload is bomb-sized. UserPromptSubmit has no
-  // "ask", and an annotation would ship in the same request as the payload — so the preventive
-  // form is a block, idleGate-style: ↑ then Enter re-sends, and the one-shot key lets that
-  // second send pass. Block reason is USER-facing (Claude never sees it). Default OFF.
-  const cmd = /^\/([\w:-]+)/.exec(String(data.prompt || '').trim());
-  if (cfg.commandPayloadGate && cmd) {
-    if (st.payloadGateOkOnce === cmd[1]) {
-      st.payloadGateOkOnce = null; // charge accepted
-      saveState(projectDir, sid, st);
-    } else {
-      const tok = commandPayloadTokens(projectDir, cmd[1]);
-      if (tok != null && tok > cfg.bombJumpTokens) {
-        st.payloadGateOkOnce = cmd[1];
-        // ttl 2: the payload lands only on the re-send's request, so the first post-block
-        // prompt legitimately sees no jump — don't let it disarm the R3 suppression early.
-        st.approvedPayloadHop = { est: tok, ttl: 2 };
-        saveState(projectDir, sid, st);
-        process.stdout.write(JSON.stringify({
-          decision: 'block',
-          reason:
-            `⚠️ Hey — running /${cmd[1]} will load ~${fmtK(tok)} tokens into this conversation ` +
-            `permanently; every message after it will re-read them.\n\n` +
-            `To run it anyway: press ↑ then Enter. To keep this session lean: run it in a ` +
-            `throwaway session instead, or ask here for just its conclusion via a subagent.`,
-        }));
-        return;
-      }
-    }
-  }
+  // R8 runs pre-meter: it prices the command's payload from disk before the turn costs anything.
+  const gate = r8CommandPayloadGuard(ctx);
+  if (gate.block) return emitBlock(ctx, gate.block);
 
   // R9 — new turn, new accumulator (persisted by whichever branch saves state below).
   st.turnPayloadTok = 0; st.turnPayloadWarned = false; st.miniBombGateArmed = false;
@@ -1693,314 +2075,14 @@ async function onUserPromptSubmit(data, projectDir) {
   // R13b — new turn: re-baseline the turn-spend meter and disarm any same-turn re-arm.
   // (Turn 1 of a brand-new session never reaches here — PreToolUse lazy-arms the baseline.)
   st.turnStartWorkTok = workTokens(m); st.turnGateAt = null;
+  ctx.m = m;
+  ctx.usd$ = wantDollars(cfg); // false => tokens-only copy (subscription users)
+
   const notes = [];
-  const usd$ = wantDollars(cfg); // false => tokens-only copy (subscription users)
-
-  // R2 receipt — a fleet finished since the last prompt; show the bill once.
-  if (st.pendingWfReceipt) {
-    notes.push(st.pendingWfReceipt);
-    st.pendingWfReceipt = null;
-  }
-
-  // R3 context-bomb tripwire — single-hop jump beyond bombJumpTokens since the last prompt.
-  // Priced by the turns that will re-read it, not the hop itself — at CACHE-READ weight
-  // (~10%), the same basis as turnFloorUSD: warm turns re-read the payload from prompt cache,
-  // and full price only recurs on the first turn after a gap longer than the cache TTL (R4's
-  // story). Numbers stay "~" — the plan meter's exact cache weighting isn't published.
-  // (Andrew, 2026-07-20: the old ×50 full-price extrapolation overstated ~10× on warm loops.)
-  if (st.lastLiveContext != null) {
-    const jump = m.liveContext - st.lastLiveContext;
-    if (jump > cfg.bombJumpTokens && st.approvedPayloadHop) {
-      // R8: the user already decided this payload at the pre-gate — one decision, one surface.
-      // (Known hole, accepted: an unrelated bomb inside the ttl window rides the suppression.)
-      // The landing upgrades the budgets table: measured jump replaces door 1's stat floor.
-      if (st.approvedPayloadHop.skill) {
-        recordObservedSkill(projectDir, st.approvedPayloadHop.skill, jump, null, cfg);
-      }
-      st.approvedPayloadHop = null;
-    } else if (jump > cfg.bombJumpTokens) {
-      const who = attributeJump(data.transcript_path, st.scanOffset);
-      const culprit = who ? ` (largest payload: ${who.label})` : '';
-      // Attribution named a skill -> record the measured landing so door 1 can gate it next
-      // time (built-ins never hit the pre-gate: no files to stat until a landing prices them).
-      const skillHit = who && /^Skill\((.+)\)$/.exec(who.label);
-      if (skillHit) recordObservedSkill(projectDir, skillHit[1], jump, who.chars, cfg);
-      const bombCost = usd$
-        ? `the per-turn floor is now ≥ ${fmtUSD(m.turnFloorUSD)} (50 more turns ≈ ` +
-          `${fmtUSD(m.turnFloorUSD * 50)})`
-        : `~${fmtK(Math.round(jump * CACHE_READ_X))} tokens per cache-warm turn (a cache read, ~10% ` +
-          `weight), and ${fmtK(jump)} of context-window headroom gone until trimmed`;
-      notes.push(
-        `context-bomb: something just loaded +${fmtK(jump)} tokens into this conversation` +
-        `${culprit} — every future turn re-reads it: ${bombCost}. Relay as ` +
-        `a STANDALONE warning block, never woven into your answer: open with "⚠️ Hey —" and ` +
-        `keep a warm conversational voice (helpful friend, not system log), 2-3 plain sentences ` +
-        `naming what landed, then the out ACTION-FIRST (ux copy/action-lines-lead-with-the-action): ` +
-        `"/clear, then /continue to drop this weight and keep the thread" (a one-time reference ` +
-        `belongs in a disposable subagent; once its useful part is extracted, /continue picks the ` +
-        `thread back up in the fresh session, nothing to prep). Then a horizontal rule before ` +
-        `the answer itself.`
-      );
-      if (cfg.bombGateWhenFat && m.liveContext >= cfg.contextWarnTokens) st.bombGateArmed = true;
-    } else if (st.approvedPayloadHop && --st.approvedPayloadHop.ttl <= 0) {
-      st.approvedPayloadHop = null; // R8 gate fired but nothing landed (denied) — disarm
-    }
-  }
-  st.lastLiveContext = m.liveContext;
-  st.scanOffset = m.main.rawLength;
-
-  // R4 idle-return — cache TTL ≈ 1h; a fat stale context re-WRITES at full write rates.
-  // One-shot per gap (keyed on the timestamp we returned to). Thin contexts refill for pennies.
-  if (m.lastTs && m.liveContext >= cfg.contextWarnTokens) {
-    const gapMin = (Date.now() - m.lastTs) / 60000;
-    if (gapMin > cfg.idleWarnMinutes && st.warnedIdleAt !== m.lastTs) {
-      st.warnedIdleAt = m.lastTs;
-      // Recovery window: walk back until ~15min of real interaction is covered (gaps
-      // count at most 5min so idle stretches don't eat the budget), then round the wall-clock
-      // offset up to the nearest 5min.
-      const ts = m.main.tsList || [];
-      let i = ts.length - 1;
-      for (let acc = 0; i > 0 && acc < 15 * 60000; i--) acc += Math.min(ts[i] - ts[i - 1], 5 * 60000);
-      const recoverMin = Math.max(5, Math.ceil((Date.now() - (ts[i] || m.lastTs)) / 300000) * 5);
-      // The pointer feeds /continue's ladder (and /recover-context pid=N stays usable as the
-      // manual form) — staged best-effort; /continue's lineage + walk-back recover without it.
-      writeRecoverPointer(projectDir, sid, recoverMin);
-      // idleGate: pre-empt the charge — block THIS submission before anything reaches the API.
-      // The message stays in the CLI input history (up-arrow + Enter re-sends), and the
-      // one-shot key set above lets that second send pass through silently: charge accepted.
-      // Block reason is USER-facing text (Claude never sees it), so it follows the warning
-      // copy rules directly — future tense, since nothing has been paid yet.
-      if (cfg.idleGate) {
-        saveState(projectDir, sid, st);
-        process.stdout.write(JSON.stringify({
-          decision: 'block',
-          reason:
-            `⚠️ Hey — you left this session sitting for over an hour, longer than the API ` +
-            `keeps a conversation cached. If you continue here, Claude Code will re-upload ` +
-            `all ~${fmtK(m.liveContext)} tokens of it at full price.\n\n` +
-            `To continue anyway: press ↑ then Enter. To pick this work up cheaply instead: ` +
-            `/clear, then /continue — it reloads the recent thread of this conversation.`,
-        }));
-        return;
-      }
-      notes.push(idleReturnNote(m.liveContext));
-    }
-  }
-
-  // Fat-context advisory — the core "1 question in a 5h window" guard. Injected on EVERY prompt
-  // past the threshold (it's ~50 tokens; the decision is per-prompt by nature).
-  if (m.liveContext >= cfg.contextWarnTokens) {
-    const floorPart = usd$
-      ? `has a ≥ ${fmtUSD(m.turnFloorUSD)} re-read floor before any work happens`
-      : `re-reads all ~${fmtK(m.liveContext)} tokens of it against the plan window before any ` +
-        `work happens`;
-    notes.push(
-      `live context ≈ ${fmtK(m.liveContext)} tokens — every turn in this session now ` +
-      `${floorPart}. If the user's prompt is a quick one-off unrelated to the ongoing work, ` +
-      `answer it, but ALSO tell them it would be much ${usd$ ? 'cheaper' : 'lighter on their ' +
-      'usage window'} asked in a fresh session (this context is re-sent on every turn).`
-    );
-  }
-
-  // R6 scope-drift nudge — when the dominant share of live context belongs to scopes the
-  // session has moved past, every turn pays rent on settled work. Scope data comes from the
-  // terminal-title per-title ledger ({sid}.history.jsonl) — the same watermarks its /clear
-  // advisor reads — so drift and advisor can never disagree about what a topic cost. The nudge
-  // fires ONLY above driftMinContextTokens (the STAY floor below which a cut can't pay for
-  // itself), so at fire time the cut is a foregone conclusion by construction — hand the user
-  // the action-first /clear + /continue out (a recover-pointer staged at fire time pins the
-  // ledger boundary, so /continue self-packages the thread, no prep). The dependency
-  // case drift can't see (a build->article day reads as two scopes, but the article feeds on
-  // the build context) is handled in the copy itself: it advises STAYING when the new scope
-  // builds on the earlier work. Model relays the block; it NEVER runs the command.
-  // Once per scope (nudgedScope).
-  if (cfg.driftNudge) {
-    const tenures = readLedgerTenures(projectDir, sid);
-    const cur = tenures[tenures.length - 1];
-    if (cur) {
-      // Prompt residency is the one thing the ledger can't carry — counted here in state. The
-      // ledger gains the new-scope line at the shift turn's first paint after the title write,
-      // so this counter starts on the guard's next prompt — the same "first seen on turn 2"
-      // beat the old scopeLog had.
-      if (st.curScope === cur.scope) {
-        st.curScopePrompts = (st.curScopePrompts || 0) + 1;
-      } else {
-        st.curScope = cur.scope; st.curScopePrompts = 1;
-        if (tenures.length > 1) logLine(projectDir,
-          `sid=${sid.slice(0, SID_SHORT_LEN)} scope="${cur.scope}" ctx=${fmtK(m.liveContext)}`);
-      }
-      cur.prompts = st.curScopePrompts;
-      // Defer loop: consume a model-written drift-deferred flag (the in-turn judge refused the
-      // staged card — stale premise or open threads), snooze, and re-arm the one-shot when the
-      // snooze expires; driftVerdict then re-stages and the model re-judges with a fresh premise.
-      const deferred = consumeDriftDeferred(projectDir);
-      driftDeferralTick(st, deferred, cfg.driftRetryPrompts);
-      if (deferred && st.driftSnooze) logLine(projectDir,
-        `sid=${sid.slice(0, SID_SHORT_LEN)} drift-deferred scope="${st.driftSnooze.scope}" retry@${st.driftSnooze.retryAtPrompts}p`);
-      const v = driftVerdict(tenures, m.liveContext, cfg);
-      if (v.fire && st.nudgedScope !== cur.scope) {
-        st.nudgedScope = cur.scope;
-        st.driftSnooze = null;
-        logLine(projectDir,
-          `sid=${sid.slice(0, SID_SHORT_LEN)} drift-nudge from="${v.dominant}" to="${cur.scope}" prior=${v.priorPct}%`);
-        notes.push(driftNote(v.dominant, cur.scope, v.priorPct, cfg.driftAutoMigrate, m.liveContext));
-        // R11 (revised 2026-07-21): stage a recover-pointer pinned to the current tenure's
-        // enteredIso — the drifted thread's exact boundary. /continue's auto mode reads
-        // recover.json before any heuristic rung, so after the nudge's "/clear + /continue"
-        // (one-liner and prose branch alike) the fresh session recovers exactly this thread.
-        // (Replaces the retired SessionStart-injection candidate, deleted 2026-07-24 —
-        // git history is the museum.)
-        const ageMin = Math.max(1, Math.round((Date.now() - (Date.parse(cur.enteredIso) || Date.now())) / 60000));
-        writeRecoverPointer(projectDir, sid, ageMin, cur.enteredIso);
-      }
-    }
-  }
-
-  // Spend-step check-ins are API-billed-only (2026-07-18): on a subscription the $-equivalent
-  // steps map to nothing the user experiences — the R12 window flags below carry the plan-meter
-  // story there. Unknown billing keeps the check-ins (the dollars may be real).
-  const crossed = billingKind() === 'subscription' ? []
-    : (cfg.sessionWarnUSD || []).filter(s => m.usd >= s && st.warnedUSD < s);
-
-  // Anthropic's own window meter — fetched at most ONCE per prompt (cached >=180s, so most prompts
-  // are cache-served; the network hit is only every few minutes). Shared by the two window flags
-  // below AND the spend-step check-in, so the fetch never happens twice in a turn.
-  let official = null;
-  if (cfg.officialUsageFetch &&
-      (cfg.windowSpikeWarn || cfg.windowThresholdWarn || cfg.windowThresholdGate || crossed.length)) {
-    const off = await fetchOfficialUsage(projectDir);
-    if (off && off.data) official = off.data;
-  }
-
-  // R12 — window guards, both grounded in that meter. The stake here is a THROTTLE (lost access
-  // until reset), which is unsayable in dollars, so the copy is always window-% and never $.
-  //   R12a window-spike: one turn ate a big slice of the 5h window (the delta of the meter's own
-  //     %, so it self-calibrates — no budget to set).
-  //   R12b window-threshold: the tightest live window (5h or weekly) crossed the high-water mark
-  //     — once per window cycle; re-arms when that window resets. windowThresholdGate (opt-in)
-  //     escalates that same one-shot from a note to a BLOCK (mirrors idleGate).
-  if (cfg.windowSpikeWarn || cfg.windowThresholdWarn || cfg.windowThresholdGate) {
-    const now5h = fiveHourWindow(official);
-    if (cfg.windowSpikeWarn) {
-      const prev = st.lastWindowPct != null
-        ? { pct: st.lastWindowPct, resetsAt: st.lastWindowResetsAt } : null;
-      const sv = windowSpikeVerdict(now5h, prev, st.lastTurnDeltaUsd || 0, cfg);
-      // windowSpikeConfirm upgrades the passive note to an interactive AskUserQuestion card — a SOFT
-      // relay, never a decision:'block', so it can't stall the turn. Off -> the standalone note.
-      if (sv.fire) {
-        // Attribute the interval's spend across sessions before wording the flag — the meter is
-        // account-level, so "that last turn" is only sayable when the ledger shows we were alone.
-        const attr = spikeAttribution(readSpendLedger(st.lastWindowAtIso), sid);
-        const mins = st.lastWindowAtIso && Number.isFinite(Date.parse(st.lastWindowAtIso))
-          ? Math.max(1, Math.round((Date.now() - Date.parse(st.lastWindowAtIso)) / 60000)) : null;
-        // The confirm card returns null when the window resets before projected exhaustion —
-        // provably no throttle risk, so nothing is relayed at all (threshold ladder still runs).
-        const spikeNote = cfg.windowSpikeConfirm
-          ? windowSpikeConfirmNote(sv, now5h, sid, attr, mins)
-          : windowSpikeNote(sv, now5h, attr, mins);
-        if (spikeNote) notes.push(spikeNote);
-      }
-      // advance the baseline whenever the meter is live (fired or not) so the next delta is fresh
-      if (now5h) {
-        st.lastWindowPct = now5h.pct; st.lastWindowResetsAt = now5h.resetsAt;
-        st.lastWindowAtIso = new Date().toISOString();
-      }
-    }
-    if (cfg.windowThresholdWarn || cfg.windowThresholdGate) {
-      const worst = tightestWindow(official);
-      const warned = effectiveWarn(worst, worst ? loadWindowWarn(worst.name) : null, st.warnedWindow);
-      const tv = windowThresholdVerdict(worst, warned, cfg);
-      if (tv.fire) {
-        st.warnedWindow = { name: tv.name, resetsAt: tv.resetsAt, rung: tv.rung };
-        saveWindowWarn(tv.name, st.warnedWindow);
-        // Gate: pre-empt the turn before anything reaches the API — TOP rung only (lower rungs
-        // are FYI bearings and never block). The one-shot key set above lets the ↑+Enter re-send
-        // pass through silently next time (charge accepted). Note is the fallback.
-        if (cfg.windowThresholdGate && tv.rung === tv.topRung) {
-          saveState(projectDir, sid, st);
-          process.stdout.write(JSON.stringify({ decision: 'block', reason: windowThresholdGateReason(tv) }));
-          return;
-        }
-        if (cfg.windowThresholdWarn) notes.push(windowThresholdNote(tv, cfg));
-      }
-    }
-  }
-
-  // Session-spend steps — announce once per crossed step. v2: total includes fleets.
-  // The trigger stays dollar-weighted (cross-model normalization); the MESSAGE leads with
-  // tokens, one metric per line. The 5h scan is fresh-parse (no cache) — acceptable only
-  // because step crossings are rare by design.
-  if (crossed.length) {
-    st.warnedUSD = Math.max(...crossed);
-    const split = m.agents.files
-      ? ` = main ${fmtK(tokensOf(m.main.perModel))} + ${m.agents.files} agents ` +
-        `${fmtK(tokensOf(m.agents.perModel))}` : '';
-    // Anthropic's own percentages lead when reachable — the definitive measures; everything
-    // after is supporting detail (Andrew 2026-07-12).
-    const statLines = [];
-    let haveOfficial = false;
-    if (official) {
-      const ol = officialLines(official);
-      if (ol.length) { statLines.push(...ol); haveOfficial = true; }
-    }
-    statLines.push(
-      `This session: ${fmtK(sessionTokens(m))} tokens${split}` +
-        (usd$ ? ` (≈ ${fmtUSD(m.usd)} API-list)` : ''),
-    );
-    // Conditional qualifiers — only when they change the reading, so the block stays scannable.
-    const pm = mergedPerModel(m);
-    const tot = tokensOf(pm);
-    const cr = Object.values(pm).reduce((a, v) => a + v.cr, 0);
-    if (tot && cr / tot > 0.7) {
-      // raw total dominated by cache re-reads reads scarier than it is (re-reads are
-      // discounted against plan limits and billed at a tenth on API)
-      statLines.push(`  ↳ ${fmtK(cr)} of those are cached re-reads (weigh far less against ` +
-        `your plan) · fresh work ${fmtK(tot - cr)}`);
-    }
-    const byModel = Object.entries(pm)
-      .map(([k, v]) => ({ name: shortModel(k), tok: tokOne(v) }))
-      .filter(x => tot && x.tok / tot >= 0.05)
-      .sort((a, b) => b.tok - a.tok);
-    if (byModel.length > 1) {
-      // a Haiku token != a Fable token — flag mixed-model totals
-      statLines.push(`  ↳ models: ${byModel.map(x => `${x.name} ${fmtK(x.tok)}`).join(' · ')}`);
-    }
-    try {
-      const win = scanWindow(Date.now() - 5 * 3600 * 1000);
-      statLines.push(`Last 5h, all sessions: ${fmtK(win.tokens)} tokens` +
-        (usd$ ? ` (≈ ${fmtUSD(win.usd)})` : ''));
-      if (!haveOfficial && cfg.windowBudgetUSD) {
-        // Estimate fallback only when the official meter is unreachable. % uses the WEIGHTED
-        // figure, not raw tokens — Max metering discounts cache reads and weights by model,
-        // so the $-equivalent is the mix-robust proxy. "≈" + label: it's calibrated, not measured.
-        statLines.push(`Plan target: ≈${Math.round((win.usd / cfg.windowBudgetUSD) * 100)}% ` +
-          `of your 5h budget used (estimate — official meter unreachable)`);
-      }
-    } catch (_) { /* window scan is best-effort — the session line still ships */ }
-    if (cfg.planDetect) {
-      const pl = planLine(planInfo());
-      if (pl) statLines.push(pl);
-    }
-    notes.push(
-      `token check-in: relay to the user in your next reply as a STANDALONE stat block — ` +
-      `one metric per line exactly as given (labels, numbers, and indentation verbatim), ` +
-      `no drama, no commentary between the lines:\n${statLines.join('\n')}`
-    );
-  }
-
-  // R13a — plan-first steer: the predictive half no meter can do. A hook only sees tokens
-  // after they're spent; the model can gauge a request's blast radius BEFORE. One short
-  // model-facing line on every prompt (~70 tokens) — cheap against the 10×-normal spiral it
-  // exists to preempt (evidence: the 2026-07-24 7M-token session that no gate saw coming).
-  // Pushed LAST so real warnings lead the note block.
-  if (cfg.planSteer) {
-    notes.push(
-      `plan-steer (silent steering — never mention or relay this note): before starting the ` +
-      `work this prompt asks for, gauge its blast radius. If it plausibly needs ` +
-      `>~${fmtK(PLAN_STEER_TOK)} tokens of work (repo-wide sweep, multi-repo change, ` +
-      `open-ended "fix/migrate everything"), FIRST propose a plan with session-sized substeps ` +
-      `and get a go-ahead — a normal task finishes under ~${fmtK(TASK_NORM_TOK)} tokens.`
-    );
+  for (const guard of PROMPT_GUARDS) {
+    const r = await guard(ctx);
+    notes.push(...r.notes);
+    if (r.block) return emitBlock(ctx, r.block);
   }
 
   saveState(projectDir, sid, st);
@@ -2325,7 +2407,7 @@ function projectNameOf(fp, proj) {
     fs.closeSync(fd);
     const m = /"cwd"\s*:\s*("(?:[^"\\]|\\.)*")/.exec(buf.toString('utf8', 0, n));
     if (m) return path.basename(JSON.parse(m[1]));
-  } catch (_) {}
+  } catch (_) { /* unreadable transcript — fall back to the stripped slug */ }
   return proj.replace(/^C--(?:CODE-)?/, '');
 }
 
