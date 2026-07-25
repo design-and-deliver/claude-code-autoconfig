@@ -26,6 +26,7 @@
     "preversion": "npm test",
     "prepublishOnly": "npm test",
     "test:hooks": "node test/hook-tests.test.js",
+    "coverage": "c8 npm test",
     "pub": "npm whoami && npm publish",
     "test:box": "node test/box-alignment.test.js",
     "test:install": "node test/cli-install.test.js",
@@ -69,6 +70,7 @@
     "node": ">=18.0.0"
   },
   "devDependencies": {
+    "c8": "^12.0.0",
     "eslint": "^10.7.0",
     "globals": "^17.7.0"
   }

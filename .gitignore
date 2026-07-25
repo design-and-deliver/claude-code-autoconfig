@@ -30,6 +30,9 @@ tmpclaude-*
 # Test temp directories
 test/.test-temp-*
 
+# c8 coverage output (npm run coverage — visibility only, never committed)
+coverage/
+
 # Session-rendered article archive (/create-web-page output, local-only)
 ARTICLES/
 
