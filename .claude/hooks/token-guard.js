@@ -34,7 +34,12 @@
  *                           (cache re-reads weighted at their 0.1x billing rate) cross
  *                           turnGateTokens (a normal task lands under ~100k; 10× that
  *                           means the work spiraled past anything consciously chosen);
- *                       (f) v1 hard gate on total session spend (default off, re-arms stepwise).
+ *                       (f) R14: in-turn RENT tripwire — hard ask once ONE turn's cache
+ *                           re-reads (round trips x resident context) cross turnRentGateTokens.
+ *                           The blind spot R13b cannot see by construction: ordinary work done
+ *                           over many round trips at a fat context. Every other context guard
+ *                           speaks only at a prompt boundary; this one re-checks mid-turn;
+ *                       (g) v1 hard gate on total session spend (default off, re-arms stepwise).
  *   PostToolUse      -> R9: mini-bomb accumulator — per-turn sum of tool-result payloads; when
  *                       the total crosses bombJumpTokens, one mid-turn note to Claude (payloads
  *                       individually too small for R8's doors, bomb-sized in aggregate).
@@ -143,6 +148,16 @@
  *   spirals. Re-arms at the next gate-width within the same turn; every prompt resets the
  *   baseline. Copy is TOKEN-denominated on every billing kind — task size is work volume,
  *   not price. null disables.
+ *   turnRentGateTokens 1000000 — R14: hard ask when a single TURN's cache RE-READS cross this.
+ *   The deliberate mirror of the sentence above: R13b discounts re-reads 10x so it can judge
+ *   TASK SIZE, which by construction blinds it to the bill — a turn can do 83k of ordinary work
+ *   and still burn 2.5M in re-reads across 24 round trips at a 104k context (observed
+ *   2026-07-25, $2.62 in one 22-minute turn, R13b's work meter reading ~0.33M). Rent is real
+ *   money, so it gets its own unweighted gate. The copy leads with round trips x context rather
+ *   than a raw total, because the lever is context size, not task length — and unlike the
+ *   fat-context advisory (UserPromptSubmit, once per prompt) this one re-checks mid-turn, which
+ *   is the only place rent accrues. Re-arms at the next gate-width within the turn; every
+ *   prompt resets the baseline. null disables.
  *   planSteer true — R13a: one-line every-prompt steer telling Claude to gauge the request's
  *   blast radius FIRST and propose a plan (session-sized substeps) before starting work that
  *   plausibly exceeds ~3× a normal task. The predictive half a meter can't do: the hook stages
@@ -239,6 +254,7 @@ const DEFAULTS = {
   miniBombWarn: true,
   miniBombGate: false,
   turnGateTokens: 1000000,          // R13b: hard ask when ONE turn's work tokens cross this (null = off)
+  turnRentGateTokens: 1000000,      // R14: hard ask when ONE turn's cache RE-READS cross this (null = off)
   planSteer: true,                  // R13a: every-prompt plan-first steer (model-facing, never relayed)
   skillBudgetWarnChars: 150000,
   idleWarnMinutes: 60,
@@ -293,6 +309,7 @@ const TOKEN_SAVER = {
   windowThresholdGate: true,     // hard-pause at the 80% mark — max-protection posture keeps the stopgate
   windowSpikeWarnPct: 10,        // flag a smaller single-turn window bite than the 20 default
   turnGateTokens: 500000,        // R13b: half the default gate-width — spirals stopped at 5× normal, not 10×
+  turnRentGateTokens: 500000,    // R14: same halving for rent — ~5 round trips at 100k context
 };
 
 // Layer DEFAULTS < TOKEN_SAVER (when on) < explicit user config. Pure + exported for
@@ -1022,7 +1039,8 @@ function loadState(projectDir, sid) {
     approvedPayloadHop: null, payloadGateOkOnce: null,
     turnPayloadTok: 0, turnPayloadWarned: false, miniBombGateArmed: false,
     lastWindowPct: null, lastWindowResetsAt: null, lastWindowAtIso: null, warnedWindow: null,
-    lastTurnDeltaUsd: 0, turnStartWorkTok: null, turnGateAt: null };
+    lastTurnDeltaUsd: 0, turnStartWorkTok: null, turnGateAt: null,
+    turnStartCr: null, turnStartReqs: null, rentGateAt: null };
   try {
     return Object.assign(blank,
       JSON.parse(fs.readFileSync(path.join(stateDir(projectDir), `${sid}.json`), 'utf8')));
@@ -1667,6 +1685,12 @@ const sessionTokens = m => tokensOf(m.main.perModel) + tokensOf(m.agents.perMode
 const workOne = v => v.inp + v.out + v.cw + v.cr * CACHE_READ_X;
 const workTokensOf = pm => Object.values(pm).reduce((a, v) => a + workOne(v), 0);
 const workTokens = m => workTokensOf(m.main.perModel) + workTokensOf(m.agents.perModel);
+// R14 rent meter: the OTHER half of the same split — cache re-reads, unweighted. workTokens
+// deliberately discounts these 10× (they're rent, not work), which is right for judging task
+// size and wrong for judging a bill: rent is real money and compounds as context × round trips.
+// So the two gates read the same turn through opposite lenses and neither one hides the other.
+const crTokensOf = pm => Object.values(pm).reduce((a, v) => a + (v.cr || 0), 0);
+const crTokens = m => crTokensOf(m.main.perModel) + crTokensOf(m.agents.perModel);
 const shortModel = k => k.split('-')[1] || k;
 function mergedPerModel(m) {
   const out = {};
@@ -2106,6 +2130,8 @@ async function onUserPromptSubmit(data, projectDir) {
   // R13b — new turn: re-baseline the turn-spend meter and disarm any same-turn re-arm.
   // (Turn 1 of a brand-new session never reaches here — PreToolUse lazy-arms the baseline.)
   st.turnStartWorkTok = workTokens(m); st.turnGateAt = null;
+  // R14 — same re-baseline for the rent meter (re-reads + round trips since this prompt).
+  st.turnStartCr = crTokens(m); st.turnStartReqs = m.main.turns; st.rentGateAt = null;
   ctx.m = m;
   ctx.usd$ = wantDollars(cfg); // false => tokens-only copy (subscription users)
 
@@ -2267,9 +2293,9 @@ function onPreToolUse(data, projectDir) {
       `/clear, then /continue to shed it and keep this thread.`);
   }
 
-  // R13b + v1 both need the session meter; PreToolUse runs on every tool call, so meter once
+  // R13b/R14 + v1 all need the session meter; PreToolUse runs on every tool call, so meter once
   // and only when at least one spend gate is armed.
-  if (cfg.hardGateUSD == null && cfg.turnGateTokens == null) return;
+  if (cfg.hardGateUSD == null && cfg.turnGateTokens == null && cfg.turnRentGateTokens == null) return;
   const m = meterSession(data.transcript_path, { fleet: cfg.fleetMeter, projectDir });
 
   // R13b — turn-spend tripwire: ONE turn's work tokens (main + fleet, delta since the last
@@ -2299,6 +2325,44 @@ function onPreToolUse(data, projectDir) {
           `anticipated. Approve to push on (next check ≈ ${fmtK(st.turnGateAt)} this turn) — ` +
           `or deny, and Claude should stop and propose a plan with session-sized substeps.`);
       }
+    }
+  }
+
+  // R14 — in-turn RENT tripwire. The failure R13b structurally cannot see: a turn whose work
+  // is ordinary (83k on the 2026-07-25 plan re-cut, under TASK_NORM_TOK) but which pays for a
+  // fat resident context over and over — 24 round trips × ~104k = 2.5M of re-reads, $2.62, in
+  // ONE turn. Every other context guard speaks at a prompt boundary (the fat-context advisory
+  // fires on UserPromptSubmit, once); rent accrues BETWEEN those boundaries, and a 20-minute
+  // autonomous turn has no boundary to take. This is the only check that re-reads context size
+  // mid-turn — which is also why it must stay cheap: it reuses the meter already computed above.
+  if (cfg.turnRentGateTokens != null) {
+    if (st.turnStartCr == null) {
+      // No baseline (turn 1 of a fresh session, or state written before R14 existed): arm it
+      // mid-turn — undercounts this turn rather than billing the whole session's rent to it.
+      st.turnStartCr = crTokens(m); st.turnStartReqs = m.main.turns;
+      saveState(projectDir, sid, st);
+    }
+    const rent = crTokens(m) - st.turnStartCr;
+    const rGate = st.rentGateAt != null ? st.rentGateAt : cfg.turnRentGateTokens;
+    if (rent >= rGate) {
+      // Re-arm ABOVE the observed rent (same rule as R13b — one huge landing must not re-fire
+      // on the very next tool call).
+      st.rentGateAt = (Math.floor(rent / cfg.turnRentGateTokens) + 1) * cfg.turnRentGateTokens;
+      saveState(projectDir, sid, st);
+      const reqs = Math.max(1, m.main.turns - (st.turnStartReqs || 0));
+      // Work = the turn's work tokens minus the 0.1x-weighted rent already inside them, i.e.
+      // input + output + cache writes. Null baseline (turnGateTokens off) => report rent alone.
+      const work = st.turnStartWorkTok == null ? null
+        : Math.max(0, workTokens(m) - st.turnStartWorkTok - rent * CACHE_READ_X);
+      const vs = work == null ? '' : ` against ~${fmtK(work)} tokens of actual work`;
+      return ask('PreToolUse',
+        `⚠️ Hey — this turn has made ${reqs} round trip${reqs === 1 ? '' : 's'} carrying ` +
+        `~${fmtK(m.liveContext)} of ` +
+        `context: ~${fmtK(rent)} tokens of re-reads${vs}. That is rent, not progress, and it ` +
+        `compounds every trip — the lever is a smaller resident context, not a shorter task. ` +
+        `Approve to push on (next check ≈ ${fmtK(st.rentGateAt)} of re-reads this turn) — or ` +
+        `deny, and Claude should land this turn at a commit point so you can /clear + /continue ` +
+        `carrying only the next step.`);
     }
   }
 
