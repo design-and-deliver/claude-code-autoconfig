@@ -1,0 +1,96 @@
+{
+  "//": "Baseline for the complexity no-growth ratchet (see complexity-ratchet.test.js). Shrink-only: regenerate with --write-baseline in the same commit that clears a violation.",
+  "maxAllowed": 9,
+  "violations": {
+    ".claude/hooks/arcade-beeps.js": [
+      "Async function 'main'",
+      "Function 'endsOnQuestionInline'"
+    ],
+    ".claude/hooks/auto-guard.js": [
+      "Function 'main'"
+    ],
+    ".claude/hooks/mark-commit-active.js": [
+      "Arrow function"
+    ],
+    ".claude/hooks/terminal-title.js": [
+      "Async function 'handle'",
+      "Async function 'postGrade'",
+      "Async function 'turnWatch'",
+      "Function 'activeTwins'",
+      "Function 'ancestryChain'",
+      "Function 'classifyTail'",
+      "Function 'clearAdvice'",
+      "Function 'dupeGuardPaint'",
+      "Function 'dupeGuardResult'",
+      "Function 'inspectLastResponse'",
+      "Function 'lineageAncestors'",
+      "Function 'probeLive'",
+      "Function 'readContextTokens'",
+      "Function 'recordLineage'",
+      "Function 'setTitle'",
+      "Function 'titleLog'"
+    ],
+    ".claude/hooks/token-guard.js": [
+      "Async function 'fetchOfficialUsage'",
+      "Async function 'onUserPromptSubmit'",
+      "Async function 'report'",
+      "Function 'analyzeSession'",
+      "Function 'attributeJump'",
+      "Function 'driftDeferralTick'",
+      "Function 'driftVerdict'",
+      "Function 'fanVerdict'",
+      "Function 'ledgerScopes'",
+      "Function 'meter'",
+      "Function 'meterSession'",
+      "Function 'officialLines'",
+      "Function 'onPostToolUse'",
+      "Function 'onPreToolUse'",
+      "Function 'onStop'",
+      "Function 'payloadVerdict'",
+      "Function 'planInfo'",
+      "Function 'recordObservedSkill'",
+      "Function 'recoverTail'",
+      "Function 'renderAnalysis'",
+      "Function 'resolveTranscript'",
+      "Function 'scanWindow'",
+      "Function 'skillPayloadChars'",
+      "Function 'skillSizes'",
+      "Function 'tightestWindow'",
+      "Function 'windowSpikeConfirmNote'",
+      "Function 'windowSpikeNote'",
+      "Function 'windowSpikeVerdict'",
+      "Function 'windowThresholdVerdict'"
+    ],
+    ".claude/scripts/plan-progress.js": [
+      "Function 'parsePlan'",
+      "Function 'render'"
+    ],
+    ".claude/scripts/sync-docs.js": [
+      "Function 'generateTreeHtml'",
+      "Function 'generateTreeInfo'"
+    ],
+    ".claude/scripts/whats-happening.js": [
+      "Function 'analyze'",
+      "Function 'summarizeInput'"
+    ],
+    "bin/lib/plugins.js": [
+      "Function 'pluginAdd'",
+      "Function 'runPluginCommand'",
+      "Function 'seedAddedDelta'"
+    ],
+    "bin/lib/settings-merge.js": [
+      "Function 'mergeSettingsInto'",
+      "Function 'migrateLegacyHookCommands'",
+      "Function 'unmergeSettingsFrom'"
+    ],
+    "bin/lib/updates.js": [
+      "Function 'pullUpdates'"
+    ],
+    "bin/update-summary.js": [
+      "Function 'formatUpdateSummary'"
+    ],
+    "test/box-alignment.test.js": [
+      "Function 'testBoxStructure'"
+    ]
+  }
+}
