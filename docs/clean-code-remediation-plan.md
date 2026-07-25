@@ -16,6 +16,17 @@ Each substep: make it green (`npm test` before and after), run its **Verify** co
 with a `Changelog:` trailer (dev-gated work → `Changelog: none`), append a Ledger entry, then
 `/clear` + `/continue` (plan-aware; resumes at the next unchecked substep).
 
+**Model routing (added 2026-07-25):** each remaining substep title ends with a `[fable]` /
+`[opus]` tag — check it and set `/model` accordingly BEFORE `/continue` (model is per-session;
+caches are model-scoped, so never switch mid-session). Heuristic: **Opus 5** for well-specified
+mechanical extractions with strong test/byte-diff nets (half Fable's price, strongest at
+executing a spec); **Fable 5** for ⛔ trap-surface edits and design-judgment seams. Mixed
+substep 3.3 is routed per sub-item in its body. If an `[opus]` session flails or the review
+finds plan deviations, restart that substep on Fable. **Every substep's closing message must
+end with the handoff line for the NEXT unchecked substep** — e.g.
+`Handoff: /clear → /model fable → /continue (next: 3.4 · [fable])` — so the model switch is
+emitted at the boundary, never left to memory.
+
 ---
 
 ## ⛔ Standing trap warnings — read before ANY item
@@ -197,6 +208,11 @@ must now be side-effect-free.
 Single-file constraint stands (hook deployment); the split is INTO per-rule functions within
 the file, anchored on the pure verdict functions that already exist.
 
+**Model routing:** 3.3b → **[opus]** (3.3a's guard shape is the template — pattern-following
+with a byte-diff net); 3.3c → **[fable]** (the `--analyze` digest is a machine interface, and
+deduping the region-attribution logic shared with `attributeJump` is a design seam, not a
+mechanical extraction).
+
 - [x] 3.3a — `onUserPromptSubmit` (CC 89, 2026-07-24 re-census): one `r<N>...Guard(ctx)`
       function per rule (R8, R9, meter, R2, R3, R4, fat-context, R6, R12a, R12b, spend-step),
       each returning `{notes, block}`; the handler becomes a fold over them. Digest wording
@@ -210,7 +226,7 @@ output on a real transcript diffed byte-for-byte against pre-refactor output; th
 CC ≤ 9 bar on each cleared function + its helpers.
 **Commit:** one per sub-item + `Changelog: none`.
 
-### ☐ 3.4 · L · ~2h — terminal-title: explicit event dispatch + handle() split
+### ☐ 3.4 · L · ~2h — terminal-title: explicit event dispatch + handle() split · [fable]
 
 ⚠ Highest-trap substep: fleet-synced file, cross-process sidecar protocol.
 
@@ -229,7 +245,7 @@ manual smoke: one prompt in a scratch session paints working→idle correctly.
 **Commit:** `fix(terminal-title): explicit Stop dispatch; split handle()` +
 `Changelog: More reliable terminal tab status updates`.
 
-### ☐ 3.5 · M · ~60m — settings-merge: per-domain split
+### ☐ 3.5 · M · ~60m — settings-merge: per-domain split · [opus]
 
 - [ ] `mergeSettingsInto` / `unmergeSettingsFrom` (CC 30 each) → `mergeEnv/mergeHooks/
       mergePermissions` + unmerge twins; the `added`-delta contract (BH-1) is byte-frozen —
@@ -238,7 +254,7 @@ manual smoke: one prompt in a scratch session paints working→idle correctly.
 **Verify:** `npm test` (plugin suite incl. the 2026-07-24 corrupt-settings tests).
 **Commit:** `refactor(settings-merge): per-domain helpers` + `Changelog: none`.
 
-### ☐ 3.6 · L · ~2h — terminal-title: decompose turnWatch (CC 79)
+### ☐ 3.6 · L · ~2h — terminal-title: decompose turnWatch (CC 79) · [fable]
 
 ⚠ Same trap surface as 3.4 (fleet-synced single file, cross-process sidecar protocol) —
 execute right after it, while that session's traps are fresh.
@@ -259,7 +275,7 @@ detached child — run on the dev box; CI green proves nothing here.
 **Verify:** `npm test`; check-mode sync (zero drift); the Phase 3 CC ≤ 9 bar.
 **Commit:** `refactor(terminal-title): decompose turnWatch` + `Changelog: none`.
 
-### ☐ 3.7 · L · ~2h — token-guard: meter (CC 33) + fanVerdict (CC 31)
+### ☐ 3.7 · L · ~2h — token-guard: meter (CC 33) + fanVerdict (CC 31) · [opus]
 
 - [ ] Test FIRST — `meter` has no direct unit test (coverage today is incidental through the
       event handlers): fixture transcript → exact `perModel` keys (`inp/out/cr/cw/searches/usd`),
@@ -277,7 +293,7 @@ detached child — run on the dev box; CI green proves nothing here.
 **Verify:** `npm test` after each function; the Phase 3 CC ≤ 9 bar.
 **Commit:** one per function + `Changelog: none`.
 
-### ☐ 3.8 · L · ~90m — token-guard: the --report renderer (CC 32) — test first, it has none
+### ☐ 3.8 · L · ~90m — token-guard: the --report renderer (CC 32) — test first, it has none · [opus]
 
 - [ ] Characterization test spawning `--report` on a fixture transcript with `global.fetch` +
       credentials stubbed (reuse the 1.3 pattern in token-guard-official-usage.test.cjs). Pin
@@ -293,7 +309,7 @@ detached child — run on the dev box; CI green proves nothing here.
 (fetch stubbed to the cached allocation so the diff is deterministic); the Phase 3 CC ≤ 9 bar.
 **Commit:** `refactor(token-guard): decompose the --report renderer` + `Changelog: none`.
 
-### ☐ 3.9 · M · ~45m — whats-happening: decompose analyze (CC 33)
+### ☐ 3.9 · M · ~45m — whats-happening: decompose analyze (CC 33) · [opus]
 
 - [ ] Extract `sliceCurrentTurn` / `buildResultMap` / `buildSteps` / `classifyState`. The
       `state` enum (`running-tool` | `thinking` | `idle-or-done`) and the `--json` object keys
@@ -303,7 +319,7 @@ detached child — run on the dev box; CI green proves nothing here.
 **Verify:** `npm test`; the Phase 3 CC ≤ 9 bar.
 **Commit:** `refactor(whats-happening): decompose analyze` + `Changelog: none`.
 
-### ☐ 3.10 · M · ~45m — plan-progress: decompose render (CC 32) — after 2.5, never before
+### ☐ 3.10 · M · ~45m — plan-progress: decompose render (CC 32) — after 2.5, never before · [opus]
 
 - [ ] Hard dependency: 2.5's characterization suite is the only safety net this file gets —
       do not start this substep without it landed.
@@ -758,3 +774,23 @@ detached child — run on the dev box; CI green proves nothing here.
     interactive timing), not token-guard.
   - Doc fix riding along: 3.3's Verify hook count refreshed 206 → 217.
   - Next: 3.3b (`onPreToolUse`, CC 44 — same guard shape).
+
+- **2026-07-25 — plan amendment: model routing tags (no substep executed).** A Fable 5 session
+  tagged every remaining substep with its executing model — `· [opus]` / `· [fable]` at the END
+  of the title, after the ` — `, so the SUBSTEP regex (`plan-progress.js:50`) never sees it;
+  verified post-edit with a full plan-progress render (all 20 substeps parse, next → 3.3).
+  Rationale: Opus 5 is half Fable's price ($5/$25 vs $10/$50 per MTok) and implementation burns
+  ~75% of a session's tokens; Fable stays on plan/review work and trap-surface edits.
+  Assignments: **3.3b opus** (3.3a's guard pattern is the template, byte-diff net),
+  **3.3c fable** (`--analyze` digest machine interface + the attributeJump dedupe is a design
+  seam), **3.4 + 3.6 fable** (the plan's own "highest-trap" flags: fleet-synced single file,
+  cross-process sidecar protocol, byte-frozen strings), **3.5 / 3.7 / 3.8 / 3.9 / 3.10 opus**
+  (pinned contracts + characterization/byte-diff nets make them execution tasks). Borderline
+  call: 3.7 — the meter pricing fold is subtle, but its test-FIRST spec is prescriptive enough
+  for Opus; restart on Fable if the fixture test drags. Also recommended, not added (user's
+  call): a phase-end `[fable]` review substep over the accumulated Phase 3 diff
+  (`git diff 8a94b78..HEAD` at the time), findings routed back to an Opus fix session.
+  Addendum (same day): the legend now also requires every substep's closing message to end
+  with the next-substep handoff line (`Handoff: /clear → /model <tag> → /continue`), so the
+  switch instruction is emitted at each boundary instead of relying on the user's memory.
+  Next: 3.3b (on Opus 5). Handoff: /clear → /model opus → /continue (next: 3.3b · [opus]).
