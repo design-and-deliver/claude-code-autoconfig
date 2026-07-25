@@ -127,13 +127,13 @@ to `copyDir` locally → the new tests must fail; revert).
 **Verify:** `npm test` (same pass counts per suite as before the migration).
 **Commit:** `test: extract the shared harness` + `Changelog: none`.
 
-### ☐ 2.3 · M · ~45m — Complexity ratchet (reconcile with the 3-rule lint decision)
+### ☑ 2.3 · M · ~45m — Complexity ratchet (reconcile with the 3-rule lint decision) (DONE 2026-07-24, see Ledger)
 
-- [ ] Decision first (record in this plan's Ledger): the 3-rule eslint floor is documented as
+- [x] Decision first (record in this plan's Ledger): the 3-rule eslint floor is documented as
       deliberate. The ratchet that fits that philosophy is NOT a style rule but a no-growth
       gate: a test that runs eslint's `complexity` rule programmatically and asserts the
       violation count/set does not GROW past the checked-in baseline (67 as of 2026-07-24).
-- [ ] Add `test/complexity-ratchet.test.js` + `test/complexity-baseline.json`; shrinking the
+- [x] Add `test/complexity-ratchet.test.js` + `test/complexity-baseline.json`; shrinking the
       baseline is allowed and updates the file in the same commit.
 
 **Verify:** `npm test`; add a scratch function with CC 12 → suite must fail; remove it.
@@ -586,3 +586,29 @@ detached child — run on the dev box; CI green proves nothing here.
     Baseline-testing old revisions must run inside the real dev tree, not a scratch clone.
   - Deviations: none beyond the reconciliation framing. Next: 2.3 (complexity ratchet —
     decision about the 3-rule lint floor goes in this Ledger).
+
+- **2026-07-24 — 2.3 complexity ratchet — DONE.** Commit `4f85c91`, `npm test` green before
+  and after (full chain, 213 hook tests), `npx eslint .` clean.
+  - **The decision (recorded per the item):** the 3-rule eslint floor stays exactly 3 rules —
+    complexity is NOT a fourth lint rule. The ratchet is a no-growth GATE in the test chain:
+    `test/complexity-ratchet.test.js` runs eslint's `complexity` rule programmatically at the
+    Phase 3 bar (max 9), REUSING eslint.config.js's own files/ignores/languageOptions at
+    runtime so the two scopes can never drift. Exact-match in BOTH directions: growth fails
+    naming the offender; a cleared violation also fails until the baseline is tightened
+    (`node test/complexity-ratchet.test.js --write-baseline`) in the same commit — Phase 3's
+    shrink-per-substep bar is now mechanical, not prose.
+  - Baseline reality vs the item's "67": today's census in the lint-floor scope is
+    **64 violations in 13 files** (`test/complexity-baseline.json`). The raw repo-wide count
+    is 65, but `pilots/deny-reads-pilot.js` sits outside the lint floor's scope and the
+    ratchet inherits that exclusion by design; the rest of the 67→64 drift is post-review
+    refactors already landed (e.g. 1.1's R11 deletion).
+  - Violation identity = file + function label only (no CC value), compared as multisets —
+    an offender drifting 97→95 doesn't churn the baseline; two anonymous arrows in one file
+    still count as two.
+  - Verify ran per the item: scratch CC-12 function → exactly the no-growth test failed
+    (named `test/scratch-cc.js: Function 'scratchComplexity'`, exit 1); removed, green again.
+    Suite wired into `npm test` after contracts.test.js.
+  - Note for later sessions: an eslint version bump can legitimately shift CC math — if the
+    census moves with zero code edits, re-baseline in the upgrade commit and say so there
+    (documented in the suite header).
+  - Deviations: none. Next: 2.4 (c8 coverage visibility, ~20m).
