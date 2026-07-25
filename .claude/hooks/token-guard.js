@@ -215,7 +215,7 @@ const LEDGER_ENTRY_DUST_USD = 0.001;         // Stop path: no-op turns stay out 
 const ROLLUP_DUST_USD = 0.005;               // 5h rollup: rows / agent splits below this are noise
 const SPIKE_SOLO_SHARE_FLOOR = 0.85;         // spikeCopyMode materiality: above this share the solo story holds
 const TASK_NORM_TOK = 100000;                // R13: a normal task finishes under this — the spiral yardstick
-const PLAN_STEER_TOK = 3 * TASK_NORM_TOK;    // R13a: blast-radius bar quoted in the plan-first steer
+const PLAN_STEER_TOK = 2 * TASK_NORM_TOK;    // R13a: blast-radius bar quoted in the plan-first steer
 
 const DEFAULTS = {
   tokenSaver: false,                // Cost Control: single on/off toggle. Off = this light default posture;
