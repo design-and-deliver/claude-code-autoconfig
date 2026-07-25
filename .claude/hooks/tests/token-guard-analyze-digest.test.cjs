@@ -61,3 +61,50 @@ test('--analyze TOTALS breaks out the cached re-read share and effective spend',
   assert.ok(out.includes('effective ≈ 18k token-equivalents'),
     `digest is missing the effective token-equivalents figure\n--- output ---\n${out}`);
 });
+
+// resolveTranscript accepts every form a user actually pastes: the bare sid8, and the whole
+// "project/sid8" row label /usage-report prints (the form that used to fail with "no
+// transcript matches" — 2026-07-25). Subprocess with HOME/USERPROFILE redirected to a fake
+// ~/.claude/projects tree; the fixture's first line carries cwd so projectNameOf labels the
+// hit "testproj/<sid8>".
+const SID = '1a2b3c4d-1111-2222-3333-444455556666';
+function mkResolveHome() {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tg-resolve-'));
+  const projDir = path.join(home, '.claude', 'projects', 'C--CODE-testproj');
+  fs.mkdirSync(projDir, { recursive: true });
+  const cwdLine = JSON.stringify({ type: 'user', timestamp: '2026-07-20T17:58:00.000Z',
+    cwd: '/CODE/testproj', message: { role: 'user', content: 'hi' } });
+  fs.writeFileSync(path.join(projDir, SID + '.jsonl'), cwdLine + '\n' + TRANSCRIPT);
+  return home;
+}
+function runResolve(arg, home) {
+  const r = spawnSync(process.execPath, [HOOK, '--analyze', arg],
+    { encoding: 'utf8', env: { ...process.env, HOME: home, USERPROFILE: home } });
+  return { status: r.status, out: (r.stdout || '') + (r.stderr || '') };
+}
+
+test('--analyze resolves a bare sid8 prefix', () => {
+  const home = mkResolveHome();
+  try {
+    const { status, out } = runResolve(SID.slice(0, 8), home);
+    assert.strictEqual(status, 0);
+    assert.ok(out.includes('SESSION'), `bare sid8 should resolve to a digest\n--- output ---\n${out}`);
+  } finally { fs.rmSync(home, { recursive: true, force: true }); }
+});
+
+test('--analyze resolves the project/sid8 label form /usage-report prints', () => {
+  const home = mkResolveHome();
+  try {
+    const { out } = runResolve(`testproj/${SID.slice(0, 8)}`, home);
+    assert.ok(out.includes('SESSION'), `project/sid8 label should resolve to a digest\n--- output ---\n${out}`);
+  } finally { fs.rmSync(home, { recursive: true, force: true }); }
+});
+
+test('--analyze project/sid8 with the wrong project name does not match', () => {
+  const home = mkResolveHome();
+  try {
+    const { out } = runResolve(`otherproj/${SID.slice(0, 8)}`, home);
+    assert.ok(out.includes('no transcript matches'),
+      `a wrong project name must not resolve\n--- output ---\n${out}`);
+  } finally { fs.rmSync(home, { recursive: true, force: true }); }
+});

@@ -281,9 +281,11 @@ detached child — run on the dev box; CI green proves nothing here.
 
 - [ ] Characterization test spawning `--report` on a fixture transcript with `global.fetch` +
       credentials stubbed (reuse the 1.3 pattern in token-guard-official-usage.test.cjs). Pin
-      the `ALLOCATION` / `THIS SESSION` / `LAST 5 HOURS` headers and the
-      `/analyze-session <sid>` hint format — usage-report.md and analyze-session.md consume
-      those literally.
+      the `ALLOCATION` / `THIS SESSION` / `LAST 5 HOURS` headers, the
+      `run /analyze-session <id> …` hint line above the rollup rows, and the sid8 in the row
+      labels — analyze-session.md resolves those sid8s. (The per-row `· /analyze-session <sid>`
+      suffix is opt-in via `analyzeHint: true` since 2026-07-24; usage-report.md never parsed
+      the hint, contrary to this bullet's earlier wording.)
 - [ ] Extract `allocationLines` / `sessionLines` / `formatModelRow` / `windowLines` /
       `formatWindowRow`; the dollars-vs-tokens display branch collapses into ONE place.
 

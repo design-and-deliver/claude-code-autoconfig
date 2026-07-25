@@ -1,25 +1,40 @@
+---
+description: Analyze one session's token spend — deterministic digest + efficiency read-out
+argument-hint: [sid8 | project/sid8 | transcript-path]
+allowed-tools: Bash(node .claude/hooks/token-guard.js --analyze:*)
+---
 <!-- @description Analyze one session's token spend — deterministic RENT/BOMBS/FLEETS/TTL digest plus an efficiency read-out: dominant cost category, named causes, and what to change in future sessions. -->
-<!-- @version 4 -->
+<!-- @version 5 -->
 <!-- @response success | Prints the digest verbatim, then interpretation: dominant category, top causes, forward recommendations. -->
 <!-- @example /analyze-session cf4d557d | Analyze that session's efficiency -->
 
 # Analyze Session
 
 Explain where a session's tokens went and what to change next time. The heavy lifting is
-deterministic (the `--analyze` digest — pure node, no LLM, ~free); the model interprets ONLY
-the digest.
+deterministic (the `--analyze` digest — pure node, no LLM, ~free) and has ALREADY RUN: the
+injected output below was generated at prompt time, before the model saw this prompt. The
+model interprets ONLY the digest.
 
-Argument: `$ARGUMENTS` — a session-id prefix (the sid8 shown on `/usage-report`'s LAST 5 HOURS
-rows) or a full transcript path. No argument → analyze the CURRENT session (derive the
-transcript path the same way `/usage-report` does).
+Argument: `$ARGUMENTS` — a session-id prefix, the exact `project/sid8` label shown on
+`/usage-report`'s LAST 5 HOURS rows (both forms resolve), or a full transcript path.
 
-## Step 1: generate the digest (deterministic)
+## Digest (injected at prompt time — zero model round trips)
 
-```bash
-node .claude/hooks/token-guard.js --analyze <sid8-or-path>
-```
+!`node .claude/hooks/token-guard.js --analyze $ARGUMENTS`
 
-If it reports ambiguity, show the candidate list and ask which one was meant.
+## Step 1: check the injected digest
+
+The digest above already ran — re-running it via Bash wastes the round trip the injection
+exists to save. Route on its first line:
+
+- Starts with `SESSION` → healthy; go straight to Step 2.
+- Says `usage:` → the command was invoked with no argument: derive the CURRENT session's
+  transcript path (`~/.claude/projects/<project-slug>/<session-id>.jsonl`, same derivation
+  as `/usage-report`) and run `node .claude/hooks/token-guard.js --analyze <path>` via
+  Bash — the only case that needs a model-driven run.
+- Says `ambiguous` → show the candidate list and ask which one was meant.
+- Says `no transcript matches` → report that verbatim and point at `/usage-report`'s row
+  labels as the source of valid sids.
 
 ## Step 2: interpret — the digest ONLY
 

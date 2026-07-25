@@ -259,7 +259,9 @@ const DEFAULTS = {
                                      // top rung = ⚠️ checkpoint. One-shot per rung per cycle.
   windowThresholdGate: false,    // R12b gate demoted to opt-in 2026-07-18 — 80% is a checkpoint, not an
                                  // emergency, so the default is the end-of-response note. Token-saver arms it.
-  analyzeHint: true,
+  analyzeHint: false,            // true restores the per-row "· /analyze-session <sid>" suffix on the
+                                 // 5h rollup rows; off (default since 2026-07-24) a single hint line
+                                 // above the rows teaches the same move without the per-line noise.
 };
 
 // ---------------------------------------------------------------------------
@@ -2311,6 +2313,22 @@ function onPostToolUse(data, projectDir) {
 
 // ---------------------------------------------------------------------------
 // 5h window ≈ the subscription rate-limit window (approximation: files touched in 5h, entries
+// Row label = the project's real directory name, read from the transcript's own recorded cwd.
+// The ~/.claude/projects slug can't provide it: path separators and in-name hyphens both
+// flatten to '-', so the name can't be split back out of the slug. First 64KB is plenty — cwd
+// rides on the first entries; any miss falls back to the stripped slug (fail-silent ethos).
+function projectNameOf(fp, proj) {
+  try {
+    const fd = fs.openSync(fp, 'r');
+    const buf = Buffer.alloc(64 * 1024);
+    const n = fs.readSync(fd, buf, 0, buf.length, 0);
+    fs.closeSync(fd);
+    const m = /"cwd"\s*:\s*("(?:[^"\\]|\\.)*")/.exec(buf.toString('utf8', 0, n));
+    if (m) return path.basename(JSON.parse(m[1]));
+  } catch (_) {}
+  return proj.replace(/^C--(?:CODE-)?/, '');
+}
+
 // timestamped within 5h). Fleet-aware — a session whose AGENT dir moved recently counts even if
 // its main transcript went quiet. Fresh-parses every fresh transcript (no cache): fine for
 // --report and the rare spend-step crossing, too slow to run on every prompt. Throws if
@@ -2335,7 +2353,7 @@ function scanWindow(cutoff) {
       out.usd += m.usd;
       out.tokens += sessionTokens(m);
       out.rows.push({
-        label: `${proj.replace(/^C--/, '')}/${f.slice(0, SID_SHORT_LEN)}`, sid: f.slice(0, SID_SHORT_LEN),
+        label: `${projectNameOf(fp, proj)}/${f.slice(0, SID_SHORT_LEN)}`, sid: f.slice(0, SID_SHORT_LEN),
         usd: m.usd, tok: sessionTokens(m),
         agentsUsd: m.agents.usd, agentsTok: tokensOf(m.agents.perModel),
       });
@@ -2549,17 +2567,28 @@ function renderAnalysis(a, usd$) {
 }
 
 // --analyze <sid-prefix|path>: resolve a sid8 (the LAST 5 HOURS row labels) to its transcript.
+// Accepts the exact "project/sid8" label those rows print (users paste it whole), a bare sid
+// prefix, or a transcript path: the last segment is the sid, an optional segment before it
+// narrows the project — matched against both the display name and the raw projects-dir slug,
+// so a pasted stale full path still resolves by its sid.
 function resolveTranscript(arg) {
-  if (!arg) return { err: 'usage: token-guard.js --analyze <sid-prefix | transcript.jsonl>' };
+  if (!arg) return { err: 'usage: token-guard.js --analyze <sid-prefix | project/sid-prefix | transcript.jsonl>' };
   if (arg.endsWith('.jsonl') && fs.existsSync(arg)) return { fp: arg };
+  const parts = arg.split(/[\\/]/).filter(Boolean);
+  let sidArg = parts.length ? parts[parts.length - 1] : arg;
+  if (sidArg.endsWith('.jsonl')) sidArg = sidArg.slice(0, -'.jsonl'.length);
+  const projArg = parts.length > 1 ? parts[parts.length - 2] : null;
   const projects = path.join(os.homedir(), '.claude', 'projects');
   const hits = [];
   let dirs; try { dirs = fs.readdirSync(projects); } catch (_) { return { err: 'cannot read ~/.claude/projects' }; }
   for (const proj of dirs) {
     let files; try { files = fs.readdirSync(path.join(projects, proj)); } catch (_) { continue; }
     for (const f of files) {
-      if (f.endsWith('.jsonl') && f.startsWith(arg)) {
-        hits.push({ fp: path.join(projects, proj, f), label: `${proj.replace(/^C--/, '')}/${f.slice(0, SID_SHORT_LEN)}` });
+      if (f.endsWith('.jsonl') && f.startsWith(sidArg)) {
+        const fp = path.join(projects, proj, f);
+        const label = `${projectNameOf(fp, proj)}/${f.slice(0, SID_SHORT_LEN)}`;
+        if (projArg && projArg !== proj && projArg !== label.split('/')[0]) continue;
+        hits.push({ fp, label });
       }
     }
   }
@@ -2673,6 +2702,8 @@ async function report(transcriptPath) {
   try {
     const win = scanWindow(Date.now() - 5 * 3600 * 1000);
     lines.push('', `LAST 5 HOURS  (all projects — approximates the rate-limit window)`);
+    if (win.rows.length && !cfg.analyzeHint)
+      lines.push(`  run /analyze-session <id> on any session below to analyze the token usage for that session`);
     for (const r of win.rows.slice(0, 8)) {
       const amt = (usd$ ? fmtUSD(r.usd) : fmtK(r.tok)).padStart(7);
       const ag = usd$
