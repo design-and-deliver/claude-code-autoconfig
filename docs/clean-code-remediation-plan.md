@@ -139,9 +139,9 @@ to `copyDir` locally → the new tests must fail; revert).
 **Verify:** `npm test`; add a scratch function with CC 12 → suite must fail; remove it.
 **Commit:** `test: complexity no-growth ratchet` + `Changelog: none`.
 
-### ☐ 2.4 · S · ~20m — Coverage visibility (c8, no thresholds yet)
+### ☑ 2.4 · S · ~20m — Coverage visibility (c8, no thresholds yet) (DONE 2026-07-24, see Ledger)
 
-- [ ] `npm i -D c8`, `npm run coverage` script wrapping the existing chain; record the
+- [x] `npm i -D c8`, `npm run coverage` script wrapping the existing chain; record the
       baseline number in the Ledger. No gating yet — visibility first.
 
 **Verify:** `npm run coverage` prints a summary; `npm test` unaffected.
@@ -612,3 +612,24 @@ detached child — run on the dev box; CI green proves nothing here.
     census moves with zero code edits, re-baseline in the upgrade commit and say so there
     (documented in the suite header).
   - Deviations: none. Next: 2.4 (c8 coverage visibility, ~20m).
+
+- **2026-07-24 — 2.4 c8 coverage visibility — DONE.** Commit `71b2da3`, `npm test` green
+  before and after (full chain, 213 hook tests), `npx eslint .` clean.
+  - `npm run coverage` = `c8 npm test` (c8@12.0.0, zero config). Works on Windows; c8's
+    `NODE_V8_COVERAGE` propagates through npm → cmd → node children, so the spawned
+    behavioral CLI runs and hook-test children ARE counted (bin/cli.js at 88.96% is the
+    proof — it only ever executes as a child process). `coverage/` gitignored; eslint's
+    file-glob scope already excludes it. No thresholds, no gating, per the item.
+  - **Baseline (recorded per the item): All files 85.42% stmts / 74.67% branch /
+    85.65% funcs / 85.42% lines.** Notables: `token-guard.js` 79.24%,
+    `terminal-title.js` 91.09%, `cli.js` 88.96%, `settings-merge.js` 94.00%,
+    `scripts/generate-changelog.js` 51.09% (the floor — its `--postversion` half only
+    runs on real version bumps).
+  - Discovery (matters for reading the report): c8 defaults to `all: false` — a file the
+    suite never loads is ABSENT from the table, not shown as 0%. Absent today:
+    `.claude/scripts/plan-progress.js` (untested until 2.5) and
+    `.claude/scripts/sync-docs.js` (the contracts ratchet compares committed bytes; it
+    does not execute the generator). Test files themselves are already excluded by c8's
+    default exclude globs (`test/**`, `**/*.test.*`) — no config needed.
+  - Deviations: none. Next: 2.5 (tests for plan-progress — the characterization suite
+    that 3.10 hard-depends on).
