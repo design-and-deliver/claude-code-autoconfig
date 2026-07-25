@@ -28,12 +28,7 @@ const readmePath = path.join(repoRoot, 'README.md');
 const cliPath = path.join(repoRoot, 'bin', 'cli.js');
 const docsPath = path.join(repoRoot, '.claude', 'docs', 'autoconfig.docs.html');
 
-let passed = 0, failed = 0;
-function test(name, fn) {
-  try { fn(); console.log(`✓ ${name}`); passed++; }
-  catch (e) { console.log(`✗ ${name}`); console.log(`  Error: ${e.message}`); failed++; }
-}
-function assert(c, m) { if (!c) throw new Error(m); }
+const { test, assert, summary } = require('./_harness');
 
 // DEV_ONLY_FILES + deprecated aliases, parsed straight from bin/cli.js source — the same
 // single source of truth the other suites read, never a hand-kept copy (trap T1).
@@ -131,6 +126,4 @@ test('sync-docs.js reproduces autoconfig.docs.html byte-for-byte (docs ratchet)'
   }
 });
 
-console.log();
-console.log(`${passed} passed, ${failed} failed`);
-process.exit(failed > 0 ? 1 : 0);
+summary();

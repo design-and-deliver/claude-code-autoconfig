@@ -27,12 +27,7 @@ const docsPath = path.join(repoRoot, '.claude', 'docs', 'autoconfig.docs.html');
 const pkgPath = path.join(repoRoot, 'package.json');
 const validateMdPath = path.join(repoRoot, '.claude', 'commands', 'validate-cca-install.md');
 
-let passed = 0, failed = 0;
-function test(name, fn) {
-  try { fn(); console.log(`✓ ${name}`); passed++; }
-  catch (e) { console.log(`✗ ${name}`); console.log(`  Error: ${e.message}`); failed++; }
-}
-function assert(c, m) { if (!c) throw new Error(m); }
+const { test, assert, summary } = require('./_harness');
 
 // The canonical source of truth — parsed exactly as bin/cli.js and sync-docs.js do.
 function parseDevOnlyFiles(src) {
@@ -89,6 +84,4 @@ test('validate-cca-install.md dev_only list equals DEV_ONLY_FILES', () => {
     `validate-cca-install.md dev_only [${a.join(', ')}] != DEV_ONLY_FILES [${b.join(', ')}] — keep them in sync`);
 });
 
-console.log();
-console.log(`${passed} passed, ${failed} failed`);
-process.exit(failed > 0 ? 1 : 0);
+summary();

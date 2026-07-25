@@ -16,24 +16,7 @@ const { execFileSync } = require('child_process');
 
 const SCRIPT = path.join(__dirname, '..', '.claude', 'scripts', 'whats-happening.js');
 
-let passed = 0;
-let failed = 0;
-
-function test(name, fn) {
-  try {
-    fn();
-    console.log(`✓ ${name}`);
-    passed++;
-  } catch (err) {
-    console.log(`✗ ${name}`);
-    console.log(`  Error: ${err.message}`);
-    failed++;
-  }
-}
-
-function assert(condition, msg) {
-  if (!condition) throw new Error(msg);
-}
+const { test, assert, summary } = require('./_harness');
 
 // --- Fixtures: one title per tier, each with a minimal transcript -----------
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cca-wh-'));
@@ -109,11 +92,4 @@ test('--json emits a parseable analysis object for the match', () => {
 
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
 
-console.log();
-console.log('============================================================');
-if (failed === 0) {
-  console.log(`ALL TESTS PASSED (${passed} tests)`);
-} else {
-  console.log(`TESTS FAILED: ${passed} passed, ${failed} failed`);
-  process.exit(1);
-}
+summary();

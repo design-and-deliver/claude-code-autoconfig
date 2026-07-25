@@ -25,25 +25,8 @@ const WORKING = [0x26ab, 0xfe0e];
 const AWAITING = [0x25d0];
 const IDLE = [0x273b];
 
-let passed = 0;
-let failed = 0;
+const { test, assert, summary } = require('./_harness');
 const tempDirs = [];
-
-function test(name, fn) {
-  try {
-    fn();
-    console.log(`✓ ${name}`);
-    passed++;
-  } catch (err) {
-    console.log(`✗ ${name}`);
-    console.log(`  Error: ${err.message}`);
-    failed++;
-  }
-}
-
-function assert(condition, msg) {
-  if (!condition) throw new Error(msg);
-}
 
 function mkWorkspace() {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'tt-test-'));
@@ -1626,10 +1609,4 @@ for (const dir of tempDirs) {
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
 }
 
-console.log('============================================================');
-if (failed === 0) {
-  console.log(`ALL TESTS PASSED (${passed} tests)`);
-} else {
-  console.log(`TESTS FAILED: ${passed} passed, ${failed} failed`);
-  process.exit(1);
-}
+summary();

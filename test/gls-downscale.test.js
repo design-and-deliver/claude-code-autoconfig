@@ -27,24 +27,7 @@ if (os.platform() !== 'win32') {
 
 const SCRIPT = path.join(__dirname, '..', '.claude', 'scripts', 'gls-downscale.js');
 
-let passed = 0;
-let failed = 0;
-
-function test(name, fn) {
-  try {
-    fn();
-    console.log(`✓ ${name}`);
-    passed++;
-  } catch (err) {
-    console.log(`✗ ${name}`);
-    console.log(`  Error: ${err.message}`);
-    failed++;
-  }
-}
-
-function assert(condition, msg) {
-  if (!condition) throw new Error(msg);
-}
+const { test, assert, summary } = require('./_harness');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cca-gls-'));
 const psq = s => s.replace(/'/g, "''");
@@ -146,11 +129,4 @@ test('missing input passes through with exit 0 (fail-open contract)', () => {
 
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
 
-console.log();
-console.log('============================================================');
-if (failed === 0) {
-  console.log(`ALL TESTS PASSED (${passed} tests)`);
-} else {
-  console.log(`TESTS FAILED: ${passed} passed, ${failed} failed`);
-  process.exit(1);
-}
+summary();

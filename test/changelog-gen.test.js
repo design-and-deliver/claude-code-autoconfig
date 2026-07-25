@@ -9,24 +9,7 @@
 
 const { bulletFor, isHousekeeping } = require('../scripts/generate-changelog.js');
 
-let passed = 0;
-let failed = 0;
-
-function test(name, fn) {
-  try {
-    fn();
-    console.log(`✓ ${name}`);
-    passed++;
-  } catch (err) {
-    console.log(`✗ ${name}`);
-    console.log(`  Error: ${err.message}`);
-    failed++;
-  }
-}
-
-function assert(condition, msg) {
-  if (!condition) throw new Error(msg);
-}
+const { test, assert, summary } = require('./_harness');
 
 console.log('============================================================');
 console.log('CHANGELOG GENERATION TESTS');
@@ -107,12 +90,5 @@ test('revert and merge commits are housekeeping (BH-9) — never leak into the c
   assert(isHousekeeping('feat(cli): add a revert command') === false, 'feat mentioning revert stays');
   assert(isHousekeeping('fix(merge): repair the merge logic') === false, 'fix mentioning merge stays');
 });
-console.log();
 
-console.log('============================================================');
-if (failed === 0) {
-  console.log(`ALL TESTS PASSED (${passed} tests)`);
-} else {
-  console.log(`TESTS FAILED: ${passed} passed, ${failed} failed`);
-  process.exit(1);
-}
+summary();

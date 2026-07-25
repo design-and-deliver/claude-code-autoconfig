@@ -12,30 +12,7 @@ const os = require('os');
 const CLI_PATH = path.join(__dirname, '..', 'bin', 'cli.js');
 const PACKAGE_CLAUDE_DIR = path.join(__dirname, '..', '.claude');
 
-let passed = 0;
-let failed = 0;
-
-function test(name, fn) {
-  try {
-    fn();
-    console.log(`✓ ${name}`);
-    passed++;
-  } catch (err) {
-    console.log(`✗ ${name}`);
-    console.log(`  Error: ${err.message}`);
-    failed++;
-  }
-}
-
-function assert(condition, msg) {
-  if (!condition) throw new Error(msg);
-}
-
-function assertExists(filePath, msg) {
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`${msg || 'File should exist'}: ${filePath}`);
-  }
-}
+const { test, assert, assertExists, summary } = require('./_harness');
 
 // =============================================================================
 // TESTS
@@ -187,16 +164,4 @@ test('CLI deliberately excludes updates from AUTOCONFIG_FILES', () => {
   assert(!m[1].includes("'updates'"), "AUTOCONFIG_FILES must NOT include 'updates' (deliberately removed in 05a567b)");
 });
 
-console.log();
-
-// -----------------------------------------------------------------------------
-// Summary
-// -----------------------------------------------------------------------------
-
-console.log('============================================================');
-if (failed === 0) {
-  console.log(`ALL TESTS PASSED (${passed} tests)`);
-} else {
-  console.log(`TESTS FAILED: ${passed} passed, ${failed} failed`);
-  process.exit(1);
-}
+summary();

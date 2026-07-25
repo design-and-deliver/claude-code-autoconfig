@@ -68,62 +68,10 @@ const DEV_ONLY_COMMANDS = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-ses
 const DEPRECATED_ALIASES = ['enable-arcade-beeps.md', 'disable-arcade-beeps.md'];
 const SHIPPED_COMMANDS = ['autoconfig.md', 'autoconfig-update.md', 'continue.md', 'recover-context.md', 'gls.md'];
 
-let passed = 0;
-let failed = 0;
-
-function test(name, fn) {
-  try {
-    fn();
-    console.log(`✓ ${name}`);
-    passed++;
-  } catch (err) {
-    console.log(`✗ ${name}`);
-    console.log(`  Error: ${err.message}`);
-    failed++;
-  }
-}
-
-function assert(condition, msg) {
-  if (!condition) throw new Error(msg);
-}
+const { test, assert, summary, makeClaudeShim, runCli } = require('./_harness');
 
 function readJson(p) {
   return JSON.parse(fs.readFileSync(p, 'utf8'));
-}
-
-// A throwaway dir on PATH holding a `claude` that answers `claude --version` and exits 0, so
-// isClaudeInstalled() returns true without a real Claude Code install (and never shells out to
-// `npm install -g`). Cross-platform: .cmd on Windows, an executable shell script elsewhere.
-function makeClaudeShim() {
-  const shimDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cca-shim-'));
-  if (process.platform === 'win32') {
-    fs.writeFileSync(path.join(shimDir, 'claude.cmd'), '@echo off\r\necho claude 1.0.0\r\n');
-  } else {
-    const p = path.join(shimDir, 'claude');
-    fs.writeFileSync(p, '#!/bin/sh\necho claude 1.0.0\n');
-    fs.chmodSync(p, 0o755);
-  }
-  return shimDir;
-}
-
-// Run the CLI without ever throwing. Returns { code, out } (stdout+stderr combined). CLAUDECODE
-// is cleared so the inside-Claude block never fires for --bootstrap when this suite itself runs
-// inside a Claude session; the shim dir is prepended to PATH (handling Windows' 'Path' casing).
-function runCli(projectDir, args, shimDir) {
-  const env = { ...process.env, CLAUDECODE: '' };
-  const pathKey = Object.keys(env).find(k => k.toLowerCase() === 'path') || 'PATH';
-  env[pathKey] = shimDir + path.delimiter + (env[pathKey] || '');
-  try {
-    const stdout = execFileSync('node', [CLI_PATH, ...args], {
-      cwd: projectDir,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env
-    });
-    return { code: 0, out: stdout };
-  } catch (e) {
-    return { code: e.status == null ? 1 : e.status, out: (e.stdout || '') + (e.stderr || '') };
-  }
 }
 
 function makeProject(label) {
@@ -795,11 +743,4 @@ for (const dir of cleanups) {
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
 }
 
-console.log();
-console.log('============================================================');
-if (failed === 0) {
-  console.log(`ALL TESTS PASSED (${passed} tests)`);
-} else {
-  console.log(`TESTS FAILED: ${passed} passed, ${failed} failed`);
-  process.exit(1);
-}
+summary();

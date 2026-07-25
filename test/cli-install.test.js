@@ -22,30 +22,7 @@ const path = require('path');
 const CLI_PATH = path.join(__dirname, '..', 'bin', 'cli.js');
 const PACKAGE_CLAUDE_DIR = path.join(__dirname, '..', '.claude');
 
-let passed = 0;
-let failed = 0;
-
-function test(name, fn) {
-  try {
-    fn();
-    console.log(`✓ ${name}`);
-    passed++;
-  } catch (err) {
-    console.log(`✗ ${name}`);
-    console.log(`  Error: ${err.message}`);
-    failed++;
-  }
-}
-
-function assert(condition, msg) {
-  if (!condition) throw new Error(msg);
-}
-
-function assertExists(filePath, msg) {
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`${msg || 'File should exist'}: ${filePath}`);
-  }
-}
+const { test, assert, assertExists, summary } = require('./_harness');
 
 // =============================================================================
 // TESTS
@@ -616,16 +593,4 @@ test('cli.js migrates BEFORE merging on the settings upgrade path (ordering guar
   assert(migrateAt < mergeAt, 'migration must run before the merge or upgrades double the hooks');
 });
 
-console.log();
-
-// -----------------------------------------------------------------------------
-// Summary
-// -----------------------------------------------------------------------------
-
-console.log('============================================================');
-if (failed === 0) {
-  console.log(`ALL TESTS PASSED (${passed} tests)`);
-} else {
-  console.log(`TESTS FAILED: ${passed} passed, ${failed} failed`);
-  process.exit(1);
-}
+summary();

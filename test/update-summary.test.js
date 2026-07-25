@@ -8,12 +8,7 @@
 
 const { formatUpdateSummary, compareVersions, classifyBullet } = require('../bin/update-summary.js');
 
-let passed = 0, failed = 0;
-function test(name, fn) {
-  try { fn(); console.log(`✓ ${name}`); passed++; }
-  catch (e) { console.log(`✗ ${name}`); console.log(`  Error: ${e.message}`); failed++; }
-}
-function assert(c, m) { if (!c) throw new Error(m); }
+const { test, assert, summary } = require('./_harness');
 
 const CHANGELOG = `# Changelog
 
@@ -108,11 +103,4 @@ test('compareVersions orders segment-wise', () => {
   assert(compareVersions('1.1.0', '1.0.999') === 1, 'minor beats patch');
 });
 
-console.log();
-console.log('============================================================');
-if (failed === 0) {
-  console.log(`ALL TESTS PASSED (${passed} tests)`);
-} else {
-  console.log(`TESTS FAILED: ${passed} passed, ${failed} failed`);
-  process.exit(1);
-}
+summary();

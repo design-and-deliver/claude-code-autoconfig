@@ -14,24 +14,7 @@ const { spawnSync } = require('child_process');
 
 const HOOK_PATH = path.join(__dirname, '..', '.claude', 'hooks', 'auto-guard.js');
 
-let passed = 0;
-let failed = 0;
-
-function test(name, fn) {
-  try {
-    fn();
-    console.log(`✓ ${name}`);
-    passed++;
-  } catch (err) {
-    console.log(`✗ ${name}`);
-    console.log(`  Error: ${err.message}`);
-    failed++;
-  }
-}
-
-function assert(condition, msg) {
-  if (!condition) throw new Error(msg);
-}
+const { test, assert, summary } = require('./_harness');
 
 // Build a temp project with the given cca.config.json content (null = no file),
 // run the hook against `command`, and return { stdout, decision } where decision
@@ -156,10 +139,4 @@ test('non-Bash tool → silent', () => {
   }
 });
 
-console.log();
-console.log('============================================================');
-if (failed > 0) {
-  console.log(`FAILED: ${failed} test(s) failed, ${passed} passed`);
-  process.exit(1);
-}
-console.log(`ALL AUTO-GUARD TESTS PASSED (${passed} tests)`);
+summary();
