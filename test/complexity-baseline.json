@@ -33,8 +33,6 @@
     ".claude/hooks/token-guard.js": [
       "Async function 'fetchOfficialUsage'",
       "Async function 'report'",
-      "Function 'analyzeSession'",
-      "Function 'attributeJump'",
       "Function 'driftDeferralTick'",
       "Function 'driftVerdict'",
       "Function 'fanVerdict'",

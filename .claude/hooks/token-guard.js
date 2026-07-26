@@ -469,6 +469,41 @@ function meterSession(transcriptPath, opts) {
 // ---------------------------------------------------------------------------
 // R3 attribution: name the largest single message in the transcript region a bomb landed in.
 // Best-effort — the jump number comes from usage either way; this just points a finger.
+// The finger-pointing vocabulary (tool-name harvest + payload labels) is shared with the
+// --analyze scan (scanRequests); the walks stay separate — attributeJump wants one global
+// best after an offset, the scan wants every candidate plus per-request regions.
+
+// Record an assistant message's tool_use names: tool_use_id -> "Tool(detail)".
+function harvestToolNames(content, toolNames) {
+  for (const c of content) {
+    if (c && c.type === 'tool_use') {
+      const detail = (c.input && (c.input.skill || c.input.file_path)) || '';
+      toolNames[c.id] = c.name + (detail ? `(${path.basename(String(detail))})` : '');
+    }
+  }
+}
+
+// Blame label for a non-assistant transcript line: the originating tool when a tool_result
+// is present, else meta/skill payload vs plain message.
+function payloadLabel(o, toolNames) {
+  const msg = o.message;
+  if (msg && Array.isArray(msg.content)) {
+    const tr = msg.content.find(c => c && c.type === 'tool_result');
+    if (tr) return toolNames[tr.tool_use_id] || 'tool result';
+  }
+  return o.isMeta ? 'meta/skill payload' : 'message';
+}
+
+// One parsed line -> the running largest-payload candidate.
+function bestPayloadStep(line, o, toolNames, best) {
+  if (o.type === 'assistant' && o.message && Array.isArray(o.message.content)) {
+    harvestToolNames(o.message.content, toolNames);
+    return best; // assistant output is priced as output, not context payload
+  }
+  if (best && line.length <= best.chars) return best;
+  return { chars: line.length, label: payloadLabel(o, toolNames) };
+}
+
 function attributeJump(transcriptPath, fromChar) {
   let raw; try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch (_) { return null; }
   const toolNames = {}; // tool_use_id -> "Tool(detail)"
@@ -476,24 +511,7 @@ function attributeJump(transcriptPath, fromChar) {
   for (const line of raw.slice(Math.max(0, fromChar)).split(/\r?\n/)) {
     if (!line.trim()) continue;
     let o; try { o = JSON.parse(line); } catch (_) { continue; }
-    const msg = o && o.message;
-    if (o.type === 'assistant' && msg && Array.isArray(msg.content)) {
-      for (const c of msg.content) {
-        if (c && c.type === 'tool_use') {
-          const detail = (c.input && (c.input.skill || c.input.file_path)) || '';
-          toolNames[c.id] = c.name + (detail ? `(${path.basename(String(detail))})` : '');
-        }
-      }
-      continue; // assistant output is priced as output, not context payload
-    }
-    if (best && line.length <= best.chars) continue;
-    let label = 'message';
-    if (o.isMeta) label = 'meta/skill payload';
-    if (msg && Array.isArray(msg.content)) {
-      const tr = msg.content.find(c => c && c.type === 'tool_result');
-      if (tr) label = toolNames[tr.tool_use_id] || 'tool result';
-    }
-    best = { chars: line.length, label };
+    best = bestPayloadStep(line, o, toolNames, best);
   }
   return best;
 }
@@ -2735,12 +2753,119 @@ function scanWindow(cutoff) {
 // (CHARS_PER_TOKEN and IMAGE_TOK_EST — used by this analyzer AND the live payload
 // guards — are declared with the other sizing constants at the top of the file.)
 
-function analyzeSession(transcriptPath, cfg) {
-  const m = meterSession(transcriptPath, {});
-  const sid = path.basename(transcriptPath).replace(/\.jsonl$/i, '');
+const lineTs = o => o.timestamp ? Date.parse(o.timestamp) || 0 : 0;
+
+// input+output+cache split, summed across main and agent per-model tallies.
+function tokenSplit(m) {
   const split = { inp: 0, out: 0, cr: 0, cw: 0 };
   for (const pm of [m.main.perModel, m.agents.perModel])
     for (const v of Object.values(pm)) { split.inp += v.inp; split.out += v.out; split.cr += v.cr; split.cw += v.cw; }
+  return split;
+}
+
+// Streamed rewrites reuse the message id: last usage wins. A NEW id snapshots the current
+// region-best payload as its blame culprit and opens a fresh region.
+function recordRequest(s, o, msg) {
+  const u = msg.usage;
+  const ctx = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) +
+    (u.cache_creation_input_tokens || 0);
+  const ts = lineTs(o);
+  const id = msg.id || `line-${s.seen.size}`;
+  if (s.seen.has(id)) {
+    const r = s.seen.get(id); r.ctx = ctx; if (ts) r.ts = ts;
+    return;
+  }
+  s.seen.set(id, { ctx, ts, model: msg.model || '', culprit: s.regionBest });
+  s.regionBest = null;
+}
+
+// base64 image payloads tokenize ~2 orders of magnitude below chars/2.6 — flag them so
+// the render never prints a fake 260k-token estimate for a 1.6k-token screenshot.
+function recordPayload(s, line, o) {
+  const cand = { chars: line.length, label: payloadLabel(o, s.toolNames),
+    isImage: /"type"\s*:\s*"image"/.test(line), ts: lineTs(o) };
+  s.payloads.push(cand);
+  if (!s.regionBest || cand.chars > s.regionBest.chars) s.regionBest = cand;
+}
+
+function scanLine(s, line, o) {
+  if (!o) return;
+  const msg = o.message;
+  if (o.type === 'assistant' && msg) {
+    if (Array.isArray(msg.content)) harvestToolNames(msg.content, s.toolNames);
+    if (msg.usage) recordRequest(s, o, msg);
+    return; // assistant output is priced as output, not context payload
+  }
+  if (o.type !== 'user' && !o.isMeta) return; // progress/system noise, not payload
+  recordPayload(s, line, o);
+}
+
+// Single ordered pass. Assistant usage lines mark API requests (the ctx trajectory);
+// everything between two of them is the region a bomb's payload landed in — same
+// finger-pointing as attributeJump, but region-bounded so a later monster line can't
+// steal an earlier bomb's blame.
+function scanRequests(raw) {
+  const s = {
+    toolNames: {},    // tool_use_id -> "Tool(detail)"
+    seen: new Map(),  // message.id -> request entry (streamed rewrites: last usage wins)
+    regionBest: null, // largest context payload since the previous API request
+    payloads: [],     // every candidate, for the top-payloads table
+  };
+  for (const line of raw.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    let o; try { o = JSON.parse(line); } catch (_) { continue; }
+    scanLine(s, line, o);
+  }
+  return s;
+}
+
+// RENT — every API request re-reads the live context; the sum is the session's rent bill.
+function rentStats(reqs, totalTokens) {
+  const q = frac => reqs[Math.min(reqs.length - 1, Math.floor(frac * (reqs.length - 1)))].ctx;
+  const totalRent = reqs.reduce((a, r) => a + r.ctx, 0);
+  return {
+    quartiles: [q(0), q(0.25), q(0.5), q(0.75), q(1)],
+    meanCtx: Math.round(totalRent / reqs.length),
+    totalRent,
+    share: totalTokens ? totalRent / totalTokens : 0,
+  };
+}
+
+// BOMBS — single-hop ctx jumps. Request 0 counts too: a session that OPENS huge (compaction
+// continuation, fat CLAUDE.md) pays that context all session long and deserves the flag.
+function findBombs(reqs, bombJumpTokens) {
+  const bombs = [];
+  let prev = 0;
+  for (const r of reqs) {
+    const jump = r.ctx - prev;
+    if (jump > bombJumpTokens) {
+      bombs.push({ jump, ts: r.ts,
+        label: r.culprit ? r.culprit.label : (prev === 0 ? 'opening context (first request)' : 'unknown'),
+        chars: r.culprit ? r.culprit.chars : 0, isImage: !!(r.culprit && r.culprit.isImage) });
+    }
+    prev = r.ctx;
+  }
+  return bombs;
+}
+
+// TTL — gaps longer than the cache TTL while the context was fat: the return re-uploads
+// everything at full write price (~20x a cached turn).
+function findTtlGaps(reqs, cfg) {
+  const gaps = [];
+  for (let i = 1; i < reqs.length; i++) {
+    if (!reqs[i].ts || !reqs[i - 1].ts) continue;
+    const gapMin = (reqs[i].ts - reqs[i - 1].ts) / 60000;
+    if (gapMin > cfg.idleWarnMinutes && reqs[i - 1].ctx >= cfg.contextWarnTokens) {
+      gaps.push({ gapMin: Math.round(gapMin), endTs: reqs[i].ts, ctx: reqs[i - 1].ctx,
+        rewriteUSD: (reqs[i - 1].ctx * priceFor(reqs[i].model).inp * CACHE_WRITE_1H_X) / 1e6 });
+    }
+  }
+  return gaps;
+}
+
+function analyzeSession(transcriptPath, cfg) {
+  const m = meterSession(transcriptPath, {});
+  const sid = path.basename(transcriptPath).replace(/\.jsonl$/i, '');
   const res = {
     sid, project: path.basename(path.dirname(transcriptPath)).replace(/^C--/, ''),
     startTs: 0, endTs: m.lastTs, requests: 0, models: Object.keys(m.main.perModel),
@@ -2748,7 +2873,7 @@ function analyzeSession(transcriptPath, cfg) {
       tokens: sessionTokens(m), mainTok: tokensOf(m.main.perModel),
       agentsTok: tokensOf(m.agents.perModel), agentFiles: m.agents.files,
       usd: m.usd, mainUsd: m.main.usd, agentsUsd: m.agents.usd, liveContext: m.liveContext,
-      split, effectiveTok: Math.round(workTokens(m)),
+      split: tokenSplit(m), effectiveTok: Math.round(workTokens(m)),
     },
     rent: null, bombs: [], topPayloads: [], fleets: m.agents.perWorkflow, ttlGaps: [],
     cfgBombJump: cfg.bombJumpTokens, cfgIdleMin: cfg.idleWarnMinutes,
@@ -2758,98 +2883,15 @@ function analyzeSession(transcriptPath, cfg) {
   let raw;
   try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch (_) { return res; }
 
-  // Single ordered pass. Assistant usage lines mark API requests (the ctx trajectory);
-  // everything between two of them is the region a bomb's payload landed in — same
-  // finger-pointing as attributeJump, but region-bounded so a later monster line can't
-  // steal an earlier bomb's blame.
-  const toolNames = {};   // tool_use_id -> "Tool(detail)"
-  const seen = new Map(); // message.id -> request entry (streamed rewrites: last usage wins)
-  let regionBest = null;  // largest context payload since the previous API request
-  const payloads = [];    // every candidate, for the top-payloads table
-
-  for (const line of raw.split(/\r?\n/)) {
-    if (!line.trim()) continue;
-    let o; try { o = JSON.parse(line); } catch (_) { continue; }
-    const msg = o && o.message;
-    if (o && o.type === 'assistant' && msg) {
-      if (Array.isArray(msg.content)) {
-        for (const c of msg.content) {
-          if (c && c.type === 'tool_use') {
-            const detail = (c.input && (c.input.skill || c.input.file_path)) || '';
-            toolNames[c.id] = c.name + (detail ? `(${path.basename(String(detail))})` : '');
-          }
-        }
-      }
-      if (msg.usage) {
-        const u = msg.usage;
-        const ctx = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) +
-          (u.cache_creation_input_tokens || 0);
-        const ts = o.timestamp ? Date.parse(o.timestamp) || 0 : 0;
-        const id = msg.id || `line-${seen.size}`;
-        if (seen.has(id)) {
-          const r = seen.get(id); r.ctx = ctx; if (ts) r.ts = ts;
-        } else {
-          seen.set(id, { ctx, ts, model: msg.model || '', culprit: regionBest });
-          regionBest = null;
-        }
-      }
-      continue; // assistant output is priced as output, not context payload
-    }
-    if (!o || (o.type !== 'user' && !o.isMeta)) continue; // progress/system noise, not payload
-    let label = 'message';
-    if (o.isMeta) label = 'meta/skill payload';
-    if (msg && Array.isArray(msg.content)) {
-      const tr = msg.content.find(c => c && c.type === 'tool_result');
-      if (tr) label = toolNames[tr.tool_use_id] || 'tool result';
-    }
-    // base64 image payloads tokenize ~2 orders of magnitude below chars/2.6 — flag them so
-    // the render never prints a fake 260k-token estimate for a 1.6k-token screenshot.
-    const cand = { chars: line.length, label, isImage: /"type"\s*:\s*"image"/.test(line),
-      ts: o.timestamp ? Date.parse(o.timestamp) || 0 : 0 };
-    payloads.push(cand);
-    if (!regionBest || cand.chars > regionBest.chars) regionBest = cand;
-  }
-
-  const reqs = [...seen.values()];
+  const s = scanRequests(raw);
+  const reqs = [...s.seen.values()];
   res.requests = reqs.length;
   if (!reqs.length) return res;
   res.startTs = reqs[0].ts;
-
-  // RENT — every API request re-reads the live context; the sum is the session's rent bill.
-  const q = frac => reqs[Math.min(reqs.length - 1, Math.floor(frac * (reqs.length - 1)))].ctx;
-  const totalRent = reqs.reduce((a, r) => a + r.ctx, 0);
-  res.rent = {
-    quartiles: [q(0), q(0.25), q(0.5), q(0.75), q(1)],
-    meanCtx: Math.round(totalRent / reqs.length),
-    totalRent,
-    share: res.totals.tokens ? totalRent / res.totals.tokens : 0,
-  };
-
-  // BOMBS — single-hop ctx jumps. Request 0 counts too: a session that OPENS huge (compaction
-  // continuation, fat CLAUDE.md) pays that context all session long and deserves the flag.
-  let prev = 0;
-  for (const r of reqs) {
-    const jump = r.ctx - prev;
-    if (jump > cfg.bombJumpTokens) {
-      res.bombs.push({ jump, ts: r.ts,
-        label: r.culprit ? r.culprit.label : (prev === 0 ? 'opening context (first request)' : 'unknown'),
-        chars: r.culprit ? r.culprit.chars : 0, isImage: !!(r.culprit && r.culprit.isImage) });
-    }
-    prev = r.ctx;
-  }
-
-  // TTL — gaps longer than the cache TTL while the context was fat: the return re-uploads
-  // everything at full write price (~20x a cached turn).
-  for (let i = 1; i < reqs.length; i++) {
-    if (!reqs[i].ts || !reqs[i - 1].ts) continue;
-    const gapMin = (reqs[i].ts - reqs[i - 1].ts) / 60000;
-    if (gapMin > cfg.idleWarnMinutes && reqs[i - 1].ctx >= cfg.contextWarnTokens) {
-      res.ttlGaps.push({ gapMin: Math.round(gapMin), endTs: reqs[i].ts, ctx: reqs[i - 1].ctx,
-        rewriteUSD: (reqs[i - 1].ctx * priceFor(reqs[i].model).inp * CACHE_WRITE_1H_X) / 1e6 });
-    }
-  }
-
-  res.topPayloads = payloads.filter(p => p.chars >= 10000)
+  res.rent = rentStats(reqs, res.totals.tokens);
+  res.bombs = findBombs(reqs, cfg.bombJumpTokens);
+  res.ttlGaps = findTtlGaps(reqs, cfg);
+  res.topPayloads = s.payloads.filter(p => p.chars >= 10000)
     .sort((a, b) => b.chars - a.chars).slice(0, 10);
   return res;
 }
