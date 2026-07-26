@@ -996,5 +996,13 @@ every plan in the repo invisible to `/plan-progress` and `/continue`.
     earlier substep) — the ⛔ single-file hook constraint voids it. The trap section now says so
     explicitly, and names test-first-in-an-earlier-substep as the compensating lever (that is
     what 3.8a is). Completed substeps were not re-tagged; the model-routing legend is untouched.
-  - rent: 0.5M (M ceiling ≈1.5M — tag holds; one-file doc surgery + two verifies).
+  - rent: **5.2M processed / ≈673k effective** (97% cached re-reads), 49 requests, 32m wall,
+    mean 105k resident, ending at 144k live context. Biggest single read was this doc at 9k
+    tokens — which is the read-in-slices rule paying for itself in the very session that wrote
+    it. ⚠ **First rent line in this repo, and it exposes an ambiguity in the rule:** tagged M
+    (ceiling ≈1.5M), which the *headline* blows past 3.5× and the *effective* figure clears
+    comfortably. `.claude/rules/plan-authoring.md` says to "read it off the session's own token
+    usage" without saying WHICH number, and at 97% cache the two differ by ~8×. Later entries
+    must record both until the rule picks one. Caveat on this datum: the session also carried
+    the audit and the write-up, not just the edits.
   - Next: 3.3b (on Opus 5). Handoff: /clear → /model opus → /continue (next: 3.3b · [opus]).
