@@ -26,7 +26,7 @@ Read exactly three slices and nothing else:
 3. the **Ledger tail** — `tail -80 docs/clean-code-remediation-plan.md`, not the whole section.
 
 Every remaining substep carries a **Read list** of exact files and line ranges. Open those
-windows only: the two hook files are 3,144 and 1,740 lines and must NEVER be read whole.
+windows only: the two hook files are 3,186 and 1,740 lines and must NEVER be read whole.
 
 **Every Ledger entry records rent.** Close it with a `rent:` line — the session's total token
 spend from the `--analyze` digest (`node .claude/hooks/token-guard.js --analyze <sid>`), e.g.
@@ -65,7 +65,7 @@ emitted at the boundary, never left to memory.
   compensating lever for hook substeps is **land the characterization test in an earlier
   substep**, then extract in-file against it.
 - **God files — Grep-then-Read-window ONLY, never opened whole:**
-  `.claude/hooks/token-guard.js` (**3,144 lines**, ~42k tokens) and
+  `.claude/hooks/token-guard.js` (**3,186 lines**, ~42k tokens) and
   `.claude/hooks/terminal-title.js` (**1,740 lines**). Six of the remaining substeps target
   them. Each substep's Read list names the windows; a whole-file read blows the session's
   budget on turn one and stays resident for every turn after.
@@ -270,7 +270,7 @@ cleared violation in the same commit.
 **Commit:** `refactor(token-guard): decompose onPreToolUse into per-rule guards` +
 `Changelog: none`.
 
-### ☐ 3.3c · L · ~2h — token-guard: decompose `analyzeSession` (CC 52) · [fable]
+### ☑ 3.3c · L · ~2h — token-guard: decompose `analyzeSession` (CC 52) (DONE 2026-07-26, see Ledger)
 
 ⚠ Trap surface: the `--analyze` digest wording is a machine interface (`/analyze-session` keys
 on the literal "live context at end" and the RENT/BOMBS/FLEETS/TTL headers). Byte-identical
@@ -281,11 +281,11 @@ output is the acceptance bar, not a nicety.
 `:2869-2935` (`renderAnalysis` — owns the frozen wording) ·
 `:472-506` (`attributeJump` — the region-attribution logic to dedupe against).
 
-- [ ] Extract the per-concern accumulators out of `analyzeSession`.
-- [ ] Dedupe the region-attribution logic it shares with `attributeJump` into one helper. This
+- [x] Extract the per-concern accumulators out of `analyzeSession`.
+- [x] Dedupe the region-attribution logic it shares with `attributeJump` into one helper. This
       is a design seam, not a mechanical extraction — the two callers want different outputs
       from the same walk; if one helper makes both awkward, say so in the Ledger and leave them.
-- [ ] `node scripts/sync-hook-fleet.js --write`, then check mode for zero drift.
+- [x] `node scripts/sync-hook-fleet.js --write`, then check mode for zero drift.
 
 **Verify:** `npm test`; `--analyze` on a real transcript diffed **byte-for-byte** pre/post
 (3.3a used the 41.9M-token `13065f1d` transcript); the Phase 3 CC ≤ 9 bar on each cleared
@@ -415,7 +415,7 @@ pattern to copy.
 Cheaper half — `token-guard-fan.test.cjs` already pins the shape, so no new suite.
 
 **Read list** (~120 lines): `this doc:413-430` ·
-`.claude/hooks/token-guard.js:803-873` (`fanVerdict`, the target) · `:874-895`
+`.claude/hooks/token-guard.js:821-891` (`fanVerdict`, the target) · `:892-913`
 (`workflowSource` — its caller-side input) · grep `.claude/hooks/tests/token-guard-fan.test.cjs`
 for `level` to find the pinned assertions.
 
@@ -436,7 +436,7 @@ valuable and is the only "extract before you edit" move available inside a singl
 ### ☐ 3.8a · L · ~60m — token-guard: characterization test for `--report` (it has none) · [opus]
 
 **Read list** (~190 lines): `this doc:436-454` ·
-`.claude/hooks/token-guard.js:3019-3144` (`report`, to end of file — the thing being pinned) ·
+`.claude/hooks/token-guard.js:3061-3186` (`report`, to end of file — the thing being pinned) ·
 `.claude/hooks/tests/token-guard-official-usage.test.cjs` (the 1.3 fetch/credentials stub
 pattern to reuse).
 
@@ -458,7 +458,7 @@ Hard dependency: 3.8a's suite is the only safety net this function gets — do n
 it landed.
 
 **Read list** (~130 lines): `this doc:455-470` ·
-`.claude/hooks/token-guard.js:3019-3144` (`report`) · 3.8a's new test file.
+`.claude/hooks/token-guard.js:3061-3186` (`report`) · 3.8a's new test file.
 
 - [ ] Extract `allocationLines` / `sessionLines` / `formatModelRow` / `windowLines` /
       `formatWindowRow`; the dollars-vs-tokens display branch collapses into ONE place.
@@ -1085,3 +1085,48 @@ every plan in the repo invisible to `/plan-progress` and `/continue`.
     at L; `.claude/rules/plan-authoring.md` still needs to say WHICH number the ceiling means.
   - Next: 3.3c (`analyzeSession`, CC 52 — the frozen-wording trap surface).
     Handoff: /clear → /model fable → /continue (next: 3.3c · [fable]).
+
+- **2026-07-26 — 3.3c decompose `analyzeSession` — DONE.** Commit `5a00994`, `npm test` green
+  on the committed tree (EXIT=0; **240** hook tests), fleet sync written + re-checked at zero
+  drift, sync-docs regen byte-identical (nothing to commit).
+  - `analyzeSession` CC **52 → 3**: scan side extracted to `scanRequests`/`scanLine`/
+    `recordRequest`/`recordPayload`, digest side to `rentStats`/`findBombs`/`findTtlGaps`/
+    `tokenSplit`. The design seam the substep flagged resolved cleanly: the shared walk deduped
+    into `harvestToolNames` + `payloadLabel` + `bestPayloadStep` and `attributeJump` cleared too
+    (CC → 5) — neither caller came out awkward. eslint `complexity>8`: zero hits across all 13
+    touched functions. Ratchet baseline shrank by exactly `analyzeSession` + `attributeJump`.
+  - Verify per the item: `--analyze` on the 41.9M-token `13065f1d` transcript **byte-identical**
+    pre/post (1,380 bytes, `cmp` clean) — the frozen-wording machine interface held.
+  - **Substep spanned two sessions, split by a concurrency stand-down — and the stand-down was
+    right.** Session 1 (`5beb2b97`) did the whole refactor + Verify, then found four hunks in
+    `token-guard.js` it did not write — a new **R15 `restartBullet`** feature (prices the
+    /clear-vs-push-on choice in R13b's and the rent gate's ask copy) — and stood down per the
+    concurrency rule. No Claude session on this machine wrote it (transcripts + glyphs all
+    checked; best theory is editor-side work), and it MOVED again at 16:12 between the sessions
+    (signature refactor + a `rentAskCopy` call site). Session 2 (`5ebf113a`) split the diff
+    mechanically — a content classifier over hunks, every hunk classifying cleanly (3 mine /
+    4 foreign) — reverse-applied the foreign four, re-ran the full Verify on the clean tree,
+    committed only 3.3c, fleet-synced (the fleet never saw R15), then re-applied the foreign
+    hunks **byte-identical** to the 16:12 snapshot (`cmp` clean; snapshots in both sessions'
+    scratchpads).
+  - **R15 remains in the working tree: uncommitted, author unknown, and RED** —
+    `token-guard-r13.test.cjs` pins the R13b ask at 4 bullets and R15 adds a 5th (6/7 on the
+    interleaved tree, 240/240 committed). Its owner owes the test update, the commit, and a
+    fleet sync. Until then `npm test` on this worktree fails by design — do not "fix" the pin
+    for them, and do NOT run `sync-hook-fleet --write` while the tree is dirty.
+  - Read lists re-pointed in this commit: the file grew 3,144 → **3,186** (+35 helpers above
+    `attributeJump`, −17 its shrink, +24 the decomposition). 3.7b `fanVerdict` `:803-873` →
+    **`:821-891`**, `workflowSource` `:874-895` → **`:892-913`**; 3.8a/3.8b `report`
+    `:3019-3144` → **`:3061-3186`**. Re-verified unshifted (above the edit): `meter` `:337-402`,
+    `meterSession` `:422-471`, `PRICES`/`CACHE_*_X` `:198-211`. New homes: the dedupe helpers
+    `:477-506`, `attributeJump` `:507-518`, `scanRequests` `:2807`, `rentStats` `:2823`,
+    `analyzeSession` `:2866`, `renderAnalysis` `:2911`. ⚠ While R15 sits uncommitted,
+    WORKING-TREE numbers below `:1778` skew +29/+5/+4 vs these committed ones — grep, don't
+    trust, until it lands.
+  - rent: session 1 **4.4M processed / ≈620k effective** (40 requests, 23m wall, 96% cached,
+    155k live at end); session 2 **≈1.7M / ≈274k effective at ledger time** (20 requests, 93%
+    cached, 103k live). Combined ≈6.1M / ≈894k. L ceiling ≈3M: holds on effective, ~2× on the
+    headline — third data point (after 3.3a, 3.3b) that the rule needs to say WHICH number the
+    ceiling means.
+  - Next: 3.4a (terminal-title: explicit Stop dispatch — a shippable user-facing fix).
+    Handoff: /clear → /continue (next: 3.4a · [fable], same model — no /model switch needed).
