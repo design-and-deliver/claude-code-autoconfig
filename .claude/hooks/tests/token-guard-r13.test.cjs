@@ -57,8 +57,16 @@ test('R13b fires once a turn crosses the gate — token copy, no $, re-arms abov
   const out = gateOut(preToolUse(fix));
   assert.equal(out.permissionDecision, 'ask');
   assert.match(out.permissionDecisionReason, /ONE turn has burned ~300k tokens/);
-  assert.match(out.permissionDecisionReason, /propose a plan/);
+  // The plan steer now straddles two bullets: the Lever names it, the Choice acts on it.
+  assert.match(out.permissionDecisionReason, /plan with session-sized substeps/);
+  assert.match(out.permissionDecisionReason, /propose that plan/);
   assert.doesNotMatch(out.permissionDecisionReason, /\$/);
+  // Structure (2026-07-26): headline reading, then ONE bullet per thought — same shape as R14.
+  const lines = out.permissionDecisionReason.split('\n');
+  assert.equal(lines.length, 4);
+  assert.match(lines[0], /^⚠️ Hey — this ONE turn has burned ~300k tokens\.$/);
+  assert.deepEqual(lines.slice(1).map(l => l.slice(0, 8)),
+    ['• Cost: ', '• Lever:', '• Choice']);
   // Re-armed at 400k (above the 300k observed), so the very next call must NOT re-fire.
   assert.equal(gateOut(preToolUse(fix)).permissionDecision, undefined);
 });
