@@ -2344,11 +2344,14 @@ function onPreToolUse(data, projectDir) {
         st.turnGateFires = (st.turnGateFires || 0) + 1;
         st.turnGateAt = reArmAt(turnTok, cfg.turnGateTokens, st.turnGateFires);
         saveState(projectDir, sid, st);
+        // Same shape as R14 below — headline reading, then cost / lever / choice, one per line.
         return ask('PreToolUse',
-          `⚠️ Hey — this ONE turn has burned ~${fmtK(turnTok)} tokens; a normal task finishes ` +
-          `under ~${fmtK(TASK_NORM_TOK)}, so the work has likely spiraled well past what was ` +
-          `anticipated.${nextCheckClause(st.turnGateFires, st.turnGateAt)} Approve to push on — ` +
-          `or deny, and Claude should stop and propose a plan with session-sized substeps.`);
+          `⚠️ Hey — this ONE turn has burned ~${fmtK(turnTok)} tokens.\n` +
+          `• Cost: a normal task finishes under ~${fmtK(TASK_NORM_TOK)}, so the work has likely ` +
+          `spiraled well past what was anticipated.\n` +
+          `• Lever: a plan with session-sized substeps, not a longer turn.` +
+          `${nextCheckClause(st.turnGateFires, st.turnGateAt)}\n` +
+          `• Choice: approve to push on — or deny, and Claude should stop and propose that plan.`);
       }
     }
   }
@@ -2382,14 +2385,19 @@ function onPreToolUse(data, projectDir) {
       const work = st.turnStartWorkTok == null ? null
         : Math.max(0, workTokens(m) - st.turnStartWorkTok - rent * CACHE_READ_X);
       const vs = work == null ? '' : ` against ~${fmtK(work)} tokens of actual work`;
+      // Headline reading, then one bullet per thought — cost / lever / choice. A single wrapped
+      // paragraph buried the ask under the arithmetic (Andrew 2026-07-26). This is the only
+      // guard message that carries \n; if the dialog ever collapses them the bullets still read
+      // as "• "-separated clauses rather than running together.
       return ask('PreToolUse',
         `⚠️ Hey — this turn has made ${reqs} round trip${reqs === 1 ? '' : 's'} carrying ` +
-        `~${fmtK(m.liveContext)} of ` +
-        `context: ~${fmtK(rent)} tokens of re-reads${vs}. That is rent, not progress, and it ` +
-        `compounds every trip — the lever is a smaller resident context, not a shorter task.` +
-        `${nextCheckClause(st.rentGateFires, st.rentGateAt, ' of re-reads')} Approve to push on — ` +
-        `or deny, and Claude should land this turn at a commit point so you can /clear + ` +
-        `/continue carrying only the next step.`);
+        `~${fmtK(m.liveContext)} of context.\n` +
+        `• Cost: ~${fmtK(rent)} tokens of re-reads${vs} — that is rent, not progress, and it ` +
+        `compounds every trip.\n` +
+        `• Lever: a smaller resident context, not a shorter task.` +
+        `${nextCheckClause(st.rentGateFires, st.rentGateAt, ' of re-reads')}\n` +
+        `• Choice: approve to push on — or deny, and Claude should land this turn at a commit ` +
+        `point so you can /clear + /continue carrying only the next step.`);
     }
   }
 

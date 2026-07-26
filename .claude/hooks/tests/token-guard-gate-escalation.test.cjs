@@ -150,7 +150,8 @@ test('escalated copy still ends on the deny-side instruction, and stays token-de
   preToolUse(fix);
   fs.appendFileSync(fix.tp, roundTrip('m3', 150000));
   const r = reason(fix);
-  assert.match(r, /Approve to push on — or deny/);      // the escalation clause did not eat the ask
+  // The escalation clause rides the "Lever" bullet, so it cannot eat the ask on the last one.
+  assert.match(r, /^• Choice: approve to push on — or deny/m);
   assert.match(r, /\/clear \+ \/continue/);
   assert.doesNotMatch(r, /\$/);
 });
