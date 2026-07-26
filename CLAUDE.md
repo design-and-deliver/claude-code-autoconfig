@@ -136,6 +136,11 @@ terminal-title — token-guard is the file that actually drifted 231 lines, prec
 nothing checked it. A blocked push means an adopting repo is stale: run
 `node scripts/sync-hook-fleet.js --write`, commit the target repo, push again.
 
+`test/hook-fleet-sync.test.js` runs everywhere (it drives the actuator against throwaway dirs)
+and pins its semantics — adopt-only, the `~/.claude` token-guard carve-out, check-vs-write, the
+exit codes this hook depends on. It does **not** replace the guard: it proves the actuator is
+correct, never that this machine's fleet is actually in sync. Only the check-mode run does that.
+
 On a fresh checkout, recreate `.git/hooks/pre-push` (then `chmod +x` it):
 
 ```sh

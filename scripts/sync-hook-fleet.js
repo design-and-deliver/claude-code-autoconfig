@@ -48,11 +48,16 @@ const canonicalFor = f => path.join(__dirname, '..', '.claude', 'hooks', f);
 // Per-machine fleet. Prefer the general name; fall back to the terminal-title-era one so an
 // existing box keeps working with no migration step.
 //   [{ "label": "my-repo", "dir": "C:\\path\\to\\repo\\.claude\\hooks" }, ...]
+// CCA_HOOK_FLEET_FILE overrides both — the seam test/hook-fleet-sync.test.js drives the real
+// CLI against throwaway dirs instead of this machine's actual repos.
 const FLEET_FILES = ['hook-fleet.local.json', 'terminal-title-fleet.local.json'];
 function readLocalFleet() {
-  for (const name of FLEET_FILES) {
+  const candidates = process.env.CCA_HOOK_FLEET_FILE
+    ? [process.env.CCA_HOOK_FLEET_FILE]
+    : FLEET_FILES.map(n => path.join(__dirname, n));
+  for (const file of candidates) {
     try {
-      const list = JSON.parse(fs.readFileSync(path.join(__dirname, name), 'utf8'));
+      const list = JSON.parse(fs.readFileSync(file, 'utf8'));
       if (Array.isArray(list)) {
         return list.filter(t => t && typeof t.label === 'string' && typeof t.dir === 'string');
       }
@@ -149,6 +154,9 @@ function applyOne(target, entry, canonText, mode, say, tally) {
  * @param {boolean}  opts.quiet   print nothing unless something drifted or was written
  * @param {string}   opts.only    restrict to targets under this project dir
  * @param {string[]} opts.files   restrict to these manifest entries (default: all)
+ * @param {object[]} opts.targets explicit {label, dir, isGlobal} list, bypassing this machine's
+ *                                fleet entirely (default: resolve it) — how the suite exercises
+ *                                the global branch without writing into a real ~/.claude
  * @returns {{drifted:number, wrote:number, missing:number, lines:string[]}}
  */
 function syncFleet(opts) {
@@ -167,7 +175,7 @@ function syncFleet(opts) {
   }
   if (!quiet) header(entries, canon, write, say);
 
-  for (const t of resolveTargets(opts.only)) {
+  for (const t of (opts.targets || resolveTargets(opts.only))) {
     for (const e of entries) {
       if (t.isGlobal && !e.global) continue;                  // not part of this file's fleet
       applyOne(t, e, canon[e.file], { write, quiet }, say, tally);
@@ -191,14 +199,20 @@ function report(r, write) {
   }
 }
 
+// A value-taking flag with nothing after it (`--files` last, or `--only --write`) reads as
+// absent rather than crashing or swallowing the next flag — `--files` used to throw on
+// undefined.split, which would have failed the run for a typo.
 function parseArgs(argv) {
-  const onlyIdx = argv.indexOf('--only');
-  const filesIdx = argv.indexOf('--files');
+  const value = flag => {
+    const v = argv[argv.indexOf(flag) + 1];
+    return argv.includes(flag) && v && !v.startsWith('--') ? v : null;
+  };
+  const files = value('--files');
   return {
     write: argv.includes('--write'),
     quiet: argv.includes('--quiet'),
-    only: onlyIdx >= 0 ? argv[onlyIdx + 1] : null,
-    files: filesIdx >= 0 ? argv[filesIdx + 1].split(',') : null,
+    only: value('--only'),
+    files: files ? files.split(',') : null,
   };
 }
 
