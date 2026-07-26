@@ -43,7 +43,6 @@
       "Function 'meterSession'",
       "Function 'officialLines'",
       "Function 'onPostToolUse'",
-      "Function 'onPreToolUse'",
       "Function 'onStop'",
       "Function 'payloadVerdict'",
       "Function 'planInfo'",

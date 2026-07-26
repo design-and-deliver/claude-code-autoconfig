@@ -2285,203 +2285,243 @@ function onStop(data, projectDir) {
     `floor=${fmtUSD(m.turnFloorUSD)}/turn turns=${m.turns} ${models}`);
 }
 
-function onPreToolUse(data, projectDir) {
-  const cfg = loadConfig(projectDir);
-  const sid = data.session_id || '';
+// ---------------------------------------------------------------------------
+// PreToolUse guards. Each takes the shared ctx and returns null to fall through, or a decision
+// { kind: 'ask' | 'deny', reason }; PRETOOL_GUARDS at the bottom folds them in rule order.
+// Same shape as the UserPromptSubmit fold above, with one difference: PreToolUse has no notes
+// channel — a guard either speaks (ending the fold) or stays silent.
 
-  // R2 — Workflow launch confirm. Fires on launch, not on spend; independent of hardGateUSD.
-  // No metering here (PreToolUse runs on every tool call — keep the common path instant).
-  if ((cfg.workflowConfirm || cfg.workflowFanGuard) && data.tool_name === 'Workflow') {
-    const fan = cfg.workflowFanGuard ? fanVerdict(workflowSource(data.tool_input), cfg) : null;
-    // The fan guard stays silent on small, bounded workflows: if nothing tripped it AND the
-    // fire-on-every-launch confirm (R2) is off, spend no ask here.
-    if (!fan && !cfg.workflowConfirm) return;
-    const h = loadWfHistory(projectDir);
-    const usd$ = wantDollars(cfg);
-    const estimate = h
-      ? (usd$ || !h.tok
-          ? `last workflow in this project cost ${fmtUSD(h.usd)} across ${h.agents} agents`
-          : `last workflow in this project ran ${fmtK(h.tok)} tokens across ${h.agents} agents`)
-      : (usd$
-          ? `rule of thumb ≈ ${fmtUSD(USD_PER_AGENT_RULE_OF_THUMB)}/agent in fresh-context ` +
-            `writes (a 45-agent research fleet ≈ $20)`
-          : `rule of thumb ≈ 25k fresh tokens/agent (a 45-agent research fleet can draw 1M+ ` +
-            `from the usage window)`);
-    if (fan) {
-      // Two tiers. A concrete fan at/over the hard cap is a DENY — the runaway backstop; below
-      // that it's an ASK where the fan signal leads (right-size before launch) and the cost
-      // estimate rides along as scale. Both fire even when workflowConfirm is off.
-      const hardCap = cfg.fanHardCap || DEFAULTS.fanHardCap;
-      if (fan.level === 'block') {
-        return deny('PreToolUse',
-          `⚠️ Hey — blocked: this Workflow declares ${fan.signals.join('; ')}, at or over ` +
-          `your hard fan cap of ${hardCap} agents. A fan this wide is far more often an ` +
-          `over-provisioning bug than real parallel work, and fleets bill outside the visible ` +
-          `transcript (${estimate}). Cut the fan, or raise fanHardCap in cca.config.json to allow it.`);
-      }
-      return ask('PreToolUse',
-        `⚠️ Hey — this Workflow looks over-fanned for one task — ${fan.signals.join('; ')}` +
-        `${fan.estimate ? ` — ${fan.estimate}` : ''}. A narrow question rarely needs more than ` +
-        `~${cfg.fanWarnAgents || DEFAULTS.fanWarnAgents} agents, and fleets bill outside the ` +
-        `visible transcript (${estimate}). Cut the fan first, or approve to launch as-is.`);
-    }
-    return ask('PreToolUse',
-      `⚠️ Hey — Workflow launch — ${estimate}; fleets spend outside the visible transcript. ` +
-      `Approve to launch.`);
+// State is read LAZILY: R2's Workflow doors decide without it, and PreToolUse runs on EVERY
+// tool call. Every guard after R2 goes through here, so the file is read at most once per call.
+function preState(ctx) {
+  if (!ctx.st) ctx.st = loadState(ctx.projectDir, ctx.sid);
+  return ctx.st;
+}
+
+// A gate armed or re-armed state before speaking: persist it, then hand the ask back to the
+// fold. Same save-then-speak beat as emitBlock on the prompt side.
+function gateAsk(ctx, reason) {
+  saveState(ctx.projectDir, ctx.sid, ctx.st);
+  return { kind: 'ask', reason };
+}
+
+// A turn-ender defers BOTH in-turn tripwires without re-arming — see gateVerdict for why
+// silence beats a green label.
+function skipVerdict(verdict) {
+  return !!verdict && verdict.kind === 'skip';
+}
+
+// The scale clause every fleet ask carries: this project's last workflow bill when one is on
+// record, else the per-agent rule of thumb — in the user's own denomination.
+function wfEstimate(projectDir, usd$) {
+  const h = loadWfHistory(projectDir);
+  if (!h) {
+    return usd$
+      ? `rule of thumb ≈ ${fmtUSD(USD_PER_AGENT_RULE_OF_THUMB)}/agent in fresh-context ` +
+        `writes (a 45-agent research fleet ≈ $20)`
+      : `rule of thumb ≈ 25k fresh tokens/agent (a 45-agent research fleet can draw 1M+ ` +
+        `from the usage window)`;
   }
+  return usd$ || !h.tok
+    ? `last workflow in this project cost ${fmtUSD(h.usd)} across ${h.agents} agents`
+    : `last workflow in this project ran ${fmtK(h.tok)} tokens across ${h.agents} agents`;
+}
 
-  const st = loadState(projectDir, sid);
-
-  // R8 — payload pre-gate, doors 1-2. One ask in the moment the rent is still avoidable;
-  // R3 only gets to warn about payloads that never came through here.
-  if (cfg.payloadGate && (data.tool_name === 'Skill' || data.tool_name === 'Read')) {
-    const ti = data.tool_input || {};
-    const sizes = data.tool_name === 'Skill'
-      ? skillSizes(projectDir, String(ti.skill || ''))
-      : readSizes(String(ti.file_path || ''));
-    const v = payloadVerdict(data.tool_name, ti, sizes, cfg);
-    if (v) {
-      // One decision, one surface: mark the hop so R3 doesn't re-warn what the user just
-      // decided at this gate. ttl 1 = disarms at the next prompt if nothing landed (denied).
-      // Skill hops carry the name so the landing can be recorded as an observed budget row.
-      st.approvedPayloadHop = { est: v.estTokens, ttl: 1 };
-      if (v.door === 'skill') st.approvedPayloadHop.skill = String(ti.skill || '');
-      saveState(projectDir, sid, st);
-      return ask('PreToolUse', v.door === 'skill'
-        ? `⚠️ Hey — loading the ${ti.skill} skill adds ${v.floor ? 'at least ' : ''}` +
-          `~${fmtK(v.estTokens)} tokens to this conversation permanently — every later message ` +
-          `re-reads them. If you only need an answer from it, a disposable subagent can read ` +
-          `it and return just the conclusion. Approve to load it here anyway.`
-        : `⚠️ Hey — reading ${path.basename(String(ti.file_path || ''))} in full adds ` +
-          `~${fmtK(v.estTokens)} tokens to this conversation permanently — every later message ` +
-          `re-reads them. A ranged Read (offset/limit) or a disposable subagent keeps it out. ` +
-          `Approve to read it in full anyway.`);
-    }
+// R10 — two tiers. A concrete fan at/over the hard cap is a DENY, the runaway backstop; below
+// that it's an ASK where the fan signal leads (right-size before launch) and the cost estimate
+// rides along as scale. Both fire even when workflowConfirm is off.
+function fanDecision(fan, cfg, estimate) {
+  const hardCap = cfg.fanHardCap || DEFAULTS.fanHardCap;
+  if (fan.level === 'block') {
+    return { kind: 'deny', reason:
+      `⚠️ Hey — blocked: this Workflow declares ${fan.signals.join('; ')}, at or over ` +
+      `your hard fan cap of ${hardCap} agents. A fan this wide is far more often an ` +
+      `over-provisioning bug than real parallel work, and fleets bill outside the visible ` +
+      `transcript (${estimate}). Cut the fan, or raise fanHardCap in cca.config.json to allow it.` };
   }
+  return { kind: 'ask', reason:
+    `⚠️ Hey — this Workflow looks over-fanned for one task — ${fan.signals.join('; ')}` +
+    `${fan.estimate ? ` — ${fan.estimate}` : ''}. A narrow question rarely needs more than ` +
+    `~${cfg.fanWarnAgents || DEFAULTS.fanWarnAgents} agents, and fleets bill outside the ` +
+    `visible transcript (${estimate}). Cut the fan first, or approve to launch as-is.` };
+}
 
-  // R9 — one-shot ask armed by the accumulator (miniBombGate only): the turn already piled up
-  // bomb-sized tool results; one conscious approve before more work compounds on top.
-  if (st.miniBombGateArmed) {
-    st.miniBombGateArmed = false;
-    saveState(projectDir, sid, st);
-    return ask('PreToolUse',
-      `⚠️ Hey — this turn's tool results have already piled up ~${fmtK(st.turnPayloadTok)} ` +
-      `tokens of new context — bomb-sized in aggregate, and every later message re-reads it. ` +
-      `Approve to keep going here; a disposable subagent or ranged reads keep the rest out.`);
+// R2 — Workflow launch confirm (carrying R10's fan tiers). Fires on launch, not on spend;
+// independent of hardGateUSD. No metering here (PreToolUse runs on every tool call — keep the
+// common path instant).
+function r2WorkflowLaunchGuard(ctx) {
+  const { cfg, data } = ctx;
+  if (!(cfg.workflowConfirm || cfg.workflowFanGuard) || data.tool_name !== 'Workflow') return null;
+  const fan = cfg.workflowFanGuard ? fanVerdict(workflowSource(data.tool_input), cfg) : null;
+  // The fan guard stays silent on small, bounded workflows: if nothing tripped it AND the
+  // fire-on-every-launch confirm (R2) is off, spend no ask here.
+  if (!fan && !cfg.workflowConfirm) return null;
+  const estimate = wfEstimate(ctx.projectDir, wantDollars(cfg));
+  if (fan) return fanDecision(fan, cfg, estimate);
+  return { kind: 'ask', reason:
+    `⚠️ Hey — Workflow launch — ${estimate}; fleets spend outside the visible transcript. ` +
+    `Approve to launch.` };
+}
+
+// Which door R8 is pricing: a Skill's bundled files, or one Read's file.
+function doorSizes(projectDir, data, ti) {
+  return data.tool_name === 'Skill'
+    ? skillSizes(projectDir, String(ti.skill || ''))
+    : readSizes(String(ti.file_path || ''));
+}
+
+// The R8 door copy — one beat for both doors: what it adds, that it is permanent, the cheaper
+// lever, then the approve line.
+function payloadAskCopy(ti, v) {
+  if (v.door === 'skill') {
+    return `⚠️ Hey — loading the ${ti.skill} skill adds ${v.floor ? 'at least ' : ''}` +
+      `~${fmtK(v.estTokens)} tokens to this conversation permanently — every later message ` +
+      `re-reads them. If you only need an answer from it, a disposable subagent can read ` +
+      `it and return just the conclusion. Approve to load it here anyway.`;
   }
+  return `⚠️ Hey — reading ${path.basename(String(ti.file_path || ''))} in full adds ` +
+    `~${fmtK(v.estTokens)} tokens to this conversation permanently — every later message ` +
+    `re-reads them. A ranged Read (offset/limit) or a disposable subagent keeps it out. ` +
+    `Approve to read it in full anyway.`;
+}
 
-  // R3 — one-shot post-bomb gate (armed only when bombGateWhenFat and the bomb landed fat).
-  if (st.bombGateArmed) {
-    st.bombGateArmed = false;
-    saveState(projectDir, sid, st);
-    return ask('PreToolUse',
-      `⚠️ Hey — a context bomb just landed at fat context (see warning above) — one-time ` +
-      `confirm before more work compounds on top of it. If the payload isn't needed here: ` +
-      `/clear, then /continue to shed it and keep this thread.`);
+// R8 — payload pre-gate, doors 1-2. One ask in the moment the rent is still avoidable;
+// R3 only gets to warn about payloads that never came through here.
+function r8PayloadDoorGuard(ctx) {
+  const { cfg, data, projectDir } = ctx;
+  if (!cfg.payloadGate || (data.tool_name !== 'Skill' && data.tool_name !== 'Read')) return null;
+  const ti = data.tool_input || {};
+  const v = payloadVerdict(data.tool_name, ti, doorSizes(projectDir, data, ti), cfg);
+  if (!v) return null;
+  // One decision, one surface: mark the hop so R3 doesn't re-warn what the user just
+  // decided at this gate. ttl 1 = disarms at the next prompt if nothing landed (denied).
+  // Skill hops carry the name so the landing can be recorded as an observed budget row.
+  const st = preState(ctx);
+  st.approvedPayloadHop = { est: v.estTokens, ttl: 1 };
+  if (v.door === 'skill') st.approvedPayloadHop.skill = String(ti.skill || '');
+  return gateAsk(ctx, payloadAskCopy(ti, v));
+}
+
+// R9 — one-shot ask armed by the accumulator (miniBombGate only): the turn already piled up
+// bomb-sized tool results; one conscious approve before more work compounds on top.
+function r9MiniBombGateGuard(ctx) {
+  const st = preState(ctx);
+  if (!st.miniBombGateArmed) return null;
+  st.miniBombGateArmed = false;
+  return gateAsk(ctx,
+    `⚠️ Hey — this turn's tool results have already piled up ~${fmtK(st.turnPayloadTok)} ` +
+    `tokens of new context — bomb-sized in aggregate, and every later message re-reads it. ` +
+    `Approve to keep going here; a disposable subagent or ranged reads keep the rest out.`);
+}
+
+// R3 — one-shot post-bomb gate (armed only when bombGateWhenFat and the bomb landed fat).
+function r3PostBombGateGuard(ctx) {
+  const st = preState(ctx);
+  if (!st.bombGateArmed) return null;
+  st.bombGateArmed = false;
+  return gateAsk(ctx,
+    `⚠️ Hey — a context bomb just landed at fat context (see warning above) — one-time ` +
+    `confirm before more work compounds on top of it. If the payload isn't needed here: ` +
+    `/clear, then /continue to shed it and keep this thread.`);
+}
+
+// R13b — turn-spend tripwire: ONE turn's work tokens (main + fleet, delta since the last
+// prompt) crossing turnGateTokens means the task spiraled ~10× past a normal one — nobody
+// consciously chose that spend. Checked before the session gate (the sharper signal), and
+// TOKEN-denominated on every billing kind: task size is work volume, not price — which is
+// exactly why cache re-reads ride at 0.1x here (rent measures context size, not task size).
+function r13bTurnSpendGuard(ctx) {
+  const { cfg, m, st, verdict } = ctx;
+  if (cfg.turnGateTokens == null) return null;
+  const nowTok = workTokens(m);
+  if (st.turnStartWorkTok == null) {
+    // No baseline yet (turn 1 of a fresh session, or a session whose baseline predates the
+    // work-token unit): arm it mid-turn — undercounts the current turn rather than
+    // mis-billing the whole session to it (or mixing units across the recalibration).
+    st.turnStartWorkTok = nowTok;
+    saveState(ctx.projectDir, ctx.sid, st);
+    return null;
   }
+  const turnTok = nowTok - st.turnStartWorkTok;
+  const tGate = st.turnGateAt != null ? st.turnGateAt : cfg.turnGateTokens;
+  if (turnTok < tGate || skipVerdict(verdict)) return null;
+  // Re-arm ABOVE the observed spend, at a width that DOUBLES each same-turn fire — see
+  // nextCheckClause for why a flat step stopped working.
+  st.turnGateFires = (st.turnGateFires || 0) + 1;
+  st.turnGateAt = reArmAt(turnTok, cfg.turnGateTokens, st.turnGateFires);
+  // Same shape as R14 below — headline reading, then cost / lever / choice, one per line.
+  return gateAsk(ctx,
+    `⚠️ Hey — this ONE turn has burned ~${fmtK(turnTok)} tokens.\n` +
+    `• Cost: a normal task finishes under ~${fmtK(TASK_NORM_TOK)}, so the work has likely ` +
+    `spiraled well past what was anticipated.\n` +
+    `• Lever: a plan with session-sized substeps, not a longer turn.` +
+    `${nextCheckClause(st.turnGateFires, st.turnGateAt)}\n` +
+    choiceBullet(verdict,
+      'approve to push on — or deny, and Claude should stop and propose that plan.',
+      'denying means Claude stops and proposes that plan.'));
+}
 
-  // R13b/R14 + v1 all need the session meter; PreToolUse runs on every tool call, so meter once
-  // and only when at least one spend gate is armed.
-  if (cfg.hardGateUSD == null && cfg.turnGateTokens == null && cfg.turnRentGateTokens == null) return;
-  // What the PENDING call argues for. Computed once; both in-turn tripwires consult it. A
-  // turn-ender defers BOTH gates without re-arming — see gateVerdict for why silence beats a
-  // green label. The session $ gate below is deliberately unaffected: it is a spend backstop the
-  // user armed by hand, not a per-turn steer, so a cheap commit should not slip past it.
-  const verdict = gateVerdict(data.tool_name, data.tool_input);
-  const m = meterSession(data.transcript_path, { fleet: cfg.fleetMeter, projectDir });
+// The R14 ask. Headline reading, then one bullet per thought — cost / lever / choice. A single
+// wrapped paragraph buried the ask under the arithmetic (Andrew 2026-07-26). This is the only
+// guard message that carries \n; if the dialog ever collapses them the bullets still read
+// as "• "-separated clauses rather than running together.
+function rentAskCopy(ctx, rent) {
+  const { m, st, verdict } = ctx;
+  const reqs = Math.max(1, m.main.turns - (st.turnStartReqs || 0));
+  // Work = the turn's work tokens minus the 0.1x-weighted rent already inside them, i.e.
+  // input + output + cache writes. Null baseline (turnGateTokens off) => report rent alone.
+  const work = st.turnStartWorkTok == null ? null
+    : Math.max(0, workTokens(m) - st.turnStartWorkTok - rent * CACHE_READ_X);
+  const vs = work == null ? '' : ` against ~${fmtK(work)} tokens of actual work`;
+  return `⚠️ Hey — this turn has made ${reqs} round trip${reqs === 1 ? '' : 's'} carrying ` +
+    `~${fmtK(m.liveContext)} of context.\n` +
+    `• Cost: ~${fmtK(rent)} tokens of re-reads${vs} — that is rent, not progress, and it ` +
+    `compounds every trip.\n` +
+    `• Lever: a smaller resident context, not a shorter task.` +
+    `${nextCheckClause(st.rentGateFires, st.rentGateAt, ' of re-reads')}\n` +
+    choiceBullet(verdict,
+      'approve to push on — or deny, and Claude should land this turn at a commit ' +
+      'point so you can /clear + /continue carrying only the next step.',
+      'denying lands this turn at a commit point so you can /clear + /continue carrying ' +
+      'only the next step.');
+}
 
-  // R13b — turn-spend tripwire: ONE turn's work tokens (main + fleet, delta since the last
-  // prompt) crossing turnGateTokens means the task spiraled ~10× past a normal one — nobody
-  // consciously chose that spend. Checked before the session gate (the sharper signal), and
-  // TOKEN-denominated on every billing kind: task size is work volume, not price — which is
-  // exactly why cache re-reads ride at 0.1x here (rent measures context size, not task size).
-  if (cfg.turnGateTokens != null) {
-    const nowTok = workTokens(m);
-    if (st.turnStartWorkTok == null) {
-      // No baseline yet (turn 1 of a fresh session, or a session whose baseline predates the
-      // work-token unit): arm it mid-turn — undercounts the current turn rather than
-      // mis-billing the whole session to it (or mixing units across the recalibration).
-      st.turnStartWorkTok = nowTok;
-      saveState(projectDir, sid, st);
-    } else {
-      const turnTok = nowTok - st.turnStartWorkTok;
-      const tGate = st.turnGateAt != null ? st.turnGateAt : cfg.turnGateTokens;
-      if (turnTok >= tGate && !(verdict && verdict.kind === 'skip')) {
-        // Re-arm ABOVE the observed spend, at a width that DOUBLES each same-turn fire — see
-        // nextCheckClause for why a flat step stopped working.
-        st.turnGateFires = (st.turnGateFires || 0) + 1;
-        st.turnGateAt = reArmAt(turnTok, cfg.turnGateTokens, st.turnGateFires);
-        saveState(projectDir, sid, st);
-        // Same shape as R14 below — headline reading, then cost / lever / choice, one per line.
-        return ask('PreToolUse',
-          `⚠️ Hey — this ONE turn has burned ~${fmtK(turnTok)} tokens.\n` +
-          `• Cost: a normal task finishes under ~${fmtK(TASK_NORM_TOK)}, so the work has likely ` +
-          `spiraled well past what was anticipated.\n` +
-          `• Lever: a plan with session-sized substeps, not a longer turn.` +
-          `${nextCheckClause(st.turnGateFires, st.turnGateAt)}\n` +
-          choiceBullet(verdict,
-            'approve to push on — or deny, and Claude should stop and propose that plan.',
-            'denying means Claude stops and proposes that plan.'));
-      }
-    }
+// R14 — in-turn RENT tripwire. The failure R13b structurally cannot see: a turn whose work
+// is ordinary (83k on the 2026-07-25 plan re-cut, under TASK_NORM_TOK) but which pays for a
+// fat resident context over and over — 24 round trips × ~104k = 2.5M of re-reads, $2.62, in
+// ONE turn. Every other context guard speaks at a prompt boundary (the fat-context advisory
+// fires on UserPromptSubmit, once); rent accrues BETWEEN those boundaries, and a 20-minute
+// autonomous turn has no boundary to take. This is the only check that re-reads context size
+// mid-turn — which is also why it must stay cheap: it reuses the meter spendGatesGuard took.
+function r14TurnRentGuard(ctx) {
+  const { cfg, m, st, verdict } = ctx;
+  if (cfg.turnRentGateTokens == null) return null;
+  if (st.turnStartCr == null) {
+    // No baseline (turn 1 of a fresh session, or state written before R14 existed): arm it
+    // mid-turn — undercounts this turn rather than billing the whole session's rent to it.
+    st.turnStartCr = crTokens(m); st.turnStartReqs = m.main.turns;
+    saveState(ctx.projectDir, ctx.sid, st);
   }
+  const rent = crTokens(m) - st.turnStartCr;
+  const rGate = st.rentGateAt != null ? st.rentGateAt : cfg.turnRentGateTokens;
+  if (rent < rGate || skipVerdict(verdict)) return null;
+  // Re-arm ABOVE the observed rent, doubling the width each same-turn fire (same rule as
+  // R13b — one huge landing must not re-fire on the very next tool call, and repeats must
+  // get rarer rather than becoming wallpaper).
+  st.rentGateFires = (st.rentGateFires || 0) + 1;
+  st.rentGateAt = reArmAt(rent, cfg.turnRentGateTokens, st.rentGateFires);
+  return gateAsk(ctx, rentAskCopy(ctx, rent));
+}
 
-  // R14 — in-turn RENT tripwire. The failure R13b structurally cannot see: a turn whose work
-  // is ordinary (83k on the 2026-07-25 plan re-cut, under TASK_NORM_TOK) but which pays for a
-  // fat resident context over and over — 24 round trips × ~104k = 2.5M of re-reads, $2.62, in
-  // ONE turn. Every other context guard speaks at a prompt boundary (the fat-context advisory
-  // fires on UserPromptSubmit, once); rent accrues BETWEEN those boundaries, and a 20-minute
-  // autonomous turn has no boundary to take. This is the only check that re-reads context size
-  // mid-turn — which is also why it must stay cheap: it reuses the meter already computed above.
-  if (cfg.turnRentGateTokens != null) {
-    if (st.turnStartCr == null) {
-      // No baseline (turn 1 of a fresh session, or state written before R14 existed): arm it
-      // mid-turn — undercounts this turn rather than billing the whole session's rent to it.
-      st.turnStartCr = crTokens(m); st.turnStartReqs = m.main.turns;
-      saveState(projectDir, sid, st);
-    }
-    const rent = crTokens(m) - st.turnStartCr;
-    const rGate = st.rentGateAt != null ? st.rentGateAt : cfg.turnRentGateTokens;
-    if (rent >= rGate && !(verdict && verdict.kind === 'skip')) {
-      // Re-arm ABOVE the observed rent, doubling the width each same-turn fire (same rule as
-      // R13b — one huge landing must not re-fire on the very next tool call, and repeats must
-      // get rarer rather than becoming wallpaper).
-      st.rentGateFires = (st.rentGateFires || 0) + 1;
-      st.rentGateAt = reArmAt(rent, cfg.turnRentGateTokens, st.rentGateFires);
-      saveState(projectDir, sid, st);
-      const reqs = Math.max(1, m.main.turns - (st.turnStartReqs || 0));
-      // Work = the turn's work tokens minus the 0.1x-weighted rent already inside them, i.e.
-      // input + output + cache writes. Null baseline (turnGateTokens off) => report rent alone.
-      const work = st.turnStartWorkTok == null ? null
-        : Math.max(0, workTokens(m) - st.turnStartWorkTok - rent * CACHE_READ_X);
-      const vs = work == null ? '' : ` against ~${fmtK(work)} tokens of actual work`;
-      // Headline reading, then one bullet per thought — cost / lever / choice. A single wrapped
-      // paragraph buried the ask under the arithmetic (Andrew 2026-07-26). This is the only
-      // guard message that carries \n; if the dialog ever collapses them the bullets still read
-      // as "• "-separated clauses rather than running together.
-      return ask('PreToolUse',
-        `⚠️ Hey — this turn has made ${reqs} round trip${reqs === 1 ? '' : 's'} carrying ` +
-        `~${fmtK(m.liveContext)} of context.\n` +
-        `• Cost: ~${fmtK(rent)} tokens of re-reads${vs} — that is rent, not progress, and it ` +
-        `compounds every trip.\n` +
-        `• Lever: a smaller resident context, not a shorter task.` +
-        `${nextCheckClause(st.rentGateFires, st.rentGateAt, ' of re-reads')}\n` +
-        choiceBullet(verdict,
-          'approve to push on — or deny, and Claude should land this turn at a commit ' +
-          'point so you can /clear + /continue carrying only the next step.',
-          'denying lands this turn at a commit point so you can /clear + /continue carrying ' +
-          'only the next step.'));
-    }
-  }
-
-  // v1 hard gate on total session spend (v2: fleet-aware total). Default off.
-  if (cfg.hardGateUSD == null) return;
+// v1 hard gate on total session spend (v2: fleet-aware total). Default off.
+function sessionSpendGuard(ctx) {
+  const { cfg, m, st } = ctx;
+  if (cfg.hardGateUSD == null) return null;
   const gate = st.gateArmedAt != null ? st.gateArmedAt : cfg.hardGateUSD;
-  if (m.usd < gate) return;
+  if (m.usd < gate) return null;
   st.gateArmedAt = gate + (cfg.gateStepUSD || DEFAULTS.gateStepUSD); // re-arm one step higher
-  saveState(projectDir, sid, st);
   if (wantDollars(cfg)) {
-    return ask('PreToolUse',
+    return gateAsk(ctx,
       `⚠️ Hey — session estimate ${fmtUSD(m.usd)} ≥ ${fmtUSD(gate)} gate. ` +
       `Approve to continue (next check at ${fmtUSD(st.gateArmedAt)}), or /clear for a fresh session.`);
   }
@@ -2491,10 +2531,47 @@ function onPreToolUse(data, projectDir) {
   // exactly the sense the $ figures are.
   const tok = sessionTokens(m);
   const perUSD = m.usd > 0 ? tok / m.usd : 0;
-  return ask('PreToolUse',
+  return gateAsk(ctx,
     `⚠️ Hey — session estimate ${fmtK(tok)} tokens ≥ the ~${fmtK(gate * perUSD)}-token gate. ` +
     `Approve to continue (next check ≈ ${fmtK(st.gateArmedAt * perUSD)} tokens), or /clear for a ` +
     `fresh session.`);
+}
+
+// The three spend gates share one meter: PreToolUse runs on every tool call, so meter ONCE and
+// only when at least one of them is armed. Order matters — R13b (sharpest) before R14 before
+// the session backstop.
+const SPEND_GUARDS = [r13bTurnSpendGuard, r14TurnRentGuard, sessionSpendGuard];
+
+function spendGatesGuard(ctx) {
+  const { cfg, data } = ctx;
+  if (cfg.hardGateUSD == null && cfg.turnGateTokens == null && cfg.turnRentGateTokens == null) {
+    return null;
+  }
+  preState(ctx);
+  // What the PENDING call argues for. Computed once; both in-turn tripwires consult it. A
+  // turn-ender defers BOTH gates without re-arming — see gateVerdict for why silence beats a
+  // green label. The session $ gate is deliberately unaffected: it is a spend backstop the
+  // user armed by hand, not a per-turn steer, so a cheap commit should not slip past it.
+  ctx.verdict = gateVerdict(data.tool_name, data.tool_input);
+  ctx.m = meterSession(data.transcript_path, { fleet: cfg.fleetMeter, projectDir: ctx.projectDir });
+  for (const guard of SPEND_GUARDS) {
+    const d = guard(ctx);
+    if (d) return d;
+  }
+  return null;
+}
+
+// Rule order is decision order: R2's Workflow doors first (they decide without touching state),
+// then the one-shot payload/bomb gates, then the metered spend tripwires last.
+const PRETOOL_GUARDS = [r2WorkflowLaunchGuard, r8PayloadDoorGuard, r9MiniBombGateGuard,
+  r3PostBombGateGuard, spendGatesGuard];
+
+function onPreToolUse(data, projectDir) {
+  const ctx = { data, projectDir, cfg: loadConfig(projectDir), sid: data.session_id || '', st: null };
+  for (const guard of PRETOOL_GUARDS) {
+    const d = guard(ctx);
+    if (d) return d.kind === 'deny' ? deny('PreToolUse', d.reason) : ask('PreToolUse', d.reason);
+  }
 }
 
 function ask(event, reason) {
