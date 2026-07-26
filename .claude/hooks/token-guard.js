@@ -1697,6 +1697,69 @@ const nextCheckClause = (fires, nextAt, unit = '') => fires <= 1
 // Geometric re-arm: width = base × 2^(fires-1), measured from what was actually observed (so a
 // single huge landing can never re-fire on the very next tool call). fires counts THIS fire.
 const reArmAt = (observed, base, fires) => observed + base * Math.pow(2, fires - 1);
+
+// ── gateVerdict: which button the PENDING CALL argues for (R13b/R14) ──────────────────────────
+// The token math cannot answer this. "23 round trips, 124k resident, 2.3M of re-reads" is a
+// measurement of the turn's STATE — identical whether the next call is a commit or another
+// god-file read — so a recommendation derived from it would say the same thing every time, and a
+// recommendation that never varies is wallpaper. The discriminator is the SHAPE of the call being
+// gated, which PreToolUse already hands us. Two classes are mechanically decidable:
+//
+//   'skip'  a turn-ender (git add/commit/status/diff --stat). Tiny output, and it IS the
+//           "land this turn at a commit point" the gate's own Choice bullet asks for. Firing here
+//           would contradict the advice three lines above it — and once a gate has recommended
+//           approve, the next real warning gets dismissed by reflex. So the gate does not fire at
+//           all, and does NOT re-arm: the next non-turn-ender call takes the check it deferred.
+//           Silence is a stronger recommendation than a green label.
+//   'deny'  output the turn will then re-read on every remaining trip — a full test suite, or a
+//           Grep explicitly unbounded (head_limit: 0; an unset head_limit already caps at 250).
+//
+// Everything else returns null and the copy stays neutral. The hook is a Node script matching a
+// command string with no model in the loop — it cannot know whether a `git add` stages the RIGHT
+// files, or whether this expensive read is the one that unblocks the task. Narrow is correct.
+
+// Cheap segments that move the turn toward a commit. Deliberately a strict allowlist: an
+// unrecognized segment disqualifies the whole command, so a miss costs one extra warning — never
+// a silently skipped gate. (Quoted `;`/`&&` inside a commit message split badly and fail closed
+// for the same reason.)
+const TURN_ENDER_SEG = [
+  /^git\s+add\b/, /^git\s+commit\b/, /^git\s+status\b/, /^git\s+rev-parse\b/,
+  /^git\s+diff\s+(--stat|--cached\s+--stat|--staged\s+--stat)\b/,
+  /^git\s+log\s+--oneline\b/, /^git\s+branch\s+--show-current\b/, /^cd\s/,
+];
+function isTurnEnder(cmd) {
+  const segs = String(cmd || '').split(/&&|\|\||[;|]/).map(s => s.trim()).filter(Boolean);
+  return segs.length > 0 && segs.every(s => TURN_ENDER_SEG.some(re => re.test(s)));
+}
+// A test runner with no path/pattern argument runs the whole suite. Flags (-t, --coverage, --run)
+// and go's ./... wildcard scope nothing, so they don't count as an argument.
+const TEST_RUNNER =
+  /^(?:(?:pnpm|npm|yarn|bun)\s+(?:run\s+)?test|npx\s+(?:jest|vitest|mocha)|jest|vitest|pytest|mocha|go\s+test)\b(.*)$/;
+function isFullSuite(cmd) {
+  const m = TEST_RUNNER.exec(String(cmd || '').trim());
+  if (!m) return false;
+  return m[1].split(/\s+/).filter(a => a && !a.startsWith('-') && a !== './...').length === 0;
+}
+function gateVerdict(toolName, toolInput) {
+  const ti = toolInput || {};
+  if (toolName === 'Bash') {
+    if (isTurnEnder(ti.command)) return { kind: 'skip' };
+    if (isFullSuite(ti.command)) {
+      return { kind: 'deny', why: 'this runs the whole test suite, and its output is re-read on every remaining trip' };
+    }
+    return null;
+  }
+  if (toolName === 'Grep' && ti.output_mode === 'content' && ti.head_limit === 0) {
+    return { kind: 'deny', why: 'this Grep is explicitly unbounded, so its output lands in context and stays there' };
+  }
+  return null;
+}
+// Recommendation-leading Choice bullet. The verdict leads; the neutral both-ways phrasing still
+// follows, because the tag is advisory — it names the evidence, it does not claim authority the
+// script does not have.
+const choiceBullet = (verdict, neutral, denyTail) => verdict && verdict.kind === 'deny'
+  ? `• Choice: deny looks right here — ${verdict.why}. Approving pushes on; ${denyTail}`
+  : `• Choice: ${neutral}`;
 // total tokens PROCESSED (in + out + cache read/write) — the unit user-facing check-ins lead
 // with. Deliberately unweighted; the dollar figure beside it carries the per-model weighting.
 const tokOne = v => v.inp + v.out + v.cr + v.cw;
@@ -2320,6 +2383,11 @@ function onPreToolUse(data, projectDir) {
   // R13b/R14 + v1 all need the session meter; PreToolUse runs on every tool call, so meter once
   // and only when at least one spend gate is armed.
   if (cfg.hardGateUSD == null && cfg.turnGateTokens == null && cfg.turnRentGateTokens == null) return;
+  // What the PENDING call argues for. Computed once; both in-turn tripwires consult it. A
+  // turn-ender defers BOTH gates without re-arming — see gateVerdict for why silence beats a
+  // green label. The session $ gate below is deliberately unaffected: it is a spend backstop the
+  // user armed by hand, not a per-turn steer, so a cheap commit should not slip past it.
+  const verdict = gateVerdict(data.tool_name, data.tool_input);
   const m = meterSession(data.transcript_path, { fleet: cfg.fleetMeter, projectDir });
 
   // R13b — turn-spend tripwire: ONE turn's work tokens (main + fleet, delta since the last
@@ -2338,7 +2406,7 @@ function onPreToolUse(data, projectDir) {
     } else {
       const turnTok = nowTok - st.turnStartWorkTok;
       const tGate = st.turnGateAt != null ? st.turnGateAt : cfg.turnGateTokens;
-      if (turnTok >= tGate) {
+      if (turnTok >= tGate && !(verdict && verdict.kind === 'skip')) {
         // Re-arm ABOVE the observed spend, at a width that DOUBLES each same-turn fire — see
         // nextCheckClause for why a flat step stopped working.
         st.turnGateFires = (st.turnGateFires || 0) + 1;
@@ -2351,7 +2419,9 @@ function onPreToolUse(data, projectDir) {
           `spiraled well past what was anticipated.\n` +
           `• Lever: a plan with session-sized substeps, not a longer turn.` +
           `${nextCheckClause(st.turnGateFires, st.turnGateAt)}\n` +
-          `• Choice: approve to push on — or deny, and Claude should stop and propose that plan.`);
+          choiceBullet(verdict,
+            'approve to push on — or deny, and Claude should stop and propose that plan.',
+            'denying means Claude stops and proposes that plan.'));
       }
     }
   }
@@ -2372,7 +2442,7 @@ function onPreToolUse(data, projectDir) {
     }
     const rent = crTokens(m) - st.turnStartCr;
     const rGate = st.rentGateAt != null ? st.rentGateAt : cfg.turnRentGateTokens;
-    if (rent >= rGate) {
+    if (rent >= rGate && !(verdict && verdict.kind === 'skip')) {
       // Re-arm ABOVE the observed rent, doubling the width each same-turn fire (same rule as
       // R13b — one huge landing must not re-fire on the very next tool call, and repeats must
       // get rarer rather than becoming wallpaper).
@@ -2396,8 +2466,11 @@ function onPreToolUse(data, projectDir) {
         `compounds every trip.\n` +
         `• Lever: a smaller resident context, not a shorter task.` +
         `${nextCheckClause(st.rentGateFires, st.rentGateAt, ' of re-reads')}\n` +
-        `• Choice: approve to push on — or deny, and Claude should land this turn at a commit ` +
-        `point so you can /clear + /continue carrying only the next step.`);
+        choiceBullet(verdict,
+          'approve to push on — or deny, and Claude should land this turn at a commit ' +
+          'point so you can /clear + /continue carrying only the next step.',
+          'denying lands this turn at a commit point so you can /clear + /continue carrying ' +
+          'only the next step.'));
     }
   }
 
