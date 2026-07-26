@@ -26,7 +26,7 @@ Read exactly three slices and nothing else:
 3. the **Ledger tail** — `tail -80 docs/clean-code-remediation-plan.md`, not the whole section.
 
 Every remaining substep carries a **Read list** of exact files and line ranges. Open those
-windows only: the two hook files are 3,067 and 1,740 lines and must NEVER be read whole.
+windows only: the two hook files are 3,144 and 1,740 lines and must NEVER be read whole.
 
 **Every Ledger entry records rent.** Close it with a `rent:` line — the session's total token
 spend from the `--analyze` digest (`node .claude/hooks/token-guard.js --analyze <sid>`), e.g.
@@ -65,7 +65,7 @@ emitted at the boundary, never left to memory.
   compensating lever for hook substeps is **land the characterization test in an earlier
   substep**, then extract in-file against it.
 - **God files — Grep-then-Read-window ONLY, never opened whole:**
-  `.claude/hooks/token-guard.js` (**3,067 lines**, ~41k tokens) and
+  `.claude/hooks/token-guard.js` (**3,144 lines**, ~42k tokens) and
   `.claude/hooks/terminal-title.js` (**1,740 lines**). Six of the remaining substeps target
   them. Each substep's Read list names the windows; a whole-file read blows the session's
   budget on turn one and stays resident for every turn after.
@@ -249,7 +249,7 @@ exactly as 3.2's Ledger entry already advised executing it.
       R12a, R12b, spend-step), each returning `{notes, block}`; the handler becomes a fold over
       them. Digest wording byte-identical.
 
-### ☐ 3.3b · L · ~2h — token-guard: decompose `onPreToolUse` (CC 44) · [opus]
+### ☑ 3.3b · L · ~2h — token-guard: decompose `onPreToolUse` (CC 44) (DONE 2026-07-26, see Ledger)
 
 **Read list** (~330 lines — do NOT open token-guard.js whole, it is 3,067):
 `this doc:252-272` · `.claude/hooks/token-guard.js:2288-2498` (`onPreToolUse`, the target) ·
@@ -257,11 +257,11 @@ exactly as 3.2's Ledger entry already advised executing it.
 `:2500-2543` (`ask` / `deny` — the return shapes the guards must produce). Grep, don't read,
 for the pure verdicts it already calls (`payloadVerdict`, `fanVerdict`, `commandPayloadTokens`).
 
-- [ ] Same shape as 3.3a: one guard function per rule, each `{notes, block}`, handler becomes
+- [x] Same shape as 3.3a: one guard function per rule, each `{notes, block}`, handler becomes
       a fold. Reuse `emitBlock`'s save+block+return beat rather than re-inventing it.
-- [ ] CRLF trap (3.1/3.3a's note): the file is fully CRLF — go in via a marker-anchored splice
+- [x] CRLF trap (3.1/3.3a's note): the file is fully CRLF — go in via a marker-anchored splice
       script, not hand edits, and check for stray LFs after.
-- [ ] `node scripts/sync-hook-fleet.js --write`, then check mode for zero drift.
+- [x] `node scripts/sync-hook-fleet.js --write`, then check mode for zero drift.
 
 **Verify:** `npm test` (240 hook tests as of 3cf38d3); a real PreToolUse payload smoke in a
 sandboxed `CLAUDE_PROJECT_DIR` composing at least two rules in their original order; the
@@ -277,8 +277,8 @@ on the literal "live context at end" and the RENT/BOMBS/FLEETS/TTL headers). Byt
 output is the acceptance bar, not a nicety.
 
 **Read list** (~230 lines): `this doc:273-294` ·
-`.claude/hooks/token-guard.js:2661-2790` (`analyzeSession`, the target) ·
-`:2792-2858` (`renderAnalysis` — owns the frozen wording) ·
+`.claude/hooks/token-guard.js:2738-2867` (`analyzeSession`, the target) ·
+`:2869-2935` (`renderAnalysis` — owns the frozen wording) ·
 `:472-506` (`attributeJump` — the region-attribution logic to dedupe against).
 
 - [ ] Extract the per-concern accumulators out of `analyzeSession`.
@@ -436,7 +436,7 @@ valuable and is the only "extract before you edit" move available inside a singl
 ### ☐ 3.8a · L · ~60m — token-guard: characterization test for `--report` (it has none) · [opus]
 
 **Read list** (~190 lines): `this doc:436-454` ·
-`.claude/hooks/token-guard.js:2942-3067` (`report`, to end of file — the thing being pinned) ·
+`.claude/hooks/token-guard.js:3019-3144` (`report`, to end of file — the thing being pinned) ·
 `.claude/hooks/tests/token-guard-official-usage.test.cjs` (the 1.3 fetch/credentials stub
 pattern to reuse).
 
@@ -458,7 +458,7 @@ Hard dependency: 3.8a's suite is the only safety net this function gets — do n
 it landed.
 
 **Read list** (~130 lines): `this doc:455-470` ·
-`.claude/hooks/token-guard.js:2942-3067` (`report`) · 3.8a's new test file.
+`.claude/hooks/token-guard.js:3019-3144` (`report`) · 3.8a's new test file.
 
 - [ ] Extract `allocationLines` / `sessionLines` / `formatModelRow` / `windowLines` /
       `formatWindowRow`; the dollars-vs-tokens display branch collapses into ONE place.
@@ -1032,3 +1032,56 @@ every plan in the repo invisible to `/plan-progress` and `/continue`.
     session cannot tell it was misled. Any commit that edits a god file must re-point the plan
     ranges below it in the same commit, the way a doc/rule reference is already required to be.
   - Resume point unchanged: **next → 3.3b**, on Opus 5.
+
+- **2026-07-26 — 3.3b decompose `onPreToolUse` — DONE.** Commit `b93e701`, `npm test` green
+  before and after (EXIT=0; **240** hook tests, 20 `ALL TESTS PASSED` banners), fleet sync
+  written + re-checked at zero drift, `sync-docs` regen byte-identical (nothing to commit).
+  - The CC-44 handler is now **6 lines**: a `ctx` literal plus a fold over `PRETOOL_GUARDS` =
+    [`r2WorkflowLaunchGuard`, `r8PayloadDoorGuard`, `r9MiniBombGateGuard`, `r3PostBombGateGuard`],
+    with the single exit mapping the winning guard's `kind` to `ask`/`deny`.
+  - **Deviation from 3.3a's shape, deliberate:** these guards RETURN a decision (`{kind, reason}`
+    or nothing) instead of accumulating `{notes, block}`. PreToolUse has no notes channel — it
+    asks, denies, or stays silent — so `emitBlock`'s save+block+return beat had nothing to
+    centralize here. State stays lazy (`preState(ctx)` loads on first use), which is what keeps
+    the common path — every tool call in the session — off disk, exactly as the original did.
+  - Second-level extractions the CC ≤ 9 bar forced: `gateAsk`, `skipVerdict`, `wfEstimate`,
+    `fanDecision` (R2's two-tier deny-vs-ask), `doorSizes`, `payloadAskCopy`. Measured:
+    `onPreToolUse`=5 · `preState`=2 · `gateAsk`=1 · `skipVerdict`=2 · `wfEstimate`=5 ·
+    `fanDecision`=5 · `r2WorkflowLaunchGuard`=8 · `doorSizes`=4 · `payloadAskCopy`=4 ·
+    `r8PayloadDoorGuard`=8 · `r9MiniBombGateGuard`=2 · `r3PostBombGateGuard`=2. Nothing above 8.
+  - Verify per the item: a **byte-parity smoke** — six real PreToolUse payloads, each composing
+    several rules (R2 winning over R9+R3; the R8 skill door; the R8 read door; the R9
+    accumulator; the R3 post-bomb gate; the silent fall-through) — run against the new hook AND
+    against `git show HEAD:` of the old one. All six preserved the original rule order and were
+    byte-identical old-vs-new. Ratchet baseline shrank by exactly `Function 'onPreToolUse'` in
+    the same commit. CRLF trap held: 3,144 LF = 3,144 CRLF, zero strays.
+  - The smoke's first run reported one FAIL that was **the fixture's bug, not the hook's**: R8's
+    read door got a relative path, so `readSizes` found nothing and fell through. Absolute path
+    fixed it. Worth repeating in 3.3c/3.8a — a path-shaped fixture must be absolute.
+  - **Fleet sync — the gap was 36× what the last entry saw.** Both `job-agent-extension` and
+    `wifi-app` were **219 lines** behind on token-guard.js (the 2026-07-26 entry measured 6, on
+    wifi-app only); `3cf38d3`/`52ea8c0`/`50bfb9a` widened it in between. Written and re-checked
+    at zero drift, so the dev-box pre-push guard is clear. Lesson: the drift number in a Ledger
+    entry is stale the moment another session commits — re-check, never trust the recorded one.
+  - **Read lists re-pointed in this commit** per the rule the last entry established. The file
+    grew 3,067 → **3,144**, a uniform **+77** below the edit point: 3.3c `analyzeSession`
+    `:2661-2790` → **`:2738-2867`**, `renderAnalysis` `:2792-2858` → **`:2869-2935`**; 3.8a/3.8b
+    `report` `:2942-3067` → **`:3019-3144`**; header + trap-section file size 3,067 → 3,144.
+    Re-verified as unshifted (every one sits ABOVE the edit): `meter` `:337-402`, `meterSession`
+    `:422-471`, `attributeJump` `:472-506`, `fanVerdict` `:803-873`, `workflowSource` `:874-895`,
+    `PRICES`/`CACHE_*_X` `:198-211`.
+  - **Substep spanned two sessions** — the first (`49548749`) did the whole refactor and the
+    entire Verify gate, then was interrupted at the `--write` fleet-sync call; the second
+    (`82d1afa7`, `/continue` on a mid-flight tree) re-ran the suite, synced, committed, ledgered.
+    The split cost little because the handoff was mechanical, but note the asymmetry: session 1
+    paid ~27k on `/continue`'s full-recovery path (`Read(recover-context.md)` 14k +
+    `Read(recovered-context.json)` 13k, its two largest payloads), session 2 paid ~0 by
+    extracting the transcript tail inline. A mid-flight recovery does not need the full ladder
+    when the plan doc + `git status` already say what is unfinished.
+  - rent: **4.1M processed / ≈596k effective** across both sessions (2.5M/353k over 26 requests,
+    then 1.6M/243k over 21), 47 requests, 25m wall, 95% cached both times, ending at 95k live
+    context. L ceiling ≈3M: the tag **holds on the effective figure and misses 1.4× on the
+    headline** — the same ambiguity 3.3a's entry flagged, now on a second data point. Tag left
+    at L; `.claude/rules/plan-authoring.md` still needs to say WHICH number the ceiling means.
+  - Next: 3.3c (`analyzeSession`, CC 52 — the frozen-wording trap surface).
+    Handoff: /clear → /model fable → /continue (next: 3.3c · [fable]).
