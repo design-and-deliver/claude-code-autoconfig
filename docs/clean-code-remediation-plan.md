@@ -26,7 +26,7 @@ Read exactly three slices and nothing else:
 3. the **Ledger tail** — `tail -80 docs/clean-code-remediation-plan.md`, not the whole section.
 
 Every remaining substep carries a **Read list** of exact files and line ranges. Open those
-windows only: the two hook files are 2,986 and 1,740 lines and must NEVER be read whole.
+windows only: the two hook files are 3,067 and 1,740 lines and must NEVER be read whole.
 
 **Every Ledger entry records rent.** Close it with a `rent:` line — the session's total token
 spend from the `--analyze` digest (`node .claude/hooks/token-guard.js --analyze <sid>`), e.g.
@@ -65,7 +65,7 @@ emitted at the boundary, never left to memory.
   compensating lever for hook substeps is **land the characterization test in an earlier
   substep**, then extract in-file against it.
 - **God files — Grep-then-Read-window ONLY, never opened whole:**
-  `.claude/hooks/token-guard.js` (**2,986 lines**, ~40k tokens) and
+  `.claude/hooks/token-guard.js` (**3,067 lines**, ~41k tokens) and
   `.claude/hooks/terminal-title.js` (**1,740 lines**). Six of the remaining substeps target
   them. Each substep's Read list names the windows; a whole-file read blows the session's
   budget on turn one and stays resident for every turn after.
@@ -251,10 +251,10 @@ exactly as 3.2's Ledger entry already advised executing it.
 
 ### ☐ 3.3b · L · ~2h — token-guard: decompose `onPreToolUse` (CC 44) · [opus]
 
-**Read list** (~310 lines — do NOT open token-guard.js whole, it is 2,986):
-`this doc:252-272` · `.claude/hooks/token-guard.js:2225-2418` (`onPreToolUse`, the target) ·
-`:2128-2179` (3.3a's `emitBlock` + `PROMPT_GUARDS` fold — **the template to copy**) ·
-`:2419-2462` (`ask` / `deny` — the return shapes the guards must produce). Grep, don't read,
+**Read list** (~330 lines — do NOT open token-guard.js whole, it is 3,067):
+`this doc:252-272` · `.claude/hooks/token-guard.js:2288-2498` (`onPreToolUse`, the target) ·
+`:2191-2242` (3.3a's `emitBlock` + `PROMPT_GUARDS` fold — **the template to copy**) ·
+`:2500-2543` (`ask` / `deny` — the return shapes the guards must produce). Grep, don't read,
 for the pure verdicts it already calls (`payloadVerdict`, `fanVerdict`, `commandPayloadTokens`).
 
 - [ ] Same shape as 3.3a: one guard function per rule, each `{notes, block}`, handler becomes
@@ -263,7 +263,7 @@ for the pure verdicts it already calls (`payloadVerdict`, `fanVerdict`, `command
       script, not hand edits, and check for stray LFs after.
 - [ ] `node scripts/sync-hook-fleet.js --write`, then check mode for zero drift.
 
-**Verify:** `npm test` (217 hook tests as of 3.3a); a real PreToolUse payload smoke in a
+**Verify:** `npm test` (240 hook tests as of 3cf38d3); a real PreToolUse payload smoke in a
 sandboxed `CLAUDE_PROJECT_DIR` composing at least two rules in their original order; the
 Phase 3 CC ≤ 9 bar on `onPreToolUse` + every helper; ratchet baseline shrinks by exactly the
 cleared violation in the same commit.
@@ -277,8 +277,8 @@ on the literal "live context at end" and the RENT/BOMBS/FLEETS/TTL headers). Byt
 output is the acceptance bar, not a nicety.
 
 **Read list** (~230 lines): `this doc:273-294` ·
-`.claude/hooks/token-guard.js:2580-2710` (`analyzeSession`, the target) ·
-`:2711-2777` (`renderAnalysis` — owns the frozen wording) ·
+`.claude/hooks/token-guard.js:2661-2790` (`analyzeSession`, the target) ·
+`:2792-2858` (`renderAnalysis` — owns the frozen wording) ·
 `:472-506` (`attributeJump` — the region-attribution logic to dedupe against).
 
 - [ ] Extract the per-concern accumulators out of `analyzeSession`.
@@ -391,7 +391,7 @@ passed a step that could not fit. `fanVerdict` already has its test net; `meter`
 
 **Read list** (~200 lines): `this doc:390-412` ·
 `.claude/hooks/token-guard.js:337-402` (`meter`, the target) · `:422-471` (`meterSession` —
-one of the three field-name consumers) · `:270-336` (the `PRICES` / `CACHE_*_X` block the
+one of the three field-name consumers) · `:198-211` (the `PRICES` / `CACHE_*_X` block the
 pricing fold must keep as the single source — grep `CACHE_READ_X` if the range has drifted) ·
 `.claude/hooks/tests/token-guard-official-usage.test.cjs` head for the fixture-transcript
 pattern to copy.
@@ -436,7 +436,7 @@ valuable and is the only "extract before you edit" move available inside a singl
 ### ☐ 3.8a · L · ~60m — token-guard: characterization test for `--report` (it has none) · [opus]
 
 **Read list** (~190 lines): `this doc:436-454` ·
-`.claude/hooks/token-guard.js:2861-2986` (`report`, to end of file — the thing being pinned) ·
+`.claude/hooks/token-guard.js:2942-3067` (`report`, to end of file — the thing being pinned) ·
 `.claude/hooks/tests/token-guard-official-usage.test.cjs` (the 1.3 fetch/credentials stub
 pattern to reuse).
 
@@ -458,7 +458,7 @@ Hard dependency: 3.8a's suite is the only safety net this function gets — do n
 it landed.
 
 **Read list** (~130 lines): `this doc:455-470` ·
-`.claude/hooks/token-guard.js:2861-2986` (`report`) · 3.8a's new test file.
+`.claude/hooks/token-guard.js:2942-3067` (`report`) · 3.8a's new test file.
 
 - [ ] Extract `allocationLines` / `sessionLines` / `formatModelRow` / `windowLines` /
       `formatWindowRow`; the dollars-vs-tokens display branch collapses into ONE place.
@@ -1006,3 +1006,29 @@ every plan in the repo invisible to `/plan-progress` and `/continue`.
     must record both until the rule picks one. Caveat on this datum: the session also carried
     the audit and the write-up, not just the edits.
   - Next: 3.3b (on Opus 5). Handoff: /clear → /model opus → /continue (next: 3.3b · [opus]).
+
+- **2026-07-26 — Read-list re-pointing (no substep executed).** A `/continue` aimed at 3.3b
+  found the working tree dirty and `token-guard.js` being written live by another session.
+  Stood down rather than execute; that session landed `3cf38d3` (R14 gate verdicts) and
+  `df538aa` (fleet drift direction), both of which moved the line numbers this plan points at.
+  Re-verified every token-guard range by grepping the function starts and corrected them:
+  - 3.3b `onPreToolUse` `:2225-2418` → **`:2288-2498`** (the function itself grew ~17 lines —
+    `gateVerdict` is now called at the top and `choiceBullet` renders R13b's and R14's Choice
+    bullet, so the decomposition has two more collaborators than the substep anticipated);
+    `emitBlock`/`PROMPT_GUARDS` `:2128-2179` → `:2191-2242`; `ask`/`deny` `:2419-2462` →
+    `:2500-2543`; Read-list total ~310 → ~330 lines; Verify's hook-test count 217 → **240**.
+  - 3.3c `analyzeSession` `:2580-2710` → `:2661-2790`; `renderAnalysis` `:2711-2777` →
+    `:2792-2858`. 3.8a/3.8b `report` `:2861-2986` → `:2942-3067`. File size 2,986 → **3,067**
+    lines (header line 29 + trap section + both Read lists).
+  - **Pre-existing error, unrelated to the shift:** 3.7a pointed at `:270-336` for the
+    `PRICES` / `CACHE_*_X` block, which actually lives at **`:198-211`** — 270-336 is the
+    config DEFAULTS block. Its own "grep `CACHE_READ_X` if the range has drifted" hedge is
+    what kept this from biting; corrected anyway.
+  - Unshifted and re-verified as still correct: `meter` `:337-402`, `meterSession` `:422-471`,
+    `fanVerdict` `:803-873`, `workflowSource` `:874-895`, `attributeJump` `:472-506` — every
+    one sits ABOVE the insertion point, which is why only the tail moved.
+  - **Discovery — a plan's Read lists rot silently.** Nothing in the repo checks them: they are
+    prose, so a stale range costs the executing session a wrong window and a re-read, and the
+    session cannot tell it was misled. Any commit that edits a god file must re-point the plan
+    ranges below it in the same commit, the way a doc/rule reference is already required to be.
+  - Resume point unchanged: **next → 3.3b**, on Opus 5.
