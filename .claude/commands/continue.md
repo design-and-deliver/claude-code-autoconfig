@@ -1,5 +1,5 @@
 <!-- @description Continues where your previous session in this terminal left off — recovers its context and resumes the work. Plan-aware: if that session was executing a substep of a plan doc, resumes from the plan's Ledger instead of the transcript. -->
-<!-- @version 4 -->
+<!-- @version 5 -->
 <!-- @param --show | flag | optional | Opens the recovered transcript in your default editor (no-op on a clean plan handoff — nothing is extracted). -->
 <!-- @response success | Picking up where we left off — {what we were doing}. Then the work resumes. -->
 <!-- @response plan | Picking up where we left off — {plan alias}: substep {N.k} done ({hash}); starting {next}. Then the next substep runs. -->
@@ -104,6 +104,58 @@ in one line if it was passed). Go straight to Step 6.
 commit / Ledger entry missing): the in-flight sliver lives only in the transcript — recover
 it. Continue with Step 4.
 
+## Step 3b: Concurrency gate — is a SIBLING session already on this plan?
+
+⛔ **Run this before executing any substep.** A plan doc is a shared work queue with no
+lock: nothing stops two terminals from resuming the same plan. The Ledger cannot protect
+you here — it is written *after* a substep, so a sibling mid-substep is invisible in it by
+construction, and a sibling that ran two substeps without ledgering the first makes the
+Ledger actively wrong. The dupe-session guard does not cover this either: it keys on
+*identical* titles, and two sessions routinely invent different aliases for the same plan
+("Company Fields" vs "Company info plan"). So probe for a live sibling directly —
+substituting the plan doc path resolved in Step 2:
+
+```bash
+python3 -c "
+import glob, json, os, re, time
+plan = '$PLAN_DOC'
+sid_now = os.environ.get('CLAUDE_CODE_SESSION_ID', '')
+STOP = {'plan','plans','doc','docs','the','and','for','with'}
+def toks(s):
+    return {w for w in re.split(r'[^a-z0-9]+', s.lower()) if len(w) > 2 and w not in STOP}
+want = toks(os.path.basename(plan))
+hits = {}
+for d in ['.claude/hooks/.titles', os.path.expanduser('~/.claude/hooks/.titles')]:
+    for g in glob.glob(os.path.join(d, '*.glyph')):
+        sid = os.path.basename(g)[:-6]
+        if sid == sid_now or sid in hits: continue
+        if time.time() - os.path.getmtime(g) > 180: continue   # same liveness bar as the dupe guard
+        title = ''
+        h = os.path.join(d, sid + '.history.jsonl')
+        if os.path.exists(h):
+            lines = [l for l in open(h, encoding='utf-8', errors='replace') if l.strip()]
+            if lines:
+                try: title = json.loads(lines[-1]).get('title', '') or ''
+                except Exception: pass
+        if toks(title.split('—')[0]) & want:
+            hits[sid] = (title.strip(), open(g, encoding='utf-8', errors='replace').read().strip())
+for sid, (title, glyph) in hits.items():
+    print('LIVE_SIBLING sid=%s glyph=%s title=%s' % (sid[:8], glyph, title))
+print('NO_LIVE_SIBLING' if not hits else 'SIBLING_COUNT=%d' % len(hits))
+"
+```
+
+The match is deliberately loose (any distinctive word shared between the sibling's title
+scope and the plan's filename) — a false positive costs one sentence of reporting, a false
+negative costs duplicated work and a merge conflict.
+
+- `NO_LIVE_SIBLING` → proceed to Step 4/6 as resolved.
+- One or more `LIVE_SIBLING` lines → **STOP. Do not execute a substep, do not edit the plan
+  doc, do not touch the working tree.** Report: the sibling's sid, its title, and what git
+  actually shows (`git log --oneline -5` and `git status --short`, in every repo the plan's
+  phases commit to — a done substep's commit may live in another repo entirely). Then ask
+  the user how to proceed rather than choosing for them; standing down is the default.
+
 ## Step 4: Full recovery (not plan-driven, or mid-flight)
 
 Read `.claude/commands/recover-context.md` (fall back to `~/.claude/commands/recover-context.md`
@@ -152,8 +204,9 @@ Never re-do work the tail (or git) already shows as done.
 
 ## Step 6: Resume (plan-driven session)
 
-The plan doc is already read and the Ledger/git reconciliation done (Step 3). Open your
-reply with the same line, plan-flavored:
+The plan doc is already read, the Ledger/git reconciliation done (Step 3), and the
+concurrency gate cleared (Step 3b — if it did not clear, you already stopped there). Open
+your reply with the same line, plan-flavored:
 
 > **Picking up where we left off** — {plan alias}: substep {N.k} done ({hash}); starting {N.next}.
 
@@ -167,5 +220,7 @@ Then act by Step 3's state:
 - **Plan complete** (every substep checked): say so in one line, then ask what's next.
 
 Traps: never re-do a substep the Ledger + git already show done; never run two substeps in
-one session (one-substep-per-fresh-session is the plan's token-hygiene lever); where the doc
-and the code disagree, trust git and fix the doc.
+one session (one-substep-per-fresh-session is the plan's token-hygiene lever — and skipping
+the intermediate Ledger entry is what makes the next session's handoff lie); where the doc
+and the code disagree, trust git and fix the doc; a plan doc is a shared queue with no lock,
+so Step 3b's gate is not optional.
