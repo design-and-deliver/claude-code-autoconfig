@@ -145,9 +145,12 @@
  *   cache writes at full weight, cache re-reads at 0.1x (their billing weight): unweighted,
  *   re-reads are rent — context size × round trips — and cross 1M in ~16 ordinary tool calls
  *   at a 60k context with zero heavy work, so the gate would fire on routine turns instead of
- *   spirals. Re-arms at the next gate-width within the same turn; every prompt resets the
- *   baseline. Copy is TOKEN-denominated on every billing kind — task size is work volume,
- *   not price. null disables.
+ *   spirals. Re-arms above the observed spend at a width that DOUBLES on each same-turn fire
+ *   (base, 2x, 4x…) and the copy names the repeat ("3rd check this turn") — a flat step turned
+ *   the gate into wallpaper: five byte-identical modals inside one 48-minute turn, approved
+ *   every time (observed 2026-07-25, session c9ad7711, turnGateAt walked 1M -> 6M). Every
+ *   prompt resets both the baseline and the fire count. Copy is TOKEN-denominated on every
+ *   billing kind — task size is work volume, not price. null disables.
  *   turnRentGateTokens 1000000 — R14: hard ask when a single TURN's cache RE-READS cross this.
  *   The deliberate mirror of the sentence above: R13b discounts re-reads 10x so it can judge
  *   TASK SIZE, which by construction blinds it to the bill — a turn can do 83k of ordinary work
@@ -156,8 +159,8 @@
  *   money, so it gets its own unweighted gate. The copy leads with round trips x context rather
  *   than a raw total, because the lever is context size, not task length — and unlike the
  *   fat-context advisory (UserPromptSubmit, once per prompt) this one re-checks mid-turn, which
- *   is the only place rent accrues. Re-arms at the next gate-width within the turn; every
- *   prompt resets the baseline. null disables.
+ *   is the only place rent accrues. Same geometric re-arm and repeat-naming copy as R13b above;
+ *   every prompt resets the baseline and the fire count. null disables.
  *   planSteer true — R13a: one-line every-prompt steer telling Claude to gauge the request's
  *   blast radius FIRST and propose a plan (session-sized substeps) before starting work that
  *   plausibly exceeds ~3× a normal task. The predictive half a meter can't do: the hook stages
@@ -1039,8 +1042,8 @@ function loadState(projectDir, sid) {
     approvedPayloadHop: null, payloadGateOkOnce: null,
     turnPayloadTok: 0, turnPayloadWarned: false, miniBombGateArmed: false,
     lastWindowPct: null, lastWindowResetsAt: null, lastWindowAtIso: null, warnedWindow: null,
-    lastTurnDeltaUsd: 0, turnStartWorkTok: null, turnGateAt: null,
-    turnStartCr: null, turnStartReqs: null, rentGateAt: null };
+    lastTurnDeltaUsd: 0, turnStartWorkTok: null, turnGateAt: null, turnGateFires: 0,
+    turnStartCr: null, turnStartReqs: null, rentGateAt: null, rentGateFires: 0 };
   try {
     return Object.assign(blank,
       JSON.parse(fs.readFileSync(path.join(stateDir(projectDir), `${sid}.json`), 'utf8')));
@@ -1674,6 +1677,26 @@ function windowThresholdGateReason(tv) {
 
 const fmtUSD = v => `$${v.toFixed(2)}`;
 const fmtK = v => v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1000 ? `${Math.round(v / 1000)}k` : `${v}`;
+// 1st/2nd/3rd/4th — only ever used for a same-turn gate repeat count, so n is small; the
+// 11/12/13 case is still handled because getting it wrong is more distracting than the rule.
+const ordinal = n => {
+  const r100 = n % 100;
+  if (r100 >= 11 && r100 <= 13) return `${n}th`;
+  return `${n}${['th', 'st', 'nd', 'rd'][n % 10] || 'th'}`;
+};
+// Shared "when do I hear from this gate again" clause for the two in-turn tripwires (R13b work,
+// R14 rent). The gate WIDTH doubles on every same-turn fire, so the copy has to say so — a flat
+// step produced five byte-identical modals inside one 48-minute turn (observed 2026-07-25:
+// turnGateAt walked 1M -> 6M in session c9ad7711, approved every time). Five identical asks are
+// a keystroke, not a decision; two or three escalating ones stay a decision. The first fire
+// keeps the plain forward-looking phrasing — there is no repeat to name yet.
+const nextCheckClause = (fires, nextAt, unit = '') => fires <= 1
+  ? ` Next check ≈ ${fmtK(nextAt)}${unit} this turn.`
+  : ` This is the ${ordinal(fires)} check this turn — each approval doubles the gap to the ` +
+    `next (≈ ${fmtK(nextAt)}${unit}).`;
+// Geometric re-arm: width = base × 2^(fires-1), measured from what was actually observed (so a
+// single huge landing can never re-fire on the very next tool call). fires counts THIS fire.
+const reArmAt = (observed, base, fires) => observed + base * Math.pow(2, fires - 1);
 // total tokens PROCESSED (in + out + cache read/write) — the unit user-facing check-ins lead
 // with. Deliberately unweighted; the dollar figure beside it carries the per-model weighting.
 const tokOne = v => v.inp + v.out + v.cr + v.cw;
@@ -2129,9 +2152,10 @@ async function onUserPromptSubmit(data, projectDir) {
   if (!m.main.turns) return; // brand-new session — nothing to say
   // R13b — new turn: re-baseline the turn-spend meter and disarm any same-turn re-arm.
   // (Turn 1 of a brand-new session never reaches here — PreToolUse lazy-arms the baseline.)
-  st.turnStartWorkTok = workTokens(m); st.turnGateAt = null;
+  st.turnStartWorkTok = workTokens(m); st.turnGateAt = null; st.turnGateFires = 0;
   // R14 — same re-baseline for the rent meter (re-reads + round trips since this prompt).
   st.turnStartCr = crTokens(m); st.turnStartReqs = m.main.turns; st.rentGateAt = null;
+  st.rentGateFires = 0;
   ctx.m = m;
   ctx.usd$ = wantDollars(cfg); // false => tokens-only copy (subscription users)
 
@@ -2315,14 +2339,15 @@ function onPreToolUse(data, projectDir) {
       const turnTok = nowTok - st.turnStartWorkTok;
       const tGate = st.turnGateAt != null ? st.turnGateAt : cfg.turnGateTokens;
       if (turnTok >= tGate) {
-        // Re-arm ABOVE the observed spend, not one notch up — a single huge landing must not
-        // re-fire the gate on the very next tool call.
-        st.turnGateAt = (Math.floor(turnTok / cfg.turnGateTokens) + 1) * cfg.turnGateTokens;
+        // Re-arm ABOVE the observed spend, at a width that DOUBLES each same-turn fire — see
+        // nextCheckClause for why a flat step stopped working.
+        st.turnGateFires = (st.turnGateFires || 0) + 1;
+        st.turnGateAt = reArmAt(turnTok, cfg.turnGateTokens, st.turnGateFires);
         saveState(projectDir, sid, st);
         return ask('PreToolUse',
           `⚠️ Hey — this ONE turn has burned ~${fmtK(turnTok)} tokens; a normal task finishes ` +
           `under ~${fmtK(TASK_NORM_TOK)}, so the work has likely spiraled well past what was ` +
-          `anticipated. Approve to push on (next check ≈ ${fmtK(st.turnGateAt)} this turn) — ` +
+          `anticipated.${nextCheckClause(st.turnGateFires, st.turnGateAt)} Approve to push on — ` +
           `or deny, and Claude should stop and propose a plan with session-sized substeps.`);
       }
     }
@@ -2345,9 +2370,11 @@ function onPreToolUse(data, projectDir) {
     const rent = crTokens(m) - st.turnStartCr;
     const rGate = st.rentGateAt != null ? st.rentGateAt : cfg.turnRentGateTokens;
     if (rent >= rGate) {
-      // Re-arm ABOVE the observed rent (same rule as R13b — one huge landing must not re-fire
-      // on the very next tool call).
-      st.rentGateAt = (Math.floor(rent / cfg.turnRentGateTokens) + 1) * cfg.turnRentGateTokens;
+      // Re-arm ABOVE the observed rent, doubling the width each same-turn fire (same rule as
+      // R13b — one huge landing must not re-fire on the very next tool call, and repeats must
+      // get rarer rather than becoming wallpaper).
+      st.rentGateFires = (st.rentGateFires || 0) + 1;
+      st.rentGateAt = reArmAt(rent, cfg.turnRentGateTokens, st.rentGateFires);
       saveState(projectDir, sid, st);
       const reqs = Math.max(1, m.main.turns - (st.turnStartReqs || 0));
       // Work = the turn's work tokens minus the 0.1x-weighted rent already inside them, i.e.
@@ -2359,10 +2386,10 @@ function onPreToolUse(data, projectDir) {
         `⚠️ Hey — this turn has made ${reqs} round trip${reqs === 1 ? '' : 's'} carrying ` +
         `~${fmtK(m.liveContext)} of ` +
         `context: ~${fmtK(rent)} tokens of re-reads${vs}. That is rent, not progress, and it ` +
-        `compounds every trip — the lever is a smaller resident context, not a shorter task. ` +
-        `Approve to push on (next check ≈ ${fmtK(st.rentGateAt)} of re-reads this turn) — or ` +
-        `deny, and Claude should land this turn at a commit point so you can /clear + /continue ` +
-        `carrying only the next step.`);
+        `compounds every trip — the lever is a smaller resident context, not a shorter task.` +
+        `${nextCheckClause(st.rentGateFires, st.rentGateAt, ' of re-reads')} Approve to push on — ` +
+        `or deny, and Claude should land this turn at a commit point so you can /clear + ` +
+        `/continue carrying only the next step.`);
     }
   }
 
