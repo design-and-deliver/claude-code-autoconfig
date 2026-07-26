@@ -1,5 +1,5 @@
 <!-- @description Continues where your previous session in this terminal left off — recovers its context and resumes the work. Plan-aware: if that session was executing a substep of a plan doc, resumes from the plan's Ledger instead of the transcript. -->
-<!-- @version 5 -->
+<!-- @version 6 -->
 <!-- @param --show | flag | optional | Opens the recovered transcript in your default editor (no-op on a clean plan handoff — nothing is extracted). -->
 <!-- @response success | Picking up where we left off — {what we were doing}. Then the work resumes. -->
 <!-- @response plan | Picking up where we left off — {plan alias}: substep {N.k} done ({hash}); starting {next}. Then the next substep runs. -->
@@ -87,8 +87,17 @@ the session NOT plan-driven — then skip to Step 4 (full recovery).
 
 ## Step 3: Plan gate — clean handoff or mid-flight?
 
-Read the plan doc IN FULL — its standing trap warnings, the substep checklist, and the
-`## Ledger`. Then reconcile three sources:
+Read the plan doc **in slices, never whole** — a mature plan runs 800+ lines and more than half
+of that is Ledger, which a full read makes resident for every remaining request in the session.
+Take exactly three slices:
+
+- the **⛔ standing trap warnings** (the plan's header names their line range),
+- the **substep checklist** — `grep -n '^#\{2,4\} [☑☐]' <plan>` for the map, then read only the
+  next unchecked substep's body,
+- the **Ledger tail** — `tail -80 <plan>`, not the whole section.
+
+If the plan's header carries its own read-in-slices instruction (the plan-authoring convention),
+follow that instead — it names exact ranges. Then reconcile three sources:
 
 - the Ledger's latest entry (which substep, which commit hash),
 - `git log --oneline -15` (does that hash exist? a Ledger entry with NO hash counts as
