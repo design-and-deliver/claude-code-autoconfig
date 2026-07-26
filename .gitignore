@@ -39,6 +39,8 @@ ARTICLES/
 # Local feature pilots / experiments (not distributed)
 pilots/
 
-# Per-machine terminal-title fleet list (personal repo paths — never committed;
-# see scripts/sync-terminal-title.js)
+# Per-machine hook fleet list (personal repo paths — never committed;
+# see scripts/sync-hook-fleet.js). Both names: the second is the terminal-title-era
+# original, still read as a fallback so an existing box needs no migration.
+scripts/hook-fleet.local.json
 scripts/terminal-title-fleet.local.json

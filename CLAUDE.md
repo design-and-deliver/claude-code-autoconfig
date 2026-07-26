@@ -127,22 +127,27 @@ lives there, and those tests do NOT run any other way).
 
 `.git/hooks/` is untracked, so this hook lives only on the dev box — it is **not** shipped and
 **not** committed. It is the one mechanical guard for the fleet-parity class that CI structurally
-cannot see: `live-twin-parity.test.js` skips on CI, so CI green never proves the terminal-title
-fleet is in sync (see trap 5 / T8 below). The hook blocks a push unless `npm test` passes AND
-`node scripts/sync-terminal-title.js` (check mode) reports zero drift.
+cannot see: `live-twin-parity.test.js` skips on CI, so CI green never proves the hook fleet is in
+sync (see trap 5 / T8 below). The hook blocks a push unless `npm test` passes AND
+`node scripts/sync-hook-fleet.js` (check mode) reports zero drift.
+
+Since 2026-07-25 it checks the whole manifest (terminal-title + token-guard), not just
+terminal-title — token-guard is the file that actually drifted 231 lines, precisely because
+nothing checked it. A blocked push means an adopting repo is stale: run
+`node scripts/sync-hook-fleet.js --write`, commit the target repo, push again.
 
 On a fresh checkout, recreate `.git/hooks/pre-push` (then `chmod +x` it):
 
 ```sh
 #!/bin/sh
 # CCA dev-box pre-push guard (see CLAUDE.md). Not tracked; recreate on a fresh checkout.
-# Blocks a push unless the full suite passes AND the terminal-title fleet is in sync
+# Blocks a push unless the full suite passes AND the canonical hook fleet is in sync
 # (the parity class CI cannot see — live-twin-parity.test.js skips on CI).
 set -e
 echo "[pre-push] running full test suite (npm test)..."
 npm test
-echo "[pre-push] checking terminal-title fleet sync..."
-node scripts/sync-terminal-title.js
+echo "[pre-push] checking hook fleet sync..."
+node scripts/sync-hook-fleet.js
 echo "[pre-push] OK - tests green, fleet in sync."
 ```
 
@@ -156,10 +161,16 @@ and a green feeling, then breaks something real:
   trailers or its OVERRIDES map). `.claude/docs/autoconfig.docs.html` is rebuilt by
   `node .claude/scripts/sync-docs.js`, which locates exact string markers inside that HTML —
   reformatting the file breaks the next sync.
-- **`.claude/hooks/terminal-title.js` here is the canonical copy.** Edit only this one, then
-  run `node scripts/sync-terminal-title.js --write` to push it to `~/.claude` and the fleet.
+- **The `.claude/hooks` copies here are the canonical ones** — `terminal-title.js`,
+  `terminal-title.directive.md`, and `token-guard.js` (the manifest in
+  `scripts/sync-hook-fleet.js`). Edit only these, then run
+  `node scripts/sync-hook-fleet.js --write` to push them to `~/.claude` and the fleet.
   Never edit a copy — the next sync clobbers it; drift fails `live-twin-parity.test.js` on
-  this machine (the test skips on CI, so CI green ≠ parity ok).
+  this machine (the test skips on CI, so CI green ≠ parity ok). Syncing is **adopt-only**: a
+  target that doesn't already have the file is skipped, never created, so a repo never
+  acquires a hook by sync (that's the installer's job, and an unwired hook reads as adoption
+  while doing nothing). `scripts/sync-terminal-title.js` still works — it is now a thin
+  front-end over the same code, kept because plan and audit docs name it.
 - **Dev-only gating lives in `DEV_ONLY_FILES` (bin/cli.js), NOT package.json `files`.** The
   npm `files` negations only shape the tarball; anything absent from `DEV_ONLY_FILES` is
   installed into every user project. token-guard + its commands are deliberately gated —
