@@ -49,6 +49,14 @@ are no-ops — there the Ledger entry itself is the durable record, so skip thos
    alone passed a substep that then burned 1.7M tokens in six minutes (2026-07-25), because the
    cost was in the write→test→fix loop, not the reading.
 
+   **Rent ceiling — S ≈ 0.5M · M ≈ 1.5M · L ≈ 3M tokens.** This is the only budget you can
+   *verify after the fact* — read it off the session's own token usage (or
+   `token-guard.js --analyze <sid>` where that hook is installed); the other four are
+   authoring-time estimates. Deliberately round — they are derived from the round-trip caps against measured
+   resident context, not fitted, so false precision would be dishonest. Read them as tripwires,
+   not allowances: **most substeps should be M**, and a step landing near L's 3M is telling you
+   it wanted to be two steps. Recheck a done substep against its tag and correct the tag.
+
    **The `~<time>` grammar is machine-parsed** (`/plan-progress`'s SUBSTEP regex is the
    contract): a single `~<N>m` or `~<N>h` token — `~45m`, `~2h`, `~1.5h` — with the ` — `
    IMMEDIATELY after it. `~45 min`, `~2 hr`, `~2h each`, or `~2h (split a/b)` all fail the
