@@ -107,6 +107,29 @@ test('check mode reports drift without touching the file; --write then fixes it'
   assert(syncFleet({ targets: [t] }).drifted === 0, 're-check must report a clean fleet');
 });
 
+// The label is the only signal a check-mode run gives about HOW stale a target is, so its
+// direction is load-bearing: it is what tells you whether to sync now or after the next commit.
+test('"N lines behind" counts what the target LACKS, not what --write would drop', () => {
+  const t = target({ 'token-guard.js': STALE });
+  const line = syncFleet({ files: ['token-guard.js'], targets: [t] })
+    .lines.find(l => l.includes('[DRIFT]'));
+  const n = Number((/(\d+) lines behind/.exec(line) || [, '0'])[1]);
+  const canonLines = norm(canonOf('token-guard.js')).split('\n').length;
+  // A one-line target lacks essentially all of canonical. Measured the other way round it lacks
+  // "1" — the junk line canonical doesn't have — which is how a 340-line drift read as "5".
+  assert(n > canonLines / 2,
+    `a one-line target must read as far behind; got ${n} of ${canonLines} canonical lines`);
+});
+
+test('a target holding every canonical line but still differing reads as local edits', () => {
+  const t = target({ 'token-guard.js': canonOf('token-guard.js') + '\n// a local tweak\n' });
+  const r = syncFleet({ files: ['token-guard.js'], targets: [t] });
+  assert(r.drifted === 1, `a locally-edited copy must still count as drift, got ${r.drifted}`);
+  const line = r.lines.find(l => l.includes('[DRIFT]'));
+  assert(/local edits only/.test(line), `expected a local-edits label, got: ${line.trim()}`);
+  assert(!/lines behind/.test(line), `it lacks nothing, so it is not behind: ${line.trim()}`);
+});
+
 test('the files filter scopes the run (sync-terminal-title.js must not touch token-guard)', () => {
   const t = target({ 'terminal-title.js': STALE, 'token-guard.js': STALE });
   syncFleet({

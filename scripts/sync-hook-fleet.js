@@ -68,9 +68,16 @@ function readLocalFleet() {
 
 const norm = s => s.replace(/\r/g, '');                       // CRLF-proof comparison
 const readOr = f => { try { return fs.readFileSync(f, 'utf8'); } catch (_) { return null; } };
-const driftLines = (a, b) => {                                // rough count of lines in b not in a
-  const setA = new Set(norm(a).split('\n'));
-  return norm(b).split('\n').filter(l => !setA.has(l)).length;
+// How far a target is BEHIND: the canonical lines it does not have yet — i.e. roughly what a
+// --write would bring in. Rough on purpose (a set membership test, so a line repeated elsewhere
+// in the target counts as present); an exact diff would be precision this label cannot use.
+// The arguments used to be handed over the other way round, which measured the lines the target
+// would LOSE and let a badly stale copy read as nearly current — wifi-app sat ~340 lines net
+// behind canonical and was labelled "5 lines behind" (2026-07-26). Direction IS the number here,
+// so the parameters are named rather than positional-by-convention.
+const linesBehind = (current, canonical) => {
+  const have = new Set(norm(current).split('\n'));
+  return norm(canonical).split('\n').filter(l => !have.has(l)).length;
 };
 
 // Resolve to a comparable absolute form — the --only filter compares a project dir against
@@ -137,14 +144,18 @@ function applyOne(target, entry, canonText, mode, say, tally) {
     return;
   }
   const created = verdict === 'create';
-  const n = created ? norm(canonText).split('\n').length : driftLines(canonText, cur);
+  const n = created ? norm(canonText).split('\n').length : linesBehind(cur, canonText);
+  // n === 0 on an updating pair means the target holds every canonical line and still differs:
+  // it is not behind, it has local edits (which --write reverts). Saying "0 lines behind" of a
+  // file that is about to change would read as a broken counter.
+  const amount = n ? `${n} lines` : 'local edits';
   if (mode.write) {
     fs.writeFileSync(path.join(target.dir, entry.file), canonText);
-    say(`  [sync]  ${label} ${created ? 'created' : 'updated'} (${n} lines)`);
+    say(`  [sync]  ${label} ${created ? `created (${n} lines)` : `updated (${amount})`}`);
     tally.wrote++;
     return;
   }
-  say(`  [DRIFT] ${label} ${created ? 'absent' : `${n} lines behind`}`);
+  say(`  [DRIFT] ${label} ${created ? 'absent' : (n ? `${n} lines behind` : 'local edits only')}`);
   tally.drifted++;
 }
 
