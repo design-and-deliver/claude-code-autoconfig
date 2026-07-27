@@ -1,25 +1,30 @@
-# Plan authoring rules
+# Plan authoring — session-sized steps + handoff ledger
 
-Any multi-session remediation/feature plan written in this repo (e.g. by /up-to-snuff) follows
-this structure. The plan is a self-contained doc a fresh session can execute with zero prior
-conversation context.
+Applies whenever authoring a multi-phase plan/spec doc that will be executed across more than
+one session (e.g. by /up-to-snuff). The plan is a self-contained doc a fresh session can execute
+with zero prior conversation context.
 
-**This file is CANONICAL.** Sibling repos (job-agent-extension, etc.) keep a copy at
-`.claude/rules/plan-authoring.md` — edit this one, then port. The two copies drifted apart
-between 2026-06 and 2026-07-25 and neither was a superset; don't let that happen again.
+**This file is CANONICAL and repo-agnostic — keep it that way.** Adopting repos hold a
+byte-identical copy at `.claude/rules/plan-authoring.md`, kept in sync by
+`scripts/sync-hook-fleet.js` (CCA is the source; a repo without the file is not adopting it and
+is never given one). So: edit THIS copy, then run the actuator — a hand-edit in an adopting repo
+is reverted by the next `--write`. Repo-specific facts (which files are the god files, what the
+test command is) belong in that repo's plan docs and CLAUDE.md, **not here**; hand-porting is
+exactly what let the two copies drift apart between 2026-06 and 2026-07-25 with neither a
+superset.
 
 ## Where plans live
 
 `docs/*.md` (tracked — Ledger history rides in git) or `.claude/plans/*.md` (local working
-plans; gitignored in this repo). Tooling that discovers plans (/continue's plan probe,
+plans, gitignored in some repos). Tooling that discovers plans (/continue's plan probe,
 /plan-progress) must scan BOTH directories. A gitignored plan's Ledger-only "commit" steps
 are no-ops — there the Ledger entry itself is the durable record, so skip those commits.
 
 ## Structure
 
 1. **Header**: goal, links to source audits/evidence, and "how to execute" (one substep per
-   fresh session; Verify; commit; Ledger entry; then `/clear` + `/continue` — /continue is
-   plan-aware: it detects the plan-substep session via the title history, reads the Ledger,
+   fresh session; Verify; commit; Ledger entry; then `/clear` + `/continue` — /continue (v2+)
+   is plan-aware: it detects the plan-substep session via the title history, reads the Ledger,
    verifies the last commit hash against git, and resumes at the next unchecked substep.
    Fallback where /continue is absent: start a fresh session pointed at the plan doc).
    The header also carries the **read-this-doc-in-slices instruction**: name the ⛔ trap
@@ -27,16 +32,16 @@ are no-ops — there the Ledger entry itself is the durable record, so skip thos
    tail, never the whole plan (see Read budget).
 2. **⛔ Standing trap warnings** section at the top: the "never do X" list a fresh session must
    read before ANY item — load-bearing conventions where an innocent refactor runs clean and
-   breaks at runtime.
+   breaks at runtime. Name this repo's god files here too (see Read budget below).
 3. **Phases ordered by protection per effort**:
    - Phase 1 — stop the repo from lying (dead code, wrong docs; cheap, no product logic)
    - Phase 2 — make wrong edits fail loudly (tests wired in, CI, lint/type gaps closed)
    - Phase 3 — shrink the god files (per-domain, incremental, each substep shippable)
 4. **Session-sized substeps** (N.1, N.2 …) with checkboxes: each executable start-to-finish in
    one fresh session, ending with a **Verify** step (actual commands, not "check it works") and
-   a commit point (subject + `Changelog:` trailer per CLAUDE.md's changelog rules). Every substep
-   heading carries an **effort tag** — `### ☐ N.N · <S|M|L> · ~<time> — <title>` — so a fresh
-   session (and the reader) knows the weight before opening it:
+   a commit point (subject plus whatever trailer the repo's own changelog rules require). Every
+   substep heading carries an **effort tag** — `### ☐ N.N · <S|M|L> · ~<time> — <title>` — so a
+   fresh session (and the reader) knows the weight before opening it:
 
    | Size | Shape | Read budget | Write budget | Round trips | Rough time |
    |------|-------|-------------|--------------|-------------|-----------|
@@ -86,8 +91,7 @@ are no-ops — there the Ledger entry itself is the durable record, so skip thos
    **Commit** lines stay prose, outside the count.
 5. **Deferred** section: options considered and deliberately not planned, with reasons — so a
    later session doesn't "helpfully" do them.
-6. **Ledger** at the bottom, appended after each substep: date — step — outcome (+ commit
-   hash), deviations, discoveries with `file:line` pointers, notes a later step needs.
+6. **Ledger** at the bottom (see below).
 
 ## Why the session boundary is the lever
 
@@ -131,8 +135,9 @@ and an edit invalidates the read so it often gets paid twice.
   ~20k of resident context across ~18 requests ≈ **360k of rent in one session**, more than
   splitting the substep would have saved. It is the cheapest change on this page.
 - **Whole-file reads only under ~800 lines.** Above that: Grep to locate, then Read a window
-  around the hit. State the big files by name in the ⛔ trap section — e.g. *`background.ts`
-  (4,581 lines) is Grep-then-Read-window only, never opened whole.*
+  around the hit. Name the god files in the ⛔ trap section, with their line counts and the
+  verdict spelled out — e.g. *`background.ts` (4,581 lines): **Grep-then-Read-window only, never
+  opened whole.*** A plan that says "the modal" instead of naming it has not budgeted the read.
 - **The Read list is part of the size tag** (see the table above). A substep whose Read list
   totals more than ~2,000 lines sizes XL by definition — and there is no XL. Split it.
 - **Extract before you edit.** If a substep needs new logic to live inside a god file, write
@@ -144,14 +149,29 @@ and an edit invalidates the read so it often gets paid twice.
   a file (fixtures dir, scratchpad) and surface only a short key summary. The plan references
   the path; it never inlines the report, and the executing session never prints raw JSON.
 
+## Ledger (required section at the bottom of every plan)
+
+A `## Ledger` section, **appended to after each substep runs** — it is what a fresh session
+reads instead of re-grepping:
+
+- date — step — outcome (+ commit hash)
+- deviations from the written plan
+- discoveries with `file:line` pointers
+- notes/dependencies a LATER step needs
+
+Keep entries to a few lines. Checkbox annotations mark *that* an item is done; the ledger
+carries *what the next session must know*.
+
 ## Safety rails (bake into the items, don't just state them)
 
 - Docs vs code disagree → **fix the docs to match the code**, never the reverse.
-- This package has production users: any stored-state / API / serialized shape is
-  **additive-only** (no renames, no type changes, no reordering) — flag violations instead of
-  writing them as plan items.
+- Prior versions are live in the wild wherever the repo ships to users: any stored-state / API /
+  serialized shape is **additive-only** (no renames, no type changes, no reordering) — flag
+  violations instead of writing them as plan items. Where the repo has its own compatibility
+  rule (`.claude/rules/backwards-compat-prod.md` and the like), that rule's checklist governs.
 - Every "delete dead code" item embeds its own **re-verify grep** (zero live references) — an
   audit's word alone is not enough.
 - Deleting/renaming a file that a doc or rule references → update that doc **in the same
   substep**.
-- Every substep assumes `npm test` starts green and requires it green before its commit.
+- Every substep assumes the repo's full test command starts green and requires it green before
+  its commit.

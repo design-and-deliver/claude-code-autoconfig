@@ -80,7 +80,10 @@ test('the paired directive IS created next to an adopted terminal-title.js', () 
   assert(inSync(t, 'terminal-title.js'), 'terminal-title.js must be brought to canonical');
   assert(inSync(t, 'terminal-title.directive.md'), 'its directive must be created (fleet gap)');
   assert(read(t, 'token-guard.js') === null, 'an unadopted token-guard must NOT be created');
-  assert(r.wrote === 2 && r.missing === 1, `expected 2 written / 1 skipped, got ${r.wrote}/${r.missing}`);
+  // Counted against the manifest rather than a literal, so growing the fleet doesn't fail a
+  // test that is really asserting "exactly the pair moved, nothing else did".
+  assert(r.wrote === 2 && r.missing === MANIFEST.length - 2,
+    `expected 2 written / the rest skipped, got ${r.wrote}/${r.missing}`);
 });
 
 test('token-guard.js is never pushed to the global (~/.claude) target', () => {
@@ -128,6 +131,53 @@ test('a target holding every canonical line but still differing reads as local e
   const line = r.lines.find(l => l.includes('[DRIFT]'));
   assert(/local edits only/.test(line), `expected a local-edits label, got: ${line.trim()}`);
   assert(!/lines behind/.test(line), `it lacks nothing, so it is not behind: ${line.trim()}`);
+});
+
+// --- manifest entries that live outside .claude/hooks (`subdir`) ------------------------------
+// The fleet file records each target as its .claude/hooks dir, so a rules entry has to resolve
+// as that dir's SIBLING. Getting this wrong is silent: the sync reports success while the file
+// lands in the hooks dir and the rule the repo actually reads never changes.
+
+// A throwaway repo with the real .claude/<hooks|rules> shape; `dir` is the hooks dir, exactly
+// as a hand-written fleet entry records it.
+function repoTarget(tree, opts) {
+  const o = opts || {};
+  const label = o.label || `r${++seq}`;
+  const root = path.join(tmpRoot, label, '.claude');
+  const dir = path.join(root, 'hooks');
+  for (const sub of Object.keys(tree || {})) {
+    fs.mkdirSync(path.join(root, sub), { recursive: true });
+    for (const name of Object.keys(tree[sub])) {
+      fs.writeFileSync(path.join(root, sub, name), tree[sub][name]);
+    }
+  }
+  fs.mkdirSync(dir, { recursive: true });
+  return { label, dir, root, isGlobal: o.isGlobal === true };
+}
+const readIn = (t, sub, f) => {
+  try { return fs.readFileSync(path.join(t.root, sub, f), 'utf8'); } catch (_) { return null; }
+};
+const canonRule = f => fs.readFileSync(path.join(__dirname, '..', '.claude', 'rules', f), 'utf8');
+
+test('a rules entry syncs into .claude/rules — NOT into the hooks dir the fleet points at', () => {
+  const t = repoTarget({ rules: { 'plan-authoring.md': STALE } });
+  const r = syncFleet({ write: true, files: ['plan-authoring.md'], targets: [t] });
+  assert(r.wrote === 1, `the adopted rule must sync, wrote ${r.wrote}`);
+  assert(norm(readIn(t, 'rules', 'plan-authoring.md') || '') === norm(canonRule('plan-authoring.md')),
+    '.claude/rules/plan-authoring.md must end up byte-identical to canonical');
+  assert(readIn(t, 'hooks', 'plan-authoring.md') === null,
+    'it must NOT be written into .claude/hooks (the dir the fleet file records)');
+  assert(syncFleet({ files: ['plan-authoring.md'], targets: [t] }).drifted === 0,
+    're-check must read the rule back from the same place it wrote it');
+});
+
+test('ADOPT-ONLY holds across the subdir: hooks adoption does not pull in the rule', () => {
+  const t = repoTarget({ hooks: { 'token-guard.js': STALE }, rules: {} });
+  syncFleet({ write: true, targets: [t] });
+  assert(norm(readIn(t, 'hooks', 'token-guard.js') || '') === norm(canonOf('token-guard.js')),
+    'the adopted hook must still sync');
+  assert(readIn(t, 'rules', 'plan-authoring.md') === null,
+    'an existing-but-empty rules dir is not adoption — the rule must NOT be created');
 });
 
 test('the files filter scopes the run (sync-terminal-title.js must not touch token-guard)', () => {
