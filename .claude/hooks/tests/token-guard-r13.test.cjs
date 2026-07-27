@@ -59,7 +59,9 @@ test('R13b fires once a turn crosses the gate — token copy, no $, re-arms abov
   assert.match(out.permissionDecisionReason, /ONE turn has burned ~300k tokens/);
   // The plan steer now straddles two bullets: the Lever names it, the Choice acts on it.
   assert.match(out.permissionDecisionReason, /plan with session-sized substeps/);
-  assert.match(out.permissionDecisionReason, /propose that plan/);
+  // "propose" when the Choice bullet is neutral, "proposes" when it leads with a recommendation
+  // and reuses the deny tail — either way the plan steer has to survive to the ask.
+  assert.match(out.permissionDecisionReason, /proposes? that plan/);
   assert.doesNotMatch(out.permissionDecisionReason, /\$/);
   // Structure (2026-07-26): headline reading, then ONE bullet per thought — same shape as R14.
   const lines = out.permissionDecisionReason.split('\n');

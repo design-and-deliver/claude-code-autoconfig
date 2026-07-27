@@ -1,9 +1,18 @@
 // gateVerdict — the recommendation layer on the two in-turn tripwires (R13b work, R14 rent).
 //
 // The premise: token math measures the TURN'S STATE and is identical whether the next call is a
-// commit or another god-file read, so a recommendation derived from it never varies — and a
-// recommendation that never varies is wallpaper. The discriminator is the SHAPE of the pending
-// call, which PreToolUse already hands the hook.
+// commit or another god-file read, so it cannot discriminate between two pending calls. For THAT
+// the discriminator is the SHAPE of the call, which PreToolUse already hands the hook.
+//
+// Refined 2026-07-26 (Andrew: "a user shouldn't be forced to figure out if 2M means keep going or
+// clear/continue"). The original reading of the premise — leave the Choice bullet neutral unless
+// the CALL is a bomb — left the common case unlabelled, which put the arithmetic back on the
+// reader, the one thing the card exists to prevent. The correction: turn state cannot rank two
+// calls, but it CAN rank restart-vs-push-on, and that ratio genuinely varies (a 40k context at
+// the 1M fire is nearly free to rebuild; a 900k one at the 2M fire is not). So the Choice bullet
+// now always names a side — from the call when it is a bomb, from the ratio otherwise, and
+// neutral only when the meter is empty. It is the same verdict the Restart bullet was already
+// reaching, promoted to the line the eye actually lands on.
 //
 // Born from the 2026-07-26 screenshot: R14 fired on `git add … && git status --short` — the exact
 // "land at a commit point" its own Choice bullet was asking for, three lines above. Two behaviors
@@ -93,7 +102,7 @@ test('full test suite fires with deny LEADING the Choice bullet', () => {
   assert.equal(out.permissionDecision, 'ask');
   const lines = out.permissionDecisionReason.split('\n');
   assert.equal(lines.length, 5);                       // R14's pinned shape survives (5 since R15)
-  assert.match(lines[4], /^• Choice: deny looks right here — /);
+  assert.match(lines[4], /^• Choice: deny \(recommended\) — /);
   assert.match(lines[4], /whole test suite/);
   // Advisory, not authoritarian: the approve path is still stated.
   assert.match(lines[4], /Approving pushes on/);
@@ -107,40 +116,82 @@ test('a full suite behind `cd &&` still fires — the check is per segment, not 
   const fix = primed();
   const out = gateOut(call(fix, 'Bash', { command: 'cd C:/CODE/repo && pnpm test --run' }));
   assert.equal(out.permissionDecision, 'ask');
-  assert.match(out.permissionDecisionReason.split('\n')[4], /^• Choice: deny looks right here — /);
+  assert.match(out.permissionDecisionReason.split('\n')[4], /^• Choice: deny \(recommended\) — /);
 });
 
 test('redirects and pipes are not scope — `pnpm test --run 2>&1 | tail -30` is a full suite', () => {
   const fix = primed();
   const out = gateOut(call(fix, 'Bash', { command: 'pnpm test --run 2>&1 | tail -30' }));
   assert.equal(out.permissionDecision, 'ask');
-  assert.match(out.permissionDecisionReason.split('\n')[4], /^• Choice: deny looks right here — /);
+  assert.match(out.permissionDecisionReason.split('\n')[4], /^• Choice: deny \(recommended\) — /);
 });
 
-test('a SCOPED test run is not a bomb — no recommendation, neutral copy', () => {
+// A scoped run still gets a recommendation — the NUMBERS one — so the assertion here is about
+// the bomb label, not about neutrality: the verdict layer must not call a two-file test run a
+// full suite. Matching on the bomb's own reason keeps this independent of which way the fixture's
+// restart arithmetic happens to fall.
+test('a SCOPED test run is not a bomb — no call-driven deny', () => {
   const fix = primed();
   const out = gateOut(call(fix, 'Bash', { command: 'pnpm test --run src/utils/foo.test.ts' }));
   assert.equal(out.permissionDecision, 'ask');
   const lines = out.permissionDecisionReason.split('\n');
-  assert.match(lines[4], /^• Choice: approve to push on — or deny/);
-  assert.doesNotMatch(lines[4], /looks right here/);
+  assert.doesNotMatch(lines[4], /whole test suite/);
 
   // The other half of the redirect fix: stripping operators must not swallow a REAL path arg.
   // This is the literal command from the 2026-07-26 screenshot — cd, pipe, redirect AND a scope.
   const piped = gateOut(call(primed(), 'Bash',
     { command: 'cd C:/CODE/repo && pnpm test --run src/utils/foo.test.ts 2>&1 | tail -30' }));
-  assert.doesNotMatch(piped.permissionDecisionReason.split('\n')[4], /looks right here/);
+  assert.doesNotMatch(piped.permissionDecisionReason.split('\n')[4], /whole test suite/);
 });
 
 test('explicitly-unbounded Grep is a bomb; an unset head_limit (caps at 250) is not', () => {
   const bomb = gateOut(call(primed(), 'Grep',
     { pattern: 'foo', output_mode: 'content', head_limit: 0 }));
-  assert.match(bomb.permissionDecisionReason.split('\n')[4], /^• Choice: deny looks right here — /);
+  assert.match(bomb.permissionDecisionReason.split('\n')[4], /^• Choice: deny \(recommended\) — /);
   assert.match(bomb.permissionDecisionReason, /explicitly unbounded/);
 
   const ordinary = gateOut(call(primed(), 'Grep', { pattern: 'foo', output_mode: 'content' }));
   assert.equal(ordinary.permissionDecision, 'ask');
-  assert.match(ordinary.permissionDecisionReason.split('\n')[4], /^• Choice: approve to push on/);
+  assert.doesNotMatch(ordinary.permissionDecisionReason, /explicitly unbounded/);
+});
+
+// ── The numbers-driven half (the 2026-07-26 refinement) ───────────────────────────────────────
+// The screenshot case: an ordinary command, no bomb shape, ~2.1M of rent — and the Choice bullet
+// said "approve to push on — or deny", handing the arithmetic straight back to the reader. Both
+// directions are pinned, because a recommendation that only ever says one thing is exactly the
+// wallpaper this layer exists to avoid.
+test('an ordinary call gets the RATIO recommendation — deny when a restart is cheap', () => {
+  const fix = mkFixture({ turnRentGateTokens: 1000000 });
+  promptSubmit(fix);
+  // Rent piles up across the turn, but the LAST message is thin — so the live context is cheap
+  // to rebuild next to the gap remaining before the next check.
+  for (const id of ['a', 'b', 'c', 'd']) fs.appendFileSync(fix.tp, roundTrip(id, 300000));
+  fs.appendFileSync(fix.tp, roundTrip('e', 50000));
+  const lines = gateOut(call(fix, 'Bash', { command: 'ls -la' }))
+    .permissionDecisionReason.split('\n');
+  assert.match(lines[3], /Cheap to rebuild/);
+  assert.match(lines[4], /^• Choice: deny \(recommended\) — /);
+  assert.match(lines[4], /Approving pushes on\./);     // the losing option stays on the card
+});
+
+test('…and approve when it is not — a fat context is not worth rebuilding', () => {
+  const lines = gateOut(call(primed(), 'Bash', { command: 'ls -la' }))
+    .permissionDecisionReason.split('\n');
+  assert.match(lines[3], /Little saving in restarting here/);
+  assert.match(lines[4], /^• Choice: approve \(recommended\) — push on; /);
+  assert.match(lines[4], /denying lands this turn at a commit point/);
+});
+
+// The two bullets are one thought split in half — evidence, then verdict. If they ever disagree
+// the card is worse than neutral, because the reader now has to arbitrate between them.
+test('reading and recommendation never argue — the Restart evidence decides the Choice side', () => {
+  for (const fix of [primed(), primed({ turnRentGateTokens: 250000 })]) {
+    const lines = gateOut(call(fix, 'Bash', { command: 'ls -la' }))
+      .permissionDecisionReason.split('\n');
+    assert.match(lines[4], /^• Choice: (?:approve|deny) \(recommended\) — /);
+    assert.match(lines[4],
+      /Cheap to rebuild/.test(lines[3]) ? /^• Choice: deny/ : /^• Choice: approve/);
+  }
 });
 
 test('R13b carries the same verdict layer', () => {
@@ -153,5 +204,5 @@ test('R13b carries the same verdict layer', () => {
   const out = gateOut(call(fix, 'Bash', { command: 'vitest' }));
   assert.equal(out.permissionDecision, 'ask');
   assert.match(out.permissionDecisionReason, /spiraled/);            // R13b's framing
-  assert.match(out.permissionDecisionReason, /deny looks right here/);
+  assert.match(out.permissionDecisionReason, /deny \(recommended\)/);
 });

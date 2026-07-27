@@ -1783,12 +1783,28 @@ function gateVerdict(toolName, toolInput) {
   }
   return null;
 }
-// Recommendation-leading Choice bullet. The verdict leads; the neutral both-ways phrasing still
-// follows, because the tag is advisory — it names the evidence, it does not claim authority the
-// script does not have.
-const choiceBullet = (verdict, neutral, denyTail) => verdict && verdict.kind === 'deny'
-  ? `• Choice: deny looks right here — ${verdict.why}. Approving pushes on; ${denyTail}`
-  : `• Choice: ${neutral}`;
+// ── Recommendation-leading Choice bullet ──────────────────────────────────────────────────────
+// The card's whole job is to spare the reader the arithmetic, and a neutral "approve or deny"
+// hands it straight back: nothing in "~2.1M of re-reads" tells a human whether to push on or
+// clear (Andrew 2026-07-26 — "a user shouldn't be forced to figure out if 2M means they should
+// keep going or clear/continue"). So a side is named, always, from whichever of two signals is
+// available:
+//   1. the CALL — a bomb (full suite, unbounded Grep) is a deny whatever the meter says, because
+//      its cost is still in the future and therefore in no number on this card;
+//   2. the NUMBERS — `cheap`: restart cost vs the next gap, the same comparison the Restart
+//      bullet's evidence line is built from. The verdict lives HERE and only here; Restart states
+//      the ratio and stops, so the two bullets never argue with each other.
+// The call wins when both speak. A dead meter (cheap == null, nothing measured) is the only path
+// back to the old neutral copy — a recommendation with no evidence behind it is noise, and this
+// script does not bluff. The losing option stays spelled out in every branch: advisory, not
+// authoritarian.
+const choiceBullet = (verdict, { neutral, denyTail }, cheap) => {
+  if (verdict && verdict.kind === 'deny')
+    return `• Choice: deny (recommended) — ${verdict.why}. Approving pushes on; ${denyTail}`;
+  if (cheap === true)  return `• Choice: deny (recommended) — ${denyTail} Approving pushes on.`;
+  if (cheap === false) return `• Choice: approve (recommended) — push on; ${denyTail}`;
+  return `• Choice: ${neutral}`;
+};
 // ── restartBullet: price the option the Choice bullet leaves unpriced (R15) ───────────────────
 // Approving buys ONE more doubled leg; the standing alternative is /clear + /continue. Both
 // numbers are already metered, so the comparison is free: a restart re-pays roughly the resident
@@ -1801,6 +1817,11 @@ const choiceBullet = (verdict, neutral, denyTail) => verdict && verdict.kind ===
 // and a turn's ruled-out paths live only in the window and are on no disk at all. So the cheap
 // branch names that condition rather than claiming it holds — same discipline as choiceBullet.
 const CHEAP_RESTART_X = 3;  // restart ≤ gap/3 → clearing saves at least two thirds of the next leg
+// The numeric half of the recommendation, lifted out of restartBullet so choiceBullet can lead
+// with it. null (not false) when the meter came back empty — the two are different answers and
+// choiceBullet branches on all three.
+const restartCheap = (liveContext, gap) =>
+  (!liveContext || !(gap > 0)) ? null : liveContext * CHEAP_RESTART_X <= gap;
 // Position clause, so a caller whose HEADLINE already states trips × context (R14) can pass ''
 // and skip the restatement rather than printing the same reading twice.
 const restartPos = reqs => reqs == null
@@ -1813,9 +1834,12 @@ function restartBullet(pos, liveContext, gap) {
     ? `• Restart: ${pos} ~${fmtK(liveContext)} of context — /clear + /continue rebuilds that ` +
       `for ${price}.`
     : `• Restart: /clear + /continue rebuilds that ~${fmtK(liveContext)} for ${price}.`;
-  return liveContext * CHEAP_RESTART_X <= gap
-    ? `${head} Cheap — but take it FROM a commit point: what this turn ruled out is not on disk.\n`
-    : `${head} Little saving in restarting here — push on, and clear at the next commit instead.\n`;
+  // Evidence only — the verdict it used to carry moved to choiceBullet, so the two bullets read
+  // as reading-then-recommendation instead of saying "push on" twice in four lines.
+  return restartCheap(liveContext, gap)
+    ? `${head} Cheap to rebuild — but take it FROM a commit point: what this turn ruled out is ` +
+      `not on disk.\n`
+    : `${head} Little saving in restarting here.\n`;
 }
 // total tokens PROCESSED (in + out + cache read/write) — the unit user-facing check-ins lead
 // with. Deliberately unweighted; the dollar figure beside it carries the per-model weighting.
@@ -2516,9 +2540,10 @@ function r13bTurnSpendGuard(ctx) {
     restartBullet(
       restartPos(st.turnStartReqs == null ? null : Math.max(1, m.main.turns - st.turnStartReqs)),
       m.liveContext, st.turnGateAt - turnTok) +
-    choiceBullet(verdict,
-      'approve to push on — or deny, and Claude should stop and propose that plan.',
-      'denying means Claude stops and proposes that plan.'));
+    choiceBullet(verdict, {
+      neutral: 'approve to push on — or deny, and Claude should stop and propose that plan.',
+      denyTail: 'denying means Claude stops and proposes that plan.',
+    }, restartCheap(m.liveContext, st.turnGateAt - turnTok)));
 }
 
 // The R14 ask. Headline reading, then one bullet per thought — cost / lever / choice. A single
@@ -2543,11 +2568,12 @@ function rentAskCopy(ctx, rent) {
     // Here the ratio carries extra meaning for free: rent ≈ context × trips, so the percentage
     // reads as "a restart costs about what the next N round trips cost anyway."
     restartBullet('', m.liveContext, st.rentGateAt - rent) +
-    choiceBullet(verdict,
-      'approve to push on — or deny, and Claude should land this turn at a commit ' +
-      'point so you can /clear + /continue carrying only the next step.',
-      'denying lands this turn at a commit point so you can /clear + /continue carrying ' +
-      'only the next step.');
+    choiceBullet(verdict, {
+      neutral: 'approve to push on — or deny, and Claude should land this turn at a commit ' +
+        'point so you can /clear + /continue carrying only the next step.',
+      denyTail: 'denying lands this turn at a commit point so you can /clear + /continue ' +
+        'carrying only the next step.',
+    }, restartCheap(m.liveContext, st.rentGateAt - rent));
 }
 
 // R14 — in-turn RENT tripwire. The failure R13b structurally cannot see: a turn whose work

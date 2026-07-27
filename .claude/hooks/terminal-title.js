@@ -96,7 +96,25 @@ if (require.main === module) {
   }
 }
 
+// Per-event dispatcher: shared context up top, one onX handler per hook event below (3.4b split —
+// handle() was CC 97 as a single function). The Stop guard stays HERE, not inside onStop, so an
+// unknown event can never reach the Stop path.
 async function handle(data) {
+  const { event, sid, cwd, dir, file } = hookContext(data);
+  logCtx = { event, sid, dir, note: '', transcript: data.transcript_path || '' };
+  contractCanary(data, event, sid);
+  if (event === 'UserPromptSubmit') return onUserPromptSubmit(data, dir, sid, file, cwd);
+  if (event === 'PostToolUse') return onPostToolUse(dir, sid, file, cwd);
+  if (event === 'SessionStart') return onSessionStart(data, dir, sid, file, cwd);
+  if (event === 'Notification') return onNotification(data, dir, sid, file, cwd);
+  // Only Stop may dispatch the Stop path. Claude Code grows hook events over time; an unknown
+  // event falling through here would paint the tab ✻ idle mid-turn. Exit quietly instead.
+  if (event !== 'Stop') process.exit(0);
+  return onStop(data, dir, sid, file, cwd);
+}
+
+// Shared per-event context; exits 0 when this copy must stand down for a managed project copy.
+function hookContext(data) {
   const event = data.hook_event_name || '';
   const sid = data.session_id || '';
   const cwd = data.cwd || process.cwd();
@@ -118,11 +136,13 @@ async function handle(data) {
   const isUserLevel = canonPath(__dirname) === canonPath(homeHooksDir);
   const dir = path.join(isUserLevel ? os.homedir() : ownerDir, '.claude', 'hooks', '.titles');
   const file = path.join(dir, `${sid}.txt`);
-  logCtx = { event, sid, dir, note: '', transcript: data.transcript_path || '' };
+  return { event, sid, cwd, dir, file };
+}
 
-  // HARNESS-CONTRACT CANARY (debug-only surface): if Claude Code stops supplying a field the
-  // keying depends on, every fix above silently degrades to its fallback. Record the gap so the
-  // stale-glyph audit surfaces a platform change as one log line instead of the next mystery.
+// HARNESS-CONTRACT CANARY (debug-only surface): if Claude Code stops supplying a field the
+// keying depends on, every fix above silently degrades to its fallback. Record the gap so the
+// stale-glyph audit surfaces a platform change as one log line instead of the next mystery.
+function contractCanary(data, event, sid) {
   const degraded = [];
   if (!process.env.CLAUDE_PROJECT_DIR) degraded.push('CLAUDE_PROJECT_DIR');
   if (!data.cwd) degraded.push('cwd');
@@ -131,179 +151,194 @@ async function handle(data) {
     || (event === 'Notification' && process.argv[2] === '--idle-rescue');
   if (needsTranscript && !data.transcript_path) degraded.push('transcript_path');
   if (degraded.length) logCtx.contract = degraded.join(',');
+}
 
-  if (event === 'UserPromptSubmit') {
-    // Ensure the state dir exists, but NOT the file — the model's Write tool refuses to overwrite a
-    // file it hasn't read, so a pre-created empty file would make its first title write fail.
-    try { fs.mkdirSync(dir, { recursive: true }); } catch (_) { /* ignore */ }
-    // Clear any stale {sid}.ask left by an interrupted prior turn (Stop never ran to consume it), so a
-    // leftover flag can't paint a false ◐ on this turn's end. The flag must reflect ONLY this turn.
-    const askFile = path.join(dir, `${sid}.ask`);
-    if (fileExists(askFile)) { try { fs.unlinkSync(askFile); } catch (_) { /* ignore */ } }
-    ensureStartedAt(dir, sid); // belt for sessions that predate the guard (no SessionStart stamp)
-    // /continue re-arms the post-/clear title carry (see carriedTitle): the user is explicitly
-    // resuming the previous session's work, so its title becomes right again. One-way stamp,
-    // BEFORE the title resolves below so the restored title paints on this very turn.
-    if (/^\s*\/continue(?:\s|$)/.test(String(data.prompt || ''))) {
-      try { fs.writeFileSync(path.join(dir, `${sid}.continued`), '1'); } catch (_) { /* best-effort */ }
-    }
-    const title = normalize(displayTitle(file, dir, sid, cwd));
-    // Duplicate-session guard: is another tab already live on this exact work? (see dupeGuardResult)
-    const guard = dupeGuardResult(dir, sid, title, cwd);
-    if (guard && guard.block) {
-      try { process.title = `${GLYPH.awaiting} ${title}`; } catch (_) { /* ignore */ }
-      if (logCtx) { logCtx.note = 'dupe-block'; logCtx.diag = guard.diag; }
-      emit({ decision: 'block', reason: guard.reason });
-      return;
-    }
-    const out = setTitle(GLYPH.working, title);
-    out.hookSpecificOutput = {
-      hookEventName: 'UserPromptSubmit',
-      additionalContext: buildDirective(data, file, cwd),
-    };
-    if (guard && guard.systemMessage) out.systemMessage = guard.systemMessage;
-    // A user interrupt fires NO hook and CC's idle_prompt notification is not delivered after one
-    // (verified 2026-07-11), so each turn gets a watchdog child that notices a dead turn itself.
-    spawnTurnWatch(data, dir, sid, file, cwd);
-    emit(out);
+// One-shot {sid}.ask consumption — reports whether the flag was present; deleted either way.
+// Callers: UserPromptSubmit clears a stale flag, Stop's fast path honors it, the idle rescue
+// honors it only on the no-stop path (see each call site).
+function consumeAskFlag(dir, sid) {
+  const askFile = path.join(dir, `${sid}.ask`);
+  if (!fileExists(askFile)) return false;
+  try { fs.unlinkSync(askFile); } catch (_) { /* ignore */ }
+  return true;
+}
+
+// /continue re-arms the post-/clear title carry (see carriedTitle): the user is explicitly
+// resuming the previous session's work, so its title becomes right again. One-way stamp,
+// BEFORE the title resolves in the caller so the restored title paints on this very turn.
+function armContinueCarry(dir, sid, prompt) {
+  if (!/^\s*\/continue(?:\s|$)/.test(String(prompt || ''))) return;
+  try { fs.writeFileSync(path.join(dir, `${sid}.continued`), '1'); } catch (_) { /* best-effort */ }
+}
+
+function onUserPromptSubmit(data, dir, sid, file, cwd) {
+  // Ensure the state dir exists, but NOT the file — the model's Write tool refuses to overwrite a
+  // file it hasn't read, so a pre-created empty file would make its first title write fail.
+  try { fs.mkdirSync(dir, { recursive: true }); } catch (_) { /* ignore */ }
+  // Clear any stale {sid}.ask left by an interrupted prior turn (Stop never ran to consume it), so a
+  // leftover flag can't paint a false ◐ on this turn's end. The flag must reflect ONLY this turn.
+  consumeAskFlag(dir, sid);
+  ensureStartedAt(dir, sid); // belt for sessions that predate the guard (no SessionStart stamp)
+  armContinueCarry(dir, sid, data.prompt);
+  const title = normalize(displayTitle(file, dir, sid, cwd));
+  // Duplicate-session guard: is another tab already live on this exact work? (see dupeGuardResult)
+  const guard = dupeGuardResult(dir, sid, title, cwd);
+  if (guard && guard.block) {
+    try { process.title = `${GLYPH.awaiting} ${title}`; } catch (_) { /* ignore */ }
+    if (logCtx) { logCtx.note = 'dupe-block'; logCtx.diag = guard.diag; }
+    emit({ decision: 'block', reason: guard.reason });
     return;
   }
+  const out = setTitle(GLYPH.working, title);
+  out.hookSpecificOutput = {
+    hookEventName: 'UserPromptSubmit',
+    additionalContext: buildDirective(data, file, cwd),
+  };
+  if (guard && guard.systemMessage) out.systemMessage = guard.systemMessage;
+  // A user interrupt fires NO hook and CC's idle_prompt notification is not delivered after one
+  // (verified 2026-07-11), so each turn gets a watchdog child that notices a dead turn itself.
+  spawnTurnWatch(data, dir, sid, file, cwd);
+  emit(out);
+}
 
-  if (event === 'PostToolUse') {
-    // Only refresh once a real title exists; don't stamp the bare folder over what UPS showed.
-    const raw = readTitle(file);
-    if (!raw) process.exit(0);
-    // Needle-drift canary: a PostToolUse is PROOF the turn is alive. If the watchdog read the
-    // screen as "dead" earlier in THIS turn (breadcrumb nonce == this turn's watch nonce), the
-    // probe needle no longer matches CC's bottom-bar hint — a false-dead that would re-open the
-    // thinking false-fire the moment CPU goes quiet. Flag the dir so dead reads demote to the
-    // blind 120s fallback (slow beats wrong); a future LIVE read retracts the flag. A nonce
-    // MISMATCH is just a real cancel's leftover breadcrumb — consumed without flagging.
-    try {
-      const probeFile = path.join(dir, `${sid}.probe`);
-      if (fileExists(probeFile)) {
-        const probeNonce = fs.readFileSync(probeFile, 'utf8').split('|')[0];
-        let curNonce = '';
-        try { curNonce = fs.readFileSync(path.join(dir, `${sid}.watch`), 'utf8').trim(); } catch (_) { /* no watch */ }
-        fs.unlinkSync(probeFile); // one-shot either way
-        if (probeNonce && probeNonce === curNonce) {
-          fs.writeFileSync(path.join(dir, 'needle-distrust'), `${new Date().toISOString()} sid=${sid}`);
-          if (logCtx) { logCtx.note = 'needle-drift'; logCtx.diag = `dead-read on a live turn nonce=${probeNonce}`; }
-        }
-      }
-    } catch (_) { /* the canary is best-effort — never block the repaint */ }
-    const title = normalize(raw);
-    // Paint-time duplicate guard — catches collisions born mid-turn (see dupeGuardPaint).
-    const guard = dupeGuardPaint(dir, sid, title, cwd);
-    const out = setTitle(GLYPH.working, title);
-    if (guard) {
-      if (guard.systemMessage) out.systemMessage = guard.systemMessage;
-      if (guard.additionalContext) {
-        out.hookSpecificOutput = { hookEventName: 'PostToolUse', additionalContext: guard.additionalContext };
-      }
-      if (logCtx) { logCtx.note = (logCtx.note ? `${logCtx.note}+` : '') + 'dupe-paint'; logCtx.diag = guard.diag; }
+// Needle-drift canary: a PostToolUse is PROOF the turn is alive. If the watchdog read the
+// screen as "dead" earlier in THIS turn (breadcrumb nonce == this turn's watch nonce), the
+// probe needle no longer matches CC's bottom-bar hint — a false-dead that would re-open the
+// thinking false-fire the moment CPU goes quiet. Flag the dir so dead reads demote to the
+// blind 120s fallback (slow beats wrong); a future LIVE read retracts the flag. A nonce
+// MISMATCH is just a real cancel's leftover breadcrumb — consumed without flagging.
+function consumeProbeCanary(dir, sid) {
+  try {
+    const probeFile = path.join(dir, `${sid}.probe`);
+    if (!fileExists(probeFile)) return;
+    const probeNonce = fs.readFileSync(probeFile, 'utf8').split('|')[0];
+    let curNonce = '';
+    try { curNonce = fs.readFileSync(path.join(dir, `${sid}.watch`), 'utf8').trim(); } catch (_) { /* no watch */ }
+    fs.unlinkSync(probeFile); // one-shot either way
+    if (probeNonce && probeNonce === curNonce) {
+      fs.writeFileSync(path.join(dir, 'needle-distrust'), `${new Date().toISOString()} sid=${sid}`);
+      if (logCtx) { logCtx.note = 'needle-drift'; logCtx.diag = `dead-read on a live turn nonce=${probeNonce}`; }
     }
-    emit(out);
-    return;
-  }
+  } catch (_) { /* the canary is best-effort — never block the repaint */ }
+}
 
-  if (event === 'SessionStart') {
-    // Stamp the terminal lineage FIRST (see recordLineage): on a /clear or same-tab relaunch this
-    // records the cleared sid as this session's "previous" — what bare /recover-context recovers,
-    // and what carriedTitle() reads just below to carry the last title onto the tab.
-    recordLineage(dir, sid, data.source || '');
-    // Stamp this session's birth time (ordering token for the duplicate-session guard's kill mode).
-    ensureStartedAt(dir, sid);
-    // Fresh-session title: this session's own (preferred on resume/compact), else the previous
-    // session's last title carried over on a same-tab relaunch (the first turn's BASELINE authoring
-    // supersedes it), else the placeholder. A /clear-born session gets the PLACEHOLDER, not the
-    // carry — the next prompt could be anything; /continue re-arms the carry (see carriedTitle).
-    const title = normalize(readTitle(file) || carriedTitle(dir, sid) || 'Claude Code - New session');
-    const out = setTitle(GLYPH.idle, title);
-    // Inject the FULL rulebook here — once per session — instead of on every prompt. All sources
-    // get it: startup/clear teach a fresh context, resume/compact re-teach a squeezed one.
-    const rules = buildBlocks(['RULES'], file, cwd, '');
-    if (rules) {
-      out.hookSpecificOutput = { hookEventName: 'SessionStart', additionalContext: rules };
+function onPostToolUse(dir, sid, file, cwd) {
+  // Only refresh once a real title exists; don't stamp the bare folder over what UPS showed.
+  const raw = readTitle(file);
+  if (!raw) process.exit(0);
+  consumeProbeCanary(dir, sid);
+  const title = normalize(raw);
+  // Paint-time duplicate guard — catches collisions born mid-turn (see dupeGuardPaint).
+  const guard = dupeGuardPaint(dir, sid, title, cwd);
+  const out = setTitle(GLYPH.working, title);
+  if (guard) {
+    if (guard.systemMessage) out.systemMessage = guard.systemMessage;
+    if (guard.additionalContext) {
+      out.hookSpecificOutput = { hookEventName: 'PostToolUse', additionalContext: guard.additionalContext };
     }
-    emit(out);
-    return;
+    if (logCtx) { logCtx.note = (logCtx.note ? `${logCtx.note}+` : '') + 'dupe-paint'; logCtx.diag = guard.diag; }
   }
+  emit(out);
+}
 
-  if (event === 'Notification') {
-    // --idle-rescue (idle_prompt matcher): a user interrupt fires NO hook — Stop never runs — and a
-    // thinking-phase cancel writes NOTHING to the transcript either (verified 2026-07-11: Esc during
-    // "Percolating" left the file untouched; the "[Request interrupted…]" marker only shows up for
-    // tool-use cancels). So the rescue triangulates from what IS observable once CC reports the REPL
-    // idle: the newest transcript entry, its age, and the last-painted glyph.
-    //   marker tail → canceled, definitely → paint ✻
-    //   bare-prompt tail, ≥2.2s old, transcript unmoved, glyph ⬤ → the turn died with the cancel
-    //     (a live turn would have flushed something; a just-submitted one is younger) → paint ✻
-    //   assistant tail + glyph still ⬤ after a 1.6s grace → mid-response cancel or a KILLED Stop
-    //     (the grace lets a racing Stop hook paint first — that's what keeps the ~0ms
-    //     messageIdleNotifThresholdMs safe); honors an unconsumed {sid}.ask with ◐
-    //   anything else → decline WITHOUT emitting. ◐ question tabs are never downgraded, and a LIVE
-    //     permission dialog is indistinguishable from a canceled one, so awaiting|Notification is
-    //     only ever rescued by a marker. Declines log note=int-decline when CLAUDE_TITLE_DEBUG=1.
-    if (process.argv[2] === '--idle-rescue') {
-      const glyphFile = path.join(dir, `${sid}.glyph`);
-      const painted = readTitle(glyphFile).split('|');
-      const lastGlyph = painted[0];
-      const decline = (why) => {
-        if (logCtx) { logCtx.note = 'int-decline'; logCtx.diag = why; }
-        titleLog(GLYPH[lastGlyph] || GLYPH.idle, normalize(displayTitle(file, dir, sid, cwd)), false);
-        process.exit(0);
-      };
-      if (lastGlyph === 'idle') decline('already-idle');
-      if (lastGlyph === 'awaiting' && painted[1] !== 'Notification') decline('question-tab');
-      let tail = classifyTail(data.transcript_path);
-      // ~200ms JSONL append lag (same flush race the Stop grade guards)
-      for (let i = 0; tail.kind === 'none' && i < 3; i++) {
-        await delay(150);
-        tail = classifyTail(data.transcript_path);
-      }
-      let via = '';
-      if (tail.kind === 'marker') {
-        via = 'marker';
-      } else if (lastGlyph !== 'working') {
-        decline(`kind=${tail.kind} glyph=${lastGlyph || '-'}`);
-      } else if (tail.kind === 'prompt') {
-        const age = tail.ts ? Date.now() - Date.parse(tail.ts) : NaN;
-        if (!(age > 0)) decline('prompt-unaged'); // no/garbled timestamp — can't prove the stall
-        if (age < 2200) await delay(2200 - age);
-        const again = classifyTail(data.transcript_path);
-        if (again.kind !== 'prompt' || again.size !== tail.size) decline('turn-progressed');
-        via = 'stalled-prompt';
-      } else if (tail.kind === 'assistant') {
-        await delay(1600); // grace: let a racing Stop hook finish its own paint
-        if (readTitle(glyphFile).split('|')[0] !== 'working') decline('stop-painted');
-        via = 'no-stop';
-      } else {
-        decline('no-transcript');
-      }
-      // Confirmed: the turn ended without a Stop. An unconsumed {sid}.ask on the no-stop path is a
-      // KILLED Stop's question turn — honor it with ◐ + ring; on a confirmed cancel it's a leftover —
-      // clear it either way so it can't paint a false ◐ on the NEXT turn's Stop.
-      const askFlag = path.join(dir, `${sid}.ask`);
-      const honorAsk = via === 'no-stop' && fileExists(askFlag);
-      if (fileExists(askFlag)) { try { fs.unlinkSync(askFlag); } catch (_) { /* ignore */ } }
-      if (logCtx) { logCtx.note = 'int-rescue'; logCtx.diag = `via=${via} ask=${honorAsk ? 1 : 0}`; }
-      emit(setTitle(honorAsk ? GLYPH.awaiting : GLYPH.idle, normalize(displayTitle(file, dir, sid, cwd)), honorAsk));
-      return;
-    }
-    // A permission prompt is open. Single BEL only — CC already rings its own bell here (tab already gold).
-    emit(setTitle(GLYPH.awaiting, normalize(displayTitle(file, dir, sid, cwd))));
-    return;
+function onSessionStart(data, dir, sid, file, cwd) {
+  // Stamp the terminal lineage FIRST (see recordLineage): on a /clear or same-tab relaunch this
+  // records the cleared sid as this session's "previous" — what bare /recover-context recovers,
+  // and what carriedTitle() reads just below to carry the last title onto the tab.
+  recordLineage(dir, sid, data.source || '');
+  // Stamp this session's birth time (ordering token for the duplicate-session guard's kill mode).
+  ensureStartedAt(dir, sid);
+  // Fresh-session title: this session's own (preferred on resume/compact), else the previous
+  // session's last title carried over on a same-tab relaunch (the first turn's BASELINE authoring
+  // supersedes it), else the placeholder. A /clear-born session gets the PLACEHOLDER, not the
+  // carry — the next prompt could be anything; /continue re-arms the carry (see carriedTitle).
+  const title = normalize(readTitle(file) || carriedTitle(dir, sid) || 'Claude Code - New session');
+  const out = setTitle(GLYPH.idle, title);
+  // Inject the FULL rulebook here — once per session — instead of on every prompt. All sources
+  // get it: startup/clear teach a fresh context, resume/compact re-teach a squeezed one.
+  const rules = buildBlocks(['RULES'], file, cwd, '');
+  if (rules) {
+    out.hookSpecificOutput = { hookEventName: 'SessionStart', additionalContext: rules };
   }
+  emit(out);
+}
 
-  // Only Stop may dispatch the Stop path. Claude Code grows hook events over time; an unknown
-  // event falling through here would paint the tab ✻ idle mid-turn. Exit quietly instead.
-  if (event !== 'Stop') process.exit(0);
+function onNotification(data, dir, sid, file, cwd) {
+  if (process.argv[2] === '--idle-rescue') return onIdleRescue(data, dir, sid, file, cwd);
+  // A permission prompt is open. Single BEL only — CC already rings its own bell here (tab already gold).
+  emit(setTitle(GLYPH.awaiting, normalize(displayTitle(file, dir, sid, cwd))));
+}
 
-  // Stop: idle, UNLESS the turn ended on a question the user must answer — then awaiting + a 2nd BEL
-  // so VS Code paints the (otherwise bell-less) tab gold. "Ended on a question" = last visible
-  // assistant text ends in '?' (transcript heuristic) OR an explicit {sid}.ask flag (consumed here).
+// --idle-rescue (idle_prompt matcher): a user interrupt fires NO hook — Stop never runs — and a
+// thinking-phase cancel writes NOTHING to the transcript either (verified 2026-07-11: Esc during
+// "Percolating" left the file untouched; the "[Request interrupted…]" marker only shows up for
+// tool-use cancels). So the rescue triangulates from what IS observable once CC reports the REPL
+// idle: the newest transcript entry, its age, and the last-painted glyph (rescueVerdict holds the
+// tail→verdict map). ◐ question tabs are never downgraded, and a LIVE permission dialog is
+// indistinguishable from a canceled one, so awaiting|Notification is only ever rescued by a
+// marker. Declines log note=int-decline when CLAUDE_TITLE_DEBUG=1.
+async function onIdleRescue(data, dir, sid, file, cwd) {
+  const glyphFile = path.join(dir, `${sid}.glyph`);
+  const painted = readTitle(glyphFile).split('|');
+  const lastGlyph = painted[0];
+  const decline = (why) => {
+    if (logCtx) { logCtx.note = 'int-decline'; logCtx.diag = why; }
+    titleLog(GLYPH[lastGlyph] || GLYPH.idle, normalize(displayTitle(file, dir, sid, cwd)), false);
+    process.exit(0);
+  };
+  if (lastGlyph === 'idle') decline('already-idle');
+  if (lastGlyph === 'awaiting' && painted[1] !== 'Notification') decline('question-tab');
+  const verdict = await rescueVerdict(data.transcript_path, lastGlyph, glyphFile);
+  if (verdict.decline) decline(verdict.decline);
+  // Confirmed: the turn ended without a Stop. An unconsumed {sid}.ask on the no-stop path is a
+  // KILLED Stop's question turn — honor it with ◐ + ring; on a confirmed cancel it's a leftover —
+  // clear it either way so it can't paint a false ◐ on the NEXT turn's Stop.
+  const hadAsk = consumeAskFlag(dir, sid);
+  const honorAsk = verdict.via === 'no-stop' && hadAsk;
+  if (logCtx) { logCtx.note = 'int-rescue'; logCtx.diag = `via=${verdict.via} ask=${honorAsk ? 1 : 0}`; }
+  emit(setTitle(honorAsk ? GLYPH.awaiting : GLYPH.idle, normalize(displayTitle(file, dir, sid, cwd)), honorAsk));
+}
 
+// The rescue's tail→verdict map — {via} when the turn provably ended without a Stop, {decline: why}
+// when it must be left alone:
+//   marker tail → canceled, definitely → paint ✻
+//   bare-prompt tail, ≥2.2s old, transcript unmoved, glyph ⬤ → the turn died with the cancel
+//     (a live turn would have flushed something; a just-submitted one is younger) → paint ✻
+//   assistant tail + glyph still ⬤ after a 1.6s grace → mid-response cancel or a KILLED Stop
+//     (the grace lets a racing Stop hook paint first — that's what keeps the ~0ms
+//     messageIdleNotifThresholdMs safe)
+//   anything else → decline WITHOUT emitting.
+async function rescueVerdict(transcriptPath, lastGlyph, glyphFile) {
+  let tail = classifyTail(transcriptPath);
+  // ~200ms JSONL append lag (same flush race the Stop grade guards)
+  for (let i = 0; tail.kind === 'none' && i < 3; i++) {
+    await delay(150);
+    tail = classifyTail(transcriptPath);
+  }
+  if (tail.kind === 'marker') return { via: 'marker' };
+  if (lastGlyph !== 'working') return { decline: `kind=${tail.kind} glyph=${lastGlyph || '-'}` };
+  if (tail.kind === 'prompt') return rescueStalledPrompt(transcriptPath, tail);
+  if (tail.kind === 'assistant') {
+    await delay(1600); // grace: let a racing Stop hook finish its own paint
+    if (readTitle(glyphFile).split('|')[0] !== 'working') return { decline: 'stop-painted' };
+    return { via: 'no-stop' };
+  }
+  return { decline: 'no-transcript' };
+}
+
+async function rescueStalledPrompt(transcriptPath, tail) {
+  const age = tail.ts ? Date.now() - Date.parse(tail.ts) : NaN;
+  if (!(age > 0)) return { decline: 'prompt-unaged' }; // no/garbled timestamp — can't prove the stall
+  if (age < 2200) await delay(2200 - age);
+  const again = classifyTail(transcriptPath);
+  if (again.kind !== 'prompt' || again.size !== tail.size) return { decline: 'turn-progressed' };
+  return { via: 'stalled-prompt' };
+}
+
+// Stop: idle, UNLESS the turn ended on a question the user must answer — then awaiting + a 2nd BEL
+// so VS Code paints the (otherwise bell-less) tab gold. "Ended on a question" = last visible
+// assistant text ends in '?' (transcript heuristic) OR an explicit {sid}.ask flag (consumed here).
+async function onStop(data, dir, sid, file, cwd) {
   // FAILSAFE PRE-PAINT — flip to ✻ idle SYNCHRONOUSLY now, before the async grade below. That grade
   // reads/re-reads the transcript to dodge the flush race and can either throw (caught → exit 0, emits
   // nothing) or be killed on a huge, slow-to-flush final message — either way it would otherwise leave
@@ -313,10 +348,6 @@ async function handle(data) {
   // {sid}.ask flag already backstops that case).
   try { process.title = `${GLYPH.idle} ${normalize(displayTitle(file, dir, sid, cwd))}`; } catch (_) { /* ignore */ }
 
-  const askFile = path.join(dir, `${sid}.ask`);
-  const askPresent = fileExists(askFile);
-  if (askPresent) { try { fs.unlinkSync(askFile); } catch (_) { /* ignore */ } }
-
   // FAST PATH — the {sid}.ask flag is the race-proof "ended on a question" signal, written to disk BEFORE
   // Stop fires. When present, paint ◐ awaiting and emit() IMMEDIATELY, skipping the transcript grade below.
   // This is the stuck-⬤ fix: emit() (the terminalSequence CC applies on clean exit) is the ONLY paint VS
@@ -324,36 +355,45 @@ async function handle(data) {
   // emit() — which froze the tab on the last ⬤ working. Reaching emit() synchronously here closes that
   // window for every flagged question turn (the common case). SetConsoleTitleW above is a Win-terminal-only
   // bonus; VS Code never saw it, which is why the failsafe alone didn't rescue the tab.
-  if (askPresent) {
-    const deferred = spawnDeferredGrade(data, dir, sid, file, cwd);
-    if (logCtx) {
-      logCtx.note = 'ask-flag';
-      logCtx.diag = `ask=1 fast-path (${deferred ? 'grade deferred to StopDiag' : 'grade skipped'})`;
-    }
-    const out = setTitle(GLYPH.awaiting, normalize(displayTitle(file, dir, sid, cwd)), true);
-    // Advisor AFTER the paint (setTitle may append this turn's history line) and bounded (one
-    // tiny ledger read + one 64KB tail read) — it can never re-open the kill window this fast
-    // path exists to close.
-    const advice = clearAdvice(dir, sid, data.transcript_path);
-    if (advice) out.systemMessage = advice;
-    emit(out);
-    return; // emit() exits; the return keeps control flow honest if that ever changes
-  }
+  if (consumeAskFlag(dir, sid)) return onStopAskFlag(data, dir, sid, file, cwd);
+  const graded = await gradeStopTranscript(data.transcript_path);
+  emitStopVerdict(graded, dir, sid, file, cwd, data.transcript_path);
+}
 
-  // No flag → default idle, but the turn may have ended on '?' without one. Grade the transcript, guarding
-  // the flush race: the final assistant text can land in the JSONL a beat AFTER Stop fires (~200ms append
-  // lag). `suspectRace` (freshest on-disk assistant block is text-less, or none found) means the real final
-  // message is still flushing → re-read a few times before grading. Each pass reads only the transcript
-  // TAIL, so the loop stays fast on a multi-MB transcript and always reaches emit().
-  let q = inspectLastResponse(data.transcript_path);
+function onStopAskFlag(data, dir, sid, file, cwd) {
+  const deferred = spawnDeferredGrade(data, dir, sid, file, cwd);
+  if (logCtx) {
+    logCtx.note = 'ask-flag';
+    logCtx.diag = `ask=1 fast-path (${deferred ? 'grade deferred to StopDiag' : 'grade skipped'})`;
+  }
+  const out = setTitle(GLYPH.awaiting, normalize(displayTitle(file, dir, sid, cwd)), true);
+  // Advisor AFTER the paint (setTitle may append this turn's history line) and bounded (one
+  // tiny ledger read + one 64KB tail read) — it can never re-open the kill window this fast
+  // path exists to close.
+  const advice = clearAdvice(dir, sid, data.transcript_path);
+  if (advice) out.systemMessage = advice;
+  emit(out);
+}
+
+// No flag → default idle, but the turn may have ended on '?' without one. Grade the transcript, guarding
+// the flush race: the final assistant text can land in the JSONL a beat AFTER Stop fires (~200ms append
+// lag). `suspectRace` (freshest on-disk assistant block is text-less, or none found) means the real final
+// message is still flushing → re-read a few times before grading. Each pass reads only the transcript
+// TAIL, so the loop stays fast on a multi-MB transcript and always reaches emit().
+async function gradeStopTranscript(transcriptPath) {
+  let q = inspectLastResponse(transcriptPath);
   let reread = 0;
   while (!q.ends && (q.suspectRace || !q.found) && reread < 7) {
     await delay(120);
     reread++;
-    q = inspectLastResponse(data.transcript_path);
+    q = inspectLastResponse(transcriptPath);
     if (q.ends || (q.found && !q.suspectRace)) break;
   }
+  return { q, reread };
+}
 
+function emitStopVerdict(graded, dir, sid, file, cwd, transcriptPath) {
+  const { q, reread } = graded;
   // LEXICAL RESCUE — no '?' on the final line, but its closing sentence is a formulaic offer
   // ("Say the word and I'll…", "Want me to…"): the phrasing directive slipped. Paint ◐ anyway so
   // the user still gets the awaiting signal; via=lex marks it a prose DEFECT for the miss-audit,
@@ -362,13 +402,17 @@ async function handle(data) {
   const pending = q.ends || lex;
   if (logCtx) {
     logCtx.note = pending ? (lex ? 'lex' : 'q-mark') : 'idle';
-    logCtx.diag = `ask=0 qmark=${q.ends ? 1 : 0} via=${lex ? 'lex' : (q.via || '-')} found=${q.found ? 1 : 0} reread=${reread} model=${q.model || '-'} tail="${q.tail}"`;
+    logCtx.diag = stopDiag(q, lex, reread);
   }
   const glyph = pending ? GLYPH.awaiting : GLYPH.idle;
   const out = setTitle(glyph, normalize(displayTitle(file, dir, sid, cwd)), pending);
-  const advice = clearAdvice(dir, sid, data.transcript_path);
+  const advice = clearAdvice(dir, sid, transcriptPath);
   if (advice) out.systemMessage = advice;
   emit(out);
+}
+
+function stopDiag(q, lex, reread) {
+  return `ask=0 qmark=${q.ends ? 1 : 0} via=${lex ? 'lex' : (q.via || '-')} found=${q.found ? 1 : 0} reread=${reread} model=${q.model || '-'} tail="${q.tail}"`;
 }
 
 // Set the tab title two ways and return the hook payload. `process.title` is the instant flip and the
