@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Sync the canonical .claude/hooks fleet from CCA to every adopting copy.
+ * Sync the canonical .claude fleet from CCA to every adopting copy — the hooks, and (since
+ * 2026-07-26) the shared authoring rules in the sibling .claude/rules directory.
  *
  * Generalized out of sync-terminal-title.js on 2026-07-25, after token-guard.js drifted 231
  * lines behind canonical in job-agent-extension. That drift happened because token-guard had no
@@ -39,11 +40,27 @@ const MANIFEST = [
   // synced to ~/.claude: the global hooks dir has no token-guard today, and putting one there
   // without a matching settings.json entry would be inert.
   { file: 'token-guard.js', global: false },
+  // Shared authoring rules — same fleet, one directory over (`subdir`). plan-authoring.md was
+  // hand-ported between CCA and job-agent-extension and the two copies diverged for six weeks
+  // with NEITHER a superset (the rule's own header says so); a doc drifts exactly like a hook
+  // does, so it gets the same actuator rather than another "remember to port it" note. Not
+  // global: ~/.claude has no rules dir, and ADOPT-ONLY means a repo without the file keeps not
+  // having it.
+  { file: 'plan-authoring.md', global: false, subdir: 'rules' },
 ];
 
 const PAD = 46;                                               // report column for the target label
 
-const canonicalFor = f => path.join(__dirname, '..', '.claude', 'hooks', f);
+// An entry lives under .claude/<subdir>/, defaulting to the hooks dir the fleet grew up in.
+const subdirOf = entry => entry.subdir || 'hooks';
+const canonicalFor = entry => path.join(__dirname, '..', '.claude', subdirOf(entry), entry.file);
+
+// Where THIS entry belongs inside a target repo. The per-machine fleet file records each target
+// as its .claude/hooks dir, so a non-hooks entry resolves as that dir's sibling — no fleet-file
+// migration on any box, and a hand-authored path with odd slashes still works (path.dirname is
+// separator-agnostic on Windows).
+const targetDirFor = (target, entry) =>
+  entry.subdir ? path.join(path.dirname(target.dir), entry.subdir) : target.dir;
 
 // Per-machine fleet. Prefer the general name; fall back to the terminal-title-era one so an
 // existing box keeps working with no migration step.
@@ -97,8 +114,8 @@ function resolveTargets(only) {
 function loadCanonical(entries) {
   const canon = {};
   for (const e of entries) {
-    const c = readOr(canonicalFor(e.file));
-    if (c == null) return { canon: null, missingFile: canonicalFor(e.file) };
+    const c = readOr(canonicalFor(e));
+    if (c == null) return { canon: null, missingFile: canonicalFor(e) };
     canon[e.file] = c;
   }
   return { canon, missingFile: null };
@@ -106,7 +123,7 @@ function loadCanonical(entries) {
 
 function header(entries, canon, write, say) {
   for (const e of entries) {
-    say(`CANONICAL  ${canonicalFor(e.file)}  (${norm(canon[e.file]).split('\n').length} lines)`);
+    say(`CANONICAL  ${canonicalFor(e)}  (${norm(canon[e.file]).split('\n').length} lines)`);
   }
   say(`MODE       ${write ? 'WRITE (sync drifted targets)' : 'CHECK (report only)'}`);
   say('');
@@ -114,17 +131,19 @@ function header(entries, canon, write, say) {
 
 /**
  * What one (target, manifest entry) pair needs. Returns the current text too, so the caller
- * measures drift without a second read.
- * @returns {{verdict:'miss'|'ok'|'create'|'update', cur:string|null}}
+ * measures drift without a second read — and the resolved dir, so it never re-derives it (the
+ * write must land where the read looked, which for a `subdir` entry is NOT target.dir).
+ * @returns {{verdict:'miss'|'ok'|'create'|'update', cur:string|null, dir:string}}
  */
-function classify(dir, entry, canonText) {
+function classify(target, entry, canonText) {
+  const dir = targetDirFor(target, entry);
   const cur = readOr(path.join(dir, entry.file));
   if (cur == null) {
     // ADOPT-ONLY: absent means unadopted, unless this entry pairs with a file that IS here.
     const partnerPresent = entry.pairsWith != null && readOr(path.join(dir, entry.pairsWith)) != null;
-    return { verdict: partnerPresent ? 'create' : 'miss', cur: null };
+    return { verdict: partnerPresent ? 'create' : 'miss', cur: null, dir };
   }
-  return { verdict: norm(cur) === norm(canonText) ? 'ok' : 'update', cur };
+  return { verdict: norm(cur) === norm(canonText) ? 'ok' : 'update', cur, dir };
 }
 
 // The two "nothing to do" verdicts. Narrated only outside quiet mode — this runs on every
@@ -138,7 +157,7 @@ function noteNoop(verdict, label, quiet, say, tally) {
 // Classify one pair, then act on it and narrate. Mutates `tally`.
 function applyOne(target, entry, canonText, mode, say, tally) {
   const label = `${target.label} ${entry.file}`.padEnd(PAD);
-  const { verdict, cur } = classify(target.dir, entry, canonText);
+  const { verdict, cur, dir } = classify(target, entry, canonText);
   if (verdict === 'miss' || verdict === 'ok') {
     noteNoop(verdict, label, mode.quiet, say, tally);
     return;
@@ -150,7 +169,7 @@ function applyOne(target, entry, canonText, mode, say, tally) {
   // file that is about to change would read as a broken counter.
   const amount = n ? `${n} lines` : 'local edits';
   if (mode.write) {
-    fs.writeFileSync(path.join(target.dir, entry.file), canonText);
+    fs.writeFileSync(path.join(dir, entry.file), canonText);
     say(`  [sync]  ${label} ${created ? `created (${n} lines)` : `updated (${amount})`}`);
     tally.wrote++;
     return;
