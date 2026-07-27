@@ -1,5 +1,5 @@
 <!-- @description Validates your claude-code-autoconfig installation against the latest published version. -->
-<!-- @version 6 -->
+<!-- @version 7 -->
 <!-- @response valid | Install validated — all checks passed. -->
 <!-- @response issues | Validation found {N} issue(s) with fix suggestions. -->
 <!-- @sideeffect Read-only. Downloads latest package to temp dir for comparison, then cleans up. -->
@@ -70,7 +70,7 @@ for d in expected_dirs:
 # --- 2. Check command files and versions ---
 # mirror of DEV_ONLY_FILES in bin/cli.js — keep in sync
 # (guard test: see test/dev-gate-consistency, substep 2.2)
-dev_only = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-session.md', 'migrate-new-session.md', 'token-guard.js', 'plan-progress.md', 'plan-progress.js', 'whats-happening.md', 'whats-happening.js', 'refactor.md']
+dev_only = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-session.md', 'migrate-new-session.md', 'token-guard.js', 'plan-progress.md', 'plan-progress.js', 'whats-happening.md', 'whats-happening.js', 'refactor.md', 'parallel-session-worktrees.md']
 pkg_cmds_dir = os.path.join(pkg_dir, '.claude', 'commands')
 local_cmds_dir = os.path.join(claude_dir, 'commands')
 

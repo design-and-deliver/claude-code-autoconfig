@@ -61,6 +61,7 @@
     "!.claude/scripts/plan-progress.js",
     "!.claude/commands/whats-happening.md",
     "!.claude/scripts/whats-happening.js",
+    "!.claude/rules/parallel-session-worktrees.md",
     "!.claude/plans",
     "!.claude/sounds/*.enabled",
     "CLAUDE.md",
