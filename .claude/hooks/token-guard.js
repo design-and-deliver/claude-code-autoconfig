@@ -2666,16 +2666,49 @@ function sessionSpendGuard(ctx) {
     `fresh session.`);
 }
 
-// The three spend gates share one meter: PreToolUse runs on every tool call, so meter ONCE and
-// only when at least one of them is armed. Order matters — R13b (sharpest) before R14 before
-// the session backstop.
-const SPEND_GUARDS = [r13bTurnSpendGuard, r14TurnRentGuard, sessionSpendGuard];
+// R4b idle-return RECEIPT — the background-wake half of R4. A session re-invoked by a finished
+// background task (or any other self-wake) never fires UserPromptSubmit, so R4 never gets to
+// look at the gap; measured 2026-07-27 on a session that sat 9h40m at 221k context, woke itself
+// on a build completing, and re-uploaded the lot with `warnedIdleAt` still 0.
+//
+// R4's own condition cannot be reused here: it reads `Date.now() - m.lastTs`, and by the time
+// PreToolUse runs, the wake request has ALREADY landed — lastTs is seconds old and the gap
+// computes to zero. So detection is the cache split instead of the clock (see meter()).
+//
+// And unlike R4 this is a receipt, not a gate: no hook fires before a task-notification
+// re-invocation, so the charge cannot be pre-empted. It reports the charge that landed and
+// offers the /clear out while the context is still worth shedding.
+function r4bColdWriteReceiptGuard(ctx) {
+  const { cfg, m } = ctx;
+  const st = preState(ctx);
+  if (m.turns <= 1) return null;                                   // turn 1 writes the baseline fresh
+  if ((m.lastCacheWrite || 0) < cfg.contextWarnTokens) return null;
+  if (st.warnedColdWriteAt === m.lastTs) return null;              // one-shot per wake
+  if (Date.now() - (st.idleFiredAt || 0) < 10 * 60000) return null; // R4 already owned this gap
+  st.warnedColdWriteAt = m.lastTs;
+  writeRecoverPointer(ctx.projectDir, ctx.sid, recoverWindowMinutes(m));
+  return gateAsk(ctx,
+    `⚠️ Hey — this session picked itself back up after sitting longer than the API keeps a ` +
+    `conversation cached, so Claude Code just re-uploaded all ~${fmtK(m.lastCacheWrite)} ` +
+    `tokens of it at full price — about 20x what the same turn costs while cached.\n\n` +
+    `To keep going here: approve. To pick this work up cheaply instead: /clear, then ` +
+    `/continue — it reloads the recent thread of this conversation.`);
+}
+
+// The spend gates share one meter with R4b: PreToolUse runs on every tool call, so meter ONCE
+// and only when at least one of them is armed. Order matters — the idle receipt first (it
+// explains the very context the others are about to price), then R13b (sharpest), then R14,
+// then the session backstop.
+const SPEND_GUARDS = [r4bColdWriteReceiptGuard, r13bTurnSpendGuard, r14TurnRentGuard,
+  sessionSpendGuard];
 
 function spendGatesGuard(ctx) {
   const { cfg, data } = ctx;
-  if (cfg.hardGateUSD == null && cfg.turnGateTokens == null && cfg.turnRentGateTokens == null) {
-    return null;
-  }
+  // Meter only when something in this block can actually speak. R4b rides the same meter but is
+  // NOT a spend gate, so a config with every spend gate disabled must still reach it.
+  const spendArmed = cfg.hardGateUSD != null || cfg.turnGateTokens != null ||
+    cfg.turnRentGateTokens != null;
+  if (!spendArmed && !cfg.idleWarnMinutes) return null;
   preState(ctx);
   // What the PENDING call argues for. Computed once; both in-turn tripwires consult it. A
   // turn-ender defers BOTH gates without re-arming — see gateVerdict for why silence beats a
