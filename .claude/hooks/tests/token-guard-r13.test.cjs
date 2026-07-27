@@ -63,10 +63,12 @@ test('R13b fires once a turn crosses the gate — token copy, no $, re-arms abov
   assert.doesNotMatch(out.permissionDecisionReason, /\$/);
   // Structure (2026-07-26): headline reading, then ONE bullet per thought — same shape as R14.
   const lines = out.permissionDecisionReason.split('\n');
-  assert.equal(lines.length, 4);
+  assert.equal(lines.length, 5);
   assert.match(lines[0], /^⚠️ Hey — this ONE turn has burned ~300k tokens\.$/);
   assert.deepEqual(lines.slice(1).map(l => l.slice(0, 8)),
-    ['• Cost: ', '• Lever:', '• Choice']);
+    ['• Cost: ', '• Lever:', '• Restar', '• Choice']);
+  // R13b's headline states tokens, not trips — so its Restart bullet KEEPS the position clause.
+  assert.match(lines[3], /^• Restart: (\d+ round trips?|this turn is) carrying ~\d+k of context/);
   // Re-armed at 400k (above the 300k observed), so the very next call must NOT re-fire.
   assert.equal(gateOut(preToolUse(fix)).permissionDecision, undefined);
 });

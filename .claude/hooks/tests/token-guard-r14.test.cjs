@@ -65,13 +65,17 @@ test('R14 fires once a turn\'s re-reads cross the gate — round-trip copy, re-a
   assert.match(out.permissionDecisionReason, /smaller resident context/);
   assert.doesNotMatch(out.permissionDecisionReason, /\$/);
   // Structure (2026-07-26): a headline reading, then ONE bullet per thought — cost / lever /
-  // choice. The prior single wrapped paragraph buried the ask under the arithmetic; this pins
-  // it so a future copy edit can't quietly re-blob it.
+  // restart / choice. The prior single wrapped paragraph buried the ask under the arithmetic;
+  // this pins it so a future copy edit can't quietly re-blob it. Restart joined 2026-07-26
+  // (R15); it renders whenever the context meter is non-empty and the gap positive, which this
+  // fixture guarantees — see the empty-meter case below for the 4-line shape.
   const lines = out.permissionDecisionReason.split('\n');
-  assert.equal(lines.length, 4);
+  assert.equal(lines.length, 5);
   assert.match(lines[0], /^⚠️ Hey — .*round trip carrying ~\d+k of context\.$/);
   assert.deepEqual(lines.slice(1).map(l => l.slice(0, 8)),
-    ['• Cost: ', '• Lever:', '• Choice']);
+    ['• Cost: ', '• Lever:', '• Restar', '• Choice']);
+  // R14 suppresses the position clause — the headline already stated trips × context.
+  assert.match(lines[3], /^• Restart: \/clear \+ \/continue rebuilds that /);
   // Re-armed at 400k (above the 300k observed) ⇒ the very next tool call must not re-fire.
   assert.equal(gateOut(preToolUse(fix)).permissionDecision, undefined);
 });

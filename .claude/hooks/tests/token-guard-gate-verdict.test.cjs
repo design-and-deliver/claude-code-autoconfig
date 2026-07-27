@@ -92,11 +92,11 @@ test('full test suite fires with deny LEADING the Choice bullet', () => {
   const out = gateOut(call(fix, 'Bash', { command: 'pnpm test --run' }));
   assert.equal(out.permissionDecision, 'ask');
   const lines = out.permissionDecisionReason.split('\n');
-  assert.equal(lines.length, 4);                       // R14's pinned 4-line shape survives
-  assert.match(lines[3], /^• Choice: deny looks right here — /);
-  assert.match(lines[3], /whole test suite/);
+  assert.equal(lines.length, 5);                       // R14's pinned shape survives (5 since R15)
+  assert.match(lines[4], /^• Choice: deny looks right here — /);
+  assert.match(lines[4], /whole test suite/);
   // Advisory, not authoritarian: the approve path is still stated.
-  assert.match(lines[3], /Approving pushes on/);
+  assert.match(lines[4], /Approving pushes on/);
 });
 
 test('a SCOPED test run is not a bomb — no recommendation, neutral copy', () => {
@@ -104,19 +104,19 @@ test('a SCOPED test run is not a bomb — no recommendation, neutral copy', () =
   const out = gateOut(call(fix, 'Bash', { command: 'pnpm test --run src/utils/foo.test.ts' }));
   assert.equal(out.permissionDecision, 'ask');
   const lines = out.permissionDecisionReason.split('\n');
-  assert.match(lines[3], /^• Choice: approve to push on — or deny/);
-  assert.doesNotMatch(lines[3], /looks right here/);
+  assert.match(lines[4], /^• Choice: approve to push on — or deny/);
+  assert.doesNotMatch(lines[4], /looks right here/);
 });
 
 test('explicitly-unbounded Grep is a bomb; an unset head_limit (caps at 250) is not', () => {
   const bomb = gateOut(call(primed(), 'Grep',
     { pattern: 'foo', output_mode: 'content', head_limit: 0 }));
-  assert.match(bomb.permissionDecisionReason.split('\n')[3], /^• Choice: deny looks right here — /);
+  assert.match(bomb.permissionDecisionReason.split('\n')[4], /^• Choice: deny looks right here — /);
   assert.match(bomb.permissionDecisionReason, /explicitly unbounded/);
 
   const ordinary = gateOut(call(primed(), 'Grep', { pattern: 'foo', output_mode: 'content' }));
   assert.equal(ordinary.permissionDecision, 'ask');
-  assert.match(ordinary.permissionDecisionReason.split('\n')[3], /^• Choice: approve to push on/);
+  assert.match(ordinary.permissionDecisionReason.split('\n')[4], /^• Choice: approve to push on/);
 });
 
 test('R13b carries the same verdict layer', () => {

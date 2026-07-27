@@ -1778,6 +1778,34 @@ function gateVerdict(toolName, toolInput) {
 const choiceBullet = (verdict, neutral, denyTail) => verdict && verdict.kind === 'deny'
   ? `• Choice: deny looks right here — ${verdict.why}. Approving pushes on; ${denyTail}`
   : `• Choice: ${neutral}`;
+// ── restartBullet: price the option the Choice bullet leaves unpriced (R15) ───────────────────
+// Approving buys ONE more doubled leg; the standing alternative is /clear + /continue. Both
+// numbers are already metered, so the comparison is free: a restart re-pays roughly the resident
+// context, while pushing on spends the whole next gap. What varies is the RATIO — a 40k context
+// at the 1M fire is nearly free to rebuild, a 900k one at the 2M fire is not — and that variance
+// is the entire justification for the bullet. A fixed sentence here would be wallpaper.
+//
+// The part the script CANNOT measure is the seam. It has no child_process (deliberately — this
+// runs inside PreToolUse on the critical path), so it cannot ask git whether the tree is clean,
+// and a turn's ruled-out paths live only in the window and are on no disk at all. So the cheap
+// branch names that condition rather than claiming it holds — same discipline as choiceBullet.
+const CHEAP_RESTART_X = 3;  // restart ≤ gap/3 → clearing saves at least two thirds of the next leg
+// Position clause, so a caller whose HEADLINE already states trips × context (R14) can pass ''
+// and skip the restatement rather than printing the same reading twice.
+const restartPos = reqs => reqs == null
+  ? 'this turn is carrying' : `${reqs} round trip${reqs === 1 ? '' : 's'} carrying`;
+function restartBullet(pos, liveContext, gap) {
+  if (!liveContext || !(gap > 0)) return '';   // meter came back empty — say nothing over guessing
+  const pct = Math.round((liveContext / gap) * 100);
+  const price = `~${pct}% of the ~${fmtK(gap)} more this turn spends reaching the next check`;
+  const head = pos
+    ? `• Restart: ${pos} ~${fmtK(liveContext)} of context — /clear + /continue rebuilds that ` +
+      `for ${price}.`
+    : `• Restart: /clear + /continue rebuilds that ~${fmtK(liveContext)} for ${price}.`;
+  return liveContext * CHEAP_RESTART_X <= gap
+    ? `${head} Cheap — but take it FROM a commit point: what this turn ruled out is not on disk.\n`
+    : `${head} Little saving in restarting here — push on, and clear at the next commit instead.\n`;
+}
 // total tokens PROCESSED (in + out + cache read/write) — the unit user-facing check-ins lead
 // with. Deliberately unweighted; the dollar figure beside it carries the per-model weighting.
 const tokOne = v => v.inp + v.out + v.cr + v.cw;
@@ -2467,13 +2495,16 @@ function r13bTurnSpendGuard(ctx) {
   // nextCheckClause for why a flat step stopped working.
   st.turnGateFires = (st.turnGateFires || 0) + 1;
   st.turnGateAt = reArmAt(turnTok, cfg.turnGateTokens, st.turnGateFires);
-  // Same shape as R14 below — headline reading, then cost / lever / choice, one per line.
+  // Same shape as R14 below — headline reading, then cost / lever / restart / choice, one per line.
   return gateAsk(ctx,
     `⚠️ Hey — this ONE turn has burned ~${fmtK(turnTok)} tokens.\n` +
     `• Cost: a normal task finishes under ~${fmtK(TASK_NORM_TOK)}, so the work has likely ` +
     `spiraled well past what was anticipated.\n` +
     `• Lever: a plan with session-sized substeps, not a longer turn.` +
     `${nextCheckClause(st.turnGateFires, st.turnGateAt)}\n` +
+    restartBullet(
+      restartPos(st.turnStartReqs == null ? null : Math.max(1, m.main.turns - st.turnStartReqs)),
+      m.liveContext, st.turnGateAt - turnTok) +
     choiceBullet(verdict,
       'approve to push on — or deny, and Claude should stop and propose that plan.',
       'denying means Claude stops and proposes that plan.'));
@@ -2497,6 +2528,10 @@ function rentAskCopy(ctx, rent) {
     `compounds every trip.\n` +
     `• Lever: a smaller resident context, not a shorter task.` +
     `${nextCheckClause(st.rentGateFires, st.rentGateAt, ' of re-reads')}\n` +
+    // Position clause suppressed — the headline two lines up already states trips × context.
+    // Here the ratio carries extra meaning for free: rent ≈ context × trips, so the percentage
+    // reads as "a restart costs about what the next N round trips cost anyway."
+    restartBullet('', m.liveContext, st.rentGateAt - rent) +
     choiceBullet(verdict,
       'approve to push on — or deny, and Claude should land this turn at a commit ' +
       'point so you can /clear + /continue carrying only the next step.',
@@ -3179,7 +3214,7 @@ if (require.main === module) {
 module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, ledgerScopes, officialLines,
   claudeCodeUA, fetchOfficialUsage,
   analyzeSession, renderAnalysis, payloadVerdict, fanVerdict, workflowSource, skillSizes, recordObservedSkill,
-  generateBudgets, slug, driftNote, driftDeferralTick, recoverTail,
+  generateBudgets, slug, driftNote, driftDeferralTick, recoverTail, restartBullet, restartPos,
   writeRecoverPointer, idleReturnNote, resolveConfig, TOKEN_SAVER,
   fiveHourWindow, tightestWindow, windowSpikeVerdict, windowThresholdVerdict, effectiveWarn,
   spikeAttribution, spikeCopyMode,
