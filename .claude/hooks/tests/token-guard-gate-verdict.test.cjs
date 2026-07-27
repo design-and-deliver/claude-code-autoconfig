@@ -99,6 +99,24 @@ test('full test suite fires with deny LEADING the Choice bullet', () => {
   assert.match(lines[4], /Approving pushes on/);
 });
 
+// The two ways a full suite actually gets typed. Both read as "scoped" to a check that anchors at
+// string start and counts shell operators as path arguments — so the deny label almost never fired
+// on a real run (observed 2026-07-26: the gate stayed neutral on every full-suite command in the
+// session that prompted this test).
+test('a full suite behind `cd &&` still fires — the check is per segment, not anchored', () => {
+  const fix = primed();
+  const out = gateOut(call(fix, 'Bash', { command: 'cd C:/CODE/repo && pnpm test --run' }));
+  assert.equal(out.permissionDecision, 'ask');
+  assert.match(out.permissionDecisionReason.split('\n')[4], /^• Choice: deny looks right here — /);
+});
+
+test('redirects and pipes are not scope — `pnpm test --run 2>&1 | tail -30` is a full suite', () => {
+  const fix = primed();
+  const out = gateOut(call(fix, 'Bash', { command: 'pnpm test --run 2>&1 | tail -30' }));
+  assert.equal(out.permissionDecision, 'ask');
+  assert.match(out.permissionDecisionReason.split('\n')[4], /^• Choice: deny looks right here — /);
+});
+
 test('a SCOPED test run is not a bomb — no recommendation, neutral copy', () => {
   const fix = primed();
   const out = gateOut(call(fix, 'Bash', { command: 'pnpm test --run src/utils/foo.test.ts' }));
@@ -106,6 +124,12 @@ test('a SCOPED test run is not a bomb — no recommendation, neutral copy', () =
   const lines = out.permissionDecisionReason.split('\n');
   assert.match(lines[4], /^• Choice: approve to push on — or deny/);
   assert.doesNotMatch(lines[4], /looks right here/);
+
+  // The other half of the redirect fix: stripping operators must not swallow a REAL path arg.
+  // This is the literal command from the 2026-07-26 screenshot — cd, pipe, redirect AND a scope.
+  const piped = gateOut(call(primed(), 'Bash',
+    { command: 'cd C:/CODE/repo && pnpm test --run src/utils/foo.test.ts 2>&1 | tail -30' }));
+  assert.doesNotMatch(piped.permissionDecisionReason.split('\n')[4], /looks right here/);
 });
 
 test('explicitly-unbounded Grep is a bomb; an unset head_limit (caps at 250) is not', () => {

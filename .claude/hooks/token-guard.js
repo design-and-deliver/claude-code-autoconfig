@@ -1745,18 +1745,29 @@ const TURN_ENDER_SEG = [
   /^git\s+diff\s+(--stat|--cached\s+--stat|--staged\s+--stat)\b/,
   /^git\s+log\s+--oneline\b/, /^git\s+branch\s+--show-current\b/, /^cd\s/,
 ];
+const shellSegs = cmd => String(cmd || '').split(/&&|\|\||[;|]/).map(s => s.trim()).filter(Boolean);
 function isTurnEnder(cmd) {
-  const segs = String(cmd || '').split(/&&|\|\||[;|]/).map(s => s.trim()).filter(Boolean);
+  const segs = shellSegs(cmd);
   return segs.length > 0 && segs.every(s => TURN_ENDER_SEG.some(re => re.test(s)));
 }
 // A test runner with no path/pattern argument runs the whole suite. Flags (-t, --coverage, --run)
 // and go's ./... wildcard scope nothing, so they don't count as an argument.
 const TEST_RUNNER =
   /^(?:(?:pnpm|npm|yarn|bun)\s+(?:run\s+)?test|npx\s+(?:jest|vitest|mocha)|jest|vitest|pytest|mocha|go\s+test)\b(.*)$/;
+// …and neither do redirects. Both of these are corrections, not polish: matching the whole command
+// string missed `cd repo && pnpm test --run`, and counting `2>&1` / `| tail -30` as path arguments
+// made a piped full suite read as scoped. Between them they covered nearly every way a suite is
+// actually typed, so the deny verdict was live in the tests and near-dead in practice (observed
+// 2026-07-26). Per-segment matching is also what keeps `git commit -m "run pnpm test"` honest —
+// isTurnEnder runs first and returns 'skip' before this is reached.
+const REDIRECT_ARG = /^(?:\d?>>?|\d?<|&)/;
 function isFullSuite(cmd) {
-  const m = TEST_RUNNER.exec(String(cmd || '').trim());
-  if (!m) return false;
-  return m[1].split(/\s+/).filter(a => a && !a.startsWith('-') && a !== './...').length === 0;
+  return shellSegs(cmd).some(seg => {
+    const m = TEST_RUNNER.exec(seg);
+    if (!m) return false;
+    return m[1].split(/\s+/)
+      .filter(a => a && !a.startsWith('-') && a !== './...' && !REDIRECT_ARG.test(a)).length === 0;
+  });
 }
 function gateVerdict(toolName, toolInput) {
   const ti = toolInput || {};
