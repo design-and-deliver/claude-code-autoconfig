@@ -21,7 +21,7 @@ of them; a session that opens it whole pays that on turn one and re-pays it on e
 after (≈360k of rent in a long session — measured 2026-07-25, see `.claude/rules/plan-authoring.md`).
 Read exactly three slices and nothing else:
 
-1. the **⛔ trap section** (`this doc:51-89`) — before ANY item, no exceptions;
+1. the **⛔ trap section** (`this doc:51-97`) — before ANY item, no exceptions;
 2. **your own substep** — every heading's Read list names its own line range;
 3. the **Ledger tail** — `tail -80 docs/clean-code-remediation-plan.md`, not the whole section.
 
@@ -50,6 +50,14 @@ emitted at the boundary, never left to memory.
 
 ## ⛔ Standing trap warnings — read before ANY item
 
+- **NEVER `git stash` a dirty tree you did not dirty** (added 2026-07-26, cost ~1.4M tokens).
+  Sibling sessions in OTHER repos edit this repo's files by design — `.claude/rules/plan-authoring.md`
+  is canonical here, token-guard is fleet-synced — so foreign hunks are the NORMAL case, not an
+  anomaly. Stashing them looks like tidying and is actually a concurrent-write: it yanks in-flight
+  work out from under a live session and can split one change into two non-working halves. Isolate
+  with `git add <your files> && git commit`; never move someone else's. Probe live glyphs across
+  **all** projects (`~/.claude/**/.titles/*.glyph` AND `C:/CODE/*/.claude/hooks/.titles/*.glyph`) —
+  `/continue`'s Step 3b gate scans only the local dir and missed two live writers.
 - **The `.claude/hooks/` copies here are the fleet-synced canonicals** — `terminal-title.js`,
   `terminal-title.directive.md` AND `token-guard.js` (the manifest in
   `scripts/sync-hook-fleet.js:32`). Edit only these, then `node scripts/sync-hook-fleet.js
@@ -252,7 +260,7 @@ exactly as 3.2's Ledger entry already advised executing it.
 ### ☑ 3.3b · L · ~2h — token-guard: decompose `onPreToolUse` (CC 44) (DONE 2026-07-26, see Ledger)
 
 **Read list** (~330 lines — do NOT open token-guard.js whole, it is 3,067):
-`this doc:252-272` · `.claude/hooks/token-guard.js:2288-2498` (`onPreToolUse`, the target) ·
+`this doc:260-280` · `.claude/hooks/token-guard.js:2288-2498` (`onPreToolUse`, the target) ·
 `:2191-2242` (3.3a's `emitBlock` + `PROMPT_GUARDS` fold — **the template to copy**) ·
 `:2500-2543` (`ask` / `deny` — the return shapes the guards must produce). Grep, don't read,
 for the pure verdicts it already calls (`payloadVerdict`, `fanVerdict`, `commandPayloadTokens`).
@@ -276,7 +284,7 @@ cleared violation in the same commit.
 on the literal "live context at end" and the RENT/BOMBS/FLEETS/TTL headers). Byte-identical
 output is the acceptance bar, not a nicety.
 
-**Read list** (~230 lines): `this doc:273-294` ·
+**Read list** (~230 lines): `this doc:281-302` ·
 `.claude/hooks/token-guard.js:2738-2867` (`analyzeSession`, the target) ·
 `:2869-2935` (`renderAnalysis` — owns the frozen wording) ·
 `:472-506` (`attributeJump` — the region-attribution logic to dedupe against).
@@ -298,22 +306,22 @@ shippable user-facing bug fix (its own `Changelog:` line) that does not need to 
 repo's worst decomposition — and 3.4b starts from a file whose dispatch is already pinned by
 3.4a's test.
 
-### ☐ 3.4a · L · ~45m — terminal-title: explicit Stop dispatch (unknown events exit quietly) · [fable]
+### ☑ 3.4a · L · ~2h — terminal-title: explicit Stop dispatch (unknown events exit quietly) · [fable] (DONE 2026-07-26, see Ledger)
 
 Sized L not for its diff but because it edits a ⛔ trap surface — the authoring rules make that
 automatic, regardless of how small the change looks.
 
-**Read list** (~175 lines): `this doc:301-323` ·
+**Read list** (~175 lines): `this doc:309-331` ·
 `.claude/hooks/terminal-title.js:99-135` (handle's entry, `event` read at :100, the
 `needsTranscript` gate at :130) · `:233-372` (the Notification branch and the **unguarded
 fall-through** that follows it) · the hook-suite test dir listing (`ls .claude/hooks/tests/`).
 
-- [ ] The review's safety fix: dispatch matches `UserPromptSubmit` (:135), `PostToolUse`
+- [x] The review's safety fix: dispatch matches `UserPromptSubmit` (:135), `PostToolUse`
       (:172) and `Notification` (:233), then everything else falls through to the Stop path —
       so ANY unknown/new event is treated as Stop. Add an explicit `event === 'Stop'` guard;
       unknown events exit quietly (0).
-- [ ] Hook-suite test, red on HEAD first: an unknown `hook_event_name` must NOT paint idle.
-- [ ] `node scripts/sync-hook-fleet.js --write`; live-twin parity green.
+- [x] Hook-suite test, red on HEAD first: an unknown `hook_event_name` must NOT paint idle.
+- [x] `node scripts/sync-hook-fleet.js --write`; live-twin parity green.
 
 **Verify:** `npm test` (the hook suites run ONLY there); `node scripts/sync-hook-fleet.js`
 (check mode, zero drift); manual smoke: one prompt in a scratch session still paints
@@ -323,10 +331,11 @@ working→idle correctly.
 
 ### ☐ 3.4b · L · ~90m — terminal-title: split `handle()` (CC 97, the repo's worst) · [fable]
 
-**Read list** (~275 lines): `this doc:324-342` ·
+**Read list** (~275 lines): `this doc:332-351` ·
 `.claude/hooks/terminal-title.js:99-372` (`handle()` in full — 274 lines, the one whole-function
-window this plan permits in that file) · 3.4a's new dispatch test (grep `.claude/hooks/tests/`
-for the name the Ledger records). `turnWatch` (:1162-1374) is **3.6's** — do not open it here.
+window this plan permits in that file) · `.claude/hooks/tests/terminal-title-dispatch.test.cjs`
+(3.4a's dispatch test — 74 lines; the split must keep it green). `turnWatch` (:1166-1378) is
+**3.6's** — do not open it here.
 
 - [ ] Split into `onUserPromptSubmit` / `onPostToolUse` / `onNotification` / `onStop` in-file,
       on the dispatch boundaries 3.4a made explicit.
@@ -342,7 +351,7 @@ replacements; manual smoke: one prompt in a scratch session paints working→idl
 
 ### ☐ 3.5 · M · ~60m — settings-merge: per-domain split · [opus]
 
-**Read list** (~220 lines): `this doc:343-356` · `bin/lib/settings-merge.js` **whole** (217
+**Read list** (~220 lines): `this doc:352-365` · `bin/lib/settings-merge.js` **whole** (217
 lines — under the 800-line limit, the only whole-file read left in Phase 3) · grep
 `test/plugin-system.test.js` for `added` to find the delta assertions, don't read it whole.
 Not a hook: no fleet sync, no single-file constraint here.
@@ -359,14 +368,14 @@ Not a hook: no fleet sync, no single-file constraint here.
 ⚠ Same trap surface as 3.4a/3.4b (fleet-synced single file, cross-process sidecar protocol) —
 execute right after them, while that session's traps are fresh.
 
-**Read list** (~330 lines): `this doc:357-383` ·
-`.claude/hooks/terminal-title.js:1162-1374` (`turnWatch`, the target — the duplicated
-grace+recheck+rescue tail is at ~1329-1335 ≈ ~1354-1360) · `:1375-1390`
-(`rescueFromWatch` — what the extracted tail must call) · `:887-992` (`spawnTurnWatch` — the
+**Read list** (~330 lines): `this doc:366-392` ·
+`.claude/hooks/terminal-title.js:1166-1378` (`turnWatch`, the target — the duplicated
+grace+recheck+rescue tail is at ~1333-1339 ≈ ~1358-1364) · `:1379-1394`
+(`rescueFromWatch` — what the extracted tail must call) · `:891-996` (`spawnTurnWatch` — the
 payload contract it is launched with). `handle()` is 3.4b's; do not open it here.
 
 - [ ] First seam is free: the grace+recheck+rescue tail is DUPLICATED verbatim today
-      (~1329–1335 ≈ ~1354–1360) — extract one `confirmStallAndRescue(...)`.
+      (~1333–1339 ≈ ~1358–1364) — extract one `confirmStallAndRescue(...)`.
 - [ ] Extract per-verdict handlers out of the probe dispatch: `classifyProbeEligibility`,
       `handleDeadStreak`, `handleCpuQuiet`, plus the debug-gated console-title readback.
 - [ ] Byte-frozen strings: glyph-file tokens (`working` / `idle` / the awaiting token — must
@@ -389,7 +398,7 @@ passed a step that could not fit. `fanVerdict` already has its test net; `meter`
 
 ### ☐ 3.7a · L · ~90m — token-guard: test-first, then decompose `meter` (CC 33) · [opus]
 
-**Read list** (~200 lines): `this doc:390-412` ·
+**Read list** (~200 lines): `this doc:399-421` ·
 `.claude/hooks/token-guard.js:337-402` (`meter`, the target) · `:422-471` (`meterSession` —
 one of the three field-name consumers) · `:198-211` (the `PRICES` / `CACHE_*_X` block the
 pricing fold must keep as the single source — grep `CACHE_READ_X` if the range has drifted) ·
@@ -414,7 +423,7 @@ pattern to copy.
 
 Cheaper half — `token-guard-fan.test.cjs` already pins the shape, so no new suite.
 
-**Read list** (~120 lines): `this doc:413-430` ·
+**Read list** (~120 lines): `this doc:422-439` ·
 `.claude/hooks/token-guard.js:821-891` (`fanVerdict`, the target) · `:892-913`
 (`workflowSource` — its caller-side input) · grep `.claude/hooks/tests/token-guard-fan.test.cjs`
 for `level` to find the pinned assertions.
@@ -435,7 +444,7 @@ valuable and is the only "extract before you edit" move available inside a singl
 
 ### ☐ 3.8a · L · ~60m — token-guard: characterization test for `--report` (it has none) · [opus]
 
-**Read list** (~190 lines): `this doc:436-454` ·
+**Read list** (~190 lines): `this doc:445-463` ·
 `.claude/hooks/token-guard.js:3061-3186` (`report`, to end of file — the thing being pinned) ·
 `.claude/hooks/tests/token-guard-official-usage.test.cjs` (the 1.3 fetch/credentials stub
 pattern to reuse).
@@ -457,7 +466,7 @@ goes red (a characterization test that cannot fail is not a net).
 Hard dependency: 3.8a's suite is the only safety net this function gets — do not start without
 it landed.
 
-**Read list** (~130 lines): `this doc:455-470` ·
+**Read list** (~130 lines): `this doc:464-479` ·
 `.claude/hooks/token-guard.js:3061-3186` (`report`) · 3.8a's new test file.
 
 - [ ] Extract `allocationLines` / `sessionLines` / `formatModelRow` / `windowLines` /
@@ -470,7 +479,7 @@ it landed.
 
 ### ☐ 3.9 · M · ~45m — whats-happening: decompose analyze (CC 33) · [opus]
 
-**Read list** (~340 lines): `this doc:471-484` · `.claude/scripts/whats-happening.js` **whole**
+**Read list** (~340 lines): `this doc:480-493` · `.claude/scripts/whats-happening.js` **whole**
 (331 lines — under the 800-line limit) · grep `test/whats-happening.test.js` for `state` to
 find the 5 characterization assertions. Not a hook: no fleet sync.
 
@@ -484,7 +493,7 @@ find the 5 characterization assertions. Not a hook: no fleet sync.
 
 ### ☐ 3.10 · M · ~45m — plan-progress: decompose render (CC 32) — after 2.5, never before · [opus]
 
-**Read list** (~230 lines): `this doc:485-501` · `.claude/scripts/plan-progress.js` **whole**
+**Read list** (~230 lines): `this doc:494-510` · `.claude/scripts/plan-progress.js` **whole**
 (224 lines — under the 800-line limit) · grep `test/plan-progress.test.js` for the fixture
 plans. Not a hook: no fleet sync. ⚠ This script parses THIS doc — a regex change here can make
 every plan in the repo invisible to `/plan-progress` and `/continue`.
@@ -1130,3 +1139,71 @@ every plan in the repo invisible to `/plan-progress` and `/continue`.
     ceiling means.
   - Next: 3.4a (terminal-title: explicit Stop dispatch — a shippable user-facing fix).
     Handoff: /clear → /continue (next: 3.4a · [fable], same model — no /model switch needed).
+- **2026-07-26 — 3.4a explicit Stop dispatch — DONE.** Commit `aa879ca`, `npm test` green
+  (242 hook tests, suite exit 0), `sync-hook-fleet.js` check mode clean across all four
+  targets. The fix is four lines at `.claude/hooks/terminal-title.js:299` — an explicit
+  `if (event !== 'Stop') process.exit(0)` ahead of the Stop path — plus a new 74-line
+  hook suite, `.claude/hooks/tests/terminal-title-dispatch.test.cjs`.
+  - **Red-on-HEAD was proved, not assumed.** Reverted the guard, ran the suite: test 1
+    (unknown event must emit nothing / persist no glyph) failed at `:58`, test 2 (Stop still
+    paints idle on a statement turn) passed. The positive control matters — without it a
+    blanket `exit(0)` would pass test 1 and silently kill the whole Stop path.
+  - **Took THREE sessions, and only the first was the substep.** `a507af9c` (fable) wrote the
+    guard + test. `6ed9bc73` (fable) tried to verify, found foreign hunks in the tree, and
+    `git stash push`-ed them — pulling in-flight work out from under two *live* sessions in
+    `job-agent-extension`; its `npm test` was then interrupted. `005b51e3` (opus) adjudicated
+    the wreckage and landed the commit.
+  - ⛔ **New standing trap — never stash a dirty tree you did not dirty.** The stash looks like
+    tidying and is actually a concurrent-write. Sibling sessions in OTHER repos edit this
+    repo's files by design (`.claude/rules/plan-authoring.md` is canonical here; token-guard is
+    fleet-synced), so a dirty tree is the normal case, not an anomaly. Probe live glyphs across
+    **all** projects — `~/.claude/**/.titles/*.glyph` AND `C:/CODE/*/.claude/hooks/.titles/*.glyph`
+    — not just this repo's; `/continue`'s Step 3b gate only scans the local dir and missed both
+    writers. Isolate with `git add <your files> && git commit`, never by moving other people's.
+    Now the **first bullet of the ⛔ section** — a Ledger-only trap scrolls out of `tail -80`
+    the moment the next substep appends, which is exactly when it would still be needed.
+  - **The stash split one change into two non-working halves.** `stash@{0}` holds the
+    plan-authoring centralization chore's first half (`subdirOf`, `canonicalFor(entry)`,
+    `targetDirFor`, the `plan-authoring.md` manifest entry with `subdir: 'rules'`) — where
+    `targetDirFor` is *defined but never called*, so the rule would sync into `.claude/hooks/`.
+    The working tree held the second half — `classify(target, …)` *calling* `targetDirFor`,
+    which is undefined there → `ReferenceError` on first use, i.e. `npm test` could not run at
+    all until it was reverted. Even merged, `applyOne` still needs rewiring: it passes
+    `target.dir` at `scripts/sync-hook-fleet.js:142` and writes to `target.dir` at `:154`,
+    where both must use the `dir` `classify` now returns. Both halves are preserved —
+    `stash@{0}` plus `sync-hook-fleet.WORKTREE-HALF.patch` / `sync-hook-fleet.STASHED.js` in
+    `005b51e3`'s scratchpad. ⚠ The stash ALSO carries stale `token-guard.js` + r13/r14/
+    gate-verdict test hunks that `6319304` (R15) has since superseded — a blind `stash pop`
+    would revert settled work. Take only the two `sync-hook-fleet.js` / `plan-authoring.md`
+    files from it.
+  - **R15 is resolved** (it was open in 3.3c's entry above): committed `6319304`, main
+    fast-forwarded, extension copy synced at `afa68dd`, the three bullet-structure pins moved
+    4 → 5 bullets. The "do not run `sync-hook-fleet --write` while the tree is dirty" warning
+    there has expired; the fleet is now clean, including `wifi-app` token-guard.js (35 lines
+    behind, synced here).
+  - Routing held: the trap-surface edit ran on **fable** as tagged; only the adjudication and
+    verify ran on opus.
+  - **Tag corrected `~45m` → `~2h`.** Size L was right (trap surface), the time was not — even
+    the clean first session took 2h22m for a four-line diff. The L tag exists precisely because
+    small diffs on trap surfaces are not small jobs.
+  - rent: `a507af9c` **2.3M processed / ≈397k effective** (27 requests, 2h22m, 92% cached, 113k
+    live at end); `6ed9bc73` **1.2M / ≈200k effective** (16 requests, 6m, 92% cached, 91k live);
+    `005b51e3` **1.9M / ≈282k effective** (23 requests, 52m, 94% cached, 103k live). Combined
+    **5.4M / ≈879k** over 66 requests. L ceiling ≈3M: holds comfortably on effective, ~1.8× over
+    on the headline — the fourth consecutive data point (3.3a, 3.3b, 3.3c, 3.4a) that
+    `.claude/rules/plan-authoring.md` must state WHICH number the ceiling means. Note ~1.4M of
+    this was collision tax, not substep work.
+  - **Ranges re-pointed for the +4 shift** (the guard sits at `terminal-title.js:299`, so
+    everything below it moved). 3.6's Read list took all of it — `turnWatch` 1162-1374 →
+    **1166-1378**, `rescueFromWatch` 1375-1390 → **1379-1394**, `spawnTurnWatch` 887-992 →
+    **891-996**, and the duplicated-tail hints ~1329-1335 ≈ ~1354-1360 → **~1333-1339 ≈
+    ~1358-1364**. 3.4b's `:99-372` needed no change: `handle()` ended at 368 before and 372
+    now, and the range already said 372 (it over-read by 4 until this commit made it exact).
+    3.4b also now NAMES the dispatch test (`terminal-title-dispatch.test.cjs`) instead of
+    telling the session to grep for it. The trap-section insert then shifted every `this doc:`
+    self-pointer below it — all 13 re-pointed and verified against their own headings.
+  - Next: 3.4b (terminal-title: split `handle()`, CC 97 — the repo's worst). Also still parked:
+    the plan-authoring centralization chore (this branch's namesake) — its own session, not
+    folded into a substep; note `9352dbb7` in `job-agent-extension` was live on it during this
+    session, so check for a sibling before starting it.
+    Handoff: /clear → /continue (next: 3.4b · [fable], same model — no /model switch needed).
