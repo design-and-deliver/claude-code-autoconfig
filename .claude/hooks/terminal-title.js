@@ -296,6 +296,10 @@ async function handle(data) {
     return;
   }
 
+  // Only Stop may dispatch the Stop path. Claude Code grows hook events over time; an unknown
+  // event falling through here would paint the tab ✻ idle mid-turn. Exit quietly instead.
+  if (event !== 'Stop') process.exit(0);
+
   // Stop: idle, UNLESS the turn ended on a question the user must answer — then awaiting + a 2nd BEL
   // so VS Code paints the (otherwise bell-less) tab gold. "Ended on a question" = last visible
   // assistant text ends in '?' (transcript heuristic) OR an explicit {sid}.ask flag (consumed here).
