@@ -329,7 +329,7 @@ working→idle correctly.
 **Commit:** `fix(terminal-title): only Stop dispatches the Stop path` +
 `Changelog: More reliable terminal tab status updates`.
 
-### ☐ 3.4b · L · ~90m — terminal-title: split `handle()` (CC 97, the repo's worst) · [fable]
+### ☑ 3.4b · L · ~90m — terminal-title: split `handle()` (CC 97, the repo's worst) · [fable] (DONE 2026-07-26, see Ledger)
 
 **Read list** (~275 lines): `this doc:332-351` ·
 `.claude/hooks/terminal-title.js:99-372` (`handle()` in full — 274 lines, the one whole-function
@@ -337,12 +337,12 @@ window this plan permits in that file) · `.claude/hooks/tests/terminal-title-di
 (3.4a's dispatch test — 74 lines; the split must keep it green). `turnWatch` (:1166-1378) is
 **3.6's** — do not open it here.
 
-- [ ] Split into `onUserPromptSubmit` / `onPostToolUse` / `onNotification` / `onStop` in-file,
+- [x] Split into `onUserPromptSubmit` / `onPostToolUse` / `onNotification` / `onStop` in-file,
       on the dispatch boundaries 3.4a made explicit.
-- [ ] Each resulting handler + its helpers must meet the Phase 3 CC ≤ 9 bar — a 97 split four
+- [x] Each resulting handler + its helpers must meet the Phase 3 CC ≤ 9 bar — a 97 split four
       ways can still leave a 25, so expect per-event helper extraction too. `turnWatch()`
       waits for 3.6.
-- [ ] `node scripts/sync-hook-fleet.js --write`; live-twin parity green.
+- [x] `node scripts/sync-hook-fleet.js --write`; live-twin parity green.
 
 **Verify:** `npm test`; check-mode sync (zero drift); the Phase 3 CC ≤ 9 bar on `handle`'s
 replacements; manual smoke: one prompt in a scratch session paints working→idle correctly.
@@ -1207,3 +1207,47 @@ every plan in the repo invisible to `/plan-progress` and `/continue`.
     folded into a substep; note `9352dbb7` in `job-agent-extension` was live on it during this
     session, so check for a sibling before starting it.
     Handoff: /clear → /continue (next: 3.4b · [fable], same model — no /model switch needed).
+
+- **2026-07-26 — 3.4b split `handle()` into per-event handlers — DONE.** `npm test` green (21
+  suites, 247 hook subtests), check-mode fleet sync zero drift, live-twin parity green.
+  `handle()` is now a 12-line dispatcher (`terminal-title.js:102-114`) over `onUserPromptSubmit`
+  (:174), `onPostToolUse` (:225), `onSessionStart`, `onNotification` (:266) and `onStop` (:341);
+  the Stop path further split out `onStopAskFlag` (:363), and `hookContext` / `contractCanary`
+  were lifted out of the old body as shared per-event context. CC bar met: `handle` and all six
+  new functions are absent from `test/complexity-baseline.json`, i.e. every one is ≤ 9 — the
+  single cleared entry in that file (committed alongside, as the ratchet demands) is the old
+  `Function 'handle'` at 97, the repo's worst.
+  - ⚠ **Deviation — the code did NOT get its own commit.** The plan called for
+    `refactor(terminal-title): split handle() into per-event handlers`. The work was still
+    sitting uncommitted in the shared checkout when a `/continue` in another terminal
+    (`cc03ed57`) swept it up with `git add -A` into **`6d2b12d`**
+    `chore(checkpoint): preserve in-flight hook work before the fleet sync`. So this substep's
+    hash is `6d2b12d`, and that commit also carries `c1158d40`'s token-guard gate work plus the
+    new `docs/session-broker-plan.md`. Nothing is lost and the tree is consistent, but
+    `git log --oneline` will not name this refactor — search `6d2b12d` when tracing it later.
+  - ⚠ **The microstep-3 fleet sync ran BEFORE the commit, from a third session.**
+    `~/.claude/hooks/terminal-title.js` was written 2026-07-26 23:52; the repo copy is 21:57.
+    That is the outward, irreversible step landing ahead of the durable one — backwards from
+    the plan's ordering, and exactly the failure class `docs/session-broker-plan.md` was
+    written to fix (it began as the 21:57-edit-never-synced incident, which the 23:52 sync
+    closed). Harmless now: check mode reports zero drift across `~/.claude`,
+    `job-agent-extension`, `wifi-app` and `test`. Nothing further to run here.
+  - **Manual smoke** (plan's Verify): not a separate scratch session — observed live in
+    `43fc923a`, which runs the synced twin: `working|UserPromptSubmit` →
+    `working|PostToolUse` → `idle|Stop` across turns, i.e. the split handlers paint correctly.
+  - **Tag kept at `L · ~90m`, deliberately.** The substep session itself
+    (`b0439696`, fable) took **13m**. Left uncorrected because L is about trap surface, not
+    duration — the reason the wall clock stayed small is that 3.4a had already made the
+    dispatch boundaries explicit and pinned them with `terminal-title-dispatch.test.cjs`. Read
+    the pair as evidence for plan-authoring's "extract before you edit", not as a reason to
+    downgrade the next trap-surface substep.
+  - rent: `b0439696` **1.2M processed / ≈274k effective** (14 requests, 13m, 87% cached, 136k
+    live at end) for the split itself; `cc03ed57` **1.1M / ≈178k effective** (15 requests, 7m,
+    93% cached, 84k live) for the checkpoint sweep. Well inside the L ≈3M ceiling on both
+    numbers — the first Phase 3 substep where the headline also fits, because the collision tax
+    that inflated 3.3a–3.4a landed in a separate session here instead of inside the substep.
+  - Next: **3.5** (settings-merge per-domain split · M · [opus]) — not a hook, so no fleet sync
+    and no single-file constraint. Still parked: the plan-authoring centralization chore (this
+    branch's namesake) — its own session; `stash@{0}` holds its first half and must NOT be
+    popped blind (see 3.4a's entry above for exactly which two files to take).
+    Handoff: /clear → /continue (next: 3.5 · [opus] — /model switch needed from fable).
