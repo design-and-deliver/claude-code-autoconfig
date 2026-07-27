@@ -430,7 +430,8 @@ function main() {
   // gated OUT of user installs until R6/R8/R9/R10 are live-baked — see CLAUDE.md "Invariants & Landmines".
   // THIS list (not package.json "files") is what gates installs — new dev-only commands/hooks
   // must be added here. Keep the literal on one line: tests parse it by regex.
-  const DEV_ONLY_FILES = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-session.md', 'migrate-new-session.md', 'token-guard.js', 'plan-progress.md', 'plan-progress.js', 'whats-happening.md', 'whats-happening.js', 'refactor.md', 'parallel-session-worktrees.md'];
+  const DEV_ONLY_FILES = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-session.md', 'migrate-new-session.md', 'token-guard.js', 'plan-progress.md', 'plan-progress.js', 'whats-happening.md', 'whats-happening.js', 'refactor.md', 'parallel-session-worktrees.md',
+    'fleet.md', 'fleet.js'];
 
   // Everything the installer ships to user projects passes this gate, at every depth.
   const shipsToUsers = (name) => !DEV_ONLY_FILES.includes(name);
