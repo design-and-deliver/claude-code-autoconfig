@@ -8,11 +8,19 @@
 // clear/continue"). The original reading of the premise — leave the Choice bullet neutral unless
 // the CALL is a bomb — left the common case unlabelled, which put the arithmetic back on the
 // reader, the one thing the card exists to prevent. The correction: turn state cannot rank two
-// calls, but it CAN rank restart-vs-push-on, and that ratio genuinely varies (a 40k context at
-// the 1M fire is nearly free to rebuild; a 900k one at the 2M fire is not). So the Choice bullet
-// now always names a side — from the call when it is a bomb, from the ratio otherwise, and
-// neutral only when the meter is empty. It is the same verdict the Restart bullet was already
-// reaching, promoted to the line the eye actually lands on.
+// calls, but it CAN rank restart-vs-push-on. So the Choice bullet now always names a side — from
+// the call when it is a bomb, from the numbers otherwise, and neutral only when the meter is
+// empty. It is the same verdict the Restart bullet was already reaching, promoted to the line the
+// eye actually lands on.
+//
+// Corrected again 2026-07-27. The first cut read that side off "is the context cheap to rebuild?"
+// (liveContext × 3 ≤ gap) and recommended clearing when it was. Backwards and constant: a restart
+// pays off by the rent it STOPS, not the context it rebuilds, so the FAT window is the one worth
+// clearing — and the gap reduces to base × 2^(fires−1) ≥ 1M, which no real liveContext clears, so
+// `approve (recommended)` was dead code. The verdict now keys on the script's own fat-context
+// threshold (cfg.contextWarnTokens), the same line fatContextGuard and bombGateWhenFat already
+// use, so there is ONE definition of too-much-context. Both directions stay pinned below, because
+// a recommendation that only ever says one thing is exactly the wallpaper this layer avoids.
 //
 // Born from the 2026-07-26 screenshot: R14 fired on `git add … && git status --short` — the exact
 // "land at a commit point" its own Choice bullet was asking for, three lines above. Two behaviors
@@ -157,40 +165,47 @@ test('explicitly-unbounded Grep is a bomb; an unset head_limit (caps at 250) is 
 
 // ── The numbers-driven half (the 2026-07-26 refinement) ───────────────────────────────────────
 // The screenshot case: an ordinary command, no bomb shape, ~2.1M of rent — and the Choice bullet
-// said "approve to push on — or deny", handing the arithmetic straight back to the reader. Both
-// directions are pinned, because a recommendation that only ever says one thing is exactly the
-// wallpaper this layer exists to avoid.
-test('an ordinary call gets the RATIO recommendation — deny when a restart is cheap', () => {
+// said "approve to push on — or deny", handing the arithmetic straight back to the reader.
+// Rent alone does not decide the side; the LIVE CONTEXT does, against the fat line.
+test('an ordinary call on a LEAN window recommends approve — clearing would rebuild it back', () => {
   const fix = mkFixture({ turnRentGateTokens: 1000000 });
   promptSubmit(fix);
-  // Rent piles up across the turn, but the LAST message is thin — so the live context is cheap
-  // to rebuild next to the gap remaining before the next check.
+  // Rent piles up across the turn, but the LAST message is thin — the window carries ~50k, well
+  // under the 150k fat line, so a /clear here sheds almost nothing and re-pays a cold start.
   for (const id of ['a', 'b', 'c', 'd']) fs.appendFileSync(fix.tp, roundTrip(id, 300000));
   fs.appendFileSync(fix.tp, roundTrip('e', 50000));
   const lines = gateOut(call(fix, 'Bash', { command: 'ls -la' }))
     .permissionDecisionReason.split('\n');
-  assert.match(lines[3], /Cheap to rebuild/);
-  assert.match(lines[4], /^• Choice: deny \(recommended\) — /);
-  assert.match(lines[4], /Approving pushes on\./);     // the losing option stays on the card
+  assert.match(lines[3], /Lean enough that a restart would rebuild most of it back/);
+  assert.match(lines[4], /^• Choice: approve \(recommended\) — push on; /);
+  assert.match(lines[4], /denying lands this turn at a commit point/);   // losing option stays
 });
 
-test('…and approve when it is not — a fat context is not worth rebuilding', () => {
+test('…and deny on a FAT window — clearing stops that rent from the next trip on', () => {
+  // primed() leaves ~300k resident, past the 150k fat line.
   const lines = gateOut(call(primed(), 'Bash', { command: 'ls -la' }))
     .permissionDecisionReason.split('\n');
-  assert.match(lines[3], /Little saving in restarting here/);
-  assert.match(lines[4], /^• Choice: approve \(recommended\) — push on; /);
-  assert.match(lines[4], /denying lands this turn at a commit point/);
+  assert.match(lines[3], /Past the fat line/);
+  assert.match(lines[4], /^• Choice: deny \(recommended\) — /);
+  assert.match(lines[4], /past the ~150k fat line/);
+  assert.match(lines[4], /Approving pushes on; /);     // the losing option stays on the card
 });
 
 // The two bullets are one thought split in half — evidence, then verdict. If they ever disagree
 // the card is worse than neutral, because the reader now has to arbitrate between them.
 test('reading and recommendation never argue — the Restart evidence decides the Choice side', () => {
-  for (const fix of [primed(), primed({ turnRentGateTokens: 250000 })]) {
+  // Two fat fixtures at different gate widths, plus a lean one, so the pivot is checked on BOTH
+  // sides — a same-side sweep would pass on a bullet pair that always agreed by accident.
+  const lean = mkFixture({ turnRentGateTokens: 1000000 });
+  promptSubmit(lean);
+  for (const id of ['a', 'b', 'c', 'd']) fs.appendFileSync(lean.tp, roundTrip(id, 300000));
+  fs.appendFileSync(lean.tp, roundTrip('e', 50000));
+  for (const fix of [primed(), primed({ turnRentGateTokens: 250000 }), lean]) {
     const lines = gateOut(call(fix, 'Bash', { command: 'ls -la' }))
       .permissionDecisionReason.split('\n');
     assert.match(lines[4], /^• Choice: (?:approve|deny) \(recommended\) — /);
     assert.match(lines[4],
-      /Cheap to rebuild/.test(lines[3]) ? /^• Choice: deny/ : /^• Choice: approve/);
+      /Past the fat line/.test(lines[3]) ? /^• Choice: deny/ : /^• Choice: approve/);
   }
 });
 

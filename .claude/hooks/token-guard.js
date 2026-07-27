@@ -333,10 +333,10 @@ function priceFor(model) {
 
 // ---------------------------------------------------------------------------
 // meter: one transcript JSONL -> { usd, perModel, liveContext, turnFloorUSD, turns,
-//                                  maxInp, lastTs, rawLength }
+//                                  maxInp, lastTs, rawLength, lastCacheWrite, lastCacheRead }
 function meter(transcriptPath, sinceMs) {
   const out = { usd: 0, perModel: {}, liveContext: 0, turnFloorUSD: 0, turns: 0,
-    maxInp: 0, lastTs: 0, rawLength: 0, tsList: [] };
+    maxInp: 0, lastTs: 0, rawLength: 0, tsList: [], lastCacheWrite: 0, lastCacheRead: 0 };
   let raw;
   try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch (_) { return out; }
   out.rawLength = raw.length;
@@ -380,6 +380,11 @@ function meter(transcriptPath, sinceMs) {
   if (last) {
     out.liveContext = (last.input_tokens || 0) + (last.cache_read_input_tokens || 0) +
       (last.cache_creation_input_tokens || 0);
+    // The last request's cache split. A request that WRITES six figures of context instead of
+    // reading them is, by definition, a full-price re-upload — R4b's clock-free evidence that
+    // the cache TTL lapsed, usable on paths where the elapsed-gap check is already too late.
+    out.lastCacheWrite = last.cache_creation_input_tokens || 0;
+    out.lastCacheRead = last.cache_read_input_tokens || 0;
     // Floor for the NEXT turn: today's context re-read at cache-read rates on the priciest
     // model seen this session (cheap, honest lower bound — output/thinking comes on top).
     out.turnFloorUSD = (out.liveContext * out.maxInp * CACHE_READ_X) / 1e6;
@@ -425,7 +430,8 @@ function meterSession(transcriptPath, opts) {
   const agents = { usd: 0, turns: 0, files: 0, perModel: {}, perWorkflow: {} };
   const res = { main, agents, usd: main.usd, turns: main.turns,
     liveContext: main.liveContext, turnFloorUSD: main.turnFloorUSD,
-    maxInp: main.maxInp, lastTs: main.lastTs };
+    maxInp: main.maxInp, lastTs: main.lastTs,
+    lastCacheWrite: main.lastCacheWrite, lastCacheRead: main.lastCacheRead };
   if (opts.fleet === false) return res;
 
   const sessionDir = transcriptPath.replace(/\.jsonl$/i, '');
@@ -1055,6 +1061,7 @@ function stateDir(projectDir) { return path.join(projectDir, '.claude', 'hooks',
 function loadState(projectDir, sid) {
   const blank = { warnedUSD: 0, warnedCtx: false, gateArmedAt: null, lastUSD: 0,
     lastLiveContext: null, scanOffset: 0, warnedIdleAt: 0, knownWf: {},
+    warnedColdWriteAt: 0, idleFiredAt: 0,
     pendingWfReceipt: null, bombGateArmed: false, curScope: null, curScopePrompts: 0,
     nudgedScope: null, driftSnooze: null,
     approvedPayloadHop: null, payloadGateOkOnce: null,
@@ -1791,42 +1798,65 @@ function gateVerdict(toolName, toolInput) {
 // available:
 //   1. the CALL — a bomb (full suite, unbounded Grep) is a deny whatever the meter says, because
 //      its cost is still in the future and therefore in no number on this card;
-//   2. the NUMBERS — `cheap`: restart cost vs the next gap, the same comparison the Restart
-//      bullet's evidence line is built from. The verdict lives HERE and only here; Restart states
-//      the ratio and stops, so the two bullets never argue with each other.
-// The call wins when both speak. A dead meter (cheap == null, nothing measured) is the only path
-// back to the old neutral copy — a recommendation with no evidence behind it is noise, and this
-// script does not bluff. The losing option stays spelled out in every branch: advisory, not
+//   2. the NUMBERS — `rv`, restartVerdict below: is this window fat enough that clearing it pays?
+//      Computed ONCE at the call site and handed to BOTH bullets, so Restart states the reading
+//      and Choice states the verdict off the identical object. They cannot argue by construction;
+//      the old shape had each bullet re-derive the answer and relied on the two staying in step.
+// The call wins when both speak. A dead meter (rv == null, nothing measured) is the only path back
+// to the old neutral copy — a recommendation with no evidence behind it is noise, and this script
+// does not bluff. The losing option stays spelled out in every branch: advisory, not
 // authoritarian.
-const choiceBullet = (verdict, { neutral, denyTail }, cheap) => {
-  if (verdict && verdict.kind === 'deny')
-    return `• Choice: deny (recommended) — ${verdict.why}. Approving pushes on; ${denyTail}`;
-  if (cheap === true)  return `• Choice: deny (recommended) — ${denyTail} Approving pushes on.`;
-  if (cheap === false) return `• Choice: approve (recommended) — push on; ${denyTail}`;
+const choiceBullet = (verdict, { neutral, denyTail }, rv) => {
+  const why = verdict && verdict.kind === 'deny' ? verdict.why : rv && rv.clear ? rv.why : null;
+  if (why) return `• Choice: deny (recommended) — ${why}. Approving pushes on; ${denyTail}`;
+  if (rv)  return `• Choice: approve (recommended) — push on; ${denyTail}`;
   return `• Choice: ${neutral}`;
 };
-// ── restartBullet: price the option the Choice bullet leaves unpriced (R15) ───────────────────
-// Approving buys ONE more doubled leg; the standing alternative is /clear + /continue. Both
-// numbers are already metered, so the comparison is free: a restart re-pays roughly the resident
-// context, while pushing on spends the whole next gap. What varies is the RATIO — a 40k context
-// at the 1M fire is nearly free to rebuild, a 900k one at the 2M fire is not — and that variance
-// is the entire justification for the bullet. A fixed sentence here would be wallpaper.
+// ── restartVerdict / restartBullet: price the option the Choice bullet leaves unpriced (R15) ──
+// Approving buys ONE more doubled leg; the standing alternative is /clear + /continue. The rebuild
+// PRICE is metered and varies honestly — a 40k context at the 1M fire is nearly free to rebuild, a
+// 900k one at the 2M fire is not — so the head sentence states that ratio and stops.
+//
+// Whether to TAKE the restart is a different question, and until 2026-07-27 this file answered it
+// with the wrong one. It asked "is the context cheap to rebuild?" (liveContext × 3 ≤ gap) and
+// recommended clearing whenever the answer was yes. Two faults, both measured rather than argued:
+//
+//   · Backwards. A restart's payoff is not the context it rebuilds, it is the rent it STOPS
+//     paying — and /clear + /continue does not reload the window, it re-pays a fixed cold start
+//     and carries only the next step. So the LEAN window it called cheap is the one case where
+//     clearing sheds almost nothing and pays that cold start anyway, and the FAT window it waved
+//     past is the one where clearing pays for itself on the very next trip.
+//   · Constant. gap is reArmAt(observed, base, fires) − observed, which reduces to
+//     base × 2^(fires−1): the observed spend cancels, leaving ≥1M at defaults. Against a
+//     liveContext capped by the model's context window that test is true on every fire — the flip
+//     point sits at 333k, unreachable on a 200k window, so `approve (recommended)` was dead code
+//     and the label never varied. Exactly the wallpaper gateVerdict's own header warns about.
+//
+// The line that DOES vary, and already means "this window holds more than the work needs", is the
+// script's own fat-context threshold — the number fatContextGuard warns on and bombGateWhenFat
+// arms against. Reusing it keeps ONE definition of too-much-context, instead of inventing a second
+// one four bullets away from the first and letting them drift.
 //
 // The part the script CANNOT measure is the seam. It has no child_process (deliberately — this
 // runs inside PreToolUse on the critical path), so it cannot ask git whether the tree is clean,
-// and a turn's ruled-out paths live only in the window and are on no disk at all. So the cheap
+// and a turn's ruled-out paths live only in the window and are on no disk at all. So the clearing
 // branch names that condition rather than claiming it holds — same discipline as choiceBullet.
-const CHEAP_RESTART_X = 3;  // restart ≤ gap/3 → clearing saves at least two thirds of the next leg
-// The numeric half of the recommendation, lifted out of restartBullet so choiceBullet can lead
-// with it. null (not false) when the meter came back empty — the two are different answers and
-// choiceBullet branches on all three.
-const restartCheap = (liveContext, gap) =>
-  (!liveContext || !(gap > 0)) ? null : liveContext * CHEAP_RESTART_X <= gap;
+//
+// Returns null when nothing was measured: no reading, no recommendation, neutral copy.
+function restartVerdict(liveContext, gap, fatAt) {
+  if (!liveContext || !(gap > 0) || !(fatAt > 0)) return null;
+  const here = `~${fmtK(liveContext)} of context`;
+  return liveContext >= fatAt
+    ? { clear: true,
+        why: `${here} is past the ~${fmtK(fatAt)} fat line, so clearing stops that rent from the ` +
+             `next trip on` }
+    : { clear: false, why: `${here} is under the ~${fmtK(fatAt)} fat line` };
+}
 // Position clause, so a caller whose HEADLINE already states trips × context (R14) can pass ''
 // and skip the restatement rather than printing the same reading twice.
 const restartPos = reqs => reqs == null
   ? 'this turn is carrying' : `${reqs} round trip${reqs === 1 ? '' : 's'} carrying`;
-function restartBullet(pos, liveContext, gap) {
+function restartBullet(pos, liveContext, gap, rv) {
   if (!liveContext || !(gap > 0)) return '';   // meter came back empty — say nothing over guessing
   const pct = Math.round((liveContext / gap) * 100);
   const price = `~${pct}% of the ~${fmtK(gap)} more this turn spends reaching the next check`;
@@ -1834,12 +1864,13 @@ function restartBullet(pos, liveContext, gap) {
     ? `• Restart: ${pos} ~${fmtK(liveContext)} of context — /clear + /continue rebuilds that ` +
       `for ${price}.`
     : `• Restart: /clear + /continue rebuilds that ~${fmtK(liveContext)} for ${price}.`;
-  // Evidence only — the verdict it used to carry moved to choiceBullet, so the two bullets read
-  // as reading-then-recommendation instead of saying "push on" twice in four lines.
-  return restartCheap(liveContext, gap)
-    ? `${head} Cheap to rebuild — but take it FROM a commit point: what this turn ruled out is ` +
-      `not on disk.\n`
-    : `${head} Little saving in restarting here.\n`;
+  // Evidence only — the verdict lives in choiceBullet, off the SAME rv this was handed, so the two
+  // bullets read as reading-then-recommendation instead of saying "push on" twice in four lines.
+  if (!rv) return `${head}\n`;
+  return rv.clear
+    ? `${head} Past the fat line — but take the restart FROM a commit point: what this turn ` +
+      `ruled out is not on disk.\n`
+    : `${head} Lean enough that a restart would rebuild most of it back.\n`;
 }
 // total tokens PROCESSED (in + out + cache read/write) — the unit user-facing check-ins lead
 // with. Deliberately unweighted; the dollar figure beside it carries the per-model weighting.
@@ -1981,6 +2012,10 @@ function r4IdleReturnGuard(ctx) {
   const gapMin = (Date.now() - m.lastTs) / 60000;
   if (gapMin <= cfg.idleWarnMinutes || st.warnedIdleAt === m.lastTs) return { notes: [], block: null };
   st.warnedIdleAt = m.lastTs;
+  // Suppression window for R4b: with idleGate on, this BLOCKS before the re-upload happens, so
+  // the cold write lands on the user's ↑+Enter re-send moments later. R4b keys on the request
+  // AFTER the gap and R4 on the one before, so the keys can't dedupe each other — the clock does.
+  st.idleFiredAt = Date.now();
   // The pointer feeds /continue's ladder (and /recover-context pid=N stays usable as the
   // manual form) — staged best-effort; /continue's lineage + walk-back recover without it.
   writeRecoverPointer(ctx.projectDir, ctx.sid, recoverWindowMinutes(m));
@@ -2530,6 +2565,8 @@ function r13bTurnSpendGuard(ctx) {
   // nextCheckClause for why a flat step stopped working.
   st.turnGateFires = (st.turnGateFires || 0) + 1;
   st.turnGateAt = reArmAt(turnTok, cfg.turnGateTokens, st.turnGateFires);
+  // ONE verdict object, both bullets — see restartVerdict for why they can no longer disagree.
+  const rv = restartVerdict(m.liveContext, st.turnGateAt - turnTok, cfg.contextWarnTokens);
   // Same shape as R14 below — headline reading, then cost / lever / restart / choice, one per line.
   return gateAsk(ctx,
     `⚠️ Hey — this ONE turn has burned ~${fmtK(turnTok)} tokens.\n` +
@@ -2539,11 +2576,11 @@ function r13bTurnSpendGuard(ctx) {
     `${nextCheckClause(st.turnGateFires, st.turnGateAt)}\n` +
     restartBullet(
       restartPos(st.turnStartReqs == null ? null : Math.max(1, m.main.turns - st.turnStartReqs)),
-      m.liveContext, st.turnGateAt - turnTok) +
+      m.liveContext, st.turnGateAt - turnTok, rv) +
     choiceBullet(verdict, {
       neutral: 'approve to push on — or deny, and Claude should stop and propose that plan.',
       denyTail: 'denying means Claude stops and proposes that plan.',
-    }, restartCheap(m.liveContext, st.turnGateAt - turnTok)));
+    }, rv));
 }
 
 // The R14 ask. Headline reading, then one bullet per thought — cost / lever / choice. A single
@@ -2551,8 +2588,10 @@ function r13bTurnSpendGuard(ctx) {
 // guard message that carries \n; if the dialog ever collapses them the bullets still read
 // as "• "-separated clauses rather than running together.
 function rentAskCopy(ctx, rent) {
-  const { m, st, verdict } = ctx;
+  const { cfg, m, st, verdict } = ctx;
   const reqs = Math.max(1, m.main.turns - (st.turnStartReqs || 0));
+  // ONE verdict object, both bullets — see restartVerdict for why they can no longer disagree.
+  const rv = restartVerdict(m.liveContext, st.rentGateAt - rent, cfg.contextWarnTokens);
   // Work = the turn's work tokens minus the 0.1x-weighted rent already inside them, i.e.
   // input + output + cache writes. Null baseline (turnGateTokens off) => report rent alone.
   const work = st.turnStartWorkTok == null ? null
@@ -2567,13 +2606,13 @@ function rentAskCopy(ctx, rent) {
     // Position clause suppressed — the headline two lines up already states trips × context.
     // Here the ratio carries extra meaning for free: rent ≈ context × trips, so the percentage
     // reads as "a restart costs about what the next N round trips cost anyway."
-    restartBullet('', m.liveContext, st.rentGateAt - rent) +
+    restartBullet('', m.liveContext, st.rentGateAt - rent, rv) +
     choiceBullet(verdict, {
       neutral: 'approve to push on — or deny, and Claude should land this turn at a commit ' +
         'point so you can /clear + /continue carrying only the next step.',
       denyTail: 'denying lands this turn at a commit point so you can /clear + /continue ' +
         'carrying only the next step.',
-    }, restartCheap(m.liveContext, st.rentGateAt - rent));
+    }, rv);
 }
 
 // R14 — in-turn RENT tripwire. The failure R13b structurally cannot see: a turn whose work
