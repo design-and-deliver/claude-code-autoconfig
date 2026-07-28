@@ -209,6 +209,97 @@ test('reading and recommendation never argue — the Restart evidence decides th
   }
 });
 
+// ── R16: the three bomb classes the two-case deny list missed ─────────────────────────────────
+// Observed 2026-07-27: the gate fired on a `cd && head && grep` and the Choice bullet came from
+// the ratio alone — the same answer it gives for every non-bomb call at that context reading,
+// which is the wallpaper the layer exists to avoid. Each class below is pinned BOTH ways. The
+// stays-neutral half is the load-bearing one: a deny list that over-fires trains dismissal, and
+// dismissal is worse than no label at all.
+//
+// Note the neutral assertions match on the BOMB'S OWN reason string, never on the absence of a
+// fire — primed() is deliberately fat, so the numbers-driven verdict still says "deny" there.
+// That is correct and unrelated; what must not happen is the CALL being labelled a bomb.
+const BIG = 200 * 1024;                        // over BIG_READ_BYTES (120k) with margin
+function bigFile(fix, name = 'god.ts') {
+  const p = path.join(fix.proj, name);
+  fs.writeFileSync(p, 'x'.repeat(BIG));
+  return p;
+}
+const choice = out => out.permissionDecisionReason.split('\n')[4];
+
+// (a) — the class that was in the written patch and got DROPPED on inspection. R8's payload door
+// already owns the unranged-Read shape, fires earlier, and prices it off cfg.bombJumpTokens; a
+// second hard-coded threshold in gateVerdict would have been a few-KB-wide band plus a rival
+// definition of "god file". This pins WHICH gate answers, so a future re-add is a red test rather
+// than a silent duplicate.
+test('(a) a god-file Read is R8 door work, not a gateVerdict bomb — one gate owns it', () => {
+  const fix = primed();
+  const god = bigFile(fix);
+  const out = gateOut(call(fix, 'Read', { file_path: god }));
+  assert.equal(out.permissionDecision, 'ask');
+  assert.match(out.permissionDecisionReason, /reading god\.ts in full adds/);   // R8's copy
+  assert.equal(out.permissionDecisionReason.split('\n').length, 1);             // not R14's card
+  // R8's own escape hatch, re-pinned here because dropping (a) makes it the only one left.
+  for (const ranged of [{ limit: 80 }, { offset: 3000 }]) {
+    const r = gateOut(call(primed(), 'Read', Object.assign({ file_path: god }, ranged)));
+    assert.doesNotMatch(r.permissionDecisionReason, /in full adds/, JSON.stringify(ranged));
+  }
+});
+
+test('(b) an unbounded Bash search is a bomb; -m/-l/-c or a downstream head clears it', () => {
+  const bomb = gateOut(call(primed(), 'Bash', { command: 'rg TODO src/' }));
+  assert.equal(bomb.permissionDecision, 'ask');
+  assert.match(choice(bomb), /^• Choice: deny \(recommended\) — /);
+  assert.match(choice(bomb), /no -m\/-l bound/);
+  // Behind a cd, same as the full-suite case — the check is per segment, not anchored.
+  assert.match(choice(gateOut(call(primed(), 'Bash', { command: 'cd C:/CODE/repo && grep -rn foo .' }))),
+    /no -m\/-l bound/);
+
+  for (const cmd of ['rg TODO -l src/', 'rg -c TODO src/', 'rg --max-count 5 TODO src/',
+                     'grep -rn foo . | head -20', 'rg TODO src/ | wc -l']) {
+    assert.doesNotMatch(choice(gateOut(call(primed(), 'Bash', { command: cmd }))),
+      /no -m\/-l bound/, cmd);
+  }
+});
+
+test('(c) catting a big file is a bomb; a small cat is not', () => {
+  const fix = primed();
+  const god = bigFile(fix, 'huge.log');
+  const bomb = gateOut(call(fix, 'Bash', { command: 'cat ' + god }));
+  assert.equal(bomb.permissionDecision, 'ask');
+  assert.match(choice(bomb), /^• Choice: deny \(recommended\) — /);
+  assert.match(choice(bomb), /cats a file big enough/);
+
+  const small = path.join(fix.proj, 'package.json');
+  fs.writeFileSync(small, '{"name":"x"}');
+  assert.doesNotMatch(choice(gateOut(call(primed(), 'Bash', { command: 'cat ' + small }))),
+    /cats a file big enough/);
+});
+
+test('(d) a full-patch git command is a bomb; the --stat spellings stay turn-enders', () => {
+  for (const cmd of ['git diff', 'git show HEAD', 'git log -p -5', 'git log --patch']) {
+    const out = gateOut(call(primed(), 'Bash', { command: cmd }));
+    assert.equal(out.permissionDecision, 'ask', cmd);
+    assert.match(choice(out), /prints a full patch/, cmd);
+  }
+  // These are turn-enders: they must not merely stay neutral, they must DEFER the gate entirely.
+  for (const cmd of ['git diff --stat', 'git diff --cached --stat', 'git log --oneline -5']) {
+    assert.equal(gateOut(call(primed(), 'Bash', { command: cmd })).permissionDecision, undefined, cmd);
+  }
+  // --name-only is not in the turn-ender allowlist, so it fires — but not as a patch bomb.
+  assert.doesNotMatch(choice(gateOut(call(primed(), 'Bash', { command: 'git diff --name-only' }))),
+    /prints a full patch/);
+});
+
+// The four new per-segment matchers are four fresh chances to break the deferral that started
+// this whole layer. A commit message is prose and will happily contain the words that trip them.
+test('a commit message quoting the bomb words still defers the gate', () => {
+  const fix = primed();
+  const out = gateOut(call(fix, 'Bash',
+    { command: 'git commit -m "run pnpm test and rg everything, then cat the log"' }));
+  assert.equal(out.permissionDecision, undefined);
+});
+
 test('R13b carries the same verdict layer', () => {
   // Work gate armed low, rent gate off ⇒ the fire below is R13b's, not R14's.
   const fix = mkFixture({ turnGateTokens: 50000, turnRentGateTokens: null });

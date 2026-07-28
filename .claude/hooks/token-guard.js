@@ -1736,8 +1736,12 @@ const reArmAt = (observed, base, fires) => observed + base * Math.pow(2, fires -
 //           approve, the next real warning gets dismissed by reflex. So the gate does not fire at
 //           all, and does NOT re-arm: the next non-turn-ender call takes the check it deferred.
 //           Silence is a stronger recommendation than a green label.
-//   'deny'  output the turn will then re-read on every remaining trip — a full test suite, or a
-//           Grep explicitly unbounded (head_limit: 0; an unset head_limit already caps at 250).
+//   'deny'  output the turn will then re-read on every remaining trip. Five shapes qualify: a full
+//           test suite; a Grep explicitly unbounded (head_limit: 0 — an unset head_limit already
+//           caps at 250); a search typed as Bash rg/grep with no -m/-l bound and no head
+//           downstream; a `cat` of a big file; and full-patch git history (`git log -p`,
+//           `git show`, a bare `git diff`). They share one property, which is what earns the
+//           deny: output that is large, unbounded AT CALL TIME, and resident afterward.
 //
 // Everything else returns null and the copy stays neutral. The hook is a Node script matching a
 // command string with no model in the loop — it cannot know whether a `git add` stages the RIGHT
@@ -1776,12 +1780,75 @@ function isFullSuite(cmd) {
       .filter(a => a && !a.startsWith('-') && a !== './...' && !REDIRECT_ARG.test(a)).length === 0;
   });
 }
+// ── R16: the bomb classes the two-case deny list missed ───────────────────────────────────────
+// The original list denied a full suite and an unbounded Grep TOOL call. Everything else returned
+// null, so on an ordinary turn the label came from the ratio alone — and the ratio is the same
+// answer for every non-bomb call at a given context reading. That is exactly the wallpaper the
+// comments above warn about, and it fired that way on a `cd && head && grep` (observed
+// 2026-07-27). These classes share the one property that earns a deny: output that is large,
+// unbounded AT CALL TIME, and re-read on every remaining trip of the turn.
+
+// Deliberately NOT here: an unranged Read of a god file. R8's payload door already asks on that
+// exact shape (payloadVerdict, same offset/limit escape hatch) and runs BEFORE this gate, with a
+// real token estimate and a named cheaper lever. Adding it here would need a second threshold
+// alongside cfg.bombJumpTokens — two definitions of "god file" that drift apart — to buy a band
+// only a few KB wide. The three classes below are Bash, which R8 does not look at at all.
+//
+// statSync is the only measurement available on the PreToolUse critical path (no child_process).
+// A stat that throws means the path is wrong and the call will fail on its own merits: return 0
+// and let the real error speak rather than denying on a guess.
+const BIG_READ_BYTES = 120 * 1024;          // ≈46k tokens at 2.6 chars/token — a god file
+function statBytes(p) {
+  if (!p || typeof p !== 'string') return 0;
+  try { return fs.statSync(p.replace(/^["']|["']$/g, '')).size; } catch { return 0; }
+}
+
+// (b) A search typed as Bash instead of as the Grep tool. The tool caps at 250 lines unless
+//     head_limit:0 (already denied); `rg foo src/` has no cap at all. Any explicit bound —
+//     -m/--max-count, -l, -c, or a head/tail/wc downstream — clears it, so the escape hatch is the
+//     same one the operator would reach for anyway.
+const BASH_SEARCH  = /^(?:rg|ag|ack|grep)\b/;
+const SEARCH_BOUND = /(?:^|\s)-(?:m\b|l\b|c\b|-max-count\b|-files-with-matches\b|-count\b)/;
+function isUnboundedBashSearch(cmd) {
+  const segs = shellSegs(cmd);
+  return segs.some((s, i) =>
+    BASH_SEARCH.test(s) && !SEARCH_BOUND.test(s) &&
+    !segs.slice(i + 1).some(t => /^(?:head|tail|wc)\b/.test(t)));
+}
+
+// (c) `cat` of a big file — a Read with no ranging and no size check at all. Same threshold as (a);
+//     a small cat is genuinely cheap and stays neutral.
+function isBigCat(cmd) {
+  return shellSegs(cmd).some(seg => {
+    const m = /^cat\s+(.+)$/.exec(seg);
+    if (!m) return false;
+    return m[1].split(/\s+/)
+      .filter(a => a && !a.startsWith('-') && !REDIRECT_ARG.test(a))
+      .some(a => statBytes(a) >= BIG_READ_BYTES);
+  });
+}
+
+// (d) Full-patch git history. The --stat / --name-only spellings are turn-enders and return 'skip'
+//     before this is reached, so only the patch-printing forms land here — and a full working diff
+//     on a fat turn is the same bomb as a god-file read, just spelled differently.
+const GIT_FULL_PATCH =
+  /^git\s+(?:log\s+[^|]*(?:-p\b|--patch\b)|show\b|diff\b(?![^|]*--(?:stat|name-only|name-status)\b))/;
+
 function gateVerdict(toolName, toolInput) {
   const ti = toolInput || {};
   if (toolName === 'Bash') {
     if (isTurnEnder(ti.command)) return { kind: 'skip' };
     if (isFullSuite(ti.command)) {
       return { kind: 'deny', why: 'this runs the whole test suite, and its output is re-read on every remaining trip' };
+    }
+    if (isUnboundedBashSearch(ti.command)) {
+      return { kind: 'deny', why: 'this search carries no -m/-l bound and no head, so every hit lands in context and stays there' };
+    }
+    if (isBigCat(ti.command)) {
+      return { kind: 'deny', why: 'this cats a file big enough to dominate the window — a Read with offset/limit costs a fraction' };
+    }
+    if (shellSegs(ti.command).some(s => GIT_FULL_PATCH.test(s))) {
+      return { kind: 'deny', why: 'this prints a full patch rather than a --stat, and the whole diff is re-read on every remaining trip' };
     }
     return null;
   }
