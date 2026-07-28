@@ -71,6 +71,37 @@ test('package.json "files" command negations are all in DEV_ONLY_FILES', () => {
   }
 });
 
+// (b2) …and the converse, which (b) alone does not cover. (b) proves the negations are a SUBSET
+//      of the gate; nothing proved the gate was covered BY the negations, so a new dev-only file
+//      could be correctly gated from installs and still be published inside the tarball. That is
+//      how fleet.md/fleet.js (21kB) and refactor.md shipped to npm while (b) stayed green.
+//      Publishing them is not a leak — nothing secret is in them, and no user project receives
+//      them — but it is dead weight in every install, and the asymmetry is what let it pass
+//      unseen. Resolved by real path so a rename cannot satisfy the check by basename alone.
+test('every DEV_ONLY_FILES entry on disk is also negated in package.json "files"', () => {
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+  const negated = new Set((pkg.files || []).filter(f => f.startsWith('!')).map(f => f.slice(1)));
+
+  // Walk .claude once; a dev-only name may live under commands/, scripts/, hooks/ or rules/.
+  const found = new Map();
+  (function walk(dir) {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, e.name);
+      if (e.isDirectory()) { walk(abs); continue; }
+      const rel = path.relative(repoRoot, abs).split(path.sep).join('/');
+      if (!found.has(e.name)) found.set(e.name, []);
+      found.get(e.name).push(rel);
+    }
+  })(path.join(repoRoot, '.claude'));
+
+  const leaked = DEV_ONLY_FILES
+    .filter(name => (found.get(name) || []).some(rel => !negated.has(rel)))
+    .map(name => found.get(name).filter(rel => !negated.has(rel)).join(', '));
+
+  assert(leaked.length === 0,
+    `dev-only file(s) ship in the npm tarball — add a "!<path>" entry to package.json "files": ${leaked.join('; ')}`);
+});
+
 // (c) validate-cca-install.md's dev_only list must equal DEV_ONLY_FILES exactly,
 //     or the validator reports false "MISSING CMD" errors (substep 1.4).
 test('validate-cca-install.md dev_only list equals DEV_ONLY_FILES', () => {
