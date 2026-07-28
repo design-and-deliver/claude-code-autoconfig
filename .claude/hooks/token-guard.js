@@ -1834,24 +1834,27 @@ function isBigCat(cmd) {
 const GIT_FULL_PATCH =
   /^git\s+(?:log\s+[^|]*(?:-p\b|--patch\b)|show\b|diff\b(?![^|]*--(?:stat|name-only|name-status)\b))/;
 
+const isGitFullPatch = (cmd) => shellSegs(cmd).some(s => GIT_FULL_PATCH.test(s));
+
+// The Bash classes as a table rather than a stack of ifs — adding the fifth one is now a row, not
+// another branch through gateVerdict. Order is not load-bearing between the bombs (a command that
+// is two of them deserves either sentence), but the turn-ender check must stay ahead of all of
+// them: 'skip' defers the gate entirely and outranks any deny.
+const BASH_BOMBS = [
+  [isFullSuite, 'this runs the whole test suite, and its output is re-read on every remaining trip'],
+  [isUnboundedBashSearch, 'this search carries no -m/-l bound and no head, so every hit lands in context and stays there'],
+  [isBigCat, 'this cats a file big enough to dominate the window — a Read with offset/limit costs a fraction'],
+  [isGitFullPatch, 'this prints a full patch rather than a --stat, and the whole diff is re-read on every remaining trip'],
+];
+function bashVerdict(cmd) {
+  if (isTurnEnder(cmd)) return { kind: 'skip' };
+  const hit = BASH_BOMBS.find(([matches]) => matches(cmd));
+  return hit ? { kind: 'deny', why: hit[1] } : null;
+}
+
 function gateVerdict(toolName, toolInput) {
   const ti = toolInput || {};
-  if (toolName === 'Bash') {
-    if (isTurnEnder(ti.command)) return { kind: 'skip' };
-    if (isFullSuite(ti.command)) {
-      return { kind: 'deny', why: 'this runs the whole test suite, and its output is re-read on every remaining trip' };
-    }
-    if (isUnboundedBashSearch(ti.command)) {
-      return { kind: 'deny', why: 'this search carries no -m/-l bound and no head, so every hit lands in context and stays there' };
-    }
-    if (isBigCat(ti.command)) {
-      return { kind: 'deny', why: 'this cats a file big enough to dominate the window — a Read with offset/limit costs a fraction' };
-    }
-    if (shellSegs(ti.command).some(s => GIT_FULL_PATCH.test(s))) {
-      return { kind: 'deny', why: 'this prints a full patch rather than a --stat, and the whole diff is re-read on every remaining trip' };
-    }
-    return null;
-  }
+  if (toolName === 'Bash') return bashVerdict(ti.command);
   if (toolName === 'Grep' && ti.output_mode === 'content' && ti.head_limit === 0) {
     return { kind: 'deny', why: 'this Grep is explicitly unbounded, so its output lands in context and stays there' };
   }
