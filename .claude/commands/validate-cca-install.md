@@ -70,7 +70,7 @@ for d in expected_dirs:
 # --- 2. Check command files and versions ---
 # mirror of DEV_ONLY_FILES in bin/cli.js — keep in sync
 # (guard test: see test/dev-gate-consistency, substep 2.2)
-dev_only = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-session.md', 'migrate-new-session.md', 'token-guard.js', 'plan-progress.md', 'plan-progress.js', 'whats-happening.md', 'whats-happening.js', 'refactor.md', 'parallel-session-worktrees.md']
+dev_only = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-session.md', 'migrate-new-session.md', 'token-guard.js', 'plan-progress.md', 'plan-progress.js', 'whats-happening.md', 'whats-happening.js', 'fleet.md', 'fleet.js', 'refactor.md', 'parallel-session-worktrees.md']
 pkg_cmds_dir = os.path.join(pkg_dir, '.claude', 'commands')
 local_cmds_dir = os.path.join(claude_dir, 'commands')
 
