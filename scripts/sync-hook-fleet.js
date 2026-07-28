@@ -154,6 +154,28 @@ function noteNoop(verdict, label, quiet, say, tally) {
   say(verdict === 'miss' ? `  [miss]  ${label} not found (skipped)` : `  [ ok ]  ${label} in sync`);
 }
 
+// Every target here is a file the OTHER live sessions are executing right now — the hooks read
+// token-guard.js fresh on each tool call. A plain writeFileSync truncates first, so a read landing
+// inside that window gets a half file: it passes `node --check` often enough to look fine and then
+// throws mid-turn in somebody else's session (observed once, hence this). Same-directory temp plus
+// rename makes the swap atomic, so a concurrent reader sees the old file or the new one, never a
+// prefix. Same directory matters — rename across a filesystem boundary is a copy, not a swap.
+function writeAtomic(dest, text) {
+  const tmp = path.join(path.dirname(dest), `.${path.basename(dest)}.sync-${process.pid}.tmp`);
+  // The temp file is born 0644; carry the destination's mode across so a POSIX fleet does not
+  // quietly lose the +x bit on an updating pair. A create has no mode to preserve.
+  let mode = null;
+  try { mode = fs.statSync(dest).mode; } catch { /* create, not update */ }
+  try {
+    fs.writeFileSync(tmp, text);
+    if (mode !== null) fs.chmodSync(tmp, mode);
+    fs.renameSync(tmp, dest);
+  } catch (err) {
+    try { fs.unlinkSync(tmp); } catch { /* nothing to clean up */ }
+    throw err;
+  }
+}
+
 // Classify one pair, then act on it and narrate. Mutates `tally`.
 function applyOne(target, entry, canonText, mode, say, tally) {
   const label = `${target.label} ${entry.file}`.padEnd(PAD);
@@ -169,7 +191,7 @@ function applyOne(target, entry, canonText, mode, say, tally) {
   // file that is about to change would read as a broken counter.
   const amount = n ? `${n} lines` : 'local edits';
   if (mode.write) {
-    fs.writeFileSync(path.join(dir, entry.file), canonText);
+    writeAtomic(path.join(dir, entry.file), canonText);
     say(`  [sync]  ${label} ${created ? `created (${n} lines)` : `updated (${amount})`}`);
     tally.wrote++;
     return;
