@@ -349,14 +349,14 @@ replacements; manual smoke: one prompt in a scratch session paints working→idl
 **Commit:** `refactor(terminal-title): split handle() into per-event handlers` +
 `Changelog: none`.
 
-### ☐ 3.5 · M · ~60m — settings-merge: per-domain split · [opus]
+### ☑ 3.5 · M · ~60m — settings-merge: per-domain split · [opus] (DONE 2026-07-29, see Ledger)
 
 **Read list** (~220 lines): `this doc:352-365` · `bin/lib/settings-merge.js` **whole** (217
 lines — under the 800-line limit, the only whole-file read left in Phase 3) · grep
 `test/plugin-system.test.js` for `added` to find the delta assertions, don't read it whole.
 Not a hook: no fleet sync, no single-file constraint here.
 
-- [ ] `mergeSettingsInto` / `unmergeSettingsFrom` (CC 30 each) → `mergeEnv/mergeHooks/
+- [x] `mergeSettingsInto` / `unmergeSettingsFrom` (CC 30 each) → `mergeEnv/mergeHooks/
       mergePermissions` + unmerge twins; the `added`-delta contract (BH-1) is byte-frozen —
       plugin-system suite is the guard.
 
@@ -1251,3 +1251,44 @@ every plan in the repo invisible to `/plan-progress` and `/continue`.
     branch's namesake) — its own session; `stash@{0}` holds its first half and must NOT be
     popped blind (see 3.4a's entry above for exactly which two files to take).
     Handoff: /clear → /continue (next: 3.5 · [opus] — /model switch needed from fable).
+
+- **2026-07-29 — 3.5 split settings-merge per domain — DONE.** Commit `d172116`; `npm test`
+  green (21 suites, 446 assertions, exit 0). `mergeSettingsInto` and `unmergeSettingsFrom`
+  (CC 30 each) are now three-line dispatchers over `mergeHooksInto` / `mergeEnvInto` /
+  `mergePermissionsInto` and the `unmerge*From` twins. Both cleared the CC ≤ 9 bar and were
+  removed from `test/complexity-baseline.json` in the same commit, as the ratchet demands;
+  `migrateLegacyHookCommands` stays listed (untouched, still ≥ 10 — not in this substep's scope).
+  - **The delta accumulator was the real seam problem, not the domains.** The three domains
+    never interact, so splitting them was mechanical — but `added` (BH-1) threads through all
+    three, and passing it down would have put an `if (added)` in every helper. Extracted it as
+    `recorders(added)` returning an `{env, hook, perm}` triple that is three no-ops when the
+    caller passed nothing (the upgrade path), so no domain helper branches on `added` at all.
+  - ⚠ **`freshHooksOf` reads the LIVE target array, and that is load-bearing.** The BH-4 dedup
+    checks `userSettings.hooks[event]` as it mutates, so matchers inserted earlier in the same
+    pass are already visible to later ones. Passing a snapshot/copy instead would silently
+    re-admit a duplicate command within a single multi-matcher fragment. Commented at the
+    function; the BH-4 assertion (`test/plugin-system.test.js:121`) is the guard.
+  - **Deviation — one extra split beyond the plan's item.** The unmerge strip-set build came
+    out at **CC 10** as a single function (both ledger vintages in one body: recorded delta vs
+    fragment fallback). Split into `recordedHookCommands` / `fragmentHookCommands` behind a
+    two-line `hookCommandsToStrip`. Worth noting as a pattern: a "one function per data
+    vintage" branch is a free seam whenever a compat fallback pushes a helper over the bar.
+  - ⚠ **Process note — do NOT run the baseline `npm test` in the background and then edit.**
+    The pre-flight run was launched with `run_in_background` and my first Write landed mid-suite,
+    so the ratchet censused a half-edited tree and the "before" green was never actually
+    established. Worse, `npm test | tail -40` reports **tail's** exit code — the task
+    notification said "exit code 0" for a run whose ratchet had failed. Either run the baseline
+    to completion before touching a file, or check `${PIPESTATUS[0]}`. Post-change green (run
+    clean, unpiped, EXIT=0) is what this entry rests on.
+  - **Tag holds at `M · ~60m`** — 11m wall, 24 requests. rent: `d480e75b` **2.0M processed /
+    ≈288k effective** (95% cached, 101k live at end). Effective sits well inside M ≈1.5M;
+    the headline is ~1.3× over, the fifth consecutive data point that
+    `.claude/rules/plan-authoring.md` must say WHICH number the ceiling means. Note this
+    session also answered a plan-status question before starting the substep, so some of the
+    2.0M is not substep work.
+  - Next: **3.6** (terminal-title: decompose `turnWatch`, CC 79 · L · [fable]) — ⛔ back on the
+    fleet-synced trap surface: single-file constraint, `sync-hook-fleet --write` owed, and the
+    turn-watch E2E is Windows-only (CI green proves nothing). Still parked: the plan-authoring
+    centralization chore (this branch's namesake) — its own session; `stash@{0}` holds its first
+    half and must NOT be popped blind (see 3.4a's entry for which two files to take).
+    Handoff: /clear → /model fable → /continue (next: 3.6 · [fable] — model switch needed from opus).
