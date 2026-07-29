@@ -1207,212 +1207,302 @@ function readConsoleTitle(dir, pid) {
 // deadline — ROLLED while ◐ awaiting|Notification: a dialog parked on the user is not a runaway
 // turn, and the watchdog must outlive it to read the cancel marker if the user Esc's it hours
 // later (2026-07-22: a stuck ◐ — the Esc landed ~65min in, ~35min after watch-exit deadline).
+//
+// Decomposed 2026-07-29 (clean-code plan 3.6): turnWatch is the loop shell; each poll runs
+// watchPoll → watchTailPhase → dispatchProbeVerdict → one handler per probe verdict. Handlers
+// return a verdict string — 'exit' ends the watchdog, anything else polls again. The loop's
+// mutable state (streaks, lastSize, probe pacing, deadline) lives on the shared watch context `w`.
+
+const CPU_MS = 300;   // sample window: idle claude ~0% (single-scheduler-tick spike ≤ ~5.2% at
+const CPU_THRESH = 6.0; // 300ms — still < 6%); active 9–19% → 6% separates (LIVE-measured 2026-07-12).
+const GRACE_MS = 150;   // 300ms window ×2 samples is the floor; smaller windows lose tick headroom.
+const FALLBACK_AGE_MS = 120 * 1000; // probe-blind: no CPU-only rescue before this (thinking runs minutes)
+
+// The per-watch context: payload fields + sidecar paths + the loop's mutable state, shared by
+// every handler below. watchLog is the lifecycle trail (CLAUDE_TITLE_DEBUG=1): start line, ~5s
+// heartbeats, and an exit reason — so a watchdog that dies in the real CC context is
+// distinguishable from one that is alive but silently ineligible (that ambiguity cost a full
+// live-test round on 2026-07-12).
+function makeWatchContext(p) {
+  const { sid, dir, file, cwd, nonce, transcript, ppid } = p;
+  logCtx = { event: 'TurnWatch', sid, dir, note: '', transcript: transcript || '' };
+  // Test seam (CLAUDE_TITLE_TEST_DEADLINE_MS): the 30min stand-down is untestable at real scale.
+  const DEADLINE_MS = Number(process.env.CLAUDE_TITLE_TEST_DEADLINE_MS) || 30 * 60 * 1000;
+  return {
+    sid, dir, file, cwd, nonce, transcript, ppid,
+    glyphFile: path.join(dir, `${sid}.glyph`),
+    watchFile: path.join(dir, `${sid}.watch`),
+    // The session's REAL claude.exe pid. The hook's own parent is a SHORT-LIVED claude.exe shim —
+    // live trail 2026-07-12 showed parent-gone at the first poll, three turns straight — so ppid is
+    // only a log breadcrumb. The true session process is found by CONSOLE IDENTITY: painter --find
+    // attaches each claude.exe candidate and matches its console title against our own title file.
+    // Tests inject sessionPid directly (their fake parents own no matching console).
+    sessionPid: Number(p.sessionPid) || 0,
+    DEADLINE_MS,
+    deadline: 0,
+    lastSize: -1,
+    quietStreak: 0,
+    deadStreak: 0,
+    lastProbe: 0,
+    polls: 0,
+    watchLog: (note, diag) => {
+      if (!logCtx) return;
+      logCtx.note = note;
+      logCtx.diag = diag;
+      titleLog(GLYPH.working, normalize(displayTitle(file, dir, sid, cwd)), false);
+    },
+  };
+}
+
+function logWatchStart(w) {
+  w.watchLog('watch-start', `ppid=${w.ppid} session=${w.sessionPid || 'resolve'}`
+    + ` term=${process.env.TERM_PROGRAM || '-'}/${process.env.TERM_PROGRAM_VERSION || '-'}`);
+}
+
+// Concluded = the Stop/Notification path painted: ✻, or ◐ NOT from a dialog-flip
+// (awaiting|Notification is the watchdog's own dialog paint — that one rolls the deadline
+// instead, see watchPoll).
+function watchConcluded(painted) {
+  return painted[0] === 'idle' || (painted[0] === 'awaiting' && painted[1] !== 'Notification');
+}
+
+// Concluded ~150ms after the Stop paint — sessionPid is resolved and the painter is warm, so
+// this is the ideal one-shot moment to READ THE CONSOLE TITLE BACK and record whether the
+// console actually carries what we intended. MISMATCH → the paint reached the console but the
+// host (VS Code/ConPTY) is showing a stale tab; unread → couldn't read (painter absent / not
+// debug). Debug-gated because it costs one extra --get spawn; only here, never in the hot poll.
+function concludedDiag(w, painted) {
+  let diag = `concluded glyph=${painted.join('|')}`;
+  if (process.env.CLAUDE_TITLE_DEBUG === '1') {
+    const intended = `${GLYPH[painted[0]]} ${normalize(displayTitle(w.file, w.dir, w.sid, w.cwd))}`;
+    const actual = w.sessionPid ? readConsoleTitle(w.dir, w.sessionPid) : null;
+    const verdict = actual == null ? 'unread' : (actual === intended ? 'MATCH' : 'MISMATCH');
+    diag += actual == null ? ' verify=unread'
+      : ` verify=${verdict} intended="${intended}" actual="${actual}"`;
+  }
+  return diag;
+}
+
+// Resolve-then-verify the session pid: 'continue' while the painter is still compiling or no
+// console matches (retry next poll), 'exit' when the session process is gone, 'ok' to proceed.
+function ensureWatchSession(w) {
+  if (!w.sessionPid) {
+    w.sessionPid = resolveSessionPid(w.dir, w.sid, w.file, w.cwd);
+    if (w.sessionPid) w.watchLog('watch', `session resolved pid=${w.sessionPid}`);
+    else if (w.polls % 10 === 0) w.watchLog('watch', 'session unresolved (painter compiling / no console match)');
+    if (!w.sessionPid) return 'continue';
+  }
+  try { process.kill(w.sessionPid, 0); } catch (_) { w.watchLog('watch-exit', `session-gone pid=${w.sessionPid}`); return 'exit'; }
+  return 'ok';
+}
+
+// Eligibility: glyph still ⬤ AND a bare-prompt tail old enough to call stalled ('eligible' —
+// the only mode that is ever RESCUE-judged by screen/CPU). NOTE: a turn's FIRST tool call opens
+// its permission dialog while the tail still reads 'prompt' — that case IS eligible, which is
+// why an open dialog must be its own probe state ('dialog') and never dead evidence (the
+// 2026-07-15 wifi-app bug: false ✻ rescue + a wrongly-set needle-distrust flag).
+// 'dialog-scan': a permission dialog / question card can also open MID-turn (assistant tail).
+// Probe those phases too, at a gentler pace, but use the result ONLY to flip ◐ or note
+// liveness — an assistant tail with a quiet screen is also what a long silent Bash tool looks
+// like, and those stay marker-only rescue territory.
+function classifyProbeEligibility(painted, tail, age) {
+  if (painted[0] !== 'working' || !(age > 2500)) return 'ineligible';
+  if (tail.kind === 'prompt') return 'eligible';
+  if (tail.kind === 'assistant') return 'dialog-scan';
+  return 'ineligible';
+}
+
+// Ineligible poll: stays cheap (a fast Bash tool never pays for a probe), and rescue evidence
+// never survives an ineligible beat.
+function handleIneligible(w, tail, painted, age) {
+  w.quietStreak = 0;
+  w.deadStreak = 0;
+  if (w.polls % 12 === 0) w.watchLog('watch', `ineligible kind=${tail.kind} glyph=${painted[0] || '-'}`
+    + ` age=${Number.isFinite(age) ? Math.round(age / 1000) + 's' : '-'}`);
+  return 'continue';
+}
+
+// probeLive + the needle-drift demotion: a PostToolUse once PROVED a dead read on a live turn
+// (CC renamed the bottom-bar hint) — dead reads can't be trusted while the distrust flag is up,
+// so demote to blind: the 120s CPU fallback still rescues real cancels, slowly. Retracted the
+// moment any probe reads live again (see handleLiveTurn).
+function probeWithDistrust(w) {
+  let live = probeLive(w.dir, w.sid, w.sessionPid);
+  if (live === 'dead' && fileExists(path.join(w.dir, 'needle-distrust'))) {
+    if (w.polls % 40 === 0) w.watchLog('watch', 'probe-distrusted (needle drift flagged) — dead treated as blind');
+    live = null;
+  }
+  return live;
+}
+
+// A dialog is open: the turn is ALIVE, parked on the user's approval/answer. Flip ◐ NOW
+// instead of waiting ~6s for CC's permission_prompt notification. The glyph records
+// awaiting|Notification — byte-identical to the real notification's paint — so the
+// concluded check and idle-rescue treat both flips by one rule; the next poll then sees
+// glyph≠working → ineligible, so this paints at most once per dialog. No breadcrumb, no
+// distrust: a hidden liveness hint is the dialog's doing, not needle drift.
+function handleDialogFlip(w) {
+  w.quietStreak = 0;
+  w.deadStreak = 0;
+  const dt = normalize(displayTitle(w.file, w.dir, w.sid, w.cwd));
+  const paint = paintViaConsole(w.dir, w.sessionPid, `${GLYPH.awaiting} ${dt}`);
+  try { fs.writeFileSync(w.glyphFile, 'awaiting|Notification'); } catch (_) { /* best-effort */ }
+  if (logCtx) { logCtx.note = 'dialog-flip'; logCtx.diag = `via=esc-to-cancel ${paint}`; }
+  titleLog(GLYPH.awaiting, dt, false);
+  return 'continue';
+}
+
+// The bottom bar says the turn is running (thinking/streaming). Positive liveness beats any
+// amount of CPU quiet — this is the 2026-07-15 thinking-false-fire fix. A live read also
+// proves the needle still matches CC's UI — retract any drift flag, and drop this turn's
+// dead-read breadcrumb (it was a fluke, not drift; don't let a later PostToolUse read it as
+// proof).
+function handleLiveTurn(w, age) {
+  w.quietStreak = 0;
+  w.deadStreak = 0;
+  try { fs.unlinkSync(path.join(w.dir, 'needle-distrust')); } catch (_) { /* not flagged */ }
+  try { fs.unlinkSync(path.join(w.dir, `${w.sid}.probe`)); } catch (_) { /* none */ }
+  if (w.polls % 24 === 0) w.watchLog('watch', `live-turn age=${Math.round(age / 1000)}s`);
+  return 'continue';
+}
+
+// Grace beat + double-check + rescue — the shared tail of both stall verdicts (dead screen and
+// quiet CPU; was duplicated verbatim before 3.6). If the turn actually just concluded, its Stop
+// hook paints during the grace beat: the glyph leaves 'working', the tail stops being a bare
+// prompt, or the transcript moved — any of those vetoes the rescue. Returns true when it
+// rescued (the watchdog must exit); false = false alarm, the caller resets its streak.
+async function confirmStallAndRescue(via, w) {
+  await delay(GRACE_MS); // grace: if the turn just concluded, let its Stop hook paint first
+  const g2 = readTitle(w.glyphFile).split('|')[0];
+  const t2 = classifyTail(w.transcript);
+  if (g2 === 'working' && t2.kind === 'prompt' && t2.size === w.lastSize) {
+    rescueFromWatch(via, w.dir, w.sid, w.file, w.cwd, w.sessionPid);
+    return true;
+  }
+  return false;
+}
+
+// Dead screen read on an ELIGIBLE (bare-prompt) tail. First: breadcrumb for the needle-drift
+// canary — if a PostToolUse fires later in THIS turn (same nonce), the turn was provably alive
+// during this dead read → the needle is wrong. NOT cleaned in turnWatch's finally block — it
+// must outlive the watchdog to reach that PostToolUse; consumption is one-shot there (a
+// superseding turn's mismatched nonce reads as inert). Then: two independent screen reads
+// ≥500ms apart + CPU not busy (rename-belt: if CC ever drops the hint text, a busy client
+// still blocks the rescue) + the confirmStallAndRescue grace beat.
+async function handleDeadStreak(w, age) {
+  try { fs.writeFileSync(path.join(w.dir, `${w.sid}.probe`), `${w.nonce}|${Date.now()}`); } catch (_) { /* best-effort */ }
+  w.deadStreak++;
+  if (w.deadStreak < 2) return 'continue'; // two independent screen reads ≥500ms apart
+  const cpu = sampleCpu(w.dir, w.sid, w.sessionPid, CPU_MS); // rename-belt: busy client = alive
+  w.watchLog('watch', `no-esc-hint streak=${w.deadStreak} cpu=${cpu === null ? 'null' : cpu.toFixed(1)}`
+    + ` age=${Math.round(age / 1000)}s`);
+  if (cpu !== null && cpu >= CPU_THRESH) { w.deadStreak = 0; return 'continue'; }
+  if (await confirmStallAndRescue(`no-esc-hint cpu=${cpu === null ? '-' : cpu.toFixed(1)}`, w)) return 'exit';
+  w.deadStreak = 0;
+  return 'continue';
+}
+
+// Blind probe, young tail: quiet CPU alone cannot tell thinking from cancelled, so no CPU-only
+// rescue before FALLBACK_AGE_MS — long past any plausible thinking phase; a slow rescue beats
+// a wrong one.
+function handleProbeBlind(w, age) {
+  w.quietStreak = 0;
+  if (w.polls % 40 === 0) w.watchLog('watch', `probe-null age=${Math.round(age / 1000)}s`
+    + ` (CPU fallback at ${FALLBACK_AGE_MS / 1000}s)`);
+  return 'continue';
+}
+
+// Quiet = sampled below CPU_THRESH with an unmoved transcript (and a baseline to compare to).
+function cpuLooksQuiet(cpu, grew, hadBaseline) {
+  return cpu !== null && cpu < CPU_THRESH && !grew && hadBaseline;
+}
+
+// Blind probe, old tail: the degraded CPU-quiet heuristic (the pre-probe watchdog), gated
+// behind FALLBACK_AGE_MS by dispatchProbeVerdict.
+async function handleCpuQuiet(w, age, grew, hadBaseline) {
+  const cpu = sampleCpu(w.dir, w.sid, w.sessionPid, CPU_MS); // blocks ~CPU_MS
+  w.quietStreak = cpuLooksQuiet(cpu, grew, hadBaseline) ? w.quietStreak + 1 : 0;
+  if (w.polls % 6 === 0 || w.quietStreak > 0) {
+    w.watchLog('watch', `cpu=${cpu === null ? 'null' : cpu.toFixed(1)} streak=${w.quietStreak}`
+      + ` age=${Math.round(age / 1000)}s`);
+  }
+  if (w.quietStreak < 2) return 'continue';
+  if (await confirmStallAndRescue(`stalled-prompt cpu=${(cpu || 0).toFixed(1)}`, w)) return 'exit';
+  w.quietStreak = 0;
+  return 'continue';
+}
+
+// One handler per probe verdict. Order matters: 'dialog' and 'live' are positive liveness in
+// EITHER mode; after those, a dialog-scan poll is done (dead/blind reads carry NO rescue
+// evidence there — a long silent Bash tool reads exactly the same: no breadcrumb, no streaks,
+// no CPU fallback, marker-only territory); only an eligible poll goes on to the dead-streak /
+// CPU-fallback arms.
+async function dispatchProbeVerdict(w, live, mode, age, grew, hadBaseline) {
+  if (live === 'dialog') return handleDialogFlip(w);
+  if (live === 'live') return handleLiveTurn(w, age);
+  if (mode === 'dialog-scan') {
+    if (w.polls % 40 === 0) w.watchLog('watch', `dialog-scan ${live === 'dead' ? 'no-dialog' : 'blind'}`
+      + ` age=${Math.round(age / 1000)}s`);
+    return 'continue';
+  }
+  if (live === 'dead') return handleDeadStreak(w, age);
+  if (age < FALLBACK_AGE_MS) return handleProbeBlind(w, age);
+  return handleCpuQuiet(w, age, grew, hadBaseline);
+}
+
+// The tail phase of one poll: classify the transcript tail, rescue instantly on a marker
+// (tool-phase cancel — the marker flushes at cancel time, no CPU evidence needed), otherwise
+// gate the screen probes by eligibility and pace before dispatching on the probe verdict.
+async function watchTailPhase(w, painted) {
+  const tail = classifyTail(w.transcript);
+  const grew = tail.size !== w.lastSize;
+  const hadBaseline = w.lastSize !== -1;
+  w.lastSize = tail.size;
+  if (tail.kind === 'marker') {
+    rescueFromWatch('marker', w.dir, w.sid, w.file, w.cwd, w.sessionPid);
+    return 'exit';
+  }
+  const age = tail.ts ? Date.now() - Date.parse(tail.ts) : NaN;
+  const mode = classifyProbeEligibility(painted, tail, age);
+  if (mode === 'ineligible') return handleIneligible(w, tail, painted, age);
+  if (mode === 'dialog-scan') { w.quietStreak = 0; w.deadStreak = 0; } // rescue evidence never spans phases
+  if (Date.now() - w.lastProbe < (mode === 'eligible' ? 500 : 2000)) return 'continue'; // pace the screen probes
+  w.lastProbe = Date.now();
+  return dispatchProbeVerdict(w, probeWithDistrust(w), mode, age, grew, hadBaseline);
+}
+
+// One poll beat: stand-down checks first (nonce superseded / glyph concluded / session gone),
+// then the ◐ awaiting|Notification deadline roll (a dialog parked on the user is not a runaway
+// turn — 2026-07-22: an AskUserQuestion sat open past 30min, the watchdog deadlined, and the
+// Esc an hour later flushed a marker no watcher was left alive to read; the ◐ stayed stuck
+// until the next prompt repainted it), then the tail phase.
+async function watchPoll(w) {
+  if (readTitle(w.watchFile) !== w.nonce) { w.watchLog('watch-exit', 'superseded'); return 'exit'; }
+  const painted = readTitle(w.glyphFile).split('|');
+  if (watchConcluded(painted)) { w.watchLog('watch-exit', concludedDiag(w, painted)); return 'exit'; }
+  if (painted[0] === 'awaiting' && painted[1] === 'Notification') w.deadline = Date.now() + w.DEADLINE_MS;
+  const session = ensureWatchSession(w);
+  if (session !== 'ok') return session;
+  return watchTailPhase(w, painted);
+}
+
 async function turnWatch(payloadJson) {
   let p;
   try { p = JSON.parse(payloadJson); } catch (_) { return; }
-  const { sid, dir, file, cwd, nonce, transcript, ppid } = p;
-  logCtx = { event: 'TurnWatch', sid, dir, note: '', transcript: transcript || '' };
-  const glyphFile = path.join(dir, `${sid}.glyph`);
-  const watchFile = path.join(dir, `${sid}.watch`);
-
-  ensurePainter(dir); // warm the console-paint/find/cpu helper while the turn runs
-
-  // The session's REAL claude.exe pid. The hook's own parent is a SHORT-LIVED claude.exe shim —
-  // live trail 2026-07-12 showed parent-gone at the first poll, three turns straight — so ppid is
-  // only a log breadcrumb. The true session process is found by CONSOLE IDENTITY: painter --find
-  // attaches each claude.exe candidate and matches its console title against our own title file.
-  // Tests inject sessionPid directly (their fake parents own no matching console).
-  let sessionPid = Number(p.sessionPid) || 0;
-
-  // Lifecycle trail (CLAUDE_TITLE_DEBUG=1): start line, ~5s heartbeats, and an exit reason — so a
-  // watchdog that dies in the real CC context is distinguishable from one that is alive but
-  // silently ineligible (that ambiguity cost a full live-test round on 2026-07-12).
-  const watchLog = (note, diag) => {
-    if (!logCtx) return;
-    logCtx.note = note;
-    logCtx.diag = diag;
-    titleLog(GLYPH.working, normalize(displayTitle(file, dir, sid, cwd)), false);
-  };
-  watchLog('watch-start', `ppid=${ppid} session=${sessionPid || 'resolve'}`
-    + ` term=${process.env.TERM_PROGRAM || '-'}/${process.env.TERM_PROGRAM_VERSION || '-'}`);
-
-  const CPU_MS = 300;   // sample window: idle claude ~0% (single-scheduler-tick spike ≤ ~5.2% at
-  const CPU_THRESH = 6.0; // 300ms — still < 6%); active 9–19% → 6% separates (LIVE-measured 2026-07-12).
-  const GRACE_MS = 150;   // 300ms window ×2 samples is the floor; smaller windows lose tick headroom.
-  const FALLBACK_AGE_MS = 120 * 1000; // probe-blind: no CPU-only rescue before this (thinking runs minutes)
-  // Test seam (CLAUDE_TITLE_TEST_DEADLINE_MS): the 30min stand-down is untestable at real scale.
-  const DEADLINE_MS = Number(process.env.CLAUDE_TITLE_TEST_DEADLINE_MS) || 30 * 60 * 1000;
-  let deadline = Date.now() + DEADLINE_MS;
-  let lastSize = -1;
-  let quietStreak = 0;
-  let deadStreak = 0;
-  let lastProbe = 0;
-  let polls = 0;
+  const w = makeWatchContext(p);
+  ensurePainter(w.dir); // warm the console-paint/find/cpu helper while the turn runs
+  logWatchStart(w);
+  w.deadline = Date.now() + w.DEADLINE_MS;
   try {
-    while (Date.now() < deadline) {
+    while (Date.now() < w.deadline) {
       await delay(150);
-      polls++;
-      if (readTitle(watchFile) !== nonce) { watchLog('watch-exit', 'superseded'); return; }
-      const painted = readTitle(glyphFile).split('|');
-      if (painted[0] === 'idle' || (painted[0] === 'awaiting' && painted[1] !== 'Notification')) {
-        // Concluded ~150ms after the Stop paint — sessionPid is resolved and the painter is warm, so
-        // this is the ideal one-shot moment to READ THE CONSOLE TITLE BACK and record whether the
-        // console actually carries what we intended. MISMATCH → the paint reached the console but the
-        // host (VS Code/ConPTY) is showing a stale tab; unread → couldn't read (painter absent / not
-        // debug). Debug-gated because it costs one extra --get spawn; only here, never in the hot poll.
-        let diag = `concluded glyph=${painted.join('|')}`;
-        if (process.env.CLAUDE_TITLE_DEBUG === '1') {
-          const intended = `${GLYPH[painted[0]]} ${normalize(displayTitle(file, dir, sid, cwd))}`;
-          const actual = sessionPid ? readConsoleTitle(dir, sessionPid) : null;
-          const verdict = actual == null ? 'unread' : (actual === intended ? 'MATCH' : 'MISMATCH');
-          diag += actual == null ? ' verify=unread'
-            : ` verify=${verdict} intended="${intended}" actual="${actual}"`;
-        }
-        watchLog('watch-exit', diag);
-        return;
-      }
-      // A dialog parked on the user rolls the deadline (2026-07-22: an AskUserQuestion sat open
-      // past 30min, the watchdog deadlined, and the Esc an hour later flushed a marker no watcher
-      // was left alive to read — the ◐ stayed stuck until the next prompt repainted it).
-      if (painted[0] === 'awaiting' && painted[1] === 'Notification') deadline = Date.now() + DEADLINE_MS;
-      if (!sessionPid) {
-        sessionPid = resolveSessionPid(dir, sid, file, cwd);
-        if (sessionPid) watchLog('watch', `session resolved pid=${sessionPid}`);
-        else if (polls % 10 === 0) watchLog('watch', 'session unresolved (painter compiling / no console match)');
-        if (!sessionPid) continue;
-      }
-      try { process.kill(sessionPid, 0); } catch (_) { watchLog('watch-exit', `session-gone pid=${sessionPid}`); return; }
-
-      const tail = classifyTail(transcript);
-      const grew = tail.size !== lastSize;
-      const hadBaseline = lastSize !== -1;
-      lastSize = tail.size;
-
-      // Tool-phase cancel: the marker flushes at cancel time — no CPU evidence needed.
-      if (tail.kind === 'marker') {
-        rescueFromWatch('marker', dir, sid, file, cwd, sessionPid);
-        return;
-      }
-
-      const age = tail.ts ? Date.now() - Date.parse(tail.ts) : NaN;
-      // Eligibility: glyph still ⬤ AND a bare-prompt tail old enough to call stalled. Only probe
-      // at full pace when eligible (~500ms); an ineligible poll stays cheap (a fast Bash tool
-      // never pays for it). NOTE: a turn's FIRST tool call opens its permission dialog while the
-      // tail still reads 'prompt' — that case IS eligible, which is why an open dialog must be its
-      // own probe state ('dialog' below) and never dead evidence (the 2026-07-15 wifi-app bug:
-      // false ✻ rescue + a wrongly-set needle-distrust flag).
-      const eligible = painted[0] === 'working' && tail.kind === 'prompt' && age > 2500;
-      // Dialog scan: a permission dialog / question card can also open MID-turn (assistant/tool
-      // tail). Probe those phases too, at a gentler ~2s pace, but use the result ONLY to flip ◐
-      // or note liveness — a dead/blind read here carries NO rescue evidence, because an
-      // assistant tail with a quiet screen is also what a long silent Bash tool looks like, and
-      // those stay marker-only rescue territory.
-      const dialogScan = !eligible && painted[0] === 'working' && tail.kind === 'assistant' && age > 2500;
-      if (!eligible && !dialogScan) {
-        quietStreak = 0;
-        deadStreak = 0;
-        if (polls % 12 === 0) watchLog('watch', `ineligible kind=${tail.kind} glyph=${painted[0] || '-'}`
-          + ` age=${Number.isFinite(age) ? Math.round(age / 1000) + 's' : '-'}`);
-        continue;
-      }
-      if (dialogScan) { quietStreak = 0; deadStreak = 0; } // rescue evidence never spans phases
-      if (Date.now() - lastProbe < (eligible ? 500 : 2000)) continue; // pace the screen probes
-      lastProbe = Date.now();
-      let live = probeLive(dir, sid, sessionPid);
-      if (live === 'dead' && fileExists(path.join(dir, 'needle-distrust'))) {
-        // A PostToolUse once PROVED a dead read on a live turn (CC renamed the bottom-bar hint) —
-        // dead reads can't be trusted, so demote to blind: the 120s CPU fallback still rescues
-        // real cancels, slowly. Retracted the moment any probe reads live again.
-        if (polls % 40 === 0) watchLog('watch', 'probe-distrusted (needle drift flagged) — dead treated as blind');
-        live = null;
-      }
-      if (live === 'dialog') {
-        // A dialog is open: the turn is ALIVE, parked on the user's approval/answer. Flip ◐ NOW
-        // instead of waiting ~6s for CC's permission_prompt notification. The glyph records
-        // awaiting|Notification — byte-identical to the real notification's paint — so the
-        // concluded check and idle-rescue treat both flips by one rule; the next poll then sees
-        // glyph≠working → ineligible, so this paints at most once per dialog. No breadcrumb, no
-        // distrust: a hidden liveness hint is the dialog's doing, not needle drift.
-        quietStreak = 0;
-        deadStreak = 0;
-        const dt = normalize(displayTitle(file, dir, sid, cwd));
-        const paint = paintViaConsole(dir, sessionPid, `${GLYPH.awaiting} ${dt}`);
-        try { fs.writeFileSync(glyphFile, 'awaiting|Notification'); } catch (_) { /* best-effort */ }
-        if (logCtx) { logCtx.note = 'dialog-flip'; logCtx.diag = `via=esc-to-cancel ${paint}`; }
-        titleLog(GLYPH.awaiting, dt, false);
-        continue;
-      }
-      if (live === 'live') {
-        // The bottom bar says the turn is running (thinking/streaming). Positive liveness beats any
-        // amount of CPU quiet — this is the 2026-07-15 thinking-false-fire fix.
-        quietStreak = 0;
-        deadStreak = 0;
-        // A live read proves the needle still matches CC's UI — retract any drift flag, and drop
-        // this turn's dead-read breadcrumb (it was a fluke, not drift; don't let a later
-        // PostToolUse read it as proof).
-        try { fs.unlinkSync(path.join(dir, 'needle-distrust')); } catch (_) { /* not flagged */ }
-        try { fs.unlinkSync(path.join(dir, `${sid}.probe`)); } catch (_) { /* none */ }
-        if (polls % 24 === 0) watchLog('watch', `live-turn age=${Math.round(age / 1000)}s`);
-        continue;
-      }
-      if (dialogScan) {
-        // Assistant-tail phase: dead/blind reads are NOT evidence (a long silent Bash tool reads
-        // exactly the same) — no breadcrumb, no streaks, no CPU fallback. Marker-only territory.
-        if (polls % 40 === 0) watchLog('watch', `dialog-scan ${live === 'dead' ? 'no-dialog' : 'blind'}`
-          + ` age=${Math.round(age / 1000)}s`);
-        continue;
-      }
-      if (live === 'dead') {
-        // Breadcrumb for the needle-drift canary: if a PostToolUse fires later in THIS turn (same
-        // nonce), the turn was provably alive during this dead read → the needle is wrong. NOT
-        // cleaned in the finally block — it must outlive the watchdog to reach that PostToolUse;
-        // consumption is one-shot there (a superseding turn's mismatched nonce reads as inert).
-        try { fs.writeFileSync(path.join(dir, `${sid}.probe`), `${nonce}|${Date.now()}`); } catch (_) { /* best-effort */ }
-        deadStreak++;
-        if (deadStreak < 2) continue; // two independent screen reads ≥500ms apart
-        const cpu = sampleCpu(dir, sid, sessionPid, CPU_MS); // rename-belt: busy client = alive
-        watchLog('watch', `no-esc-hint streak=${deadStreak} cpu=${cpu === null ? 'null' : cpu.toFixed(1)}`
-          + ` age=${Math.round(age / 1000)}s`);
-        if (cpu !== null && cpu >= CPU_THRESH) { deadStreak = 0; continue; }
-        await delay(GRACE_MS); // grace: if the turn just concluded, let its Stop hook paint first
-        const g2 = readTitle(glyphFile).split('|')[0];
-        const t2 = classifyTail(transcript);
-        if (g2 === 'working' && t2.kind === 'prompt' && t2.size === lastSize) {
-          rescueFromWatch(`no-esc-hint cpu=${cpu === null ? '-' : cpu.toFixed(1)}`, dir, sid, file, cwd, sessionPid);
-          return;
-        }
-        deadStreak = 0;
-        continue;
-      }
-      // live === null — the probe is blind (painter missing / attach denied). Degrade to the CPU-quiet
-      // heuristic, but ONLY past FALLBACK_AGE_MS: quiet CPU alone cannot tell thinking from cancelled.
-      if (age < FALLBACK_AGE_MS) {
-        quietStreak = 0;
-        if (polls % 40 === 0) watchLog('watch', `probe-null age=${Math.round(age / 1000)}s`
-          + ` (CPU fallback at ${FALLBACK_AGE_MS / 1000}s)`);
-        continue;
-      }
-      const cpu = sampleCpu(dir, sid, sessionPid, CPU_MS); // blocks ~CPU_MS
-      quietStreak = (cpu !== null && cpu < CPU_THRESH && !grew && hadBaseline) ? quietStreak + 1 : 0;
-      if (polls % 6 === 0 || quietStreak > 0) {
-        watchLog('watch', `cpu=${cpu === null ? 'null' : cpu.toFixed(1)} streak=${quietStreak}`
-          + ` age=${Math.round(age / 1000)}s`);
-      }
-      if (quietStreak >= 2) {
-        await delay(GRACE_MS); // grace: if the turn just concluded, let its Stop hook paint first
-        const g2 = readTitle(glyphFile).split('|')[0];
-        const t2 = classifyTail(transcript);
-        if (g2 === 'working' && t2.kind === 'prompt' && t2.size === lastSize) {
-          rescueFromWatch(`stalled-prompt cpu=${(cpu || 0).toFixed(1)}`, dir, sid, file, cwd, sessionPid);
-          return;
-        }
-        quietStreak = 0;
-      }
+      w.polls++;
+      if (await watchPoll(w) === 'exit') return;
     }
-    watchLog('watch-exit', 'deadline');
+    w.watchLog('watch-exit', 'deadline');
   } finally {
-    try { fs.unlinkSync(path.join(dir, `${sid}.cpu`)); } catch (_) { /* usually already gone */ }
-    try { fs.unlinkSync(path.join(dir, `${sid}.live`)); } catch (_) { /* ignore */ }
+    try { fs.unlinkSync(path.join(w.dir, `${w.sid}.cpu`)); } catch (_) { /* usually already gone */ }
+    try { fs.unlinkSync(path.join(w.dir, `${w.sid}.live`)); } catch (_) { /* ignore */ }
   }
 }
 
