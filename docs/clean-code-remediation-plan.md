@@ -363,7 +363,7 @@ Not a hook: no fleet sync, no single-file constraint here.
 **Verify:** `npm test` (plugin suite incl. the 2026-07-24 corrupt-settings tests).
 **Commit:** `refactor(settings-merge): per-domain helpers` + `Changelog: none`.
 
-### ☐ 3.6 · L · ~2h — terminal-title: decompose turnWatch (CC 79) · [fable]
+### ☑ 3.6 · L · ~2h — terminal-title: decompose turnWatch (CC 79) · [fable] (DONE 2026-07-29, see Ledger)
 
 ⚠ Same trap surface as 3.4a/3.4b (fleet-synced single file, cross-process sidecar protocol) —
 execute right after them, while that session's traps are fresh.
@@ -374,16 +374,16 @@ grace+recheck+rescue tail is at ~1333-1339 ≈ ~1358-1364) · `:1379-1394`
 (`rescueFromWatch` — what the extracted tail must call) · `:891-996` (`spawnTurnWatch` — the
 payload contract it is launched with). `handle()` is 3.4b's; do not open it here.
 
-- [ ] First seam is free: the grace+recheck+rescue tail is DUPLICATED verbatim today
+- [x] First seam is free: the grace+recheck+rescue tail is DUPLICATED verbatim today
       (~1333–1339 ≈ ~1358–1364) — extract one `confirmStallAndRescue(...)`.
-- [ ] Extract per-verdict handlers out of the probe dispatch: `classifyProbeEligibility`,
+- [x] Extract per-verdict handlers out of the probe dispatch: `classifyProbeEligibility`,
       `handleDeadStreak`, `handleCpuQuiet`, plus the debug-gated console-title readback.
-- [ ] Byte-frozen strings: glyph-file tokens (`working` / `idle` / the awaiting token — must
+- [x] Byte-frozen strings: glyph-file tokens (`working` / `idle` / the awaiting token — must
       stay byte-identical to the real Notification paint), watch-log note names
       (`watch-start`, `watch-exit`, `dialog-flip`, `int-rescue` — `audit-titles` /
       `show-title-history` parse them), sidecar filenames
       (`.glyph/.watch/.probe/.needle/.found/.cpu/.live/.ask`).
-- [ ] `node scripts/sync-hook-fleet.js --write`; live-twin parity green.
+- [x] `node scripts/sync-hook-fleet.js --write`; live-twin parity green.
 
 ⚠ The turn-watch E2E (test/terminal-title.test.js) is Windows-only and spawns the real
 detached child — run on the dev box; CI green proves nothing here.
@@ -1292,3 +1292,42 @@ every plan in the repo invisible to `/plan-progress` and `/continue`.
     centralization chore (this branch's namesake) — its own session; `stash@{0}` holds its first
     half and must NOT be popped blind (see 3.4a's entry for which two files to take).
     Handoff: /clear → /model fable → /continue (next: 3.6 · [fable] — model switch needed from opus).
+
+- **2026-07-29 — 3.6 decomposed turnWatch — DONE.** Commit `3bfef3e`; `npm test` green (exit 0,
+  446 assertions incl. all 14 Windows watchdog E2E subtests against the real detached child),
+  fleet `--write` + check-mode zero drift across `~/.claude`, `job-agent-extension`, `wifi-app`,
+  `workforce-oregon`, `movie-maker`, `test`. `turnWatch` (CC 79, 208 lines) is now an 18-line
+  loop shell over `watchPoll` → `watchTailPhase` → `dispatchProbeVerdict` → per-verdict handlers;
+  the duplicated grace+recheck+rescue tail is one `confirmStallAndRescue`. All new functions ≤ 9;
+  baseline shrunk by `turnWatch` in the same commit.
+  - **Ranges for later steps:** `turnWatch` now at `terminal-title.js:1489-1507`; the handler
+    cluster runs `:1210-1487` (constants at :1216-1219, `makeWatchContext` :1226,
+    `watchPoll` :1478); `rescueFromWatch` :1514; file is now 1,878 lines. The plan's stated
+    ranges (1166-1378) had already drifted ~+40 before this substep — `turnWatch` actually sat
+    at 1210-1417. No other substep's Read list points into this region (3.4b's `handle()` is
+    far above and unmoved).
+  - **Mutable loop state moved onto a shared context `w`** (`makeWatchContext`) — streaks,
+    lastSize, probe pacing, deadline. Two orderings are load-bearing and preserved: `w.deadline`
+    is set AFTER `ensurePainter` (a first-run csc compile must not eat the watch window), and
+    `deadStreak` survives blind beats (dead reads separated by null probes still accumulate —
+    resetting it in `handleProbeBlind` would look symmetric and would break the ×2 rule).
+  - **Deviation — three helpers beyond the plan's named list** (same pattern as 3.5's): the
+    verdict dispatch alone (`dispatchProbeVerdict`) came out CC 10 with the blind-age gate
+    inlined, so `handleProbeBlind` split out; `cpuLooksQuiet` and `logWatchStart` keep their
+    callers under the bar. Also `handleDialogFlip`/`handleLiveTurn` were extracted though the
+    plan's list named only three handlers — the dispatch was unreadable with them inline.
+  - **Model routing followed after a detour:** the session ran 3.5 on opus, then switched to
+    fable mid-session for this substep at the user's call (plan wanted a fresh session; the
+    model-scoped cache re-upload is visible in the rent below). Executed on fable as tagged.
+  - rent: `d480e75b` (shared session) **6.5M processed / ≈979k effective** at 3.6's close (55
+    requests, 45m, 94% cached, 187k live at end); 3.5 closed at 2.0M/≈288k, so 3.6's share ≈
+    **4.5M / ≈691k** over 31 requests — incl. the opus→fable cache re-upload and a model-routing
+    Q&A + article between the substeps. L ceiling ≈3M: holds on effective, ~1.5× over on the
+    headline — sixth consecutive data point for plan-authoring's which-number question.
+  - Next: **3.7a** (token-guard: test-first, then decompose `meter` · L · [opus]) — ⛔ still a
+    fleet-synced single-file hook; the compensating lever is the characterization test FIRST.
+    Note 3.7a/3.8a were re-pointed 2026-07-26 to token-guard's post-3.3 line numbers; token-guard
+    is now 3,401 lines (was 3,186 when those ranges were written) — re-verify each range by grep
+    before trusting it. Still parked: the plan-authoring centralization chore (`stash@{0}`, do
+    NOT pop blind — see 3.4a's entry).
+    Handoff: /clear → /model opus → /continue (next: 3.7a · [opus] — model switch needed from fable).
