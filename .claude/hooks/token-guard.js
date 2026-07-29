@@ -1922,18 +1922,17 @@ function restartVerdict(liveContext, gap, fatAt) {
              `next trip on` }
     : { clear: false, why: `${here} is under the ~${fmtK(fatAt)} fat line` };
 }
-// Position clause, so a caller whose HEADLINE already states trips × context (R14) can pass ''
-// and skip the restatement rather than printing the same reading twice.
+// Position clause — the reading the bullet opens on. R13b is the only caller: R14 dropped its
+// restart bullet on 2026-07-29 (see rentAskCopy), which also retired the pos-less variant this
+// used to support for it.
 const restartPos = reqs => reqs == null
   ? 'this turn is carrying' : `${reqs} round trip${reqs === 1 ? '' : 's'} carrying`;
 function restartBullet(pos, liveContext, gap, rv) {
   if (!liveContext || !(gap > 0)) return '';   // meter came back empty — say nothing over guessing
   const pct = Math.round((liveContext / gap) * 100);
   const price = `~${pct}% of the ~${fmtK(gap)} more this turn spends reaching the next check`;
-  const head = pos
-    ? `• Restart: ${pos} ~${fmtK(liveContext)} of context — /clear + /continue rebuilds that ` +
-      `for ${price}.`
-    : `• Restart: /clear + /continue rebuilds that ~${fmtK(liveContext)} for ${price}.`;
+  const head = `• Restart: ${pos} ~${fmtK(liveContext)} of context — /clear + /continue rebuilds ` +
+    `that for ${price}.`;
   // Evidence only — the verdict lives in choiceBullet, off the SAME rv this was handed, so the two
   // bullets read as reading-then-recommendation instead of saying "push on" twice in four lines.
   if (!rv) return `${head}\n`;
@@ -2637,7 +2636,9 @@ function r13bTurnSpendGuard(ctx) {
   st.turnGateAt = reArmAt(turnTok, cfg.turnGateTokens, st.turnGateFires);
   // ONE verdict object, both bullets — see restartVerdict for why they can no longer disagree.
   const rv = restartVerdict(m.liveContext, st.turnGateAt - turnTok, cfg.contextWarnTokens);
-  // Same shape as R14 below — headline reading, then cost / lever / restart / choice, one per line.
+  // Headline reading, then cost / lever / restart / choice, one per line. R14 below runs a
+  // tighter two-bullet cut; R13b keeps the lever because "a plan with session-sized substeps"
+  // is a different instruction from its headline, not a restatement of it.
   return gateAsk(ctx,
     `⚠️ Hey — this ONE turn has burned ~${fmtK(turnTok)} tokens.\n` +
     `• Cost: a normal task finishes under ~${fmtK(TASK_NORM_TOK)}, so the work has likely ` +
@@ -2653,14 +2654,23 @@ function r13bTurnSpendGuard(ctx) {
     }, rv));
 }
 
-// The R14 ask. Headline reading, then one bullet per thought — cost / lever / choice. A single
-// wrapped paragraph buried the ask under the arithmetic (Andrew 2026-07-26). This is the only
-// guard message that carries \n; if the dialog ever collapses them the bullets still read
-// as "• "-separated clauses rather than running together.
+// The R14 ask. Headline reading, then TWO bullets — cost, choice. A single wrapped paragraph
+// buried the ask under the arithmetic (Andrew 2026-07-26), and four bullets buried it again
+// under a briefing (Andrew 2026-07-29). The two that went, and why they must not come back:
+//   · `• Lever: a smaller resident context, not a shorter task.` — the headline one line up
+//     already reads trips × context; naming the lever a second time is restatement, not advice.
+//   · `• Restart: … rebuilds that ~163k for ~16% of the ~1.0M more …` — the ratio is real, but
+//     it only means something once the reader holds a second number (the gap to the next check)
+//     that nothing else in the message needs. Priced against the Choice bullet, which already
+//     says land at a commit point and /clear + /continue, it bought a line and a denominator.
+// The one number worth keeping out of them is when this gate speaks again, so nextCheckClause
+// rides at the end of the Cost line. This is the only guard message that carries \n; if the
+// dialog ever collapses them the bullets still read as "• "-separated clauses.
 function rentAskCopy(ctx, rent) {
   const { cfg, m, st, verdict } = ctx;
   const reqs = Math.max(1, m.main.turns - (st.turnStartReqs || 0));
-  // ONE verdict object, both bullets — see restartVerdict for why they can no longer disagree.
+  // Still priced even though the Restart bullet is gone — choiceBullet turns this reading into
+  // the approve/deny recommendation (see restartVerdict for why one object feeds both).
   const rv = restartVerdict(m.liveContext, st.rentGateAt - rent, cfg.contextWarnTokens);
   // Work = the turn's work tokens minus the 0.1x-weighted rent already inside them, i.e.
   // input + output + cache writes. Null baseline (turnGateTokens off) => report rent alone.
@@ -2670,13 +2680,8 @@ function rentAskCopy(ctx, rent) {
   return `⚠️ Hey — this turn has made ${reqs} round trip${reqs === 1 ? '' : 's'} carrying ` +
     `~${fmtK(m.liveContext)} of context.\n` +
     `• Cost: ~${fmtK(rent)} tokens of re-reads${vs} — that is rent, not progress, and it ` +
-    `compounds every trip.\n` +
-    `• Lever: a smaller resident context, not a shorter task.` +
+    `compounds every trip.` +
     `${nextCheckClause(st.rentGateFires, st.rentGateAt, ' of re-reads')}\n` +
-    // Position clause suppressed — the headline two lines up already states trips × context.
-    // Here the ratio carries extra meaning for free: rent ≈ context × trips, so the percentage
-    // reads as "a restart costs about what the next N round trips cost anyway."
-    restartBullet('', m.liveContext, st.rentGateAt - rent, rv) +
     choiceBullet(verdict, {
       neutral: 'approve to push on — or deny, and Claude should land this turn at a commit ' +
         'point so you can /clear + /continue carrying only the next step.',

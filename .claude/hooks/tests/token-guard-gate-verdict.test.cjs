@@ -109,11 +109,11 @@ test('full test suite fires with deny LEADING the Choice bullet', () => {
   const out = gateOut(call(fix, 'Bash', { command: 'pnpm test --run' }));
   assert.equal(out.permissionDecision, 'ask');
   const lines = out.permissionDecisionReason.split('\n');
-  assert.equal(lines.length, 5);                       // R14's pinned shape survives (5 since R15)
-  assert.match(lines[4], /^• Choice: deny \(recommended\) — /);
-  assert.match(lines[4], /whole test suite/);
+  assert.equal(lines.length, 3);                       // R14's pinned shape (3 since the 07-29 cut)
+  assert.match(lines[2], /^• Choice: deny \(recommended\) — /);
+  assert.match(lines[2], /whole test suite/);
   // Advisory, not authoritarian: the approve path is still stated.
-  assert.match(lines[4], /Approving pushes on/);
+  assert.match(lines[2], /Approving pushes on/);
 });
 
 // The two ways a full suite actually gets typed. Both read as "scoped" to a check that anchors at
@@ -124,14 +124,14 @@ test('a full suite behind `cd &&` still fires — the check is per segment, not 
   const fix = primed();
   const out = gateOut(call(fix, 'Bash', { command: 'cd C:/CODE/repo && pnpm test --run' }));
   assert.equal(out.permissionDecision, 'ask');
-  assert.match(out.permissionDecisionReason.split('\n')[4], /^• Choice: deny \(recommended\) — /);
+  assert.match(out.permissionDecisionReason.split('\n')[2], /^• Choice: deny \(recommended\) — /);
 });
 
 test('redirects and pipes are not scope — `pnpm test --run 2>&1 | tail -30` is a full suite', () => {
   const fix = primed();
   const out = gateOut(call(fix, 'Bash', { command: 'pnpm test --run 2>&1 | tail -30' }));
   assert.equal(out.permissionDecision, 'ask');
-  assert.match(out.permissionDecisionReason.split('\n')[4], /^• Choice: deny \(recommended\) — /);
+  assert.match(out.permissionDecisionReason.split('\n')[2], /^• Choice: deny \(recommended\) — /);
 });
 
 // A scoped run still gets a recommendation — the NUMBERS one — so the assertion here is about
@@ -143,19 +143,19 @@ test('a SCOPED test run is not a bomb — no call-driven deny', () => {
   const out = gateOut(call(fix, 'Bash', { command: 'pnpm test --run src/utils/foo.test.ts' }));
   assert.equal(out.permissionDecision, 'ask');
   const lines = out.permissionDecisionReason.split('\n');
-  assert.doesNotMatch(lines[4], /whole test suite/);
+  assert.doesNotMatch(lines[2], /whole test suite/);
 
   // The other half of the redirect fix: stripping operators must not swallow a REAL path arg.
   // This is the literal command from the 2026-07-26 screenshot — cd, pipe, redirect AND a scope.
   const piped = gateOut(call(primed(), 'Bash',
     { command: 'cd C:/CODE/repo && pnpm test --run src/utils/foo.test.ts 2>&1 | tail -30' }));
-  assert.doesNotMatch(piped.permissionDecisionReason.split('\n')[4], /whole test suite/);
+  assert.doesNotMatch(piped.permissionDecisionReason.split('\n')[2], /whole test suite/);
 });
 
 test('explicitly-unbounded Grep is a bomb; an unset head_limit (caps at 250) is not', () => {
   const bomb = gateOut(call(primed(), 'Grep',
     { pattern: 'foo', output_mode: 'content', head_limit: 0 }));
-  assert.match(bomb.permissionDecisionReason.split('\n')[4], /^• Choice: deny \(recommended\) — /);
+  assert.match(bomb.permissionDecisionReason.split('\n')[2], /^• Choice: deny \(recommended\) — /);
   assert.match(bomb.permissionDecisionReason, /explicitly unbounded/);
 
   const ordinary = gateOut(call(primed(), 'Grep', { pattern: 'foo', output_mode: 'content' }));
@@ -174,38 +174,45 @@ test('an ordinary call on a LEAN window recommends approve — clearing would re
   // under the 150k fat line, so a /clear here sheds almost nothing and re-pays a cold start.
   for (const id of ['a', 'b', 'c', 'd']) fs.appendFileSync(fix.tp, roundTrip(id, 300000));
   fs.appendFileSync(fix.tp, roundTrip('e', 50000));
-  const lines = gateOut(call(fix, 'Bash', { command: 'ls -la' }))
-    .permissionDecisionReason.split('\n');
-  assert.match(lines[3], /Lean enough that a restart would rebuild most of it back/);
-  assert.match(lines[4], /^• Choice: approve \(recommended\) — push on; /);
-  assert.match(lines[4], /denying lands this turn at a commit point/);   // losing option stays
+  const reason = gateOut(call(fix, 'Bash', { command: 'ls -la' })).permissionDecisionReason;
+  const lines = reason.split('\n');
+  // R14 stopped printing the Restart bullet on 2026-07-29, so the lean reading surfaces only as
+  // the side the Choice bullet takes — which is the half that was ever load-bearing.
+  assert.doesNotMatch(reason, /• Restart/);
+  assert.match(lines[2], /^• Choice: approve \(recommended\) — push on; /);
+  assert.match(lines[2], /denying lands this turn at a commit point/);   // losing option stays
 });
 
 test('…and deny on a FAT window — clearing stops that rent from the next trip on', () => {
   // primed() leaves ~300k resident, past the 150k fat line.
   const lines = gateOut(call(primed(), 'Bash', { command: 'ls -la' }))
     .permissionDecisionReason.split('\n');
-  assert.match(lines[3], /Past the fat line/);
-  assert.match(lines[4], /^• Choice: deny \(recommended\) — /);
-  assert.match(lines[4], /past the ~150k fat line/);
-  assert.match(lines[4], /Approving pushes on; /);     // the losing option stays on the card
+  assert.match(lines[2], /^• Choice: deny \(recommended\) — /);
+  assert.match(lines[2], /past the ~150k fat line/);   // the fat READING, now on the Choice line
+  assert.match(lines[2], /Approving pushes on; /);     // the losing option stays on the card
 });
 
-// The two bullets are one thought split in half — evidence, then verdict. If they ever disagree
-// the card is worse than neutral, because the reader now has to arbitrate between them.
-test('reading and recommendation never argue — the Restart evidence decides the Choice side', () => {
+// Evidence and verdict used to be two bullets that could contradict each other; since the
+// 2026-07-29 cut they are ONE line, so the thing to pin is that the line's side tracks the
+// WINDOW. Expectation comes from the fixture, not from a second printed line — reading the
+// pivot off the message would agree with itself no matter which way the code went.
+test('the Choice side tracks the window — fat recommends deny, lean recommends approve', () => {
   // Two fat fixtures at different gate widths, plus a lean one, so the pivot is checked on BOTH
-  // sides — a same-side sweep would pass on a bullet pair that always agreed by accident.
+  // sides — a same-side sweep would pass on a verdict that never varied.
   const lean = mkFixture({ turnRentGateTokens: 1000000 });
   promptSubmit(lean);
   for (const id of ['a', 'b', 'c', 'd']) fs.appendFileSync(lean.tp, roundTrip(id, 300000));
   fs.appendFileSync(lean.tp, roundTrip('e', 50000));
-  for (const fix of [primed(), primed({ turnRentGateTokens: 250000 }), lean]) {
-    const lines = gateOut(call(fix, 'Bash', { command: 'ls -la' }))
-      .permissionDecisionReason.split('\n');
-    assert.match(lines[4], /^• Choice: (?:approve|deny) \(recommended\) — /);
-    assert.match(lines[4],
-      /Past the fat line/.test(lines[3]) ? /^• Choice: deny/ : /^• Choice: approve/);
+  for (const [fix, fat] of [[primed(), true],
+                            [primed({ turnRentGateTokens: 250000 }), true],
+                            [lean, false]]) {
+    const choiceLine = gateOut(call(fix, 'Bash', { command: 'ls -la' }))
+      .permissionDecisionReason.split('\n')[2];
+    assert.match(choiceLine, fat ? /^• Choice: deny \(recommended\) — /
+                                 : /^• Choice: approve \(recommended\) — /);
+    // The fat branch is the only one that names the line it crossed.
+    if (fat) assert.match(choiceLine, /past the ~150k fat line/);
+    else assert.doesNotMatch(choiceLine, /fat line/);
   }
 });
 
@@ -225,7 +232,7 @@ function bigFile(fix, name = 'god.ts') {
   fs.writeFileSync(p, 'x'.repeat(BIG));
   return p;
 }
-const choice = out => out.permissionDecisionReason.split('\n')[4];
+const choice = out => out.permissionDecisionReason.split('\n')[2];
 
 // (a) — the class that was in the written patch and got DROPPED on inspection. R8's payload door
 // already owns the unranged-Read shape, fires earlier, and prices it off cfg.bombJumpTokens; a

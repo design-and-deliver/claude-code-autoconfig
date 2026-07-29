@@ -63,7 +63,8 @@ test('R13b fires once a turn crosses the gate — token copy, no $, re-arms abov
   // and reuses the deny tail — either way the plan steer has to survive to the ask.
   assert.match(out.permissionDecisionReason, /proposes? that plan/);
   assert.doesNotMatch(out.permissionDecisionReason, /\$/);
-  // Structure (2026-07-26): headline reading, then ONE bullet per thought — same shape as R14.
+  // Structure (2026-07-26): headline reading, then ONE bullet per thought. R14 was cut to two
+  // bullets on 2026-07-29; R13b keeps four, so this is now the ONLY place restartBullet renders.
   const lines = out.permissionDecisionReason.split('\n');
   assert.equal(lines.length, 5);
   assert.match(lines[0], /^⚠️ Hey — this ONE turn has burned ~300k tokens\.$/);
@@ -71,6 +72,8 @@ test('R13b fires once a turn crosses the gate — token copy, no $, re-arms abov
     ['• Cost: ', '• Lever:', '• Restar', '• Choice']);
   // R13b's headline states tokens, not trips — so its Restart bullet KEEPS the position clause.
   assert.match(lines[3], /^• Restart: (\d+ round trips?|this turn is) carrying ~\d+k of context/);
+  // …and the fat-window tail, which R14 no longer has a bullet to print.
+  assert.match(lines[3], /Past the fat line — but take the restart FROM a commit point/);
   // Re-armed at 400k (above the 300k observed), so the very next call must NOT re-fire.
   assert.equal(gateOut(preToolUse(fix)).permissionDecision, undefined);
 });

@@ -62,20 +62,18 @@ test('R14 fires once a turn\'s re-reads cross the gate — round-trip copy, re-a
   assert.match(out.permissionDecisionReason, /1 round trip carrying/);   // singular, not "1 round trips"
   assert.match(out.permissionDecisionReason, /~300k tokens of re-reads/);
   assert.match(out.permissionDecisionReason, /rent, not progress/);
-  assert.match(out.permissionDecisionReason, /smaller resident context/);
   assert.doesNotMatch(out.permissionDecisionReason, /\$/);
-  // Structure (2026-07-26): a headline reading, then ONE bullet per thought — cost / lever /
-  // restart / choice. The prior single wrapped paragraph buried the ask under the arithmetic;
-  // this pins it so a future copy edit can't quietly re-blob it. Restart joined 2026-07-26
-  // (R15); it renders whenever the context meter is non-empty and the gap positive, which this
-  // fixture guarantees — see the empty-meter case below for the 4-line shape.
+  // Structure (2026-07-29): a headline reading, then TWO bullets — cost, choice. It was four
+  // (cost / lever / restart / choice) until Andrew cut the middle pair: Lever restated the
+  // headline's trips × context, and Restart's ratio needed a second number to mean anything.
+  // Their only keeper — the next-check figure — moved onto the Cost line, so this pins BOTH the
+  // 3-line shape and the absence of the two bullets, or the briefing grows back a line at a time.
   const lines = out.permissionDecisionReason.split('\n');
-  assert.equal(lines.length, 5);
+  assert.equal(lines.length, 3);
   assert.match(lines[0], /^⚠️ Hey — .*round trip carrying ~\d+k of context\.$/);
-  assert.deepEqual(lines.slice(1).map(l => l.slice(0, 8)),
-    ['• Cost: ', '• Lever:', '• Restar', '• Choice']);
-  // R14 suppresses the position clause — the headline already stated trips × context.
-  assert.match(lines[3], /^• Restart: \/clear \+ \/continue rebuilds that /);
+  assert.deepEqual(lines.slice(1).map(l => l.slice(0, 8)), ['• Cost: ', '• Choice']);
+  assert.doesNotMatch(out.permissionDecisionReason, /• Lever|• Restart/);
+  assert.match(lines[1], / Next check ≈ \d+k of re-reads this turn\.$/);
   // Re-armed at 400k (above the 300k observed) ⇒ the very next tool call must not re-fire.
   assert.equal(gateOut(preToolUse(fix)).permissionDecision, undefined);
 });
