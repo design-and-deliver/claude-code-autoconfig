@@ -438,12 +438,18 @@ function setTitle(glyph, title, ring) {
         const lines = fs.readFileSync(hf, 'utf8').trim().split('\n');
         last = JSON.parse(lines[lines.length - 1]).title || '';
       } catch (_) { /* no history yet */ }
+      // Context-size WATERMARK. Sampled on EVERY paint into the marks ledger (see recordMark) —
+      // title shifts alone are far too rare to floor the /clear advisor, because the directive
+      // rightly tells the model a title is "a compass, not a log: change it rarely". Measured
+      // 2026-07-29: only 63 of 199 histories ever reached the 2 watermarks clearAdvice required,
+      // so it fired on ~5% of sessions. The history entry keeps its own optional `tokens` field
+      // for the readers that already parse it.
+      const tokens = readContextTokens(logCtx.transcript || '');
+      recordMark(logCtx.dir, logCtx.sid, tokens);
       if (title !== last) {
-        // Context-size WATERMARK: what the session carried when this topic began — the ledger the
-        // /clear advisor reads. Optional field (absent when the transcript has no flushed usage
-        // yet, e.g. the very first UPS paint); history readers must tolerate both shapes.
+        // Optional field (absent when the transcript has no flushed usage yet, e.g. the very
+        // first UPS paint); history readers must tolerate both shapes.
         const entry = { ts: new Date().toISOString(), title };
-        const tokens = readContextTokens(logCtx.transcript || '');
         if (tokens > 0) entry.tokens = tokens;
         fs.appendFileSync(hf, `${JSON.stringify(entry)}\n`);
       }
@@ -687,6 +693,34 @@ function readContextTokens(transcriptPath) {
   return 0;
 }
 
+// Per-paint context WATERMARK ledger ({sid}.marks.json) — O(1) and never grows: { fixed, latest, n }.
+// clearAdvice's F (the session's irreducible overhead: system prompt, CLAUDE.md, rules, memory)
+// needs an EARLY sample to be right, but title shifts are deliberately rare, so deriving F from
+// them alone starved the advisory. Sampling every paint decouples measuring the floor from how
+// often the user's work happens to change topic.
+// A SHRINK re-bases the whole record: auto-compact replaced the context, so earlier watermarks
+// describe a context that no longer exists — the same rule the history window already applied.
+const MARK_SHRINK = 0.6; // latest below 60% of the prior sample = compaction, not ordinary drift
+function recordMark(dir, sid, tokens) {
+  if (!(tokens > 0)) return null; // 0 = unknown (unflushed transcript); never stamp on a guess
+  const mf = path.join(dir, `${sid}.marks.json`);
+  let m = null;
+  try { m = JSON.parse(fs.readFileSync(mf, 'utf8')); } catch (_) { /* first mark of the session */ }
+  if (!m || !(m.fixed > 0) || tokens < m.latest * MARK_SHRINK) m = { fixed: tokens, latest: tokens, n: 0 };
+  m.fixed = Math.min(m.fixed, tokens);
+  m.latest = tokens;
+  m.n = (m.n || 0) + 1;
+  try { fs.writeFileSync(mf, JSON.stringify(m)); } catch (_) { /* best-effort, like the glyph file */ }
+  return m;
+}
+// Usable only with 2+ samples — one paint cannot separate the fixed floor from the live context.
+function readMarks(dir, sid) {
+  try {
+    const m = JSON.parse(fs.readFileSync(path.join(dir, `${sid}.marks.json`), 'utf8'));
+    return m && m.fixed > 0 && m.n >= 2 ? m : null;
+  } catch (_) { return null; }
+}
+
 // Should the user be advised to /clear? Break-even rule over the ledger: with F = the session's
 // fixed overhead (≈ the smallest watermark in the window) and dead = the current topic's starting
 // watermark − F (everything buried behind it), cache reads bill dead at 0.1× every turn while a
@@ -702,29 +736,75 @@ function clearAdvice(dir, sid, transcriptPath) {
   try {
     const ADVICE_FLOOR = 40000; // below this much dead history a /clear isn't worth a nudge in any repo
     const hf = path.join(dir, `${sid}.history.jsonl`);
-    const entries = fs.readFileSync(hf, 'utf8').trim().split('\n')
+    const all = fs.readFileSync(hf, 'utf8').trim().split('\n')
       .map(l => { try { return JSON.parse(l); } catch (_) { return null; } })
-      .filter(e => e && e.tokens > 0);
-    if (entries.length < 2) return '';
+      .filter(e => e && e.ts);
+    if (!all.length) return '';
+    const entries = all.filter(e => e.tokens > 0);
+    // Re-base the topic window on a watermark shrink (auto-compact), as before.
     let start = 0;
     for (let i = 1; i < entries.length; i++) {
-      if (entries[i].tokens < entries[i - 1].tokens) start = i; // shrink → re-base the window
+      if (entries[i].tokens < entries[i - 1].tokens) start = i;
     }
     const win = entries.slice(start);
-    if (win.length < 2) return '';
-    const latest = win[win.length - 1];
-    const fixed = Math.min.apply(null, win.map(e => e.tokens));
-    const dead = latest.tokens - fixed;
+    // F comes from the per-paint marks ledger when it has one (i.e. every session since this
+    // shipped), and falls back to the old title-shift watermarks for sessions that predate it —
+    // which is also why the 2-entry minimum survives only on that fallback path.
+    const marks = readMarks(dir, sid);
+    let fixed;
+    if (marks) {
+      fixed = win.length ? Math.min(marks.fixed, Math.min.apply(null, win.map(e => e.tokens))) : marks.fixed;
+    } else {
+      if (win.length < 2) return '';
+      fixed = Math.min.apply(null, win.map(e => e.tokens));
+    }
+    const current = readContextTokens(transcriptPath) || (marks && marks.latest) ||
+      (win.length ? win[win.length - 1].tokens : 0);
+    if (!(current > 0) || !(fixed > 0)) return '';
+    // RELEVANCE JOIN on title structure. A title is `{scope} — {use-case}[ — {sub-function}]`, so
+    // the shared LEADING segments between the current title and an earlier one grade how much of
+    // that earlier context is still load-bearing (measured over 309 real shifts, 2026-07-29):
+    //   0 shared   different scope; all of it is dead ................... 59%
+    //   1 shared   same scope, new goal; the goal's context is dead ..... 38%
+    //   2+ shared  same scope AND goal, only the sub-function moved ->LIVE  3%
+    // The 2+ case is rare but it is the expensive one to get wrong: advising a /clear mid-goal
+    // discards context the NEXT sub-step still needs. Depth is NOT a magnitude signal — topic cost
+    // does not track segment count (3-segment topics measured slightly pricier, not cheaper) — it
+    // is the join key that says WHICH context is dead, which is the half the math cannot see.
+    const segsOf = t => String(t || '').split(EMDASH).map(s => s.trim()).filter(Boolean);
+    const sharedLead = (a, b) => {
+      let i = 0;
+      while (i < a.length && i < b.length && a[i].toLowerCase() === b[i].toLowerCase()) i++;
+      return i;
+    };
+    const curSegs = segsOf(all[all.length - 1].title);
+    // Walk back over the unbroken run sharing scope+goal with the current title: that run is the
+    // LIVE goal, and only what sits BEFORE it is what a /clear would actually shed.
+    let liveIdx = all.length - 1;
+    while (liveIdx > 0 && sharedLead(segsOf(all[liveIdx - 1].title), curSegs) >= 2) liveIdx--;
+    const topics = liveIdx; // entries strictly before the live run — the genuinely dead ones
+    // Prefer the watermark from the moment the live goal began: the live goal's own context is not
+    // dead, so `current` would overstate the shed. Fall back to `current` when it carries no mark.
+    const deadFrom = topics > 0 && all[liveIdx].tokens > 0 ? all[liveIdx].tokens : current;
+    const dead = deadFrom - fixed;
     if (dead < 2 * fixed || dead < ADVICE_FLOOR) return '';
+    // Once per topic: pin the CURRENT topic's ts (newest history entry, watermarked or not), so
+    // the next title shift re-arms it. A session that never re-titles is advised exactly once.
+    const topicTs = all[all.length - 1].ts;
     const adviceFile = path.join(dir, `${sid}.advice`);
-    if (readTitle(adviceFile) === latest.ts) return ''; // already advised for this topic
-    const current = readContextTokens(transcriptPath) || latest.tokens;
+    if (readTitle(adviceFile) === topicTs) return ''; // already advised for this topic
     const pct = Math.min(99, Math.round((dead / current) * 100));
-    const topics = win.length - 1;
-    try { fs.writeFileSync(adviceFile, latest.ts); } catch (_) { /* best-effort one-shot */ }
+    try { fs.writeFileSync(adviceFile, topicTs); } catch (_) { /* best-effort one-shot */ }
     const k = n => `${Math.round(n / 1000)}k`;
-    return `\u{1F4A1} ~${k(dead)} tokens of ${topics} earlier topic${topics === 1 ? '' : 's'} still ride in context `
-      + `${EMDASH} if ${topics === 1 ? "it's" : "they're"} done, /clear cuts per-turn input cost ~${pct}%`;
+    // Single-topic sessions are now reachable (they were the starved case), and there the
+    // "earlier topics" framing would be a lie — the dead weight is this topic's own history.
+    const what = topics === 0
+      ? `earlier work still ride in context ${EMDASH} if that's behind you`
+      : `${topics} earlier topic${topics === 1 ? '' : 's'} still ride in context `
+        + `${EMDASH} if ${topics === 1 ? "it's" : "they're"} done`;
+    // "Hey ${EMDASH}" prefix is the house style for every guard line we author (token-guard's asks
+    // open the same way) — it marks the line as OURS rather than Claude Code's own output.
+    return `\u{1F4A1} Hey ${EMDASH} ~${k(dead)} tokens of ${what}, /clear cuts per-turn input cost ~${pct}%`;
   } catch (_) {
     return ''; // no ledger — never advise on guesses
   }
@@ -1875,4 +1955,4 @@ function extractBlock(tpl, name) {
 // Exported for tests (require()'d when require.main !== module). The hook itself never reads these.
 // Contract: terminal-title.test.js, golden-endings.test.js, and arcade-beeps.js (lazy-requires
 // inspectLastResponse) depend on these names — renaming one silently degrades the beeps hook.
-module.exports = { inspectLastResponse, endsOnQuestion, normalize, GLYPH, shouldDefer, solicitsReply, readContextTokens, clearAdvice, ancestryChain, recordLineage, carriedTitle, displayTitle, titlesCollide, isPlaceholderTitle, activeTwins, dupeGuardResult, dupeGuardPaint };
+module.exports = { inspectLastResponse, endsOnQuestion, normalize, GLYPH, shouldDefer, solicitsReply, readContextTokens, recordMark, readMarks, clearAdvice, ancestryChain, recordLineage, carriedTitle, displayTitle, titlesCollide, isPlaceholderTitle, activeTwins, dupeGuardResult, dupeGuardPaint };
