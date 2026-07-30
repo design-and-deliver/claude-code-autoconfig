@@ -1069,6 +1069,53 @@ test('full contract present -> no degraded marker', () => {
 });
 console.log();
 
+// _alarms.log is what /audit-titles reads, and a tee that quietly stops matching would make the
+// audit report a reassuring zero instead of an outage. The two positive lines below are VERBATIM
+// captures from real watchdog output, so a diag-format change breaks these tests rather than the
+// investigation.
+console.log('Alarm tee (_alarms.log — the lines /audit-titles reads):');
+{
+  const { ALARM_RE, appendCapped } = require(HOOK);
+  const DEADLINE_OK = '2026-07-29T22:55:07.628Z  TurnWatch        working  ring=0 note=watch-exit sid=a | T  deadline polls=10 pid=23100 glyph=working|UserPromptSubmit tail=assistant tailAge=2s verify=ok actual="bash.exe"';
+  const COLLISION = '2026-07-29T22:55:05.216Z  TurnWatch        working  ring=0 note=watch    sid=a | T  session resolved pid=23100 cands=33 matched=[23100 7788]   PID-COLLISION pid=23100 alsoClaimedBy=[b] ambiguousMatch=1';
+  const ORDINARY = '2026-07-29T22:38:25.283Z  TurnWatch        working  ring=0 note=watch    sid=a | T  ineligible kind=assistant glyph=working age=0s pid=11268';
+
+  test('a stranded deadline is teed', () => {
+    assert(ALARM_RE.test(DEADLINE_OK.replace('verify=ok', 'verify=STRANDED')), 'verify=STRANDED must match');
+  });
+  test('a pid collision is teed', () => assert(ALARM_RE.test(COLLISION), 'PID-COLLISION must match'));
+  test('a HEALTHY deadline is not teed (verify=ok is not an alarm)', () => {
+    assert(!ALARM_RE.test(DEADLINE_OK), 'verify=ok must not match');
+  });
+  test('an ordinary watch poll is not teed', () => assert(!ALARM_RE.test(ORDINARY), 'plain watch line must not match'));
+  test('ALARM_RE carries no /g or /y flag (a sticky regex would skip every other alarm)', () => {
+    assert(!ALARM_RE.global && !ALARM_RE.sticky, `flags must not include g or y, got "${ALARM_RE.flags}"`);
+  });
+
+  test('appendCapped appends, then rotates exactly once past the cap', () => {
+    const dir = mkWorkspace();
+    const f = path.join(dir, '_alarms.log');
+    appendCapped(f, 'one\n', 1024);
+    appendCapped(f, 'two\n', 1024);
+    assert(fs.readFileSync(f, 'utf8') === 'one\ntwo\n', 'both lines should land in a fresh file');
+    appendCapped(f, `${'x'.repeat(1100)}\n`, 1024); // pushes size past the cap
+    appendCapped(f, 'after-rotate\n', 1024);        // this call sees size > cap and rotates
+    assert(fs.existsSync(`${f}.1`), 'expected a single .1 rotation');
+    assert(fs.readFileSync(f, 'utf8') === 'after-rotate\n', 'the live file should hold only the post-rotation line');
+    assert(fs.readFileSync(`${f}.1`, 'utf8').startsWith('one\ntwo\n'), 'the rotation should retain the earlier lines');
+  });
+
+  test('an ordinary paint leaves no _alarms.log behind', () => {
+    const cwd = mkWorkspace();
+    const sid = 'alarm-none';
+    writeTitle(cwd, sid, 'Alpha — Beta');
+    runHook({ hook_event_name: 'PostToolUse', session_id: sid, cwd }, { CLAUDE_TITLE_DEBUG: '1', CLAUDE_PROJECT_DIR: cwd });
+    const alarms = path.join(cwd, '.claude', 'hooks', '.titles', '_alarms.log');
+    assert(!fs.existsSync(alarms), 'a healthy turn must not create _alarms.log');
+  });
+}
+console.log();
+
 console.log('Shipped settings template (cd-proof hook registrations):');
 test('every .claude/hooks command in the shipped settings.json is CLAUDE_PROJECT_DIR-anchored', () => {
   const shipped = JSON.parse(

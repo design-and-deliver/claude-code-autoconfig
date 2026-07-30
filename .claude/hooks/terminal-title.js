@@ -41,7 +41,9 @@
  * both tiers with no source fork). The model authors the file; the directive injected each prompt tells
  * it the path + format. Optional forensic log (one line
  * per paint, for tracing an out-of-sync tab) is gated behind CLAUDE_TITLE_DEBUG=1 — default OFF,
- * ~512KB-capped, written to .titles/_debug.log — so it never ships a growing log.
+ * ~512KB-capped, written to .titles/_debug.log — so it never ships a growing log. The handful of
+ * those lines that name a BROKEN tab are also teed to .titles/_alarms.log (256KB-capped) so they
+ * outlive the much faster debug rotation (see ALARM_RE); /audit-titles reads them.
  *
  * Requires `env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE = "1"` (set by .claude/settings.json's env block), or CC's own writer races.
  */
@@ -461,6 +463,19 @@ function setTitle(glyph, title, ring) {
   return { terminalSequence: seq };
 }
 
+// The two diagnostics that mean a tab is ACTUALLY broken rather than merely interesting:
+// PID-COLLISION (the watchdog bound to a sibling tab's process) and verify=STRANDED (the deadline
+// expired with ⬤ still painted). Both fire at most once per watchdog lifecycle, so they are rare —
+// and rare is exactly what _debug.log loses: it fills its 512KB in ~70min on a busy project, so an
+// alarm that fires overnight has rotated away before anyone greps it. Tee them to their own log,
+// which rotates ~1000 alarms deep instead, so /audit-titles no longer races that rotation.
+// Both producers (claimPid, deadlineDiag's verify read-back) sit behind CLAUDE_TITLE_DEBUG=1
+// themselves — deliberately, since neither is behavior — so alarms only accrue while forensics
+// are on, and the tee inherits that gate rather than fighting it. Ungating them would ship a
+// per-turn ledger write and a per-deadline exe spawn to every install for a field only an
+// investigation ever reads.
+const ALARM_RE = /PID-COLLISION|verify=STRANDED/;
+
 // Optional forensic log (default OFF — gate: CLAUDE_TITLE_DEBUG=1). One line per paint, so a tab that
 // ends up out of sync (e.g. a ◐ that never cleared to ✻) can be traced to the exact event + glyph that
 // last painted it. Bounded to ~512KB with a single rotation; wrapped so it can never break a turn.
@@ -475,10 +490,15 @@ function titleLog(glyph, title, ring) {
     const line = `${new Date().toISOString()}  ${logCtx.event.padEnd(16)} `
       + `${name.padEnd(8)} ring=${ring ? 1 : 0} note=${(logCtx.note || '-').padEnd(8)} `
       + `sid=${logCtx.sid} | ${title}${diag}${contract}\n`;
-    const f = path.join(logCtx.dir, '_debug.log');
-    try { if (fs.statSync(f).size > 512 * 1024) fs.renameSync(f, `${f}.1`); } catch (_) { /* none yet */ }
-    fs.appendFileSync(f, line);
+    if (ALARM_RE.test(line)) appendCapped(path.join(logCtx.dir, '_alarms.log'), line, 256 * 1024);
+    appendCapped(path.join(logCtx.dir, '_debug.log'), line, 512 * 1024);
   } catch (_) { /* logging must never throw */ }
+}
+
+// Append with a single size-capped rotation, so no log here can grow without bound.
+function appendCapped(file, line, max) {
+  try { if (fs.statSync(file).size > max) fs.renameSync(file, `${file}.1`); } catch (_) { /* none yet */ }
+  fs.appendFileSync(file, line);
 }
 
 function fileExists(file) {
@@ -1336,7 +1356,42 @@ function makeWatchContext(p) {
 
 function logWatchStart(w) {
   w.watchLog('watch-start', `ppid=${w.ppid} session=${w.sessionPid || 'resolve'}`
-    + ` term=${process.env.TERM_PROGRAM || '-'}/${process.env.TERM_PROGRAM_VERSION || '-'}`);
+    + ` term=${process.env.TERM_PROGRAM || '-'}/${process.env.TERM_PROGRAM_VERSION || '-'}`
+    + ` ${cohortDiag(w)}`);
+}
+
+// Where this tab sits among the project's LIVE tabs. The reported symptom is ordinal — "the
+// session I opened FIRST in a project sticks on ⬤, the later ones don't" — and rank is the only
+// field that can confirm or kill that. rank=1 means no live sibling started earlier; cohort is how
+// many tabs (including this one) are open on the project right now. Live = a {sid}.glyph touched
+// inside the dupe window, the same liveness test activeTwins uses.
+function cohortDiag(w) {
+  try {
+    const now = Date.now();
+    const mine = readStartedAt(w.dir, w.sid) || now;
+    const starts = liveSiblingStarts(w.dir, w.sid, now);
+    return `cohort=${starts.length + 1} rank=${starts.filter((t) => t < mine).length + 1}`;
+  } catch (_) {
+    return 'cohort=? rank=?';
+  }
+}
+
+// When each of the project's OTHER live tabs started. A tab that never recorded a start falls back
+// to its glyph mtime, so it still counts toward the cohort rather than vanishing from it.
+function liveSiblingStarts(dir, sid, now) {
+  const starts = [];
+  for (const f of fs.readdirSync(dir)) {
+    const other = f.endsWith('.glyph') ? f.slice(0, -'.glyph'.length) : '';
+    if (!other || other === sid) continue;
+    const seen = glyphSeenAt(path.join(dir, f));
+    if (!seen || now - seen > DUPE_WINDOW_MS) continue; // stale glyph → that tab is closed
+    starts.push(readStartedAt(dir, other) || seen);
+  }
+  return starts;
+}
+
+function glyphSeenAt(file) {
+  try { return fs.statSync(file).mtimeMs; } catch (_) { return 0; }
 }
 
 // Concluded = the Stop/Notification path painted: ✻, or ◐ NOT from a dialog-flip
@@ -1367,9 +1422,13 @@ function concludedDiag(w, painted) {
 // console matches (retry next poll), 'exit' when the session process is gone, 'ok' to proceed.
 function ensureWatchSession(w) {
   if (!w.sessionPid) {
-    w.sessionPid = resolveSessionPid(w.dir, w.sid, w.file, w.cwd);
-    if (w.sessionPid) w.watchLog('watch', `session resolved pid=${w.sessionPid}`);
-    else if (w.polls % 10 === 0) w.watchLog('watch', 'session unresolved (painter compiling / no console match)');
+    const d = {};
+    w.sessionPid = resolveSessionPid(w.dir, w.sid, w.file, w.cwd, d);
+    if (w.sessionPid) {
+      w.watchLog('watch', `session resolved pid=${w.sessionPid} ${resolveDiag(d)}${claimPid(w, w.sessionPid, d)}`);
+    } else if (w.polls % 10 === 0) {
+      w.watchLog('watch', `session unresolved (${d.why || 'painter compiling / no console match'}) ${resolveDiag(d)}`);
+    }
     if (!w.sessionPid) return 'continue';
   }
   try { process.kill(w.sessionPid, 0); } catch (_) { w.watchLog('watch-exit', `session-gone pid=${w.sessionPid}`); return 'exit'; }
@@ -1398,7 +1457,7 @@ function handleIneligible(w, tail, painted, age) {
   w.quietStreak = 0;
   w.deadStreak = 0;
   if (w.polls % 12 === 0) w.watchLog('watch', `ineligible kind=${tail.kind} glyph=${painted[0] || '-'}`
-    + ` age=${Number.isFinite(age) ? Math.round(age / 1000) + 's' : '-'}`);
+    + ` age=${Number.isFinite(age) ? Math.round(age / 1000) + 's' : '-'} pid=${w.sessionPid || 0}`);
   return 'continue';
 }
 
@@ -1579,11 +1638,39 @@ async function turnWatch(payloadJson) {
       w.polls++;
       if (await watchPoll(w) === 'exit') return;
     }
-    w.watchLog('watch-exit', 'deadline');
+    w.watchLog('watch-exit', deadlineDiag(w));
   } finally {
     try { fs.unlinkSync(path.join(w.dir, `${w.sid}.cpu`)); } catch (_) { /* usually already gone */ }
     try { fs.unlinkSync(path.join(w.dir, `${w.sid}.live`)); } catch (_) { /* ignore */ }
   }
+}
+
+// The deadline exit is the one that STRANDS a tab: the watchdog stands down after 30min with the
+// glyph possibly still ⬤, and nothing is left to repaint it (a cancel fires no hook, so Stop never
+// runs). The old line said just 'deadline', which is the least informative thing it could say at
+// the exact moment the bug happens. Record the whole scene instead — poll count, the console we
+// were bound to, the glyph and transcript tail we gave up on, and a read-back of what that console
+// ACTUALLY shows, so verify=STRANDED names the failure outright.
+function deadlineDiag(w) {
+  let diag = `deadline polls=${w.polls} pid=${w.sessionPid || 0} glyph=${readTitle(w.glyphFile) || '-'}`;
+  try {
+    const tail = classifyTail(w.transcript);
+    const age = tail.ts ? Math.round((Date.now() - Date.parse(tail.ts)) / 1000) : NaN;
+    diag += ` tail=${tail.kind} tailAge=${Number.isFinite(age) ? `${age}s` : '-'}`;
+  } catch (_) {
+    diag += ' tail=?';
+  }
+  return diag + verifyDiag(w);
+}
+
+// Read back what the console we were bound to ACTUALLY shows, so verify=STRANDED names the failure
+// outright instead of leaving it to be inferred from a bare 'deadline'. Debug-gated with the rest of
+// the forensics: it spawns the painter, which no install should pay for per deadline.
+function verifyDiag(w) {
+  if (process.env.CLAUDE_TITLE_DEBUG !== '1' || !w.sessionPid) return '';
+  const actual = readConsoleTitle(w.dir, w.sessionPid);
+  if (actual == null) return ' verify=unread';
+  return ` verify=${actual.startsWith(GLYPH.working) ? 'STRANDED' : 'ok'} actual="${actual}"`;
 }
 
 // Watchdog paint: the watchdog is detached (console-less — its own process.title is a no-op), so
@@ -1606,28 +1693,122 @@ function rescueFromWatch(via, dir, sid, file, cwd, ppid) {
 // the glyph prefix. Match is case-insensitive as a further belt. First hit wins; ambiguity is
 // possible only when two tabs carry the identical title. Returns 0 while the painter is still
 // compiling or nothing matches — the caller retries each poll.
-function resolveSessionPid(dir, sid, file, cwd) {
+// `diag` is an optional out-param the caller fills a log line from (see resolveDiag): the needle
+// actually matched, how many claude.exe candidates it was scanned against, and the FULL match set
+// — not just the winner. Ambiguity here is invisible in the return value but decisive for a
+// mis-bound watchdog, so it has to leave the function some other way.
+function resolveSessionPid(dir, sid, file, cwd, diag) {
+  const d = diag || {};
   try {
     const exe = painterPath(dir);
-    if (!fileExists(exe)) return 0;
-    const cp = require('child_process');
-    const rows = cp.execSync('tasklist /FO CSV /NH /FI "IMAGENAME eq claude.exe"', { windowsHide: true }).toString();
-    const pids = rows.split('\n')
-      .map(l => (l.match(/^"[^"]+","(\d+)"/) || [])[1])
-      .filter(Boolean);
-    if (!pids.length) return 0;
-    const needleFile = path.join(dir, `${sid}.needle`);
-    const outFile = path.join(dir, `${sid}.found`);
-    fs.writeFileSync(needleFile, normalize(displayTitle(file, dir, sid, cwd)));
-    try { fs.unlinkSync(outFile); } catch (_) { /* ignore */ }
-    cp.spawnSync(exe, ['0', '--find', outFile, needleFile].concat(pids), { windowsHide: true, timeout: 8000 });
-    const found = readTitle(outFile).split(/\s+/).map(Number).filter(Boolean);
-    try { fs.unlinkSync(needleFile); } catch (_) { /* ignore */ }
-    try { fs.unlinkSync(outFile); } catch (_) { /* ignore */ }
-    return found[0] || 0;
-  } catch (_) {
-    return 0;
+    if (!fileExists(exe)) return noPid(d, 'painter-absent');
+    const pids = claudePids();
+    d.cands = pids.length;
+    if (!pids.length) return noPid(d, 'no-claude-procs');
+    d.needle = normalize(displayTitle(file, dir, sid, cwd));
+    d.placeholder = isPlaceholderTitle(d.needle, cwd);
+    d.matched = findConsoles(exe, dir, sid, d.needle, pids);
+    if (!d.matched.length) d.why = 'no-console-match';
+    return d.matched[0] || 0;
+  } catch (err) {
+    return noPid(d, `threw:${errCode(err)}`);
   }
+}
+
+// Every failure path routes through here, so `why` is never silently absent from the log line while
+// the caller still sees the plain 0 it branches on.
+function noPid(d, why) {
+  d.why = why;
+  return 0;
+}
+
+function errCode(err) {
+  return (err && err.code) || 'error';
+}
+
+// Every claude.exe on the box — the candidate set the console scan runs against.
+function claudePids() {
+  const rows = require('child_process')
+    .execSync('tasklist /FO CSV /NH /FI "IMAGENAME eq claude.exe"', { windowsHide: true }).toString();
+  return rows.split('\n')
+    .map(l => (l.match(/^"[^"]+","(\d+)"/) || [])[1])
+    .filter(Boolean);
+}
+
+// Ask the painter which of `pids` owns a console whose title CONTAINS the needle. Returns EVERY
+// match rather than just the winner — ambiguity is what mis-binds a watchdog, so it has to be visible.
+function findConsoles(exe, dir, sid, needle, pids) {
+  const needleFile = path.join(dir, `${sid}.needle`);
+  const outFile = path.join(dir, `${sid}.found`);
+  fs.writeFileSync(needleFile, needle);
+  unlinkQuiet(outFile);
+  require('child_process').spawnSync(exe, ['0', '--find', outFile, needleFile].concat(pids),
+    { windowsHide: true, timeout: 8000 });
+  const found = readTitle(outFile).split(/\s+/).map(Number).filter(Boolean);
+  unlinkQuiet(needleFile);
+  unlinkQuiet(outFile);
+  return found;
+}
+
+function unlinkQuiet(file) {
+  try { fs.unlinkSync(file); } catch (_) { /* absent already — fine */ }
+}
+
+function resolveDiag(d) {
+  return `cands=${d.cands == null ? '-' : d.cands} matched=[${(d.matched || []).join(' ')}]`
+    + ` placeholder=${d.placeholder ? 1 : 0} needle="${d.needle || ''}"`;
+}
+
+// A claim is "live" for as long as a watchdog could still be holding it (one full deadline).
+const PID_CLAIM_WINDOW_MS = 30 * 60 * 1000;
+
+// PID LEDGER + collision alarm. resolveSessionPid binds this watchdog to a console by a CONTAINS
+// scan of the console title, first hit wins — so a newborn tab, whose needle is still the bare
+// folder placeholder ("Workforce-oregon"), matches every already-titled tab in the same repo
+// ("Workforce-oregon — Ship the thing") before it matches itself. A watchdog that binds to the
+// wrong console then probes SOMEONE ELSE'S screen for liveness and repaints SOMEONE ELSE'S tab for
+// the rest of the turn — which is exactly the shape of "the tab I opened first sticks on ⬤ while
+// the later ones behave". Recording the (sid → pid) claim is what makes that provable from the log
+// alone instead of by re-running the scenario. Debug-gated: the ledger is diagnostics, not
+// behavior, and nothing reads it back to make a decision.
+function claimPid(w, pid, d) {
+  if (process.env.CLAUDE_TITLE_DEBUG !== '1') return '';
+  try {
+    const now = Date.now();
+    writeClaim(w.dir, w.sid, { pid, sid: w.sid, needle: d.needle || '', ts: now });
+    const clash = collidingClaims(w.dir, w.sid, pid, now);
+    const ambiguous = (d.matched || []).length > 1;
+    if (!clash.length && !ambiguous) return '';
+    return `  PID-COLLISION pid=${pid} alsoClaimedBy=[${clash.join(' ')}]`
+      + ` ambiguousMatch=${ambiguous ? 1 : 0}`;
+  } catch (_) {
+    return '';
+  }
+}
+
+function writeClaim(dir, sid, rec) {
+  fs.writeFileSync(path.join(dir, `${sid}.pid`), JSON.stringify(rec));
+}
+
+// The other sids whose still-live claim names the SAME pid — two watchdogs bound to one console.
+// Each is labelled sid@age so the log says which tab got there first.
+function collidingClaims(dir, sid, pid, now) {
+  const clash = [];
+  for (const f of fs.readdirSync(dir)) {
+    if (!f.endsWith('.pid') || f === `${sid}.pid`) continue;
+    const rec = readClaim(path.join(dir, f));
+    if (!rec || rec.pid !== pid || now - (rec.ts || 0) > PID_CLAIM_WINDOW_MS) continue;
+    clash.push(claimLabel(rec, f, now));
+  }
+  return clash;
+}
+
+function claimLabel(rec, file, now) {
+  return `${String(rec.sid || file).slice(0, 8)}@${Math.round((now - rec.ts) / 1000)}s`;
+}
+
+function readClaim(file) {
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) { return null; }
 }
 
 function readTitle(file) {
@@ -1955,4 +2136,4 @@ function extractBlock(tpl, name) {
 // Exported for tests (require()'d when require.main !== module). The hook itself never reads these.
 // Contract: terminal-title.test.js, golden-endings.test.js, and arcade-beeps.js (lazy-requires
 // inspectLastResponse) depend on these names — renaming one silently degrades the beeps hook.
-module.exports = { inspectLastResponse, endsOnQuestion, normalize, GLYPH, shouldDefer, solicitsReply, readContextTokens, recordMark, readMarks, clearAdvice, ancestryChain, recordLineage, carriedTitle, displayTitle, titlesCollide, isPlaceholderTitle, activeTwins, dupeGuardResult, dupeGuardPaint };
+module.exports = { inspectLastResponse, endsOnQuestion, normalize, GLYPH, shouldDefer, solicitsReply, readContextTokens, recordMark, readMarks, clearAdvice, ancestryChain, recordLineage, carriedTitle, displayTitle, titlesCollide, isPlaceholderTitle, activeTwins, dupeGuardResult, dupeGuardPaint, ALARM_RE, appendCapped };
