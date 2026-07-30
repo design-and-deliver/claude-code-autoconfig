@@ -49,6 +49,7 @@
     "!.claude/hooks/tests",
     "!.claude/hooks/tests/**",
     "!.claude/hooks/token-guard.js",
+    "!.claude/hooks/session-close.js",
     "!.claude/cca.config.json",
     "!.claude/.autoconfig-version",
     "!.claude/.autoconfig-plugins.json",

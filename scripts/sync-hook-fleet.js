@@ -40,6 +40,11 @@ const MANIFEST = [
   // synced to ~/.claude: the global hooks dir has no token-guard today, and putting one there
   // without a matching settings.json entry would be inert.
   { file: 'token-guard.js', global: false },
+  // The SessionEnd clean-exit marker. Global (unlike token-guard) because it IS wired in
+  // ~/.claude/settings.json — one user-level SessionEnd entry covers every repo, and the marker
+  // resolves its own .titles dir per session, so a project copy would only write the same file
+  // twice. Dev-only in bin/cli.js: user installs wire no SessionEnd.
+  { file: 'session-close.js', global: true },
   // Shared authoring rules — same fleet, one directory over (`subdir`). plan-authoring.md was
   // hand-ported between CCA and job-agent-extension and the two copies diverged for six weeks
   // with NEITHER a superset (the rule's own header says so); a doc drifts exactly like a hook
