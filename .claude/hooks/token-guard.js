@@ -352,13 +352,7 @@ function priceFor(model) {
 const ctxTokens = u => (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) +
   (u.cache_creation_input_tokens || 0);
 
-function meter(transcriptPath, sinceMs) {
-  const out = { usd: 0, perModel: {}, liveContext: 0, firstContext: 0, turnFloorUSD: 0, turns: 0,
-    maxInp: 0, lastTs: 0, rawLength: 0, tsList: [], lastCacheWrite: 0, lastCacheRead: 0 };
-  let raw;
-  try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch (_) { return out; }
-  out.rawLength = raw.length;
-
+function collectUsageById(raw, sinceMs, out) {
   const byId = new Map(); // message.id -> {model, usage} — last occurrence wins
   let last = null;        // last assistant usage in file order = live context source
   let first = null;       // FIRST assistant usage = this session's cold-start reading
@@ -373,7 +367,10 @@ function meter(transcriptPath, sinceMs) {
     last = o.message.usage;
     if (o.timestamp) { const t = Date.parse(o.timestamp); if (t) { out.lastTs = t; out.tsList.push(t); } }
   }
+  return { byId, first, last };
+}
 
+function costOfUsage(byId, out) {
   for (const { model, usage: u } of byId.values()) {
     const p = priceFor(model);
     const inp = u.input_tokens || 0;
@@ -395,7 +392,9 @@ function meter(transcriptPath, sinceMs) {
     out.usd += usd;
     out.turns++;
   }
+}
 
+function deriveLiveFloor(out, first, last, sinceMs) {
   for (const model of Object.keys(out.perModel)) out.maxInp = Math.max(out.maxInp, priceFor(model).inp);
   // Cold start: what this session was already carrying on its FIRST request — the fixed payload
   // (system prompt + tool schemas, CLAUDE.md, rules, memory index, skill list) that a /clear +
@@ -413,6 +412,18 @@ function meter(transcriptPath, sinceMs) {
     // model seen this session (cheap, honest lower bound — output/thinking comes on top).
     out.turnFloorUSD = (out.liveContext * out.maxInp * CACHE_READ_X) / 1e6;
   }
+}
+
+function meter(transcriptPath, sinceMs) {
+  const out = { usd: 0, perModel: {}, liveContext: 0, firstContext: 0, turnFloorUSD: 0, turns: 0,
+    maxInp: 0, lastTs: 0, rawLength: 0, tsList: [], lastCacheWrite: 0, lastCacheRead: 0 };
+  let raw;
+  try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch (_) { return out; }
+  out.rawLength = raw.length;
+
+  const { byId, first, last } = collectUsageById(raw, sinceMs, out);
+  costOfUsage(byId, out);
+  deriveLiveFloor(out, first, last, sinceMs);
   return out;
 }
 
