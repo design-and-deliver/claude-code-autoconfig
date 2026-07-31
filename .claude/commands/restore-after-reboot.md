@@ -25,8 +25,14 @@ repo like `fleet` and `token-guard`. It depends on `session-close.js`, which is 
 
 ## Step 1 — run it
 
+Installed at BOTH tiers, so prefer the project copy and fall back to the global one. A reboot is a
+machine event, not a repo event — this has to be reachable from whatever directory you happen to
+be standing in when you notice your tabs are gone.
+
 ```bash
-node "${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/restore-after-reboot.js"
+S="${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/restore-after-reboot.js"
+[ -f "$S" ] || S="$HOME/.claude/scripts/restore-after-reboot.js"
+node "$S"
 ```
 
 Map `$ARGUMENTS`: `all` → `--all`, `days N` → `--days N`, `--launch` → `--launch`.

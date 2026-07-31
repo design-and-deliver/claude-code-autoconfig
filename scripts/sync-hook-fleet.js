@@ -52,6 +52,20 @@ const MANIFEST = [
   // global: ~/.claude has no rules dir, and ADOPT-ONLY means a repo without the file keeps not
   // having it.
   { file: 'plan-authoring.md', global: false, subdir: 'rules' },
+  // Dev-only commands and their scripts. They were hand-copied between repos before this — the
+  // same "remember to port it" arrangement that let token-guard.js drift 231 lines behind, just
+  // one directory over. A command drifts exactly like a hook does, so it gets the same actuator.
+  //
+  // fleet boards ONE repo's sessions, so it stays per-repo (global: false). restore-after-reboot
+  // is the opposite: a reboot takes every terminal on the machine, and you run it from wherever
+  // you happened to be standing — so it is installed globally too, and its command file resolves
+  // the script from either tier. Note that `pairsWith` cannot join these two: it looks for the
+  // partner in the SAME directory, and a command and its script never share one. Each half is
+  // adopted on its own (ADOPT-ONLY still holds — a repo without the file is never given one).
+  { file: 'fleet.md', global: false, subdir: 'commands' },
+  { file: 'fleet.js', global: false, subdir: 'scripts' },
+  { file: 'restore-after-reboot.md', global: true, subdir: 'commands' },
+  { file: 'restore-after-reboot.js', global: true, subdir: 'scripts' },
 ];
 
 const PAD = 46;                                               // report column for the target label
