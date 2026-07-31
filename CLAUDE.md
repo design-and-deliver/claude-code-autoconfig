@@ -109,13 +109,13 @@ The `.claude/updates/` directory is for updates that **require Claude to execute
 ### Parallel sessions — work in a git worktree
 
 Several Claude sessions run against this repo at once. **If another may be open, call
-`EnterWorktree` as your first action, then `node scripts/bootstrap-worktree.js`** — a fresh
-worktree has every tracked file and no gitignored one, so without bootstrap there is no
+`EnterWorktree` before your first write to a repo file, then `node scripts/bootstrap-worktree.js`**
+— a fresh worktree has every tracked file and no gitignored one, so without bootstrap there is no
 `node_modules` (the full suite fails in `complexity-ratchet.test.js`, which loads eslint), no
 `.claude/settings.local.json` (re-prompts on every Bash call), and no
-`scripts/hook-fleet.local.json` for the fleet check. Skip the worktree only when the work
-touches no repo files, or when it builds on uncommitted changes already in this checkout —
-those do not come along.
+`scripts/hook-fleet.local.json` for the fleet check. Read-only sessions never enter one; it is one
+worktree per session, not per task. Skip it entirely when the work touches no repo files, or when
+it builds on uncommitted changes already in this checkout — those do not come along.
 
 Full loop, the `worktree.baseRef: head` gotcha, and the list of things worktrees do NOT
 isolate (`~/.claude` and the hook fleet, the live twin, `.claude/updates/` numbers,

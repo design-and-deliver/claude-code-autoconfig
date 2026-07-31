@@ -8,10 +8,25 @@ Several Claude sessions run against this repo at once. Sharing one working tree 
 collide: a file another session rewrote fails your Edit with "file has been modified since
 read", and every session's `npm test` runs against a tree someone else is mid-edit in.
 
-**If another Claude session may be open on this repo, call `EnterWorktree` as your first
-action.** This is the project instruction that authorizes the tool — you do not need to ask.
+**If another Claude session may be open on this repo, call `EnterWorktree` before your first
+write to a repo file** — the first Edit, Write, or file-mutating Bash command, whichever comes
+first. This is the project instruction that authorizes the tool — you do not need to ask.
 
-Skip it only when the work touches no repo files at all (pure Q&A, log reading, a `docs/` read).
+Not "as your first action." Read-only turns stay in the main checkout, so a session that never
+writes — Q&A, log reading, a `docs/` read, a plan review — never bootstraps a worktree at all,
+and leaves nothing behind to clean up.
+
+Entering *late* is only safe because "before the first write" is still *early enough*: a worktree
+does not carry uncommitted work along. The moment you edit a file in the main checkout, you are
+stuck there for the rest of the session. So there is exactly one safe boundary — cross it before
+the write, never after.
+
+**One worktree per session, not per task.** A worktree exists to stop two *processes* from writing
+the same files; within a session there is one writer and the turn loop serializes it, so a second
+worktree for a second use case is isolation against nobody — at the cost of another
+`npm install` and another Windows delete that may not finish. To land or drop one use case
+independently of another, commit at the boundary, or `git switch -c` inside the worktree you
+already have.
 
 ## The loop
 
