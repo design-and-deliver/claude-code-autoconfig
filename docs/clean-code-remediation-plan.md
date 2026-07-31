@@ -396,7 +396,7 @@ the function boundary: the binding budget on hook substeps is **round trips** (L
 new files — extractions in a single-file hook create none, which is exactly why the old tag
 passed a step that could not fit. `fanVerdict` already has its test net; `meter` has none.
 
-### ☐ 3.7a · L · ~90m — token-guard: test-first, then decompose `meter` (CC 33) · [opus]
+### ☑ 3.7a · L · ~90m — token-guard: test-first, then decompose `meter` (CC 33) · [opus] (DONE 2026-07-31)
 
 **Read list** (~200 lines): `this doc:399-421` ·
 `.claude/hooks/token-guard.js:337-402` (`meter`, the target) · `:422-471` (`meterSession` —
@@ -405,15 +405,15 @@ pricing fold must keep as the single source — grep `CACHE_READ_X` if the range
 `.claude/hooks/tests/token-guard-official-usage.test.cjs` head for the fixture-transcript
 pattern to copy.
 
-- [ ] Test FIRST — `meter` has no direct unit test (coverage today is incidental through the
+- [x] Test FIRST — `meter` has no direct unit test (coverage today is incidental through the
       event handlers): fixture transcript → exact `perModel` keys (`inp/out/cr/cw/searches/usd`),
       the 5m/1h cache-write TTL split, web-search surcharge, `liveContext` / `turnFloorUSD`.
       Written green on HEAD before touching the function.
-- [ ] Extract `collectUsageById` (line scan + last-wins dedupe), `costOfUsage` (the pricing
+- [x] Extract `collectUsageById` (line scan + last-wins dedupe), `costOfUsage` (the pricing
       fold — `CACHE_READ_X` / `CACHE_WRITE_5M_X` / `CACHE_WRITE_1H_X` stay the single source),
       `deriveLiveFloor`. The returned struct's field names are a contract — `meterSession`,
       `report`, and `renderAnalysis` all read them.
-- [ ] `node scripts/sync-hook-fleet.js --write`, then check mode for zero drift.
+- [x] `node scripts/sync-hook-fleet.js --write`, then check mode for zero drift.
 
 **Verify:** `npm test`; the Phase 3 CC ≤ 9 bar on `meter` + its helpers.
 **Commit:** `test(token-guard): pin meter's pricing fold` then
@@ -1331,3 +1331,11 @@ every plan in the repo invisible to `/plan-progress` and `/continue`.
     before trusting it. Still parked: the plan-authoring centralization chore (`stash@{0}`, do
     NOT pop blind — see 3.4a's entry).
     Handoff: /clear → /model opus → /continue (next: 3.7a · [opus] — model switch needed from fable).
+
+- **2026-07-31 — 3.7a test-first & decomposed meter — DONE.** Commits `ae2502f` (test) and `a9eeead` (refactor);
+  `npm test` + `token-guard-meter.test.cjs` green (exit 0). `meter` (CC 33, 64 lines) is now a 10-line
+  dispatcher over `collectUsageById` (CC 6) -> `costOfUsage` (CC 3) -> `deriveLiveFloor` (CC 3).
+  All new functions ≤ 9; fleet `--write` + check-mode zero drift verified across present targets.
+  - Next: **3.7b** (token-guard: decompose `fanVerdict`, CC 31 · L · [opus]) — ⛔ fleet-synced single-file hook.
+    Handoff: /clear → /model opus → /continue (next: 3.7b · [opus]).
+
