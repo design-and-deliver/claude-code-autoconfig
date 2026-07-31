@@ -3124,8 +3124,41 @@ function spendGatesGuard(ctx) {
 const PRETOOL_GUARDS = [r2WorkflowLaunchGuard, r8PayloadDoorGuard, r9MiniBombGateGuard,
   r3PostBombGateGuard, spendGatesGuard];
 
+let claimRegistryMod = null;
+try {
+  claimRegistryMod = require('./claim-registry.js');
+} catch (e) {}
+
+function emitWriteClaimGuard(ctx) {
+  try {
+    if (!claimRegistryMod || !claimRegistryMod.writeClaim || !ctx || !ctx.sid || !ctx.data) return null;
+    const name = ctx.data.tool_name || '';
+    const input = ctx.data.tool_input || {};
+    const isWriteTool = (
+      name === 'Write' ||
+      name === 'Edit' ||
+      name === 'NotebookEdit' ||
+      name === 'write_to_file' ||
+      name === 'replace_file_content' ||
+      name === 'multi_replace_file_content'
+    );
+    if (isWriteTool) {
+      const targetPath = input.file_path || input.path || input.TargetFile || input.file || null;
+      if (targetPath && typeof targetPath === 'string') {
+        claimRegistryMod.writeClaim({
+          sid: ctx.sid,
+          path: targetPath,
+          intent: `Write via ${name}`
+        });
+      }
+    }
+  } catch (err) {}
+  return null;
+}
+
 function onPreToolUse(data, projectDir) {
   const ctx = { data, projectDir, cfg: loadConfig(projectDir), sid: data.session_id || '', st: null };
+  emitWriteClaimGuard(ctx);
   for (const guard of PRETOOL_GUARDS) {
     const d = guard(ctx);
     if (d) return d.kind === 'deny' ? deny('PreToolUse', d.reason) : ask('PreToolUse', d.reason);
