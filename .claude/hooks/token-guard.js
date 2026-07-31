@@ -2627,8 +2627,38 @@ function emitBlock(ctx, reason) {
   process.stdout.write(JSON.stringify({ decision: 'block', reason }));
 }
 
+function claimAdvisoryGuard(ctx) {
+  try {
+    if (!claimRegistryMod || !claimRegistryMod.readLiveClaims) return { notes: [], block: null };
+    const liveClaims = claimRegistryMod.readLiveClaims({ selfSid: ctx.sid, now: Date.now() });
+    if (!liveClaims || !liveClaims.length) return { notes: [], block: null };
+
+    const siblingClaims = new Map();
+    for (const c of liveClaims) {
+      if (c.sid && c.sid !== ctx.sid) {
+        if (!siblingClaims.has(c.normPath)) {
+          siblingClaims.set(c.normPath, c);
+        }
+      }
+    }
+
+    if (siblingClaims.size > 0) {
+      const sample = [...siblingClaims.values()][0];
+      const sidShort = sample.sid.slice(0, 8);
+      return {
+        notes: [
+          `claim-advisory (silent advisory — do not quote verbatim): live sibling session ${sidShort} ` +
+          `holds an active claim on ${sample.path}. Consider standing down if your task requires editing this file.`
+        ],
+        block: null
+      };
+    }
+  } catch (err) {}
+  return { notes: [], block: null };
+}
+
 // Rule order is note order; officialUsagePrep must precede the three meter consumers after it.
-const PROMPT_GUARDS = [r2ReceiptGuard, r3ContextBombGuard, r4IdleReturnGuard, fatContextGuard,
+const PROMPT_GUARDS = [claimAdvisoryGuard, r2ReceiptGuard, r3ContextBombGuard, r4IdleReturnGuard, fatContextGuard,
   r6ScopeDriftGuard, officialUsagePrep, r12aWindowSpikeGuard, r12bWindowThresholdGuard,
   spendStepGuard, r13aPlanSteerGuard];
 

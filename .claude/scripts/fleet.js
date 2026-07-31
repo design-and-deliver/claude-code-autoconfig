@@ -336,6 +336,41 @@ for (const g of duplicateTitles(mine)) {
   L.push('');
 }
 
+let claimRegistryMod = null;
+try {
+  claimRegistryMod = require('../hooks/claim-registry.js');
+} catch (e) {}
+
+function inFlightClaimOverlaps() {
+  if (!claimRegistryMod || !claimRegistryMod.readLiveClaims) return [];
+  const claims = claimRegistryMod.readLiveClaims({ now: Date.now() });
+  const byPath = new Map();
+  for (const c of claims) {
+    if (!byPath.has(c.normPath)) byPath.set(c.normPath, []);
+    byPath.get(c.normPath).push(c);
+  }
+  const overlaps = [];
+  for (const [normPath, group] of byPath) {
+    const sids = [...new Set(group.map(c => c.sid))];
+    if (sids.length > 1) {
+      overlaps.push({
+        path: group[0].path,
+        sids,
+        claims: group
+      });
+    }
+  }
+  return overlaps;
+}
+
+const inFlight = inFlightClaimOverlaps();
+for (const o of inFlight) {
+  const sidShorts = o.sids.map(s => s.slice(0, 8)).join(' and ');
+  L.push(`⚠ IN-FLIGHT — ${sidShorts} are both writing ${o.path}`);
+  L.push('  → active write collision detected. Stand one down or wait for completion.');
+  L.push('');
+}
+
 for (const o of fileOverlaps(trees)) {
   L.push(`⚠ OVERLAP — ${o.a.branch} and ${o.b.branch} both touch ${o.shared.length} file${o.shared.length === 1 ? '' : 's'}`);
   for (const f of o.shared.slice(0, 5)) L.push(`    ${f}`);
