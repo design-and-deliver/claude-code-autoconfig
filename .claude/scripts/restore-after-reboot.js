@@ -14,7 +14,8 @@
 //
 // Everything else here is presentation.
 //
-// ⛔ READ-ONLY by default. --launch is the only writing verb and it must be asked for.
+// ⛔ READ-ONLY by default. --launch (Windows Terminal tabs) and --vscode (VS Code terminals) are
+// the only writing verbs, and both must be asked for by name.
 //
 // WHY THIS IS NOT REPO-SCOPED (the one structural difference from fleet.js)
 // A reboot is a machine event, not a repo event — it takes your six job-agent tabs AND the two
@@ -25,12 +26,13 @@
 // whats-happening. It reads session-close.js's marker, which is dev-only for the same reason.
 //
 // Usage:
-//   node restore-after-reboot.js [--days N] [--all] [--json] [--launch]
+//   node restore-after-reboot.js [--days N] [--all] [--json] [--launch] [--vscode]
+//   node restore-after-reboot.js --resume-once <sid> <dir>   # internal: what --vscode's tasks call
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync, spawn } = require('child_process');
+const { execFileSync, spawn, spawnSync } = require('child_process');
 
 // ---- args -------------------------------------------------------------
 const opts = {
@@ -40,6 +42,8 @@ const opts = {
   all: false,
   json: false,
   launch: false,
+  vscode: false,
+  resumeOnce: null,
 };
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
@@ -48,6 +52,34 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--all') opts.all = true;
   else if (a === '--json') opts.json = true;
   else if (a === '--launch') opts.launch = true;
+  else if (a === '--vscode') opts.vscode = true;
+  else if (a === '--resume-once') opts.resumeOnce = { sid: argv[++i], dir: argv[++i] };
+}
+
+// ---- --resume-once (the other half of --vscode) ------------------------
+// ⛔ THE FOOTGUN THIS DEFUSES: a VS Code task with runOn=folderOpen fires EVERY time you open
+// that folder, forever. Writing `claude --resume <sid>` straight into tasks.json would relaunch
+// a months-old conversation every time you opened the repo — worse than having no feature.
+//
+// So each generated task points here instead, carrying a one-shot token. First open: the token
+// exists, we consume it and hand the terminal to claude. Every open after that: no token, so the
+// task prints a line and exits. Per-session tokens mean no race between sibling tasks in one
+// file, and the tasks.json can sit there harmlessly until the next run rewrites it.
+const TOKEN_DIR = ['.vscode', '.restore-after-reboot'];
+const tokenPath = (dir, sid) => path.join(dir, ...TOKEN_DIR, `${sid}.token`);
+
+if (opts.resumeOnce) {
+  const { sid, dir } = opts.resumeOnce;
+  const token = tokenPath(dir || process.cwd(), sid);
+  if (!fs.existsSync(token)) {
+    console.log(`Already restored ${sid.slice(0, 8)} — this task is spent.`);
+    console.log('(It stays in .vscode/tasks.json until the next --vscode run rewrites it.)');
+    process.exit(0);
+  }
+  try { fs.unlinkSync(token); } catch { /* consumed by a concurrent open — resume anyway */ }
+  // shell:true because `claude` is a .cmd shim on Windows; inherit so it owns the terminal.
+  const r = spawnSync('claude', ['--resume', sid], { stdio: 'inherit', shell: true, cwd: dir || process.cwd() });
+  process.exit(r.status == null ? 1 : r.status);
 }
 
 const NOW = Date.now();
@@ -435,7 +467,7 @@ if (!lost.length) {
   }
   if (offered.some((s) => s.cwd && !s.cwdGone)) {
     L.push('');
-    L.push('  or re-run with --launch to open one Windows Terminal tab each.');
+    L.push('  or re-run with --launch (Windows Terminal tabs) or --vscode (VS Code terminals).');
   }
 }
 
@@ -454,7 +486,97 @@ if (sinceReboot.length && !opts.all && fromReboot.length) {
 
 console.log(L.join('\n'));
 
-// ---- 4. --launch ------------------------------------------------------
+// ---- 4. --vscode ------------------------------------------------------
+// VS Code has no CLI verb for "open a terminal running X" — the only supported hook is a task
+// with runOn=folderOpen, which fires as the window opens. So the restore is: write one task per
+// lost session, then `code <repo>`. Each task gets its own dedicated panel, which is what makes
+// the result look like the tabs you lost rather than one shared output pane.
+const TASK_PREFIX = 'restore-after-reboot: ';
+const SCRIPT_PATH = path.resolve(__filename);
+
+function taskFor(s) {
+  return {
+    // The prefix is the ownership marker. A merge removes every task carrying it and adds these,
+    // so re-running never accumulates duplicates and never touches a task you wrote.
+    //
+    // The sid8 suffix is not decoration: two lost tabs in one repo very often share a title (that
+    // is what the title hook is FOR), and VS Code keys tasks by label — same label twice is an
+    // ambiguous entry the user cannot tell apart in the picker.
+    label: `${TASK_PREFIX}${s.title || 'session'} (${s.sid.slice(0, 8)})`,
+    detail: `session ${s.sid}`,
+    type: 'shell',
+    command: `node "${SCRIPT_PATH}" --resume-once "${s.sid}" "${s.cwd}"`,
+    presentation: { panel: 'dedicated', group: 'restore', reveal: 'always', focus: false },
+    runOptions: { runOn: 'folderOpen' },
+    problemMatcher: [],
+  };
+}
+
+// ⛔ Never clobber. tasks.json is a file the user owns, it is JSONC (comments are legal and
+// common), and a reformat that silently eats their comments is not a trade this feature gets to
+// make. Strict JSON.parse is the gate: it parses, we merge and keep a .bak; it does not, we leave
+// the file completely alone and say so.
+function writeTasks(dir, sessions) {
+  const vscodeDir = path.join(dir, '.vscode');
+  const file = path.join(vscodeDir, 'tasks.json');
+  const scratch = path.join(dir, ...TOKEN_DIR);
+  const existing = (() => { try { return fs.readFileSync(file, 'utf8'); } catch { return null; } })();
+  let doc = { version: '2.0.0', tasks: [] };
+  if (existing != null) {
+    try {
+      doc = JSON.parse(existing);
+    } catch {
+      return { ok: false, why: 'tasks.json has comments or is malformed — left untouched' };
+    }
+    if (!Array.isArray(doc.tasks)) doc.tasks = [];
+  }
+  doc.tasks = doc.tasks.filter((t) => !(t && typeof t.label === 'string' && t.label.startsWith(TASK_PREFIX)));
+  doc.tasks.push(...sessions.map(taskFor));
+  doc.version = doc.version || '2.0.0';
+
+  fs.mkdirSync(scratch, { recursive: true });
+  // ⛔ This tool's whole pitch is "here is the uncommitted work you forgot about" — so it does not
+  // get to leave its own droppings in your `git status`. The scratch dir ignores ITSELF, which
+  // needs no cooperation from the repo's .gitignore, and the backup lives in it for the same
+  // reason (a tasks.json.bak sitting in .vscode/ is one more untracked file to explain).
+  fs.writeFileSync(path.join(scratch, '.gitignore'), '*\n');
+  const bak = existing != null ? path.join(scratch, 'tasks.json.bak') : null;
+  if (bak) fs.writeFileSync(bak, existing);
+  for (const s of sessions) fs.writeFileSync(tokenPath(dir, s.sid), s.sid);
+  fs.writeFileSync(file, JSON.stringify(doc, null, 2) + '\n');
+  return { ok: true, bak };
+}
+
+if (opts.vscode) {
+  const launchable = offered.filter((s) => s.cwd && !s.cwdGone);
+  if (!launchable.length) {
+    console.log('\nNothing --vscode can open — every lost session lacks a usable directory.');
+    process.exit(0);
+  }
+  console.log('');
+  for (const [dir, group] of groupByCwd(launchable)) {
+    const r = writeTasks(dir, group);
+    if (!r.ok) {
+      console.log(`  ⚠ ${dir} — ${r.why}`);
+      for (const s of group) console.log(`      cd "${dir}" && claude --resume ${s.sid}`);
+      continue;
+    }
+    console.log(`  ${dir} — ${group.length} task${group.length === 1 ? '' : 's'}` +
+                `${r.bak ? `\n      (your tasks.json backed up to ${r.bak})` : ''}`);
+    // Test seam: the suite exercises the tasks.json merge, which must not open a real editor.
+    if (process.env.CLAUDE_RESTORE_TEST_NO_OPEN) continue;
+    const c = spawnSync('code', [dir], { stdio: 'ignore', shell: true });
+    if (c.status !== 0) console.log(`      ⚠ \`code\` did not open it — run: code "${dir}"`);
+  }
+  console.log('\nVS Code asks once per folder to allow automatic tasks — answer Allow.');
+  // Worth saying out loud: folderOpen fires on OPEN. A window already showing that folder is not
+  // reopened by `code <dir>`, it is focused, and the tasks do not run.
+  console.log('A folder already open in a window is only focused, so its tasks will not fire —');
+  console.log('close that window first, or paste the resume line above.');
+  process.exit(0);
+}
+
+// ---- 5. --launch ------------------------------------------------------
 // The only verb here that does anything. Windows Terminal is the one shell host that can be told
 // "new tab, in this directory, running this" from outside itself; everywhere else the paste block
 // above is the interface. `-w 0` targets the CURRENT window so the tabs land beside the one you

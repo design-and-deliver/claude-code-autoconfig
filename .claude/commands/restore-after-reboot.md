@@ -3,10 +3,12 @@
 <!-- @param all | flag | optional | Include sessions killed some other way (a force-quit terminal), not just the reboot's. -->
 <!-- @param days N | integer | optional | How far back to look. Default 7. -->
 <!-- @param --launch | flag | optional | Actually reopen them — one Windows Terminal tab per session. -->
+<!-- @param --vscode | flag | optional | Actually reopen them — one VS Code terminal per session, in the repo each was working in. -->
 <!-- @response roster | Lists the sessions the reboot killed, what uncommitted work is sitting in their trees, and the resume commands. -->
 <!-- @response nothing | Nothing to restore — every session ended cleanly or is still open. -->
 <!-- @example /restore-after-reboot | What died in the restart, and how to get it back -->
-<!-- @example /restore-after-reboot --launch | Reopen them all as tabs -->
+<!-- @example /restore-after-reboot --launch | Reopen them all as Windows Terminal tabs -->
+<!-- @example /restore-after-reboot --vscode | Reopen them all as VS Code terminals -->
 <!-- @example /restore-after-reboot all days 14 | Everything killed in the last two weeks -->
 
 # /restore-after-reboot
@@ -18,7 +20,7 @@ It is named for the event, not the object, because that is how you reach for it:
 what got wiped, you know the machine restarted. Answering "what else did that take?" is part of
 the job, so it also reports uncommitted work sitting in the trees those sessions were editing.
 
-**READ-ONLY unless you pass `--launch`.** Running it never resumes anything on its own.
+**READ-ONLY unless you pass `--launch` or `--vscode`.** Running it never resumes anything on its own.
 
 DEV-ONLY: gated out of user installs (`DEV_ONLY_FILES` in `bin/cli.js`), dogfooded from the CCA
 repo like `fleet` and `token-guard`. It depends on `session-close.js`, which is gated the same way.
@@ -35,10 +37,11 @@ S="${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/restore-after-reboot.js"
 node "$S"
 ```
 
-Map `$ARGUMENTS`: `all` → `--all`, `days N` → `--days N`, `--launch` → `--launch`.
+Map `$ARGUMENTS`: `all` → `--all`, `days N` → `--days N`, `--launch` → `--launch`,
+`--vscode` (also `vscode` / `code`) → `--vscode`.
 
-⛔ **Never add `--launch` yourself.** Spawning eight terminals is not a step to take on the user's
-behalf because the roster looked convincing. If they want it, they pass it.
+⛔ **Never add `--launch` or `--vscode` yourself.** Spawning eight terminals is not a step to take
+on the user's behalf because the roster looked convincing. If they want it, they pass it.
 
 ## Step 2 — report it
 
@@ -60,6 +63,32 @@ If the roster is clean, add nothing.
 
 Do not resume a session, do not launch tabs, do not commit the uncommitted work it surfaced. The
 board tells the **user**; they choose what comes back.
+
+## The two reopen verbs
+
+| Verb | What you get |
+|---|---|
+| `--launch` | One Windows Terminal tab per session, in the current window. Immediate; Windows only. |
+| `--vscode` | One VS Code terminal per session, in the repo it was working in. |
+
+VS Code has no CLI verb for "open a terminal running X", so `--vscode` goes the only supported
+route: it writes one task per lost session into that repo's `.vscode/tasks.json` with
+`runOn: folderOpen`, then runs `code <repo>`. VS Code asks once per folder to allow automatic
+tasks — answer **Allow**, or nothing fires.
+
+Three things follow from that mechanism, and all three are in the output:
+
+- **A folder already open in a window will not fire.** `code <dir>` focuses an existing window
+  rather than opening it, and `folderOpen` only runs on an open. Close that window first.
+- **The tasks are one-shot.** `folderOpen` fires forever, so the task does not hold
+  `claude --resume` — it calls this script's internal `--resume-once`, which consumes a token
+  written next to the tasks file. Second open: the token is gone, so the task prints one line and
+  exits. Reopening the repo next month does not resurrect a dead conversation.
+- **Your `tasks.json` is never clobbered.** Only tasks labelled `restore-after-reboot: ` are
+  replaced. If the file has comments (legal JSONC, and unparseable by `JSON.parse`) it is left
+  byte-for-byte alone and the resume lines are printed instead. Its backup and the tokens live in
+  `.vscode/.restore-after-reboot/`, which ignores itself so this tool never adds to the very
+  `git status` it is reporting on.
 
 ## How it decides
 

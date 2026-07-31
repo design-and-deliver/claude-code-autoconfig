@@ -183,4 +183,129 @@ test('--launch refuses a session whose directory is gone', () => {
     '--launch no longer guards on cwdGone');
 });
 
+// ---------------------------------------------------------------------------------------------
+// --vscode: the tasks.json writer.
+//
+// This half writes into a directory the USER owns, and it wires itself to VS Code's folderOpen
+// trigger — which fires every single time that folder is opened, forever. So the tests below are
+// mostly about what it must NOT do: not resume twice, not eat a hand-written tasks.json, not
+// litter the git status this very tool reports on.
+// ---------------------------------------------------------------------------------------------
+
+const vscodeEnv = {
+  ...process.env,
+  HOME: home,
+  USERPROFILE: home,
+  CLAUDE_PROJECT_DIR: repoA,
+  CLAUDE_CODE_SESSION_ID: '',
+  CLAUDE_RESTORE_TEST_NO_OPEN: '1',   // seam: exercise the merge without opening a real editor
+};
+
+function runVscode() {
+  return execFileSync(process.execPath, [SCRIPT, '--vscode'], { encoding: 'utf8', env: vscodeEnv });
+}
+
+const tasksFile = path.join(repoA, '.vscode', 'tasks.json');
+const scratchDir = path.join(repoA, '.vscode', '.restore-after-reboot');
+const readTasks = () => JSON.parse(fs.readFileSync(tasksFile, 'utf8'));
+const ourTasks = () => readTasks().tasks.filter((t) => t.label.startsWith('restore-after-reboot: '));
+
+// A second casualty in repo-A wearing the SAME title as the first. Two tabs on the same feature
+// is the normal case, not a corner one — the title hook is designed to give them the same name.
+seedTranscript('ffffffff-6666-4666-8666-666666666666', 25);
+fs.writeFileSync(path.join(aTitles, 'ffffffff-6666-4666-8666-666666666666.txt'), 'Gone — killed terminal\n');
+fs.writeFileSync(path.join(aTitles, 'ffffffff-6666-4666-8666-666666666666.pid'),
+  JSON.stringify({ pid: DEAD_PID, sid: 'ffffffff-6666-4666-8666-666666666666', ts: Date.now() }));
+
+test('--vscode writes one folderOpen task per lost session, and a token for each', () => {
+  fs.mkdirSync(path.dirname(tasksFile), { recursive: true });
+  fs.writeFileSync(tasksFile, JSON.stringify({
+    version: '2.0.0',
+    tasks: [{ label: 'my own build', type: 'shell', command: 'echo hi' }],
+  }, null, 2));
+
+  runVscode();
+  const doc = readTasks();
+  const mine = ourTasks();
+  assert(mine.length === 2, `expected 2 generated tasks, got ${mine.length}`);
+  assert(mine.every((t) => t.runOptions && t.runOptions.runOn === 'folderOpen'),
+    'a generated task is not wired to folderOpen — it would never fire');
+  assert(mine.every((t) => t.presentation && t.presentation.panel === 'dedicated'),
+    'tasks share a panel — the point is one terminal per session');
+  assert(doc.tasks.some((t) => t.label === 'my own build'),
+    'the user\'s own task was dropped from tasks.json');
+  for (const sid of ['cccccccc-3333-4333-8333-333333333333', 'ffffffff-6666-4666-8666-666666666666']) {
+    assert(fs.existsSync(path.join(scratchDir, `${sid}.token`)), `no one-shot token written for ${sid}`);
+  }
+});
+
+test('two sessions sharing a title still get distinct task labels', () => {
+  // Both fixtures are titled "Gone — killed terminal". A label is VS Code's key for a task; two
+  // identical ones are indistinguishable in the picker and ambiguous to resolve.
+  const labels = ourTasks().map((t) => t.label);
+  assert(new Set(labels).size === labels.length, `duplicate task labels: ${labels.join(' | ')}`);
+});
+
+test('re-running replaces our tasks instead of accumulating them', () => {
+  runVscode();
+  runVscode();
+  const mine = ourTasks();
+  assert(mine.length === 2, `tasks accumulated across runs: ${mine.length} after 3 runs`);
+  assert(readTasks().tasks.some((t) => t.label === 'my own build'),
+    'the user\'s own task did not survive a re-run');
+});
+
+test('the scratch dir ignores itself, so this tool adds nothing to git status', () => {
+  // The tool's headline output is "here is your uncommitted work" — it must not create any.
+  const ig = path.join(scratchDir, '.gitignore');
+  assert(fs.existsSync(ig) && fs.readFileSync(ig, 'utf8').trim() === '*',
+    'the token/backup dir does not ignore itself — every run would dirty the tree');
+  assert(!fs.existsSync(`${tasksFile}.bak`), 'the backup was left in .vscode/ as an untracked file');
+  assert(fs.existsSync(path.join(scratchDir, 'tasks.json.bak')), 'the pre-existing tasks.json was not backed up');
+});
+
+test('a tasks.json with comments is left byte-for-byte alone', () => {
+  // JSONC is legal in tasks.json and common. JSON.parse cannot read it, and a reformat that
+  // silently ate the user's comments would be a far worse bug than the feature is worth.
+  const jsonc = '{\n  // my build, do not touch\n  "version": "2.0.0",\n  "tasks": []\n}\n';
+  fs.writeFileSync(tasksFile, jsonc);
+  const out = runVscode();
+  assert(fs.readFileSync(tasksFile, 'utf8') === jsonc, 'a commented tasks.json was rewritten');
+  assert(/left untouched/.test(out), 'no warning was printed for the untouched file');
+  assert(/claude --resume cccccccc-3333/.test(out),
+    'no fallback resume line offered when the tasks route was refused');
+});
+
+// --resume-once: the half that runs INSIDE VS Code. Driven with a stub `claude` on PATH so the
+// consumed path is genuinely exercised without launching a real session.
+const stubDir = path.join(tmp, 'stub-bin');
+fs.mkdirSync(stubDir, { recursive: true });
+fs.writeFileSync(path.join(stubDir, 'claude.cmd'), '@echo STUB-CLAUDE %*\r\n');
+fs.writeFileSync(path.join(stubDir, 'claude'), '#!/bin/sh\necho "STUB-CLAUDE $@"\n', { mode: 0o755 });
+
+function resumeOnce(sid) {
+  return execFileSync(process.execPath, [SCRIPT, '--resume-once', sid, repoA], {
+    encoding: 'utf8',
+    env: { ...vscodeEnv, PATH: `${stubDir}${path.delimiter}${process.env.PATH}` },
+  });
+}
+
+test('a folderOpen task resumes exactly once, then goes inert', () => {
+  // ⛔ THE FOOTGUN. folderOpen fires on every open of that folder for the rest of time. If the
+  // task held `claude --resume <sid>` directly, opening the repo next month would relaunch a dead
+  // conversation. The token makes the second firing a no-op.
+  fs.writeFileSync(tasksFile, JSON.stringify({ version: '2.0.0', tasks: [] }, null, 2));
+  runVscode();
+  const sid = 'cccccccc-3333-4333-8333-333333333333';
+  assert(fs.existsSync(path.join(scratchDir, `${sid}.token`)), 'no token to consume');
+
+  const first = resumeOnce(sid);
+  assert(/STUB-CLAUDE --resume cccccccc-3333/.test(first), `first open did not resume: ${first}`);
+  assert(!fs.existsSync(path.join(scratchDir, `${sid}.token`)), 'the token was not consumed');
+
+  const second = resumeOnce(sid);
+  assert(!/STUB-CLAUDE/.test(second), `a second folder open resumed the session again: ${second}`);
+  assert(/spent/.test(second), `no explanation printed on the spent path: ${second}`);
+});
+
 summary();
