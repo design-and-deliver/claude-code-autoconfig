@@ -67,7 +67,10 @@ test('R14 first fire reads plain — no ordinal, forward-looking next check', ()
   promptSubmit(fix);
   fs.appendFileSync(fix.tp, roundTrip('m2', 150000));   // rent 150k >= 100k gate
   const r = reason(fix);
-  assert.match(r, /Next check ≈ 250k of re-reads this turn\./);
+  // Cache-WEIGHTED, and with no ' of re-reads' suffix: since 2026-07-30 the Cost line names the
+  // unit six words earlier and renders every rent figure at the 10% cache rate, so the re-arm
+  // point rides in the same unit (250k of raw re-arm = 25k billed). Raw here would re-mix units.
+  assert.match(r, /Next check ≈ 25k this turn\./);
   assert.doesNotMatch(r, /check this turn —/);           // no repeat framing on the first ask
   assert.doesNotMatch(r, /\b\d+(st|nd|rd|th) check\b/);
 });
@@ -82,9 +85,11 @@ test('R14 second same-turn fire names the repeat and DOUBLES the width', () => {
   // Half 2 — the repeat is legible as a repeat.
   assert.match(r, /This is the 2nd check this turn/);
   assert.match(r, /each approval doubles the gap to the next/);
-  // Half 1 — width doubled: 300k observed + (100k x 2) = 500k, NOT the flat step's 400k.
-  assert.match(r, /≈ 500k of re-reads/);
-  assert.doesNotMatch(r, /≈ 400k/);
+  // Half 1 — width doubled: 300k observed + (100k x 2) = 500k raw = 50k billed, NOT the flat
+  // step's 400k/40k. The escalated branch parks the figure in a trailing parenthetical — "this
+  // turn" already rode past in "the 2nd check this turn", so it does not repeat here.
+  assert.match(r, /≈ 50k\)/);
+  assert.doesNotMatch(r, /≈ 40k/);
 });
 
 test('R14 escalation makes repeats rarer — a level that WOULD have re-fired flat stays quiet', () => {
@@ -109,7 +114,7 @@ test('R14 third fire widens again — 4x base, ordinal keeps counting', () => {
   fs.appendFileSync(fix.tp, roundTrip('m4', 250000));   // rent 550k >= 500k -> fire 3
   const r = reason(fix);
   assert.match(r, /This is the 3rd check this turn/);
-  assert.match(r, /≈ 950k of re-reads/);                // 550k + (100k x 4)
+  assert.match(r, /≈ 95k\)/);                           // 550k + (100k x 4) = 950k raw, 95k billed
 });
 
 test('a new prompt resets the fire count — escalation never leaks across turns', () => {
@@ -122,7 +127,7 @@ test('a new prompt resets the fire count — escalation never leaks across turns
   promptSubmit(fix);                                    // <- turn boundary: re-baseline + reset
   fs.appendFileSync(fix.tp, roundTrip('m4', 150000));   // 150k of rent in the NEW turn
   const r = reason(fix);
-  assert.match(r, /Next check ≈ 250k of re-reads this turn\./);  // plain again, base width again
+  assert.match(r, /Next check ≈ 25k this turn\./);       // plain again, base width again
   assert.doesNotMatch(r, /check this turn —/);
 });
 

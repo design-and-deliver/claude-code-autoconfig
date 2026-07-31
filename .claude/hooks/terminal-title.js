@@ -435,10 +435,12 @@ function setTitle(glyph, title, ring) {
     // lines, one per context shift. Best-effort like the glyph file.
     try {
       const hf = path.join(logCtx.dir, `${logCtx.sid}.history.jsonl`);
-      let last = '';
+      let last = '', lastTs = '';
       try {
         const lines = fs.readFileSync(hf, 'utf8').trim().split('\n');
-        last = JSON.parse(lines[lines.length - 1]).title || '';
+        const prev = JSON.parse(lines[lines.length - 1]);
+        last = prev.title || '';
+        lastTs = prev.ts || '';
       } catch (_) { /* no history yet */ }
       // Context-size WATERMARK. Sampled on EVERY paint into the marks ledger (see recordMark) —
       // title shifts alone are far too rare to floor the /clear advisor, because the directive
@@ -448,6 +450,12 @@ function setTitle(glyph, title, ring) {
       // for the readers that already parse it.
       const tokens = readContextTokens(logCtx.transcript || '');
       recordMark(logCtx.dir, logCtx.sid, tokens);
+      // Per-topic WRITE watermark, the other half of the /clear advisor's evidence (see
+      // recordWrites). Attributed to `lastTs` — the newest history entry BEFORE this paint's own
+      // append — because that is the topic that was current WHILE the work happened. A paint that
+      // shifts the title is reporting on a turn that ran under the OLD title, so stamping the new
+      // one would credit a topic that has not done anything yet.
+      if (lastTs) recordWrites(logCtx.dir, logCtx.sid, lastTs, readTailWrites(logCtx.transcript || ''));
       if (title !== last) {
         // Optional field (absent when the transcript has no flushed usage yet, e.g. the very
         // first UPS paint); history readers must tolerate both shapes.
@@ -675,14 +683,12 @@ function endsOnQuestion(text) {
 // exactly the candidate-dead history buried behind the current topic. clearAdvice applies the
 // cache break-even rule to that ledger; readContextTokens supplies the measurements.
 
-// Current context size — input + cache_read + cache_creation of the NEWEST main-loop assistant
-// message, from a bounded 64KB tail read (same shape as classifyTail, so it stays fast on a
-// multi-MB transcript). Sidechain (subagent) entries are skipped: their usage is not the main
-// loop's context. Returns 0 for "no data" (missing/unflushed transcript) — callers must treat 0
-// as unknown, never stamp or advise on it.
-function readContextTokens(transcriptPath) {
-  if (!transcriptPath) return 0;
-  let content;
+// Bounded 64KB tail of a transcript, shared by the two probes below (same shape as classifyTail, so
+// it stays fast on a multi-MB file). Everything either probe wants — the newest usage block, the
+// turns' tool calls — lives at the end. The window's first line is usually a partial record; both
+// callers parse line-by-line and drop what fails, so it costs nothing to leave in. '' = no data.
+function readTranscriptTail(transcriptPath) {
+  if (!transcriptPath) return '';
   try {
     const TAIL_BYTES = 64 * 1024;
     const size = fs.statSync(transcriptPath).size;
@@ -691,13 +697,22 @@ function readContextTokens(transcriptPath) {
       const len = Math.min(TAIL_BYTES, size);
       const buf = Buffer.alloc(len);
       fs.readSync(fd, buf, 0, len, size - len);
-      content = buf.toString('utf8');
+      return buf.toString('utf8');
     } finally {
       fs.closeSync(fd);
     }
   } catch (_) {
-    return 0;
+    return '';
   }
+}
+
+// Current context size — input + cache_read + cache_creation of the NEWEST main-loop assistant
+// message, from the bounded tail above. Sidechain (subagent) entries are skipped: their usage is
+// not the main loop's context. Returns 0 for "no data" (missing/unflushed transcript) — callers
+// must treat 0 as unknown, never stamp or advise on it.
+function readContextTokens(transcriptPath) {
+  const content = readTranscriptTail(transcriptPath);
+  if (!content) return 0;
   const lines = content.split('\n');
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i].trim();
@@ -713,6 +728,36 @@ function readContextTokens(transcriptPath) {
   return 0;
 }
 
+// Files the tail's turns actually WROTE — the raw material of the /clear advisor's done-ness gate.
+// The tool NAME is the whole signal: these four are the only things the model does that leave
+// something on disk to re-read later, and everything else it did is recoverable only from the
+// conversation. Sidechain entries count here even though readContextTokens skips them — a
+// subagent's write lands on disk exactly like the main loop's, and the reason to skip sidechains
+// (their usage is not the main loop's context) says nothing about files.
+const WRITE_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+function readTailWrites(transcriptPath) {
+  const content = readTranscriptTail(transcriptPath);
+  if (!content) return [];
+  const out = [];
+  const seen = new Set();
+  for (const line of content.split('\n')) {
+    const t = line.trim();
+    if (!t) continue;
+    let obj;
+    try { obj = JSON.parse(t); } catch (_) { continue; } // includes the tail window's partial first line
+    const blocks = obj && obj.message && obj.message.content;
+    if (!Array.isArray(blocks)) continue;
+    for (const b of blocks) {
+      if (!b || b.type !== 'tool_use' || !WRITE_TOOLS.has(b.name)) continue;
+      const p = b.input && (b.input.file_path || b.input.notebook_path);
+      if (typeof p !== 'string' || !p || seen.has(p)) continue;
+      seen.add(p);
+      out.push(p);
+    }
+  }
+  return out;
+}
+
 // Per-paint context WATERMARK ledger ({sid}.marks.json) — O(1) and never grows: { fixed, latest, n }.
 // clearAdvice's F (the session's irreducible overhead: system prompt, CLAUDE.md, rules, memory)
 // needs an EARLY sample to be right, but title shifts are deliberately rare, so deriving F from
@@ -726,7 +771,13 @@ function recordMark(dir, sid, tokens) {
   const mf = path.join(dir, `${sid}.marks.json`);
   let m = null;
   try { m = JSON.parse(fs.readFileSync(mf, 'utf8')); } catch (_) { /* first mark of the session */ }
-  if (!m || !(m.fixed > 0) || tokens < m.latest * MARK_SHRINK) m = { fixed: tokens, latest: tokens, n: 0 };
+  if (!m || !(m.fixed > 0) || tokens < m.latest * MARK_SHRINK) {
+    // A shrink re-bases the CONTEXT watermarks; it says nothing about files already on disk, so the
+    // write ledger rides across the re-base deliberately.
+    const carried = m && m.writes;
+    m = { fixed: tokens, latest: tokens, n: 0 };
+    if (carried) m.writes = carried;
+  }
   m.fixed = Math.min(m.fixed, tokens);
   m.latest = tokens;
   m.n = (m.n || 0) + 1;
@@ -738,6 +789,53 @@ function readMarks(dir, sid) {
   try {
     const m = JSON.parse(fs.readFileSync(path.join(dir, `${sid}.marks.json`), 'utf8'));
     return m && m.fixed > 0 && m.n >= 2 ? m : null;
+  } catch (_) { return null; }
+}
+
+// Per-topic WRITE ledger, kept beside the watermarks in {sid}.marks.json as an optional `writes`
+// map keyed by the topic's history ts. Paints happen every turn and the tail window always covers
+// the turn just finished, so nothing is missed; the same write re-seen on later paints is deduped
+// by path. Bounded twice over — paths per topic, then topics — because "a handful per session" is
+// the expectation, not a guarantee, and this file is read on every paint.
+// ADDITIVE: the key is created the first time this runs, so its ABSENCE means the ledger predates
+// this code (clearAdvice reads that as "unknown"), while an empty list is a measured zero.
+const WRITES_PER_TOPIC = 25;
+const WRITE_TOPICS = 40;
+function recordWrites(dir, sid, topicTs, paths) {
+  if (!topicTs) return null; // nothing to attribute it to — the session's first paint
+  const mf = path.join(dir, `${sid}.marks.json`);
+  let m = null;
+  try { m = JSON.parse(fs.readFileSync(mf, 'utf8')); } catch (_) { /* no marks yet */ }
+  if (!m || typeof m !== 'object') m = {};
+  const w = (m.writes && typeof m.writes === 'object') ? m.writes : {};
+  const cur = Array.isArray(w[topicTs]) ? w[topicTs] : [];
+  let changed = !m.writes || !Array.isArray(w[topicTs]); // first run, or this topic's first entry
+  for (const p of paths || []) {
+    if (cur.length >= WRITES_PER_TOPIC) break; // enough to answer "did this topic produce anything"
+    if (cur.indexOf(p) !== -1) continue;
+    cur.push(p);
+    changed = true;
+  }
+  w[topicTs] = cur;
+  const keys = Object.keys(w);
+  if (keys.length > WRITE_TOPICS) {
+    keys.sort(); // history ts is ISO-8601, so lexical order is chronological — drop the oldest
+    for (const k of keys.slice(0, keys.length - WRITE_TOPICS)) delete w[k];
+    changed = true;
+  }
+  m.writes = w;
+  if (!changed) return m; // steady state: most paints see nothing new, so don't rewrite the file
+  try { fs.writeFileSync(mf, JSON.stringify(m)); } catch (_) { /* best-effort, like the glyph file */ }
+  return m;
+}
+
+// The write ledger as clearAdvice needs it: null when the file has no `writes` key AT ALL (nothing
+// has recorded one yet), which is a different fact from an empty map. readMarks cannot serve this —
+// it withholds the record below 2 samples, and done-ness has nothing to do with the sample count.
+function readWriteLedger(dir, sid) {
+  try {
+    const m = JSON.parse(fs.readFileSync(path.join(dir, `${sid}.marks.json`), 'utf8'));
+    return m && m.writes && typeof m.writes === 'object' ? m.writes : null;
   } catch (_) { return null; }
 }
 
@@ -808,6 +906,24 @@ function clearAdvice(dir, sid, transcriptPath) {
     const deadFrom = topics > 0 && all[liveIdx].tokens > 0 ? all[liveIdx].tokens : current;
     const dead = deadFrom - fixed;
     if (dead < 2 * fixed || dead < ADVICE_FLOOR) return '';
+    // DONE-NESS GATE. Size says the context is expensive; it cannot say the topic is FINISHED. What
+    // can is whether the topic externalised its decisions into files — once they are on disk the
+    // conversation that produced them is recoverable by re-reading them, which is exactly the claim
+    // "if they're done" is making. A dead topic that wrote nothing is discussion-only, and its
+    // context is the only copy.
+    // SURVIVING files, not edit events: written-then-deleted leaves nothing to re-read, so it must
+    // not buy a "you're done". (Written-then-reverted-in-place still counts — detecting that would
+    // mean hashing every write on every paint, and the honest limit is cheaper than a wrong claim.)
+    // A null ledger is a session that predates this code: unknown, so decline to gate rather than
+    // invent a verdict — HONEST-NUMBERS CONTRACT. An empty list is a measured zero and does gate.
+    const ledger = readWriteLedger(dir, sid);
+    if (ledger) {
+      // With no dead topic the advisory proposes shedding this topic's OWN earlier turns, so the
+      // whole window is what has to have produced something.
+      const shed = topics > 0 ? all.slice(0, liveIdx) : all;
+      const survives = p => { try { return fs.existsSync(p); } catch (_) { return false; } };
+      if (!shed.some(e => (ledger[e.ts] || []).some(survives))) return '';
+    }
     // Once per topic: pin the CURRENT topic's ts (newest history entry, watermarked or not), so
     // the next title shift re-arms it. A session that never re-titles is advised exactly once.
     const topicTs = all[all.length - 1].ts;
@@ -824,7 +940,14 @@ function clearAdvice(dir, sid, transcriptPath) {
         + `${EMDASH} if ${topics === 1 ? "it's" : "they're"} done`;
     // "Hey ${EMDASH}" prefix is the house style for every guard line we author (token-guard's asks
     // open the same way) — it marks the line as OURS rather than Claude Code's own output.
-    return `\u{1F4A1} Hey ${EMDASH} ~${k(dead)} tokens of ${what}, /clear cuts per-turn input cost ~${pct}%`;
+    // The /continue tail is not optional politeness: `topics` counts only the entries BEFORE the
+    // live run, so the live goal is still IN FLIGHT whenever this fires — a bare /clear sheds the
+    // dead topics AND the task the user is mid-way through. /continue is the resume path (the same
+    // one carriedTitle re-arms on, above), and it stays a parenthetical so the ~pct% reads as
+    // /clear's alone: /continue's recovery read is a cost, and it is already inside the 1.25–2×
+    // one-time re-write of F that ADVICE_FLOOR's payback math budgets for.
+    return `\u{1F4A1} Hey ${EMDASH} ~${k(dead)} tokens of ${what}, /clear cuts per-turn input cost ~${pct}%`
+      + ` (/continue picks this task back up)`;
   } catch (_) {
     return ''; // no ledger — never advise on guesses
   }
@@ -2136,4 +2259,4 @@ function extractBlock(tpl, name) {
 // Exported for tests (require()'d when require.main !== module). The hook itself never reads these.
 // Contract: terminal-title.test.js, golden-endings.test.js, and arcade-beeps.js (lazy-requires
 // inspectLastResponse) depend on these names — renaming one silently degrades the beeps hook.
-module.exports = { inspectLastResponse, endsOnQuestion, normalize, GLYPH, shouldDefer, solicitsReply, readContextTokens, recordMark, readMarks, clearAdvice, ancestryChain, recordLineage, carriedTitle, displayTitle, titlesCollide, isPlaceholderTitle, activeTwins, dupeGuardResult, dupeGuardPaint, ALARM_RE, appendCapped };
+module.exports = { inspectLastResponse, endsOnQuestion, normalize, GLYPH, shouldDefer, solicitsReply, readContextTokens, readTailWrites, recordMark, readMarks, recordWrites, readWriteLedger, clearAdvice, ancestryChain, recordLineage, carriedTitle, displayTitle, titlesCollide, isPlaceholderTitle, activeTwins, dupeGuardResult, dupeGuardPaint, ALARM_RE, appendCapped };

@@ -83,11 +83,23 @@ test('every DEV_ONLY_FILES entry on disk is also negated in package.json "files"
   const negated = new Set((pkg.files || []).filter(f => f.startsWith('!')).map(f => f.slice(1)));
 
   // Walk .claude once; a dev-only name may live under commands/, scripts/, hooks/ or rules/.
+  // SKIP .claude/worktrees/ — a git worktree is a nested checkout of this same repo, so every
+  // dev-only file appears there a second time under a path that is not part of the package's
+  // authored tree. Enumerating those copies here cannot work: `negated` above is a set of EXACT
+  // literal paths, so satisfying the check would need a per-path entry for every file in every
+  // worktree, and that list would break the moment a worktree is created, renamed or removed.
+  // (On 2026-07-30 this reported 13 "leaked" files that were all one locked worktree's copies.)
+  // The real tarball leak those copies cause is bigger than the gated files and belongs to the
+  // "!.claude/worktrees/**" negation, pinned by (b3) below.
   const found = new Map();
   (function walk(dir) {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
       const abs = path.join(dir, e.name);
-      if (e.isDirectory()) { walk(abs); continue; }
+      if (e.isDirectory()) {
+        const relDir = path.relative(repoRoot, abs).split(path.sep).join('/');
+        if (relDir !== '.claude/worktrees') walk(abs);
+        continue;
+      }
       const rel = path.relative(repoRoot, abs).split(path.sep).join('/');
       if (!found.has(e.name)) found.set(e.name, []);
       found.get(e.name).push(rel);
@@ -100,6 +112,42 @@ test('every DEV_ONLY_FILES entry on disk is also negated in package.json "files"
 
   assert(leaked.length === 0,
     `dev-only file(s) ship in the npm tarball — add a "!<path>" entry to package.json "files": ${leaked.join('; ')}`);
+});
+
+// (b3) Runtime scratch under .claude/ must never reach the tarball. Every path below is excluded
+//      from GIT via .git/info/exclude — but that file is untracked per-machine setup and has no
+//      bearing whatsoever on npm, while "files" includes ".claude" wholesale. So each one is a
+//      latent publish leak: it ships if and only if the scratch happens to exist at publish time,
+//      which is why this needs a test rather than a habit — a clean `npm pack` yesterday proves
+//      nothing about today's.
+//      Worst case, measured 2026-07-30 with one locked worktree present: .claude/worktrees/ alone
+//      put 2,003 files / 19.5 MB in the tarball against 58 files / 693 kB for the real package —
+//      97% of it, an entire nested checkout of this repo. Two smaller ones were shipping to users
+//      at that point (scheduled_tasks.lock and cross-session-instructions/).
+//      The list is hardcoded rather than parsed from .git/info/exclude ON PURPOSE: that file is
+//      per-machine and untracked, so a test keyed on it would pass or fail by checkout rather than
+//      by defect. Add a path here when you add one there.
+const RUNTIME_SCRATCH_DIRS = [
+  '.claude/worktrees', '.claude/checkpoints', '.claude/mailbox', '.claude/routines/.state',
+  '.claude/cross-session-instructions', '.claude/agent-memory-local',
+];
+const RUNTIME_SCRATCH_FILES = [
+  '.claude/scheduled_tasks.lock', '.claude/scheduled_tasks.json', '.claude/agent-registry.json',
+  '.claude/assistant-daemon-state.json', '.claude/first-run',
+];
+
+test('package.json "files" negates every runtime-scratch path under .claude/', () => {
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+  const files = new Set(pkg.files || []);
+  const missing = [];
+  // A directory needs BOTH forms: the bare path stops the dir entry, the /** glob stops its
+  // contents. The existing !.claude/hooks/.titles pair is the precedent.
+  for (const d of RUNTIME_SCRATCH_DIRS) {
+    for (const entry of [`!${d}`, `!${d}/**`]) if (!files.has(entry)) missing.push(entry);
+  }
+  for (const f of RUNTIME_SCRATCH_FILES) if (!files.has(`!${f}`)) missing.push(`!${f}`);
+  assert(missing.length === 0,
+    `package.json "files" is missing runtime-scratch negation(s): ${missing.join(', ')} — a publish while that scratch exists would ship it (see (b3))`);
 });
 
 // (c) validate-cca-install.md's dev_only list must equal DEV_ONLY_FILES exactly,

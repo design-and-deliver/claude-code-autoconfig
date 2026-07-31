@@ -167,20 +167,35 @@ test('explicitly-unbounded Grep is a bomb; an unset head_limit (caps at 250) is 
 // The screenshot case: an ordinary command, no bomb shape, ~2.1M of rent — and the Choice bullet
 // said "approve to push on — or deny", handing the arithmetic straight back to the reader.
 // Rent alone does not decide the side; the LIVE CONTEXT does, against the fat line.
-test('an ordinary call on a LEAN window recommends approve — clearing would rebuild it back', () => {
+// Arms the same turn as primed() but ends THIN: rent piles up across the turn while the LAST
+// message carries only ~50k, well under the 150k fat line, so a /clear here sheds almost nothing
+// and re-pays a cold start for it.
+function lean() {
   const fix = mkFixture({ turnRentGateTokens: 1000000 });
   promptSubmit(fix);
-  // Rent piles up across the turn, but the LAST message is thin — the window carries ~50k, well
-  // under the 150k fat line, so a /clear here sheds almost nothing and re-pays a cold start.
   for (const id of ['a', 'b', 'c', 'd']) fs.appendFileSync(fix.tp, roundTrip(id, 300000));
   fs.appendFileSync(fix.tp, roundTrip('e', 50000));
-  const reason = gateOut(call(fix, 'Bash', { command: 'ls -la' })).permissionDecisionReason;
-  const lines = reason.split('\n');
-  // R14 stopped printing the Restart bullet on 2026-07-29, so the lean reading surfaces only as
-  // the side the Choice bullet takes — which is the half that was ever load-bearing.
-  assert.doesNotMatch(reason, /• Restart/);
-  assert.match(lines[2], /^• Choice: approve \(recommended\) — push on; /);
-  assert.match(lines[2], /denying lands this turn at a commit point/);   // losing option stays
+  return fix;
+}
+
+// Was 'recommends approve' until 2026-07-31. R14 now stays SILENT here: a blocking confirm whose
+// own advice is "push on" spends a round trip and the reader's attention to arrive at what they
+// were already doing — wallpaper, on the branch that fires MOST. The card is worth an interruption
+// only when the losing option is live, so it speaks exactly when choiceBullet would say
+// `deny (recommended)`: a bomb CALL, or a fat window. The approve COPY is not gone and is still
+// pinned — R13b prints it, and test/token-guard-copy.test.js asserts it on choiceBullet directly;
+// what is gone is R14 spending an interruption to deliver it.
+test('an ordinary call on a LEAN window stays silent — its own advice was "push on"', () => {
+  const fix = lean();
+  const raw = call(fix, 'Bash', { command: 'ls -la' });
+  assert.equal(gateOut(raw).permissionDecision, undefined);
+  assert.doesNotMatch(raw, /rent, not progress/);   // no card reached the reader at all
+  // NO re-arm on the silent path, deliberately: the doubling exists to make repeats rarer, and a
+  // fire that never reached the reader is not a repeat. So the check stays live at the same width
+  // and speaks on the first call AFTER the window turns fat, rather than sitting out a doubled gap
+  // a silent fire would have bought.
+  fs.appendFileSync(fix.tp, roundTrip('f', 300000));
+  assert.equal(gateOut(call(fix, 'Bash', { command: 'ls -la' })).permissionDecision, 'ask');
 });
 
 test('…and deny on a FAT window — clearing stops that rent from the next trip on', () => {
@@ -196,23 +211,21 @@ test('…and deny on a FAT window — clearing stops that rent from the next tri
 // 2026-07-29 cut they are ONE line, so the thing to pin is that the line's side tracks the
 // WINDOW. Expectation comes from the fixture, not from a second printed line — reading the
 // pivot off the message would agree with itself no matter which way the code went.
-test('the Choice side tracks the window — fat recommends deny, lean recommends approve', () => {
+test('the Choice side tracks the window — fat recommends deny, lean says nothing', () => {
   // Two fat fixtures at different gate widths, plus a lean one, so the pivot is checked on BOTH
-  // sides — a same-side sweep would pass on a verdict that never varied.
-  const lean = mkFixture({ turnRentGateTokens: 1000000 });
-  promptSubmit(lean);
-  for (const id of ['a', 'b', 'c', 'd']) fs.appendFileSync(lean.tp, roundTrip(id, 300000));
-  fs.appendFileSync(lean.tp, roundTrip('e', 50000));
+  // sides — a same-side sweep would pass on a verdict that never varied. Since the 2026-07-31
+  // silence guard the lean side is the ABSENCE of a card rather than an approve card, but it is
+  // still the other half of the same pivot: drop it and this passes on a gate that fired the same
+  // way at every window size.
   for (const [fix, fat] of [[primed(), true],
                             [primed({ turnRentGateTokens: 250000 }), true],
-                            [lean, false]]) {
-    const choiceLine = gateOut(call(fix, 'Bash', { command: 'ls -la' }))
-      .permissionDecisionReason.split('\n')[2];
-    assert.match(choiceLine, fat ? /^• Choice: deny \(recommended\) — /
-                                 : /^• Choice: approve \(recommended\) — /);
+                            [lean(), false]]) {
+    const raw = call(fix, 'Bash', { command: 'ls -la' });
+    if (!fat) { assert.doesNotMatch(raw, /• Choice/); continue; }
+    const choiceLine = gateOut(raw).permissionDecisionReason.split('\n')[2];
+    assert.match(choiceLine, /^• Choice: deny \(recommended\) — /);
     // The fat branch is the only one that names the line it crossed.
-    if (fat) assert.match(choiceLine, /past the ~150k fat line/);
-    else assert.doesNotMatch(choiceLine, /fat line/);
+    assert.match(choiceLine, /past the ~150k fat line/);
   }
 });
 
@@ -257,15 +270,17 @@ test('(b) an unbounded Bash search is a bomb; -m/-l/-c or a downstream head clea
   const bomb = gateOut(call(primed(), 'Bash', { command: 'rg TODO src/' }));
   assert.equal(bomb.permissionDecision, 'ask');
   assert.match(choice(bomb), /^• Choice: deny \(recommended\) — /);
-  assert.match(choice(bomb), /no -m\/-l bound/);
+  // The bomb's own why, in the plain-language wording it took on 2026-07-31 — "-m/-l bound" named
+  // the flags a fix would use, which is the reader's job to know, not the card's to assume.
+  assert.match(choice(bomb), /no result cap/);
   // Behind a cd, same as the full-suite case — the check is per segment, not anchored.
   assert.match(choice(gateOut(call(primed(), 'Bash', { command: 'cd C:/CODE/repo && grep -rn foo .' }))),
-    /no -m\/-l bound/);
+    /no result cap/);
 
   for (const cmd of ['rg TODO -l src/', 'rg -c TODO src/', 'rg --max-count 5 TODO src/',
                      'grep -rn foo . | head -20', 'rg TODO src/ | wc -l']) {
     assert.doesNotMatch(choice(gateOut(call(primed(), 'Bash', { command: cmd }))),
-      /no -m\/-l bound/, cmd);
+      /no result cap/, cmd);
   }
 });
 

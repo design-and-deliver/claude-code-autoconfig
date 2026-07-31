@@ -59,8 +59,15 @@ test('R14 fires once a turn\'s re-reads cross the gate — round-trip copy, re-a
   fs.appendFileSync(fix.tp, roundTrip('m2', 300000)); // 3 gate-widths of rent in one trip
   const out = gateOut(preToolUse(fix));
   assert.equal(out.permissionDecision, 'ask');
-  assert.match(out.permissionDecisionReason, /1 round trip carrying/);   // singular, not "1 round trips"
-  assert.match(out.permissionDecisionReason, /~300k tokens of re-reads/);
+  assert.match(out.permissionDecisionReason, /1 round trip, now carrying/); // singular throughout
+  // 300k of rent RENDERS as 30k: the meter stays raw, the card converts at display (2026-07-30).
+  // 0.1× is not a discount the script elects — it is the price — so a raw figure overstates the
+  // bill 10× and, set beside the already-weighted work figure, overstated the ratio by as much.
+  // Since 2026-07-31 the conversion is SHOWN, not just applied: trips × context × rate = billed.
+  // One trip has no average to take, so the multiplicand is the live figure and 'avg' is absent.
+  assert.match(out.permissionDecisionReason,
+    /1 trip × ~300k context × 10% \(a cache read\) = ~30k of re-reads/);
+  assert.doesNotMatch(out.permissionDecisionReason, /avg/);
   assert.match(out.permissionDecisionReason, /rent, not progress/);
   assert.doesNotMatch(out.permissionDecisionReason, /\$/);
   // Structure (2026-07-29): a headline reading, then TWO bullets — cost, choice. It was four
@@ -70,10 +77,14 @@ test('R14 fires once a turn\'s re-reads cross the gate — round-trip copy, re-a
   // 3-line shape and the absence of the two bullets, or the briefing grows back a line at a time.
   const lines = out.permissionDecisionReason.split('\n');
   assert.equal(lines.length, 3);
-  assert.match(lines[0], /^⚠️ Hey — .*round trip carrying ~\d+k of context\.$/);
+  // 'now ... each' is load-bearing: this figure is the CURRENT per-trip context, not a total and
+  // not the turn's average — the ambiguity that had Andrew differencing it against the Cost line.
+  assert.match(lines[0], /^⚠️ Hey — .*round trip, now carrying ~\d+k of context each\.$/);
   assert.deepEqual(lines.slice(1).map(l => l.slice(0, 8)), ['• Cost: ', '• Choice']);
   assert.doesNotMatch(out.permissionDecisionReason, /• Lever|• Restart/);
-  assert.match(lines[1], / Next check ≈ \d+k of re-reads this turn\.$/);
+  // Converts with the Cost figure, or the card re-mixes units in one breath. The ' of re-reads'
+  // suffix went with the conversion — the Cost line now names the unit six words earlier.
+  assert.match(lines[1], / Next check ≈ \d+k this turn\.$/);
   // Re-armed at 400k (above the 300k observed) ⇒ the very next tool call must not re-fire.
   assert.equal(gateOut(preToolUse(fix)).permissionDecision, undefined);
 });
@@ -81,16 +92,56 @@ test('R14 fires once a turn\'s re-reads cross the gate — round-trip copy, re-a
 test('R14 catches what R13b cannot: ordinary work spread over many trips at a fat context', () => {
   // The 2026-07-25 shape, at default gates. 24 trips × 104k = 2.5M of rent; work = 24×1.6k ≈
   // 38k. R13b's work meter reads ~288k against a 1M gate ⇒ silent. R14 must not be.
-  const fix = mkFixture({ turnGateTokens: 1000000, turnRentGateTokens: 1000000 });
+  //
+  // The fat line is pinned at 100k for this fixture rather than left at the 150k default, because
+  // since the 2026-07-31 silence guard a fat window is a PRECONDITION of R14 speaking at all, and
+  // the incident's own 104k sits just under the default line. Pinning it here keeps the case about
+  // what it is about — rent invisible to a work meter — instead of quietly becoming a second test
+  // of the threshold. (That the founding incident would now be silenced at defaults is a real
+  // consequence of the guard, and belongs in the guard's own tests, not smuggled into this one.)
+  const fix = mkFixture({ turnGateTokens: 1000000, turnRentGateTokens: 1000000,
+    contextWarnTokens: 100000 });
   promptSubmit(fix);
   for (let i = 2; i <= 25; i++) fs.appendFileSync(fix.tp, roundTrip(`m${i}`, 104000, 1500));
   const out = gateOut(preToolUse(fix));
   assert.equal(out.permissionDecision, 'ask');
   assert.match(out.permissionDecisionReason, /24 round trips/);
-  assert.match(out.permissionDecisionReason, /~2\.5M tokens of re-reads/);
-  assert.match(out.permissionDecisionReason, /against ~38k tokens of actual work/);
+  // The 2.5M raw renders as 250k weighted — same fire, same moment, honest unit. Asserting the
+  // pair together is the point: "~250k of re-reads against ~38k of actual work" is 6.6:1, where
+  // the raw figure claimed 66:1 off the same turn.
+  assert.match(out.permissionDecisionReason,
+    /24 trips × ~104k avg context × 10% \(a cache read\) = ~250k of re-reads/);
+  assert.match(out.permissionDecisionReason, /against ~38k of actual work \(new input \+ output\)/);
+  // No 7-figure token count anywhere: "~2.5M" read as alarm rather than as information.
+  assert.doesNotMatch(out.permissionDecisionReason, /~?\d+(\.\d+)?M\b/);
   // It is rent, not a spiral — R13b's framing must not leak into this message.
   assert.doesNotMatch(out.permissionDecisionReason, /spiral/i);
+});
+
+// The card prints an equation, so the equation has to close — arithmetic a reader can check is
+// the whole point of showing it, and one that does not add up is worse than a bare product.
+// This is the regression guard for the naive fix: multiplying by the HEADLINE context instead of
+// the average. On a turn whose context grew (the normal shape) those differ, and 44 × live × 10%
+// overstates the bill by whatever the context gained — here ~35%.
+test('R14: the printed equation closes — trips × avg × 10% equals the billed figure', () => {
+  // Fat line pinned at 100k for the same reason as the case above: the silence guard makes a fat
+  // window a precondition of the card existing, and this case is about the card's arithmetic.
+  const fix = mkFixture({ turnGateTokens: 10000000, turnRentGateTokens: 4000000,
+    contextWarnTokens: 100000 });
+  promptSubmit(fix);
+  // Context climbs 62k -> 139k across 44 trips, so avg (~101k) is nowhere near the live figure.
+  for (let i = 2; i <= 45; i++) fs.appendFileSync(fix.tp, roundTrip(`m${i}`, 60000 + i * 1750, 1500));
+  const r = gateOut(preToolUse(fix)).permissionDecisionReason || '';
+  const eq = r.match(/(\d+) trips × ~(\d+)k avg context × 10% \(a cache read\) = ~(\d+)k of re-reads/);
+  assert.ok(eq, `Cost line carries no equation: ${r}`);
+  const [, trips, avgK, billedK] = eq.map(Number);
+  const product = trips * avgK * 0.1;
+  assert.ok(Math.abs(product - billedK) / billedK < 0.02,      // slack for two k-roundings only
+    `equation does not close: ${trips} × ${avgK}k × 10% = ${product}k, printed ~${billedK}k`);
+  // And the headline figure is genuinely a DIFFERENT number, or this proved nothing.
+  const live = Number((r.match(/now carrying ~(\d+)k of context each/) || [])[1]);
+  assert.ok(live > avgK * 1.2, `fixture failed to grow the context: live ${live}k vs avg ${avgK}k`);
+  assert.match(r, new RegExp(`the next trip bills ~${Math.round(live / 10)}k at the current size`));
 });
 
 test('R14 re-baselines on the next prompt — a new turn starts rent-free', () => {

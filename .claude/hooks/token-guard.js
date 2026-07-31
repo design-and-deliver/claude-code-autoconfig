@@ -234,6 +234,13 @@ const BUSY_SESSION_DUST_USD = 0.02;          // spikeAttribution: below this a s
 const LEDGER_ENTRY_DUST_USD = 0.001;         // Stop path: no-op turns stay out of the spend ledger
 const ROLLUP_DUST_USD = 0.005;               // 5h rollup: rows / agent splits below this are noise
 const SPIKE_SOLO_SHARE_FLOOR = 0.85;         // spikeCopyMode materiality: above this share the solo story holds
+const COLD_START_SAMPLES = 12;               // R15b: rolling window of measured session cold starts
+const COLD_START_MIN_N = 3;                  // under 3 samples the median is noise — say nothing
+const COLD_START_MAX_TOK = 200000;           // a "first request" above the window is a resumed file, not a cold start
+const COLD_START_BACKFILL_FILES = 8;         // newest sibling transcripts sampled to seed the store
+const COLD_START_BACKFILL_BYTES = 128 * 1024;// bounded head-read per transcript — never load a fat .jsonl
+// COLD_START_PAYBACK_TRIPS retired 2026-07-31 — see restartVerdict. It gated on the same excess the
+// fat line now does, and could only bind above a ~113k floor, so it was dead at this machine's ~62k.
 const TASK_NORM_TOK = 100000;                // R13: a normal task finishes under this — the spiral yardstick
 const PLAN_STEER_TOK = 2 * TASK_NORM_TOK;    // R13a: blast-radius bar quoted in the plan-first steer
 
@@ -241,6 +248,13 @@ const DEFAULTS = {
   tokenSaver: false,                // Cost Control: single on/off toggle. Off = this light default posture;
                                     // on overlays the aggressive TOKEN_SAVER preset (blocks + tighter thresholds).
   contextWarnTokens: 150000,
+  // R15c: shed-able excess over the MEASURED cold-start floor — restartVerdict's real threshold
+  // (fatAt = coldStart + this). 88000 is back-fit so a ~62k floor reproduces the flat 150k exactly;
+  // every other config adapts instead of inheriting this machine's overhead. contextWarnTokens
+  // stays the fallback here and the live threshold for its other callers (bombGateWhenFat, the
+  // fat-context advisory, the idle check, the analyze digest) — those ask "is this window big",
+  // which is a different question from "is it worth clearing".
+  contextExcessTokens: 88000,
   sessionWarnUSD: [5, 15, 30],
   windowBudgetUSD: null,
   hardGateUSD: null,
@@ -334,8 +348,12 @@ function priceFor(model) {
 // ---------------------------------------------------------------------------
 // meter: one transcript JSONL -> { usd, perModel, liveContext, turnFloorUSD, turns,
 //                                  maxInp, lastTs, rawLength, lastCacheWrite, lastCacheRead }
+// Resident context of one request: everything the model had to be handed to answer it.
+const ctxTokens = u => (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) +
+  (u.cache_creation_input_tokens || 0);
+
 function meter(transcriptPath, sinceMs) {
-  const out = { usd: 0, perModel: {}, liveContext: 0, turnFloorUSD: 0, turns: 0,
+  const out = { usd: 0, perModel: {}, liveContext: 0, firstContext: 0, turnFloorUSD: 0, turns: 0,
     maxInp: 0, lastTs: 0, rawLength: 0, tsList: [], lastCacheWrite: 0, lastCacheRead: 0 };
   let raw;
   try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch (_) { return out; }
@@ -343,6 +361,7 @@ function meter(transcriptPath, sinceMs) {
 
   const byId = new Map(); // message.id -> {model, usage} — last occurrence wins
   let last = null;        // last assistant usage in file order = live context source
+  let first = null;       // FIRST assistant usage = this session's cold-start reading
   for (const line of raw.split(/\r?\n/)) {
     if (!line.trim()) continue;
     let o; try { o = JSON.parse(line); } catch (_) { continue; }
@@ -350,6 +369,7 @@ function meter(transcriptPath, sinceMs) {
     if (sinceMs && o.timestamp && Date.parse(o.timestamp) < sinceMs) continue;
     const id = o.message.id || `line-${byId.size}`;
     byId.set(id, { model: o.message.model || '', usage: o.message.usage });
+    if (!first) first = o.message.usage;
     last = o.message.usage;
     if (o.timestamp) { const t = Date.parse(o.timestamp); if (t) { out.lastTs = t; out.tsList.push(t); } }
   }
@@ -377,9 +397,13 @@ function meter(transcriptPath, sinceMs) {
   }
 
   for (const model of Object.keys(out.perModel)) out.maxInp = Math.max(out.maxInp, priceFor(model).inp);
+  // Cold start: what this session was already carrying on its FIRST request — the fixed payload
+  // (system prompt + tool schemas, CLAUDE.md, rules, memory index, skill list) that a /clear +
+  // /continue re-pays before it reads a line of code. It is a property of the whole file, so a
+  // sinceMs-windowed meter leaves it at 0 rather than reporting a mid-session request as "first".
+  if (first && !sinceMs) out.firstContext = ctxTokens(first);
   if (last) {
-    out.liveContext = (last.input_tokens || 0) + (last.cache_read_input_tokens || 0) +
-      (last.cache_creation_input_tokens || 0);
+    out.liveContext = ctxTokens(last);
     // The last request's cache split. A request that WRITES six figures of context instead of
     // reading them is, by definition, a full-price re-upload — R4b's clock-free evidence that
     // the cache TTL lapsed, usable on paths where the elapsed-gap check is already too late.
@@ -1842,7 +1866,7 @@ const isGitFullPatch = (cmd) => shellSegs(cmd).some(s => GIT_FULL_PATCH.test(s))
 // them: 'skip' defers the gate entirely and outranks any deny.
 const BASH_BOMBS = [
   [isFullSuite, 'this runs the whole test suite, and its output is re-read on every remaining trip'],
-  [isUnboundedBashSearch, 'this search carries no -m/-l bound and no head, so every hit lands in context and stays there'],
+  [isUnboundedBashSearch, 'this search has no result cap, so every match it finds lands in context and stays there'],
   [isBigCat, 'this cats a file big enough to dominate the window — a Read with offset/limit costs a fraction'],
   [isGitFullPatch, 'this prints a full patch rather than a --stat, and the whole diff is re-read on every remaining trip'],
 ];
@@ -1876,12 +1900,121 @@ function gateVerdict(toolName, toolInput) {
 // to the old neutral copy — a recommendation with no evidence behind it is noise, and this script
 // does not bluff. The losing option stays spelled out in every branch: advisory, not
 // authoritarian.
+//
+// BOTH recommendations carry their why (Andrew 2026-07-30). Until then only `deny` did, and the
+// asymmetry hid behind the Restart bullet, which printed the numbers approve omitted — R14's
+// two-bullet cut on 2026-07-29 dropped that bullet and left `approve (recommended)` asserting
+// bare, four lines under a headline reading "~4.4M tokens of re-reads". At a glance that is
+// "4.4M — keep going (recommended)": the reader fuses the verdict to the nearest big number, and
+// the number it actually turns on (liveContext vs the fat line) was nowhere on the card. rv.why
+// was already built for this branch and thrown away. Approve is the branch that needs its
+// evidence MOST — it is the counterintuitive side of every fire, and the side that looks like
+// the script rubber-stamping a spend it just called rent.
 const choiceBullet = (verdict, { neutral, denyTail }, rv) => {
   const why = verdict && verdict.kind === 'deny' ? verdict.why : rv && rv.clear ? rv.why : null;
   if (why) return `• Choice: deny (recommended) — ${why}. Approving pushes on; ${denyTail}`;
-  if (rv)  return `• Choice: approve (recommended) — push on; ${denyTail}`;
+  // denyTail opens lowercase for the mid-sentence slots above; here it starts a sentence.
+  if (rv)  return `• Choice: approve (recommended) — ${rv.why}; push on. ` +
+    `${denyTail[0].toUpperCase()}${denyTail.slice(1)}`;
   return `• Choice: ${neutral}`;
 };
+// ── Cold-start meter: what /clear + /continue actually COSTS on this machine (R15b) ───────────
+// Every restart recommendation this script has ever made priced the saving and left the price
+// blank — "clearing stops that rent from the next trip on" is true only if a fresh session starts
+// at zero, and none does. It starts at the fixed payload this repo hands every session (system
+// prompt + tool schemas, CLAUDE.md, .claude/rules, the memory index, the skill list), and that
+// payload is re-read on every trip of the new session exactly as the old one's was. So the honest
+// saving is liveContext MINUS that floor, and the honest cost of taking the restart is the floor
+// itself, paid once (Andrew 2026-07-30 — "include the new session startup cost ... so we can show
+// that we considered that aspect").
+//
+// The number is MEASURED here, never assumed: docs quote ~84k from a hand-measurement on one
+// repo/one day, and this file does not hardcode another machine's reading. Each session's own
+// first request (meter's firstContext) is one sample; the store keeps the last dozen and the card
+// quotes their MEDIAN — a mean would be dragged by the odd resumed transcript that slipped the
+// COLD_START_MAX_TOK bound. Under COLD_START_MIN_N samples it returns null and every caller falls
+// back to its pre-cold-start copy, same discipline as restartVerdict's dead-meter branch.
+function coldStartPath(projectDir) { return path.join(stateDir(projectDir), 'cold-start.json'); }
+
+function loadColdStarts(projectDir) {
+  try {
+    const j = JSON.parse(fs.readFileSync(coldStartPath(projectDir), 'utf8'));
+    return Array.isArray(j.samples) ? j.samples : [];
+  } catch (_) { return []; }
+}
+
+function saveColdStarts(projectDir, samples) {
+  try {
+    fs.mkdirSync(stateDir(projectDir), { recursive: true });
+    fs.writeFileSync(coldStartPath(projectDir),
+      JSON.stringify({ samples: samples.slice(-COLD_START_SAMPLES) }));
+  } catch (_) { /* a lost sample just delays the reading — never break the gate */ }
+}
+
+// Seed from the sibling transcripts already on disk, so the first card that needs the number is
+// not the third one. Deliberately bounded: the newest few files, a HEAD-read each (a mature
+// transcript runs to tens of MB and this is the PreToolUse critical path), and it only runs while
+// the store is short. A file whose first assistant message is past the head budget is skipped, not
+// guessed at.
+function backfillColdStarts(projectDir, transcriptPath, samples) {
+  let names;
+  const dir = path.dirname(transcriptPath || '');
+  try { names = fs.readdirSync(dir).filter(f => /\.jsonl$/i.test(f)); } catch (_) { return samples; }
+  const have = new Set(samples.map(s => s.sid));
+  const newest = names
+    .map(f => { try { return { f, t: fs.statSync(path.join(dir, f)).mtimeMs }; } catch (_) { return null; } })
+    .filter(Boolean).sort((a, b) => b.t - a.t).slice(0, COLD_START_BACKFILL_FILES);
+  for (const { f } of newest) {
+    const sid = f.replace(/\.jsonl$/i, '');
+    if (have.has(sid)) continue;
+    const tok = firstContextOfHead(path.join(dir, f));
+    have.add(sid);
+    if (tok > 0 && tok <= COLD_START_MAX_TOK) samples.push({ sid, tok });
+  }
+  return samples;
+}
+
+// First assistant usage inside the head of a transcript, or 0 if it isn't there.
+function firstContextOfHead(file) {
+  let fd;
+  try {
+    fd = fs.openSync(file, 'r');
+    const buf = Buffer.alloc(COLD_START_BACKFILL_BYTES);
+    const n = fs.readSync(fd, buf, 0, COLD_START_BACKFILL_BYTES, 0);
+    const lines = buf.slice(0, n).toString('utf8').split(/\r?\n/);
+    // Drop the tail line: a head-read almost always slices it mid-JSON.
+    lines.pop();
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      let o; try { o = JSON.parse(line); } catch (_) { continue; }
+      if (o && o.type === 'assistant' && o.message && o.message.usage) return ctxTokens(o.message.usage);
+    }
+    return 0;
+  } catch (_) { return 0; }
+  finally { if (fd !== undefined) { try { fs.closeSync(fd); } catch (_) { /* noop */ } } }
+}
+
+// Record-then-read: the session that renders a card contributes its OWN cold start first, so the
+// median always includes the configuration the reader is actually sitting in.
+function coldStartTokens(projectDir, sid, m, transcriptPath) {
+  if (!projectDir) return null;
+  let samples = loadColdStarts(projectDir);
+  const before = samples.length;
+  const mine = m && m.main && m.main.firstContext;
+  if (mine > 0 && mine <= COLD_START_MAX_TOK && !samples.some(s => s.sid === sid)) {
+    samples.push({ sid, tok: mine });
+  }
+  if (samples.length < COLD_START_MIN_N && transcriptPath) {
+    samples = backfillColdStarts(projectDir, transcriptPath, samples);
+  }
+  if (samples.length !== before) saveColdStarts(projectDir, samples);
+  const tok = samples.slice(-COLD_START_SAMPLES).map(s => s.tok)
+    .filter(t => t > 0).sort((a, b) => a - b);
+  if (tok.length < COLD_START_MIN_N) return null;
+  const mid = tok.length >> 1;
+  return tok.length % 2 ? tok[mid] : Math.round((tok[mid - 1] + tok[mid]) / 2);
+}
+
 // ── restartVerdict / restartBullet: price the option the Choice bullet leaves unpriced (R15) ──
 // Approving buys ONE more doubled leg; the standing alternative is /clear + /continue. The rebuild
 // PRICE is metered and varies honestly — a 40k context at the 1M fire is nearly free to rebuild, a
@@ -1913,15 +2046,104 @@ const choiceBullet = (verdict, { neutral, denyTail }, rv) => {
 // branch names that condition rather than claiming it holds — same discipline as choiceBullet.
 //
 // Returns null when nothing was measured: no reading, no recommendation, neutral copy.
-function restartVerdict(liveContext, gap, fatAt) {
+//
+// coldStart (optional, measured — see coldStartTokens) is the floor a fresh session starts at, and
+// it moves the LINE, not just the arithmetic behind it. The SAVING is liveContext − coldStart, not
+// liveContext: clearing does not take the per-trip rent to zero, it takes it down to the payload
+// every session carries. Only that EXCESS is shed-able — so the threshold belongs on the excess,
+// and a flat line on total context mismeasures anyone whose floor differs. Two sessions at an
+// identical 150k are opposite situations at a 20k floor (130k of shed-able cruft) and at a 120k
+// floor (30k, against a 120k restart price).
+//
+//     fatAt = coldStart + excessBudget        // measured floor
+//     fatAt = cfg.contextWarnTokens           // no floor measured yet — flat fallback
+//
+// So `excessBudget` is the real constant and 150k was only ever its sum with THIS machine's floor:
+// at the measured ~62k here, an 88k budget reproduces 150k exactly, and every other config adapts
+// (a 20k floor lands at 108k, a 100k floor at 188k). ADDITIVE deliberately, not multiplicative —
+// `coldStart × M` collapses at small floors (a 15k floor would set a 30k line) and would need the
+// model's context-window size, which this script has no way to read.
+//
+// ONE test, on ONE quantity (2026-07-31). This used to AND a second "does clearing repay its own
+// startup within COLD_START_PAYBACK_TRIPS trips" gate, which measured the same excess against a
+// different constant — and measured across a range of floors it could only ever bind above a ~113k
+// floor, so at the floor here it was dead code. Two thresholds on one quantity four lines apart is
+// exactly the drift the comments above were written to prevent, so the payback gate is gone rather
+// than rebuilt on top of the new line. The excess budget subsumes it: it IS a payback horizon,
+// stated in tokens instead of trips.
+//
+// The line is also bounded ABOVE by auto-compaction (~165k on a 200k window): a fatAt past the
+// point where the harness compacts anyway can never fire, which is how the pre-2026-07-27 test
+// died. Keep excessBudget small enough that coldStart + excessBudget stays under it.
+function restartVerdict(liveContext, gap, fatAt, coldStart, excessBudget) {
   if (!liveContext || !(gap > 0) || !(fatAt > 0)) return null;
+  // A measured floor moves the line; an unmeasured one leaves the flat default exactly where it
+  // was. Same no-floor-no-claim discipline as the copy branches below.
+  const line = coldStart > 0 && excessBudget > 0 ? coldStart + excessBudget : fatAt;
   const here = `~${fmtK(liveContext)} of context`;
-  return liveContext >= fatAt
-    ? { clear: true,
-        why: `${here} is past the ~${fmtK(fatAt)} fat line, so clearing stops that rent from the ` +
-             `next trip on` }
-    : { clear: false, why: `${here} is under the ~${fmtK(fatAt)} fat line` };
+  const fat = liveContext >= line;
+  // Nothing measured yet (a store under COLD_START_MIN_N samples): the pre-2026-07-30 reading,
+  // word for word. An unmeasured floor is not quoted as zero and not guessed at.
+  if (!(coldStart > 0)) {
+    return fat
+      ? { clear: true,
+          why: `${here} is past the ~${fmtK(line)} fat line, so clearing stops that rent from ` +
+               `the next trip on` }
+      // Carries its consequence like the clear branch does — choiceBullet quotes this verbatim as
+      // the approve recommendation's evidence, and "under the fat line" alone states a reading
+      // without saying what follows from it.
+      : { clear: false,
+          why: `${here} is under the ~${fmtK(line)} fat line, so clearing sheds little` };
+  }
+  const net = Math.max(0, liveContext - coldStart);
+  // ONE UNIT for the two figures the card weighs against each other (Andrew 2026-07-31, auditing
+  // his own card). `net` is RAW cache-read tokens; the startup floor it gets compared to in
+  // clearTail is fresh input written to cache — billed ~10x apart, printed as bare "k" apiece.
+  // "sheds ~119k a trip" beside "re-pays ~62k of startup" reads as a 2:1 win on the first trip,
+  // when the real per-trip saving is ~12k against a ~62k one-time price. Same mistake the Cost
+  // bullet already fixed by weighting rent (see rentAskCopy), one clause later — so shed renders
+  // CACHE-WEIGHTED too, and now every figure on the card is in the same money.
+  const shed = Math.round(net * CACHE_READ_X);
+  // ...and the comparison that unit makes possible, in the unit the READER has: trips. This is
+  // NOT the payback gate deleted earlier today (see the header above) — that one AND-ed a second
+  // threshold onto the fat line and decided things. This decides nothing; it prints the division
+  // the reader would otherwise have to do wrong. A FLOOR, not an estimate: the cache-write premium
+  // (CACHE_WRITE_5M_X..CACHE_WRITE_1H_X) is charged here at 1x, and a cleared window refills as it
+  // works — both push real payback later, never earlier.
+  const payback = shed > 0 ? Math.ceil(coldStart / shed) : null;
+  // why names the NET and where it came from, never the floor's own figure. The floor is quoted
+  // exactly once per card, by whichever line describes the restart itself — restartBullet on
+  // R13b, the deny tail on R14 (which has no Restart bullet). Until 2026-07-30 this clause
+  // carried it too, so an R13b card printed "~61k of startup" twice inside four lines, and an
+  // R14 card printed it only when the recommendation happened to come from the numbers.
+  // One test now — `fat` alone, against a line that already knows the floor. The old second
+  // condition is folded into where the line sits, not ANDed beside it.
+  if (fat) {
+    return { clear: true, coldStart, payback,
+      why: `${here} is past the ~${fmtK(line)} fat line, so clearing sheds ~${fmtK(shed)} a ` +
+           `trip net of startup` };
+  }
+  return { clear: false, coldStart, payback,
+    why: `${here} is under the ~${fmtK(line)} fat line, so clearing nets only ~${fmtK(shed)} a ` +
+         `trip after startup` };
 }
+// The price of the deny option, in the deny option's own sentence. R14 dropped its Restart
+// bullet (see rentAskCopy), which left the measured floor reachable ONLY through rv.why — and
+// choiceBullet discards rv.why whenever the pending CALL is a bomb, because the call wins. So on
+// the branch that fires most (a bomb deny), the card recommended /clear + /continue and priced
+// it at nothing (Andrew 2026-07-30 — the tradeoff has to be visible, or "why not clear sooner"
+// has no answer on the card). Riding in denyTail puts it on all three branches at once, since
+// every branch spells the losing option out. Unmeasured floor => the pre-2026-07-30 wording,
+// word for word: this script does not quote a floor it has not measured.
+// The payback clause rides HERE, not in rv.why, for the same reason the floor does: this is the
+// one sentence on the card that spells the clearing option out, and choiceBullet throws rv.why
+// away on a bomb deny. Putting the two halves of the trade in one clause is the whole point —
+// a price and the number of trips that price takes to earn back, side by side, in one unit.
+const clearTail = rv => rv && rv.coldStart > 0
+  ? ` — a fresh session here re-pays ~${fmtK(rv.coldStart)} of startup` +
+    (rv.payback ? `, ~${rv.payback} trip${rv.payback === 1 ? '' : 's'} to break even` : '') +
+    `, then carries only the next step`
+  : ' carrying only the next step';
 // Position clause — the reading the bullet opens on. R13b is the only caller: R14 dropped its
 // restart bullet on 2026-07-29 (see rentAskCopy), which also retired the pos-less variant this
 // used to support for it.
@@ -1929,17 +2151,37 @@ const restartPos = reqs => reqs == null
   ? 'this turn is carrying' : `${reqs} round trip${reqs === 1 ? '' : 's'} carrying`;
 function restartBullet(pos, liveContext, gap, rv) {
   if (!liveContext || !(gap > 0)) return '';   // meter came back empty — say nothing over guessing
-  const pct = Math.round((liveContext / gap) * 100);
+  // "rebuilds that" was the same fiction restartVerdict carried: a restart does not reload the
+  // window, it re-pays the startup floor and carries the next step only. With a measured floor the
+  // bullet prices the thing that actually gets paid; without one it keeps the old upper bound.
+  const cost = rv && rv.coldStart > 0 ? rv.coldStart : liveContext;
+  const pct = Math.round((cost / gap) * 100);
   const price = `~${pct}% of the ~${fmtK(gap)} more this turn spends reaching the next check`;
-  const head = `• Restart: ${pos} ~${fmtK(liveContext)} of context — /clear + /continue rebuilds ` +
-    `that for ${price}.`;
+  const head = rv && rv.coldStart > 0
+    ? `• Restart: ${pos} ~${fmtK(liveContext)} of context — /clear + /continue re-pays ` +
+      `~${fmtK(cost)} of startup, ${price}.`
+    : `• Restart: ${pos} ~${fmtK(liveContext)} of context — /clear + /continue rebuilds ` +
+      `that for ${price}.`;
   // Evidence only — the verdict lives in choiceBullet, off the SAME rv this was handed, so the two
   // bullets read as reading-then-recommendation instead of saying "push on" twice in four lines.
   if (!rv) return `${head}\n`;
   return rv.clear
     ? `${head} Past the fat line — but take the restart FROM a commit point: what this turn ` +
       `ruled out is not on disk.\n`
-    : `${head} Lean enough that a restart would rebuild most of it back.\n`;
+    // Without a floor the only thing that can be said is that the window is small. With one, say
+    // WHY it isn't worth clearing — how much of the window a fresh session would just re-pay — so
+    // the tail stops repeating the "rebuilds it back" fiction the head just dropped.
+    //
+    // The SHARE, not a superlative. This branch runs the whole not-fat band, i.e. everything
+    // below coldStart + excessBudget, where startup's share ranges from 100% down to
+    // coldStart/(coldStart + excessBudget) — 41% at this machine's ~62k floor. "Most of that
+    // window is startup" was therefore false across the top third of its own range (a 141k
+    // window on a 62k floor is 44%), and this file does not bluff. The share also stays out of
+    // rv.why's way: that clause names the shed-able NET, this one names what is not shed-able.
+    : rv.coldStart > 0
+      ? `${head} Startup alone is ~${Math.round((rv.coldStart / liveContext) * 100)}% of that ` +
+        `window.\n`
+      : `${head} Lean enough that a restart would rebuild most of it back.\n`;
 }
 // total tokens PROCESSED (in + out + cache read/write) — the unit user-facing check-ins lead
 // with. Deliberately unweighted; the dollar figure beside it carries the per-model weighting.
@@ -1952,10 +2194,17 @@ const sessionTokens = m => tokensOf(m.main.perModel) + tokensOf(m.agents.perMode
 const workOne = v => v.inp + v.out + v.cw + v.cr * CACHE_READ_X;
 const workTokensOf = pm => Object.values(pm).reduce((a, v) => a + workOne(v), 0);
 const workTokens = m => workTokensOf(m.main.perModel) + workTokensOf(m.agents.perModel);
-// R14 rent meter: the OTHER half of the same split — cache re-reads, unweighted. workTokens
-// deliberately discounts these 10× (they're rent, not work), which is right for judging task
-// size and wrong for judging a bill: rent is real money and compounds as context × round trips.
-// So the two gates read the same turn through opposite lenses and neither one hides the other.
+// R14 rent meter: the OTHER half of the same split — cache re-reads, RAW. workTokens discounts
+// these 10× because for judging task SIZE a re-read is not work; this meter keeps them whole
+// because for judging RENT a re-read is the entire phenomenon, compounding as context × round
+// trips. So the two gates read the same turn through opposite lenses and neither hides the other.
+//
+// Raw is the right unit to METER in and the wrong unit to PRINT. 0.1× is not a discount this
+// script elects to apply — it is the price (CACHE_READ_X, and the real usd math in meter()) — so
+// a raw figure overstates the bill 10×, and printed beside the already-weighted workTokens it
+// overstated the rent:work ratio by that same factor until 2026-07-30. Thresholds and geometric
+// re-arms stay in these raw units; rentAskCopy converts at the point of display, and any new
+// caller that PRINTS this number must convert too.
 const crTokensOf = pm => Object.values(pm).reduce((a, v) => a + (v.cr || 0), 0);
 const crTokens = m => crTokensOf(m.main.perModel) + crTokensOf(m.agents.perModel);
 const shortModel = k => k.split('-')[1] || k;
@@ -2635,7 +2884,9 @@ function r13bTurnSpendGuard(ctx) {
   st.turnGateFires = (st.turnGateFires || 0) + 1;
   st.turnGateAt = reArmAt(turnTok, cfg.turnGateTokens, st.turnGateFires);
   // ONE verdict object, both bullets — see restartVerdict for why they can no longer disagree.
-  const rv = restartVerdict(m.liveContext, st.turnGateAt - turnTok, cfg.contextWarnTokens);
+  const rv = restartVerdict(m.liveContext, st.turnGateAt - turnTok, cfg.contextWarnTokens,
+    coldStartTokens(ctx.projectDir, ctx.sid, m, ctx.data && ctx.data.transcript_path),
+    cfg.contextExcessTokens);
   // Headline reading, then cost / lever / restart / choice, one per line. R14 below runs a
   // tighter two-bullet cut; R13b keeps the lever because "a plan with session-sized substeps"
   // is a different instruction from its headline, not a restatement of it.
@@ -2666,34 +2917,81 @@ function r13bTurnSpendGuard(ctx) {
 // The one number worth keeping out of them is when this gate speaks again, so nextCheckClause
 // rides at the end of the Cost line. This is the only guard message that carries \n; if the
 // dialog ever collapses them the bullets still read as "• "-separated clauses.
-function rentAskCopy(ctx, rent) {
+function rentAskCopy(ctx, rent, rvIn) {
   const { cfg, m, st, verdict } = ctx;
   const reqs = Math.max(1, m.main.turns - (st.turnStartReqs || 0));
   // Still priced even though the Restart bullet is gone — choiceBullet turns this reading into
   // the approve/deny recommendation (see restartVerdict for why one object feeds both).
-  const rv = restartVerdict(m.liveContext, st.rentGateAt - rent, cfg.contextWarnTokens);
+  // Since 2026-07-31 the guard computes rv FIRST — it decides whether this card speaks at all
+  // (see r14TurnRentGuard) — and hands it down, so the reading that let the fire through and the
+  // reading the card prints are one object rather than two calls that could disagree. The
+  // fallback keeps this function callable on its own, which the copy-contract test relies on.
+  const rv = rvIn !== undefined ? rvIn
+    : restartVerdict(m.liveContext, st.rentGateAt - rent, cfg.contextWarnTokens,
+      coldStartTokens(ctx.projectDir, ctx.sid, m, ctx.data && ctx.data.transcript_path),
+      cfg.contextExcessTokens);
   // Work = the turn's work tokens minus the 0.1x-weighted rent already inside them, i.e.
   // input + output + cache writes. Null baseline (turnGateTokens off) => report rent alone.
   const work = st.turnStartWorkTok == null ? null
     : Math.max(0, workTokens(m) - st.turnStartWorkTok - rent * CACHE_READ_X);
-  const vs = work == null ? '' : ` against ~${fmtK(work)} tokens of actual work`;
-  return `⚠️ Hey — this turn has made ${reqs} round trip${reqs === 1 ? '' : 's'} carrying ` +
-    `~${fmtK(m.liveContext)} of context.\n` +
-    `• Cost: ~${fmtK(rent)} tokens of re-reads${vs} — that is rent, not progress, and it ` +
-    `compounds every trip.` +
-    `${nextCheckClause(st.rentGateFires, st.rentGateAt, ' of re-reads')}\n` +
+  // Named inline, because "actual work" is the one figure on the card with no formula beside it
+  // and no way to derive it from the other two (see the equation below for why that matters).
+  const vs = work == null ? '' : `, against ~${fmtK(work)} of actual work (new input + output)`;
+  // Rent renders CACHE-WEIGHTED so it shares a unit with `work`, which already counts cache
+  // reads at 0.1x (workOne). Raw against weighted in one sentence inflated the ratio 10x: the
+  // card read "~4.4M of re-reads against ~161k of actual work" — 27:1, where the same-unit
+  // reading is ~440k against ~161k, 2.7:1. "Rent, not progress" survives the honest ratio; what
+  // it loses is a 7-figure number that reads as alarm (Andrew 2026-07-30 — "we shouldn't scare
+  // users with token figures like 4M"). The METER stays raw (see crTokens): this is display
+  // only, and the gate fires at exactly the same moment it did before. The weight is named
+  // inline rather than given a coined unit. It NO LONGER matches the context-bomb copy's
+  // parenthetical (`a cache read, ~10% weight`, ~line 2310) word for word: an operand in a
+  // multiplication cannot also be a parenthetical aside, and this line became arithmetic on
+  // 2026-07-31. What that parity protected — the weight named in the same breath as the figure
+  // it scales — survives; and both lines now render the number FROM CACHE_READ_X, so they
+  // cannot drift apart on the value even though they differ on the wrapper.
+  const billed = Math.round(rent * CACHE_READ_X);
+  // SHOW THE MULTIPLICATION, not just its product (Andrew 2026-07-31, reading his own card:
+  // "the diff bt the 2 numbers in the first bullet point is over 200k, not 137k"). Three figures
+  // sat side by side measuring three different things — context NOW (headline), rent SO FAR,
+  // work SO FAR — with no operator between any two, so the reader tries to reconcile them by
+  // subtraction and gets something that is not a quantity: 444k − 146k = 298k means nothing, and
+  // it was exactly the reading the card invited. The fix is not a fourth figure; it is the
+  // `trips × context × rate =` that was implied all along, printed — which is also the only form
+  // the reader can check.
+  //
+  // The multiplicand is the AVERAGE (rent/reqs), not liveContext, and it has to be: context grew
+  // across the turn, so trips × the LIVE figure overstates the product by whatever it grew (44 ×
+  // 139k × 10% = 611k against the 445k actually billed). Quoting the headline as the operand
+  // would make the multiplication fail to reconstruct the product it claims to explain — a worse
+  // lie than the one it replaced. The gap between avg and live is not noise either — it IS the
+  // compounding the tail names, which is why the tail prices the NEXT trip at the live size.
+  const avg = Math.round(rent / reqs);
+  const perTrip = Math.round(m.liveContext * CACHE_READ_X);
+  const s = reqs === 1 ? '' : 's';
+  return `⚠️ Hey — this turn has made ${reqs} round trip${s}, now carrying ` +
+    `~${fmtK(m.liveContext)} of context each.\n` +
+    `• Cost: ${reqs} trip${s} × ~${fmtK(avg)}${reqs === 1 ? '' : ' avg'} context × ` +
+    // Rate rendered FROM the constant, never a literal "10%": the card's arithmetic and the
+    // weight it multiplies by cannot drift apart if only one of them can be edited.
+    `${Math.round(CACHE_READ_X * 100)}% (a cache read) = ~${fmtK(billed)} of re-reads${vs} — ` +
+    `that is rent, not progress, and it compounds: the next trip bills ~${fmtK(perTrip)} ` +
+    `at the current size.` +
+    // Same conversion — an unweighted tail would re-mix the units the Cost figure just unified.
+    // The ' of re-reads' suffix goes with it: the Cost line now names the unit six words earlier.
+    `${nextCheckClause(st.rentGateFires, Math.round(st.rentGateAt * CACHE_READ_X))}\n` +
     choiceBullet(verdict, {
       neutral: 'approve to push on — or deny, and Claude should land this turn at a commit ' +
-        'point so you can /clear + /continue carrying only the next step.',
-      denyTail: 'denying lands this turn at a commit point so you can /clear + /continue ' +
-        'carrying only the next step.',
+        `point so you can /clear + /continue${clearTail(rv)}.`,
+      denyTail: 'denying lands this turn at a commit point so you can /clear + ' +
+        `/continue${clearTail(rv)}.`,
     }, rv);
 }
 
 // R14 — in-turn RENT tripwire. The failure R13b structurally cannot see: a turn whose work
 // is ordinary (83k on the 2026-07-25 plan re-cut, under TASK_NORM_TOK) but which pays for a
-// fat resident context over and over — 24 round trips × ~104k = 2.5M of re-reads, $2.62, in
-// ONE turn. Every other context guard speaks at a prompt boundary (the fat-context advisory
+// fat resident context over and over — 24 round trips × ~104k = 2.5M of re-reads raw, which is
+// the ~250k cache-weighted the card prints since 2026-07-30, and $2.62, in ONE turn. Every other context guard speaks at a prompt boundary (the fat-context advisory
 // fires on UserPromptSubmit, once); rent accrues BETWEEN those boundaries, and a 20-minute
 // autonomous turn has no boundary to take. This is the only check that re-reads context size
 // mid-turn — which is also why it must stay cheap: it reuses the meter spendGatesGuard took.
@@ -2711,10 +3009,33 @@ function r14TurnRentGuard(ctx) {
   if (rent < rGate || skipVerdict(verdict)) return null;
   // Re-arm ABOVE the observed rent, doubling the width each same-turn fire (same rule as
   // R13b — one huge landing must not re-fire on the very next tool call, and repeats must
-  // get rarer rather than becoming wallpaper).
-  st.rentGateFires = (st.rentGateFires || 0) + 1;
-  st.rentGateAt = reArmAt(rent, cfg.turnRentGateTokens, st.rentGateFires);
-  return gateAsk(ctx, rentAskCopy(ctx, rent));
+  // get rarer rather than becoming wallpaper). Computed here but COMMITTED below, only if the
+  // card actually speaks: restartVerdict needs a positive gap, and the gate just crossed
+  // (rGate − rent ≤ 0) is not it — the reading is against the NEXT check.
+  const fires = (st.rentGateFires || 0) + 1;
+  const nextAt = reArmAt(rent, cfg.turnRentGateTokens, fires);
+  const rv = restartVerdict(m.liveContext, nextAt - rent, cfg.contextWarnTokens,
+    coldStartTokens(ctx.projectDir, ctx.sid, m, ctx.data && ctx.data.transcript_path),
+    cfg.contextExcessTokens);
+  // Silence on the branch that recommends the STATUS QUO (Andrew 2026-07-31). A blocking
+  // confirm whose own advice is "push on" spends a round trip and the reader's attention to
+  // arrive at what they were already doing — it is the wallpaper this file keeps warning
+  // about, now on the branch that fires MOST (a lean window under the fat line). The card is
+  // worth an interruption only when the losing option is live, so it speaks exactly when
+  // choiceBullet would say `deny (recommended)`: a bomb CALL, or a fat window. rv == null
+  // (nothing measured) still speaks — the neutral copy is an honest "no reading", and
+  // suppressing on an unmeasured floor would retire the tripwire entirely on a fresh machine.
+  //
+  // NO re-arm on this path, deliberately: the doubling exists to make repeats rarer, and a
+  // fire that never reached the reader is not a repeat. Leaving the threshold where it is
+  // keeps the check live on every subsequent call — it costs the meter already taken plus one
+  // small JSON read (coldStartTokens is read-only once this sid has a sample) — so the gate
+  // speaks on the first call AFTER the window crosses the fat line, instead of sitting out a
+  // doubled width that a silent fire would have bought.
+  if (!(verdict && verdict.kind === 'deny') && rv && !rv.clear) return null;
+  st.rentGateFires = fires;
+  st.rentGateAt = nextAt;
+  return gateAsk(ctx, rentAskCopy(ctx, rent, rv));
 }
 
 // v1 hard gate on total session spend (v2: fleet-aware total). Default off.
@@ -3399,6 +3720,8 @@ module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, l
   claudeCodeUA, fetchOfficialUsage,
   analyzeSession, renderAnalysis, payloadVerdict, fanVerdict, workflowSource, skillSizes, recordObservedSkill,
   generateBudgets, slug, driftNote, driftDeferralTick, recoverTail, restartBullet, restartPos,
+  restartVerdict, choiceBullet, rentAskCopy,   // test/token-guard-copy.test.js — R14 copy contract
+  coldStartTokens, firstContextOfHead, clearTail,  // R15b cold-start meter
   writeRecoverPointer, idleReturnNote, resolveConfig, TOKEN_SAVER,
   fiveHourWindow, tightestWindow, windowSpikeVerdict, windowThresholdVerdict, effectiveWarn,
   spikeAttribution, spikeCopyMode,

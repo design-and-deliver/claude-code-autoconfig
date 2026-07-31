@@ -45,6 +45,12 @@ const MANIFEST = [
   // resolves its own .titles dir per session, so a project copy would only write the same file
   // twice. Dev-only in bin/cli.js: user installs wire no SessionEnd.
   { file: 'session-close.js', global: true },
+  // The PreToolUse worktree gate. Dev-only (DEV_ONLY_FILES in bin/cli.js) and per-repo for the
+  // same reason as token-guard: ~/.claude/settings.json wires no PreToolUse entry for it, so a
+  // global copy would be an inert file that reads as adoption. It landed in two repos on
+  // 2026-07-31 — built independently here and in job-agent-extension, then merged — which is
+  // precisely the hand-port arrangement that let token-guard drift 231 lines behind.
+  { file: 'worktree-gate.js', global: false },
   // Shared authoring rules — same fleet, one directory over (`subdir`). plan-authoring.md was
   // hand-ported between CCA and job-agent-extension and the two copies diverged for six weeks
   // with NEITHER a superset (the rule's own header says so); a doc drifts exactly like a hook

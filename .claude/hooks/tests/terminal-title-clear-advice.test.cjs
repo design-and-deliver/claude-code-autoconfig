@@ -19,7 +19,12 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { clearAdvice, recordMark } = require(path.resolve(__dirname, '..', 'terminal-title.js'));
+//  4. Cost cannot see DONE-NESS. A topic is done when it externalised its decisions into files, so
+//     the advisory is gated on a dead topic having produced SURVIVING file writes — a file written
+//     and then deleted leaves nothing to re-read, and a discussion-only topic's context is the only
+//     copy of it. Sessions predating the write ledger must keep advising (absent ≠ zero).
+const { clearAdvice, recordMark, readTailWrites, recordWrites, readWriteLedger } =
+  require(path.resolve(__dirname, '..', 'terminal-title.js'));
 
 const SID = 'test-sid';
 
@@ -160,4 +165,118 @@ test('an unreadable ledger never produces an estimated advisory', () => {
   assert.equal(clearAdvice(dir, SID, seedTranscript(dir, 400000)), '', 'no history = no advice');
   seedHistory(dir, [{ ts: '2026-07-29T10:00:00.000Z', title: 'Scope — Goal' }]);
   assert.equal(clearAdvice(dir, SID, seedTranscript(dir, 400000)), '', 'history but no floor = no advice');
+});
+
+// ── done-ness: did the topic put anything on disk? ───────────────────────────────────────────────
+
+// A transcript whose assistant turns carry tool_use blocks, the shape readTailWrites reads.
+function seedToolTranscript(dir, calls) {
+  const file = path.join(dir, 'tools.jsonl');
+  fs.writeFileSync(file, calls.map(c => `${JSON.stringify({
+    type: 'assistant',
+    message: { content: [{ type: 'tool_use', name: c.name, input: c.input }] },
+  })}\n`).join(''));
+  return file;
+}
+
+test('readTailWrites picks up the write tools and ignores everything else', () => {
+  const dir = tmpTitles();
+  const file = seedToolTranscript(dir, [
+    { name: 'Read', input: { file_path: '/repo/read-only.ts' } },
+    { name: 'Edit', input: { file_path: '/repo/a.ts' } },
+    { name: 'Bash', input: { command: 'rm -rf /repo/a.ts' } },
+    { name: 'Write', input: { file_path: '/repo/b.ts', content: 'x' } },
+    { name: 'MultiEdit', input: { file_path: '/repo/c.ts', edits: [] } },
+    { name: 'NotebookEdit', input: { notebook_path: '/repo/d.ipynb' } },
+    { name: 'Edit', input: { file_path: '/repo/a.ts' } }, // the tail window re-sees earlier turns
+  ]);
+  assert.deepEqual(readTailWrites(file),
+    ['/repo/a.ts', '/repo/b.ts', '/repo/c.ts', '/repo/d.ipynb'], 'deduped, writes only');
+  assert.deepEqual(readTailWrites(path.join(dir, 'nope.jsonl')), [], 'no transcript = no claim');
+});
+
+test('recordWrites accumulates per topic and dedups across paints', () => {
+  const dir = tmpTitles();
+  recordWrites(dir, SID, 'T1', ['/repo/a.ts']);
+  recordWrites(dir, SID, 'T1', ['/repo/a.ts', '/repo/b.ts']); // next paint re-sees a.ts
+  recordWrites(dir, SID, 'T2', ['/repo/c.ts']);
+  assert.deepEqual(readWriteLedger(dir, SID), { T1: ['/repo/a.ts', '/repo/b.ts'], T2: ['/repo/c.ts'] });
+});
+
+test('an empty write list is recorded as a measured zero, not left absent', () => {
+  const dir = tmpTitles();
+  recordWrites(dir, SID, 'T1', []);
+  assert.deepEqual(readWriteLedger(dir, SID), { T1: [] });
+});
+
+test('the write ledger survives a watermark shrink (files outlive a compaction)', () => {
+  const dir = tmpTitles();
+  recordMark(dir, SID, 60000);
+  recordWrites(dir, SID, 'T1', ['/repo/a.ts']);
+  recordMark(dir, SID, 180000);
+  recordMark(dir, SID, 55000); // compaction: re-bases the watermarks, not what is on disk
+  const m = JSON.parse(fs.readFileSync(path.join(dir, `${SID}.marks.json`), 'utf8'));
+  assert.equal(m.fixed, 55000, 'floor still re-bases');
+  assert.deepEqual(m.writes, { T1: ['/repo/a.ts'] }, 'the write ledger rode across');
+});
+
+// scopeChange's dead topic (entry 0), with its write ledger under our control.
+function scopeChangeWithWrites(writes) {
+  const { dir, transcript } = scopeChange();
+  const m = JSON.parse(fs.readFileSync(path.join(dir, `${SID}.marks.json`), 'utf8'));
+  m.writes = writes;
+  fs.writeFileSync(path.join(dir, `${SID}.marks.json`), JSON.stringify(m));
+  return { dir, transcript };
+}
+
+test('a dead topic with a surviving file write is counted done', () => {
+  const dir0 = tmpTitles();
+  const survivor = path.join(dir0, 'shipped.ts');
+  fs.writeFileSync(survivor, 'export const x = 1\n');
+  const { dir, transcript } = scopeChangeWithWrites({ '2026-07-29T10:00:00.000Z': [survivor] });
+  assert.match(clearAdvice(dir, SID, transcript), /1 earlier topic still ride/);
+});
+
+test('a dead topic that wrote nothing is discussion-only, not done', () => {
+  const { dir, transcript } = scopeChangeWithWrites({ '2026-07-29T10:00:00.000Z': [] });
+  assert.equal(clearAdvice(dir, SID, transcript), '');
+});
+
+test('a write that did not survive does not buy a "you are done"', () => {
+  const dir0 = tmpTitles();
+  const gone = path.join(dir0, 'scratch.ts');
+  const { dir, transcript } = scopeChangeWithWrites({ '2026-07-29T10:00:00.000Z': [gone] });
+  assert.equal(clearAdvice(dir, SID, transcript), '', 'the file was never left on disk');
+});
+
+test('writes belonging only to the LIVE topic do not unlock the advisory', () => {
+  const dir0 = tmpTitles();
+  const survivor = path.join(dir0, 'live.ts');
+  fs.writeFileSync(survivor, 'x\n');
+  // Keyed to entry 1 — the current topic — so the DEAD topic still produced nothing.
+  const { dir, transcript } = scopeChangeWithWrites({ '2026-07-29T11:00:00.000Z': [survivor] });
+  assert.equal(clearAdvice(dir, SID, transcript), '');
+});
+
+test('a session with no write ledger at all still advises (absent is unknown, not zero)', () => {
+  const { dir, transcript } = scopeChange(); // marks.json predates the ledger
+  assert.equal(readWriteLedger(dir, SID), null);
+  assert.match(clearAdvice(dir, SID, transcript), /1 earlier topic still ride/);
+});
+
+test('a single-topic session is gated on its own window having produced something', () => {
+  const dir0 = tmpTitles();
+  const survivor = path.join(dir0, 'only.ts');
+  fs.writeFileSync(survivor, 'x\n');
+  const bare = singleTopicFatSession();
+  const withNone = singleTopicFatSession();
+  for (const [s, writes] of [[bare, { '2026-07-29T10:00:00.000Z': [survivor] }],
+    [withNone, { '2026-07-29T10:00:00.000Z': [] }]]) {
+    const mf = path.join(s.dir, `${SID}.marks.json`);
+    const m = JSON.parse(fs.readFileSync(mf, 'utf8'));
+    m.writes = writes;
+    fs.writeFileSync(mf, JSON.stringify(m));
+  }
+  assert.match(clearAdvice(bare.dir, SID, bare.transcript), /earlier work still ride/);
+  assert.equal(clearAdvice(withNone.dir, SID, withNone.transcript), '', 'nothing on disk = not done');
 });
