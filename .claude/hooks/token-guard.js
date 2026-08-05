@@ -79,6 +79,10 @@
  *   flags carry the plan-meter story there. billingKind() is the cheap per-prompt read.
  *   hardGateUSD still fires on subscriptions — it's a backstop the user armed — but its copy
  *   goes token-denominated there, per showDollars/wantDollars. 2026-07-20.)
+ *   sessionWarnTokens [5M, 10M] — the subscription-side session-total ladder (2026-08-05). The
+ *   2026-07-18 suppression removed the EVENT, not just the $ denomination: a 15M-token session
+ *   sailed to the hardGateUSD backstop with no earlier session-total voice. Same check-in,
+ *   stepped in tokens — read off sessionTokens(m), the figure the gate copy already shows.
  *   windowBudgetUSD null — your 5h-window budget in WEIGHTED $-equivalent, the mix-robust proxy
  *   for Max metering (Anthropic confirms cached content is discounted and model choice affects
  *   depletion, but publishes no multipliers — support.claude.com 9797557 / 14552983). Set an
@@ -256,6 +260,7 @@ const DEFAULTS = {
   // which is a different question from "is it worth clearing".
   contextExcessTokens: 88000,
   sessionWarnUSD: [5, 15, 30],
+  sessionWarnTokens: [5000000, 10000000],  // subscription-side session-total ladder (see header)
   windowBudgetUSD: null,
   hardGateUSD: null,
   gateStepUSD: 5,
@@ -1094,7 +1099,7 @@ function loadConfig(projectDir) {
 function stateDir(projectDir) { return path.join(projectDir, '.claude', 'hooks', '.token-guard'); }
 
 function loadState(projectDir, sid) {
-  const blank = { warnedUSD: 0, warnedCtx: false, gateArmedAt: null, lastUSD: 0,
+  const blank = { warnedUSD: 0, warnedTok: 0, warnedCtx: false, gateArmedAt: null, lastUSD: 0,
     lastLiveContext: null, scanOffset: 0, warnedIdleAt: 0, knownWf: {},
     warnedColdWriteAt: 0, idleFiredAt: 0,
     pendingWfReceipt: null, bombGateArmed: false, curScope: null, curScopePrompts: 0,
@@ -2458,11 +2463,16 @@ function fireDriftNudge(ctx, cur, v) {
   return note;
 }
 
-// Spend-step check-ins are API-billed-only (2026-07-18): on a subscription the $-equivalent
-// steps map to nothing the user experiences — the R12 window flags below carry the plan-meter
-// story there. Unknown billing keeps the check-ins (the dollars may be real).
-function crossedSpendSteps(cfg, m, st) {
-  if (billingKind() === 'subscription') return [];
+// Spend-step check-ins, denominated per billing (2026-08-05): API-billed sessions step in $
+// (the real bill); a subscription steps in TOKENS via sessionWarnTokens — the 2026-07-18 $
+// suppression stands ($-equivalent steps map to nothing the user experiences), but it had
+// removed the session-total EVENT with it, and a 15M-token session then sailed to the hard
+// gate unannounced. The token ladder reads sessionTokens(m) — the same figure the gate's
+// subscription copy shows. Unknown billing keeps the $ check-ins (the dollars may be real).
+// `kind` is injectable for tests only; callers take the default.
+function crossedSpendSteps(cfg, m, st, kind = billingKind()) {
+  if (kind === 'subscription')
+    return (cfg.sessionWarnTokens || []).filter(s => sessionTokens(m) >= s && (st.warnedTok || 0) < s);
   return (cfg.sessionWarnUSD || []).filter(s => m.usd >= s && st.warnedUSD < s);
 }
 
@@ -2544,12 +2554,13 @@ function r12bWindowThresholdGuard(ctx) {
 }
 
 // Session-spend steps — announce once per crossed step. v2: total includes fleets.
-// The trigger stays dollar-weighted (cross-model normalization); the MESSAGE leads with
-// tokens, one metric per line. The 5h scan is fresh-parse (no cache) — acceptable only
-// because step crossings are rare by design.
+// The trigger is dollar-weighted on API billing (cross-model normalization) and token-stepped
+// on a subscription; the MESSAGE leads with tokens either way, one metric per line. The 5h
+// scan is fresh-parse (no cache) — acceptable only because step crossings are rare by design.
 function spendStepGuard(ctx) {
   if (!ctx.crossed.length) return { notes: [], block: null };
-  ctx.st.warnedUSD = Math.max(...ctx.crossed);
+  if (billingKind() === 'subscription') ctx.st.warnedTok = Math.max(...ctx.crossed);
+  else ctx.st.warnedUSD = Math.max(...ctx.crossed);
   // Anthropic's own percentages lead when reachable — the definitive measures; everything
   // after is supporting detail (Andrew 2026-07-12).
   const ol = ctx.official ? officialLines(ctx.official) : [];
@@ -3795,6 +3806,7 @@ module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, l
   analyzeSession, renderAnalysis, payloadVerdict, fanVerdict, workflowSource, skillSizes, recordObservedSkill,
   generateBudgets, slug, driftNote, driftDeferralTick, recoverTail, restartBullet, restartPos,
   restartVerdict, choiceBullet, rentAskCopy,   // test/token-guard-copy.test.js — R14 copy contract
+  crossedSpendSteps,                           // test/token-guard-ladder.test.js — session-total ladder
   coldStartTokens, firstContextOfHead, clearTail,  // R15b cold-start meter
   writeRecoverPointer, idleReturnNote, resolveConfig, TOKEN_SAVER,
   fiveHourWindow, tightestWindow, windowSpikeVerdict, windowThresholdVerdict, effectiveWarn,
