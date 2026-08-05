@@ -358,7 +358,8 @@ function priceFor(model) {
 
 // ---------------------------------------------------------------------------
 // meter: one transcript JSONL -> { usd, perModel, liveContext, turnFloorUSD, turns,
-//                                  maxInp, lastTs, rawLength, lastCacheWrite, lastCacheRead }
+//                                  maxInp, lastTs, rawLength, lastCacheWrite, lastCacheRead,
+//                                  lastModel }
 // Resident context of one request: everything the model had to be handed to answer it.
 const ctxTokens = u => (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) +
   (u.cache_creation_input_tokens || 0);
@@ -400,6 +401,7 @@ function costOfUsage(byId, out) {
 
     const m = out.perModel[model] || (out.perModel[model] = { inp: 0, out: 0, cr: 0, cw: 0, searches: 0, usd: 0 });
     m.inp += inp; m.out += outT; m.cr += cr; m.cw += cwTotal; m.searches += searches; m.usd += usd;
+    out.lastModel = model; // byId is in file order — the last request's model is what the session runs NOW
     out.usd += usd;
     out.turns++;
   }
@@ -427,7 +429,8 @@ function deriveLiveFloor(out, first, last, sinceMs) {
 
 function meter(transcriptPath, sinceMs) {
   const out = { usd: 0, perModel: {}, liveContext: 0, firstContext: 0, turnFloorUSD: 0, turns: 0,
-    maxInp: 0, lastTs: 0, rawLength: 0, tsList: [], lastCacheWrite: 0, lastCacheRead: 0 };
+    maxInp: 0, lastTs: 0, rawLength: 0, tsList: [], lastCacheWrite: 0, lastCacheRead: 0,
+    lastModel: '' };
   let raw;
   try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch (_) { return out; }
   out.rawLength = raw.length;
@@ -630,12 +633,22 @@ function slug(scope) {
 // ### ☑ 3.3a · L — Modal shell chrome            (real-world: no time token, letter suffix)
 const PLAN_SUBSTEP_RE = /^###\s+([☐☑])\s+(\d+\.\d+[a-z]?)\s+·\s+([SML])(?:\s+·\s+~[\d.]+[mh])?\s+—\s+(.*)$/;
 
+// Optional model-routing tag on a substep heading — `… · [opus]`, also mid-title before a
+// `(DONE …)` suffix. Generic on purpose: any bracketed word after a `·` separator, no model
+// enum — the tag is later matched as a substring of the transcript's model id, so `[opus]`
+// covers claude-opus-5 and any dated successor without a table to maintain.
+const PLAN_MODEL_TAG_RE = /·\s*\[([\w.-]+)\]/;
+
 function parsePlanSubsteps(planText) {
   const out = [];
   const lines = String(planText || '').split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
     const m = PLAN_SUBSTEP_RE.exec(lines[i]);
-    if (m) out.push({ id: m[2], done: m[1] === '☑', size: m[3], title: m[4].trim(), line: i + 1 });
+    if (!m) continue;
+    const sub = { id: m[2], done: m[1] === '☑', size: m[3], title: m[4].trim(), line: i + 1 };
+    const tag = PLAN_MODEL_TAG_RE.exec(sub.title);
+    if (tag) sub.model = tag[1].toLowerCase();
+    out.push(sub);
   }
   return out;
 }
@@ -703,18 +716,19 @@ function findCurrentSubstep(planText, ledgerEntries) {
   if (!current) {
     return { substepId: null, isComplete: true, isBoundary: true, reason: 'all substeps checked — plan complete' };
   }
+  const model = current.model || null;
   if (!ledgerEntries.length) {
-    return { substepId: current.id, isComplete: false, isBoundary: true, reason: 'empty Ledger — clean start is a boundary' };
+    return { substepId: current.id, model, isComplete: false, isBoundary: true, reason: 'empty Ledger — clean start is a boundary' };
   }
   const last = ledgerEntries[ledgerEntries.length - 1];
   if (last.step === current.id) {
     return {
-      substepId: current.id, isComplete: false, isBoundary: false,
+      substepId: current.id, model, isComplete: false, isBoundary: false,
       reason: `last Ledger entry (${last.date}) references open substep ${current.id} — mid-substep`,
     };
   }
   return {
-    substepId: current.id, isComplete: false, isBoundary: true,
+    substepId: current.id, model, isComplete: false, isBoundary: true,
     reason: `last Ledger entry closes ${last.step || 'an unnamed step'}; ${current.id} untouched — at a boundary`,
   };
 }
@@ -2805,29 +2819,48 @@ function planBoundaryVerdict(projectDir) {
   return null;
 }
 
+// Generic model-tag validation: a substep heading may route itself to a model (`· [opus]` —
+// any bracketed tag, no enum), and the transcript's last request is ground truth for what this
+// session actually runs. Substring match keeps it table-free ([opus] ~ claude-opus-5). Silent
+// on: no tag, no meter reading, or a match — mismatch is the only thing worth a sentence.
+function planModelMismatchLine(v, sessionModel) {
+  if (!v.model || !sessionModel) return '';
+  if (sessionModel.toLowerCase().includes(v.model)) return '';
+  if (v.isBoundary) {
+    return ` Substep ${v.substepId} is tagged [${v.model}] and this session runs ${sessionModel} — ` +
+      `if the plan's loop continues from here, the handoff needs /model ${v.model} before ` +
+      `/continue (model is per-session; caches are model-scoped, so never switch mid-session).`;
+  }
+  return ` Substep ${v.substepId} is tagged [${v.model}] and this session runs ${sessionModel} — ` +
+    `if this session is executing it, either restart it on the tagged model or finish here and ` +
+    `name the model deviation in its Ledger entry.`;
+}
+
 // The note copy — model-facing steering (never relayed), r13a's framing. Conditional voice
 // throughout: the hook knows the plan's text state; only the model knows if it applies here.
-function planBoundaryNote(v) {
+function planBoundaryNote(v, sessionModel) {
   const name = path.basename(v.planPath || 'plan');
+  const modelLine = planModelMismatchLine(v, sessionModel || '');
   if (!v.isBoundary) {
     return `plan-boundary (silent steering — never mention or relay this note): the active ` +
       `plan ${name} is MID-substep ${v.substepId} (${v.reason}). If this session is executing ` +
       `that plan, finish the substep — work, Verify, commit, Ledger entry — before any ` +
       `/clear + /continue suggestion: a break now loses the substep narrative and the fresh ` +
-      `session re-pays the plan read.`;
+      `session re-pays the plan read.` + modelLine;
   }
   return `plan-boundary (silent steering — never mention or relay this note): the active plan ` +
     `${name} sits at a substep boundary (${v.reason}). If this session is executing that plan, ` +
     `a wrapped substep is the natural moment to recommend /clear, then /continue — the next ` +
     `substep (${v.substepId}) starts on a fresh window. Text verdict only: if this substep's ` +
-    `work sits uncommitted in the tree, treat it as mid-substep instead.`;
+    `work sits uncommitted in the tree, treat it as mid-substep instead.` + modelLine;
 }
 
 function r17PlanBoundaryGuard(ctx) {
   try {
     const v = planBoundaryVerdict(ctx.projectDir);
     if (!v || v.isComplete) return { notes: [], block: null };
-    return { notes: [planBoundaryNote(v)], block: null };
+    const sessionModel = (ctx.m && ctx.m.main && ctx.m.main.lastModel) || '';
+    return { notes: [planBoundaryNote(v, sessionModel)], block: null };
   } catch (_) { return { notes: [], block: null }; }
 }
 
@@ -4019,4 +4052,4 @@ module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, l
   spikeAttribution, spikeCopyMode,
   windowSpikeNote, windowSpikeConfirmNote, windowRunway, windowThresholdNote, windowThresholdGateReason,
   findActivePlan, parsePlanSubsteps, parsePlanLedger, findCurrentSubstep,    // R17 plan-boundary
-  planBoundaryVerdict, planBoundaryNote };
+  planBoundaryVerdict, planBoundaryNote, planModelMismatchLine };
