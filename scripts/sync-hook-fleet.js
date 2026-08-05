@@ -40,6 +40,11 @@ const MANIFEST = [
   // synced to ~/.claude: the global hooks dir has no token-guard today, and putting one there
   // without a matching settings.json entry would be inert.
   { file: 'token-guard.js', global: false },
+  // The guard's liveness canary. Paired: every token-guard handler is fail-open, so a repo
+  // with the guard and no canary is a fleet gap — a dead guard there is silent by design.
+  // The canary never require()s its partner (a load-time throw must not kill them both),
+  // and wiring (a UserPromptSubmit entry) stays a per-repo opt-in like the guard's own.
+  { file: 'token-guard-liveness.js', global: false, pairsWith: 'token-guard.js' },
   // The SessionEnd clean-exit marker. Global (unlike token-guard) because it IS wired in
   // ~/.claude/settings.json — one user-level SessionEnd entry covers every repo, and the marker
   // resolves its own .titles dir per session, so a project copy would only write the same file

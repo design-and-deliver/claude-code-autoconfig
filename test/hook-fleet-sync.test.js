@@ -98,8 +98,23 @@ test('token-guard.js is never pushed to the global (~/.claude) target', () => {
     'a global token-guard.js must be left untouched — nothing there wires it');
 });
 
+test('the liveness canary is created wherever token-guard.js is adopted — and only there', () => {
+  // A guard without its canary is a fleet gap: every token-guard handler is fail-open, so a
+  // dead guard in that repo would be silent. ADOPT-ONLY still holds for everyone else.
+  const adopted = target({ 'token-guard.js': canonOf('token-guard.js') });
+  syncFleet({ write: true, targets: [adopted] });
+  assert(inSync(adopted, 'token-guard-liveness.js'),
+    'a repo with token-guard.js must be given the canary');
+  const unadopted = target({});
+  syncFleet({ write: true, targets: [unadopted] });
+  assert(read(unadopted, 'token-guard-liveness.js') === null,
+    'no guard, no canary — the pair must not create into an unadopted repo');
+});
+
 test('check mode reports drift without touching the file; --write then fixes it', () => {
-  const t = target({ 'token-guard.js': STALE });
+  // The canary rides at canonical so the only drift in play is the one this case is about.
+  const t = target({ 'token-guard.js': STALE,
+    'token-guard-liveness.js': canonOf('token-guard-liveness.js') });
   const check = syncFleet({ targets: [t] });
   assert(check.drifted === 1 && check.wrote === 0,
     `check mode: expected 1 drift / 0 writes, got ${check.drifted}/${check.wrote}`);
@@ -196,6 +211,7 @@ test('quiet mode is silent on an in-sync fleet but still reports drift', () => {
     'terminal-title.js': canonOf('terminal-title.js'),
     'terminal-title.directive.md': canonOf('terminal-title.directive.md'),
     'token-guard.js': canonOf('token-guard.js'),
+    'token-guard-liveness.js': canonOf('token-guard-liveness.js'),
   });
   assert(syncFleet({ quiet: true, targets: [clean] }).lines.length === 0,
     'an in-sync fleet must print nothing at all in quiet mode');
