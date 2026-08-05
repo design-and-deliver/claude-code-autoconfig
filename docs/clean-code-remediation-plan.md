@@ -548,16 +548,16 @@ Census with per-function CC and line figures is inlined in each substep below (2
 - Per-substep CC verify: `node test/complexity-ratchet.test.js` — confirm the substep's
   functions left the "no new violations" list.
 
-### ☐ 4.1 · S · ~15m — ratchet baseline: hand-drop the stale `meter` entry · [opus]
+### ☑ 4.1 · S · ~15m — ratchet baseline: hand-drop the stale `meter` entry · [opus] (DONE 2026-08-05, see Ledger)
 
 **Read list** (~80 lines): the phase rules above · `test/complexity-baseline.json` (the
 token-guard block only) · `test/complexity-ratchet.test.js:85-99` (why NOT `--write-baseline`:
 it writes the whole census, and today's census is 16 over).
 
-- [ ] Hand-remove `"Function 'meter'"` from the `.claude/hooks/token-guard.js` list in
+- [x] Hand-remove `"Function 'meter'"` from the `.claude/hooks/token-guard.js` list in
       `test/complexity-baseline.json`. Nothing else changes. (`meterSession` stays — still
       CC 26 and already listed.)
-- [ ] `node test/complexity-ratchet.test.js` → "baseline is tight" green; "no new violations"
+- [x] `node test/complexity-ratchet.test.js` → "baseline is tight" green; "no new violations"
       still red with exactly 16 — expected until 4.5c.
 
 **Verify:** ratchet 3/4 green (only "no new violations" red); `npm test` otherwise green.
@@ -1517,4 +1517,21 @@ sibling sessions run — the sibling probe is not a formality here.
   resume-titling fix `757a303`, advisor done-ness-gate fix `016a2e9` (both already synced
   fleet-wide). Next: **4.1** (S · [opus]).
     Handoff: /clear → /model opus → /continue (next: 4.1 · [opus]).
+
+- **2026-08-05 — 4.1 dropped the stale `meter` baseline entry — DONE.** Commit `034d0e6`.
+  Ratchet 3/4 green — "baseline is tight" back to green, "no new violations" red with exactly
+  the 16 expected until 4.5c; the other 15 `npm test` suites all green (run to completion,
+  unpiped, per 3.5's process note).
+  - **Session split:** the editing session (`bbd414fc`, fable) made the one-line edit and died
+    at "finish substep verify" — no Verify, commit, or Ledger; its /continue successor was
+    interrupted mid-sibling-probe; this third session verified, committed, ledgered. Ran on
+    fable, not the tagged [opus] — finishing a mid-flight one-line S beat a model-switch restart.
+  - rent: `bbd414fc` 1.3M processed / ≈209k effective (16 req) + `0efbc2e6` ≈1.9M / ≈301k
+    effective (20 req, at ledger time). S ceiling ≈0.5M holds on effective only summed across
+    the split; /continue recovery overhead (plan + command reads ≈56k) dominated the substep
+    work itself.
+  - Next: **4.2** (claim-registry: characterize, manifest, then decompose `readLiveClaims` ·
+    M · [opus]) — test-first (zero coverage today), diff the job-agent-extension hand-copy
+    BEFORE touching the canonical, then manifest it.
+    Handoff: /clear → /model opus → /continue (next: 4.2 · [opus] — model switch needed from fable).
 
