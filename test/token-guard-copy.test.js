@@ -51,7 +51,7 @@ test('deny why unchanged', () => {
   const s = bullet(163_000);   // past the fat line
   assert(/deny \(recommended\)/.test(s), `expected a deny recommendation, got: ${s}`);
   assert(/~163k of context is past the ~150k fat line/.test(s), `deny lost its why: ${s}`);
-  assert(/Approving pushes on/.test(s), `deny stopped naming the losing option: ${s}`);
+  assert(/Approving continues the current work/.test(s), `deny stopped naming the losing option: ${s}`);
 });
 
 test('denyTail sentence-cased on approve', () => {

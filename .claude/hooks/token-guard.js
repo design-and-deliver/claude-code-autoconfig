@@ -2030,11 +2030,13 @@ const isGitFullPatch = (cmd) => shellSegs(cmd).some(s => GIT_FULL_PATCH.test(s))
 // another branch through gateVerdict. Order is not load-bearing between the bombs (a command that
 // is two of them deserves either sentence), but the turn-ender check must stay ahead of all of
 // them: 'skip' defers the gate entirely and outranks any deny.
+// Each row's sentence is a PREDICATE completing "approving continues the current work, whose
+// next step …" (choiceBullet's bomb branch) — write new rows in that grammar.
 const BASH_BOMBS = [
-  [isFullSuite, 'this runs the whole test suite, and its output is re-read on every remaining trip'],
-  [isUnboundedBashSearch, 'this search has no result cap, so every match it finds lands in context and stays there'],
-  [isBigCat, 'this cats a file big enough to dominate the window — a Read with offset/limit costs a fraction'],
-  [isGitFullPatch, 'this prints a full patch rather than a --stat, and the whole diff is re-read on every remaining trip'],
+  [isFullSuite, 'runs the whole test suite, and its output is re-read on every remaining trip'],
+  [isUnboundedBashSearch, 'runs a search with no result cap, so every match it finds lands in context and stays there'],
+  [isBigCat, 'cats a file big enough to dominate the window — a Read with offset/limit costs a fraction'],
+  [isGitFullPatch, 'prints a full patch rather than a --stat, and the whole diff is re-read on every remaining trip'],
 ];
 function bashVerdict(cmd) {
   if (isTurnEnder(cmd)) return { kind: 'skip' };
@@ -2046,7 +2048,7 @@ function gateVerdict(toolName, toolInput) {
   const ti = toolInput || {};
   if (toolName === 'Bash') return bashVerdict(ti.command);
   if (toolName === 'Grep' && ti.output_mode === 'content' && ti.head_limit === 0) {
-    return { kind: 'deny', why: 'this Grep is explicitly unbounded, so its output lands in context and stays there' };
+    return { kind: 'deny', why: 'runs a Grep that is explicitly unbounded, so its output lands in context and stays there' };
   }
   return null;
 }
@@ -2076,12 +2078,20 @@ function gateVerdict(toolName, toolInput) {
 // was already built for this branch and thrown away. Approve is the branch that needs its
 // evidence MOST — it is the counterintuitive side of every fire, and the side that looks like
 // the script rubber-stamping a spend it just called rent.
+// The bomb branch names what the buttons DO before naming the bomb (Andrew 2026-08-05):
+// "deny (recommended) — this runs the whole test suite" read as the DENY running the suite. The
+// fix is a subject, not a pronoun — approve continues the work in progress, whose next step is
+// exactly the gated command; deny blocks that step and ends the turn. Bomb why-strings are
+// predicates of "whose next step …" so the sentence assembles.
+const cap = s => `${s[0].toUpperCase()}${s.slice(1)}`;
 const choiceBullet = (verdict, { neutral, denyTail }, rv) => {
-  const why = verdict && verdict.kind === 'deny' ? verdict.why : rv && rv.clear ? rv.why : null;
-  if (why) return `• Choice: deny (recommended) — ${why}. Approving pushes on; ${denyTail}`;
-  // denyTail opens lowercase for the mid-sentence slots above; here it starts a sentence.
-  if (rv)  return `• Choice: approve (recommended) — ${rv.why}; push on. ` +
-    `${denyTail[0].toUpperCase()}${denyTail.slice(1)}`;
+  if (verdict && verdict.kind === 'deny')
+    return `• Choice: deny (recommended) — approving continues the current work, whose next ` +
+      `step ${verdict.why}. ${cap(denyTail)}`;
+  if (rv && rv.clear)
+    return `• Choice: deny (recommended) — ${rv.why}. Approving continues the current work; ${denyTail}`;
+  // denyTail opens lowercase for the mid-sentence slot above; here it starts a sentence.
+  if (rv)  return `• Choice: approve (recommended) — ${rv.why}; push on. ${cap(denyTail)}`;
   return `• Choice: ${neutral}`;
 };
 // ── Cold-start meter: what /clear + /continue actually COSTS on this machine (R15b) ───────────

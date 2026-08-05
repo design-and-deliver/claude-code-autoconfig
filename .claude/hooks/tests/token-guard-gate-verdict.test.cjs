@@ -112,8 +112,9 @@ test('full test suite fires with deny LEADING the Choice bullet', () => {
   assert.equal(lines.length, 3);                       // R14's pinned shape (3 since the 07-29 cut)
   assert.match(lines[2], /^• Choice: deny \(recommended\) — /);
   assert.match(lines[2], /whole test suite/);
-  // Advisory, not authoritarian: the approve path is still stated.
-  assert.match(lines[2], /Approving pushes on/);
+  // Advisory, not authoritarian: the approve path is still stated — and states what approve
+  // DOES (continues the work, whose next step is the suite), per Andrew 2026-08-05.
+  assert.match(lines[2], /approving continues the current work, whose next step runs/);
 });
 
 // The two ways a full suite actually gets typed. Both read as "scoped" to a check that anchors at
@@ -204,7 +205,7 @@ test('…and deny on a FAT window — clearing stops that rent from the next tri
     .permissionDecisionReason.split('\n');
   assert.match(lines[2], /^• Choice: deny \(recommended\) — /);
   assert.match(lines[2], /past the ~150k fat line/);   // the fat READING, now on the Choice line
-  assert.match(lines[2], /Approving pushes on; /);     // the losing option stays on the card
+  assert.match(lines[2], /Approving continues the current work; /);  // the losing option stays on the card
 });
 
 // Evidence and verdict used to be two bullets that could contradict each other; since the
