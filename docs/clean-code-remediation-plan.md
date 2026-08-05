@@ -16,7 +16,7 @@ Each substep: make it green (`npm test` before and after), run its **Verify** co
 with a `Changelog:` trailer (dev-gated work → `Changelog: none`), append a Ledger entry, then
 `/clear` + `/continue` (plan-aware; resumes at the next unchecked substep).
 
-**⛔ Read this doc in SLICES — never whole.** It runs 800+ lines and the Ledger is more than half
+**⛔ Read this doc in SLICES — never whole.** It runs 1,500+ lines and the Ledger is more than half
 of them; a session that opens it whole pays that on turn one and re-pays it on every request
 after (≈360k of rent in a long session — measured 2026-07-25, see `.claude/rules/plan-authoring.md`).
 Read exactly three slices and nothing else:
@@ -73,8 +73,8 @@ emitted at the boundary, never left to memory.
   compensating lever for hook substeps is **land the characterization test in an earlier
   substep**, then extract in-file against it.
 - **God files — Grep-then-Read-window ONLY, never opened whole:**
-  `.claude/hooks/token-guard.js` (**3,186 lines**, ~42k tokens) and
-  `.claude/hooks/terminal-title.js` (**1,740 lines**). Six of the remaining substeps target
+  `.claude/hooks/token-guard.js` (**4,022 lines** as of 2026-08-05, ~55k tokens) and
+  `.claude/hooks/terminal-title.js` (**2,267 lines**). Six of the remaining substeps target
   them. Each substep's Read list names the windows; a whole-file read blows the session's
   budget on turn one and stays resident for every turn after.
 - **token-guard's `--analyze` digest wording is a machine interface** ("live context at end",
@@ -421,9 +421,13 @@ pattern to copy.
 
 ### ☐ 3.7b · L · ~60m — token-guard: decompose `fanVerdict` (CC 31) · [opus]
 
+⛔ **ORDER OVERRIDE (2026-08-05): execute Phase 4 (4.1–4.6) before this and the remaining
+Phase 3 items.** Phase 4 clears the unbaselined violations that REJECT `git push`; this
+substep targets a baselined entry and blocks nothing. Resume here only when Phase 4 is done.
+
 Cheaper half — `token-guard-fan.test.cjs` already pins the shape, so no new suite.
 
-**Read list** (~120 lines): `this doc:422-439` ·
+**Read list** (~120 lines): `this doc:422-444` ·
 `.claude/hooks/token-guard.js:821-891` (`fanVerdict`, the target) · `:892-913`
 (`workflowSource` — its caller-side input) · grep `.claude/hooks/tests/token-guard-fan.test.cjs`
 for `level` to find the pinned assertions.
@@ -444,7 +448,7 @@ valuable and is the only "extract before you edit" move available inside a singl
 
 ### ☐ 3.8a · L · ~60m — token-guard: characterization test for `--report` (it has none) · [opus]
 
-**Read list** (~190 lines): `this doc:445-463` ·
+**Read list** (~190 lines): `this doc:450-468` ·
 `.claude/hooks/token-guard.js:3061-3186` (`report`, to end of file — the thing being pinned) ·
 `.claude/hooks/tests/token-guard-official-usage.test.cjs` (the 1.3 fetch/credentials stub
 pattern to reuse).
@@ -466,7 +470,7 @@ goes red (a characterization test that cannot fail is not a net).
 Hard dependency: 3.8a's suite is the only safety net this function gets — do not start without
 it landed.
 
-**Read list** (~130 lines): `this doc:464-479` ·
+**Read list** (~130 lines): `this doc:469-484` ·
 `.claude/hooks/token-guard.js:3061-3186` (`report`) · 3.8a's new test file.
 
 - [ ] Extract `allocationLines` / `sessionLines` / `formatModelRow` / `windowLines` /
@@ -479,7 +483,7 @@ it landed.
 
 ### ☐ 3.9 · M · ~45m — whats-happening: decompose analyze (CC 33) · [opus]
 
-**Read list** (~340 lines): `this doc:480-493` · `.claude/scripts/whats-happening.js` **whole**
+**Read list** (~340 lines): `this doc:485-498` · `.claude/scripts/whats-happening.js` **whole**
 (331 lines — under the 800-line limit) · grep `test/whats-happening.test.js` for `state` to
 find the 5 characterization assertions. Not a hook: no fleet sync.
 
@@ -493,7 +497,7 @@ find the 5 characterization assertions. Not a hook: no fleet sync.
 
 ### ☐ 3.10 · M · ~45m — plan-progress: decompose render (CC 32) — after 2.5, never before · [opus]
 
-**Read list** (~230 lines): `this doc:494-510` · `.claude/scripts/plan-progress.js` **whole**
+**Read list** (~230 lines): `this doc:499-515` · `.claude/scripts/plan-progress.js` **whole**
 (224 lines — under the 800-line limit) · grep `test/plan-progress.test.js` for the fixture
 plans. Not a hook: no fleet sync. ⚠ This script parses THIS doc — a regex change here can make
 every plan in the repo invisible to `/plan-progress` and `/continue`.
@@ -507,6 +511,167 @@ every plan in the repo invisible to `/plan-progress` and `/continue`.
 
 **Verify:** `npm test`; the Phase 3 CC ≤ 9 bar.
 **Commit:** `refactor(plan-progress): decompose render` + `Changelog: none`.
+
+---
+
+## Phase 4 — hold the ratchet: clear the 16 unbaselined violations (PUSH IS BLOCKED)
+
+**Why (found 2026-08-05):** `git push` is rejected — the pre-push suite runs the ratchet, and
+the census has drifted 16 functions past the baseline since Phase 3's sweep: the token-guard
+R-series feature wave and the `6d0c739` fleet landing added logic without a ratchet run, and
+none of those sessions pushed, so the debt stayed invisible until a push was attempted. Two of
+the offenders are Phase 3 alumni that REGREW: 3.7a extracted `collectUsageById` at CC 6 and
+`costOfUsage` at CC 3 on 2026-07-31; they stand at 16 and 13 five days later. One baseline
+entry is also stale (`meter`, cleared by 3.7a's decompose; the shrink was missed then).
+Census with per-function CC and line figures is inlined in each substep below (2026-08-05).
+
+**Phase rules (on top of the standing traps):**
+
+- ⛔ **Never grow the baseline.** `--write-baseline` regenerates from the CURRENT census — run
+  while the 16 stand and it bakes them in, neutering the ratchet. Allowed only in 4.6, once
+  the census is clean (where it can only shrink).
+- **`npm test` red on exactly one test is EXPECTED mid-phase** (the ratchet's "no new
+  violations"); every OTHER suite must be green before each commit — this phase amends the
+  header's "npm test green before and after" to that extent. No pushes until 4.6.
+- ⛔ **Sibling probe before every substep that edits token-guard\* or terminal-title:** live
+  glyphs across ALL projects (`~/.claude/**/.titles/*.glyph` and
+  `C:/CODE/*/.claude/hooks/.titles/*.glyph`, mtime < 3 min) AND foreign hunks in `git status`
+  for the target file. Either → stand down and report (stash trap, this doc:53). token-guard's
+  R-series work runs in sibling sessions by design; a partial clobber passes `node --check`
+  and throws at runtime.
+- Decompositions are BEHAVIOR-PRESERVING: extract in-file helpers (hoisted `function` decls,
+  matching file idiom) until the named function is CC ≤ 9. Every new helper must itself be
+  CC ≤ 9 — a CC ≥ 10 helper is a NEW violation. Single-file hook constraint holds (this
+  doc:68); function names in `module.exports` keep their names (ratchet identity is
+  file + label).
+- After any hook edit: `node scripts/sync-hook-fleet.js --write`, then check mode = zero drift.
+- Per-substep CC verify: `node test/complexity-ratchet.test.js` — confirm the substep's
+  functions left the "no new violations" list.
+
+### ☐ 4.1 · S · ~15m — ratchet baseline: hand-drop the stale `meter` entry · [opus]
+
+**Read list** (~80 lines): the phase rules above · `test/complexity-baseline.json` (the
+token-guard block only) · `test/complexity-ratchet.test.js:85-99` (why NOT `--write-baseline`:
+it writes the whole census, and today's census is 16 over).
+
+- [ ] Hand-remove `"Function 'meter'"` from the `.claude/hooks/token-guard.js` list in
+      `test/complexity-baseline.json`. Nothing else changes. (`meterSession` stays — still
+      CC 26 and already listed.)
+- [ ] `node test/complexity-ratchet.test.js` → "baseline is tight" green; "no new violations"
+      still red with exactly 16 — expected until 4.5c.
+
+**Verify:** ratchet 3/4 green (only "no new violations" red); `npm test` otherwise green.
+**Commit:** `test(ratchet): drop stale meter baseline entry` + `Changelog: none`.
+
+### ☐ 4.2 · M · ~45m — claim-registry: characterize, manifest, then decompose `readLiveClaims` (CC 21) · [opus]
+
+**Read list** (~300 lines): the phase rules · `.claude/hooks/claim-registry.js` **whole**
+(140 lines) · grep `claimRegistryMod` in token-guard.js and read those windows (consumers:
+`claimAdvisoryGuard` ~:2857 and `emitWriteClaimGuard` ~:3389; lazy fail-open require ~:3386) ·
+`scripts/sync-hook-fleet.js:33-60` (MANIFEST).
+
+- [ ] **Test-first — claim-registry has ZERO test coverage** (no `test/` file references it,
+      grepped 2026-08-05). Land `test/claim-registry.test.js` first: `readLiveClaims` over
+      fixture `.titles` dirs — live vs expired mtime, self-sid exclusion, malformed claim
+      JSON, missing dir.
+- [ ] **Manifest it**: `C:/CODE/job-agent-extension/.claude/hooks/claim-registry.js` is an
+      unmanifested hand-copy (found 2026-08-05) — the same arrangement that let token-guard
+      drift 231 lines. Add `{ file: 'claim-registry.js', global: false, pairsWith: 'token-guard.js' }`
+      to MANIFEST. Diff the two copies FIRST; if the job-agent copy differs, reconcile before
+      refactoring the canonical.
+- [ ] Decompose `readLiveClaims` to CC ≤ 9.
+- [ ] `node scripts/sync-hook-fleet.js --write` + check mode zero drift.
+
+**Verify:** new suite green; claim-registry gone from the "no new violations" list.
+**Commit:** `refactor(claim-registry): manifest + decompose readLiveClaims (test-first)` + `Changelog: none`.
+
+### ☐ 4.3 · M · ~30m — token-guard-liveness: `livenessVerdict` (CC 13, :50) + the :80 arrow (CC 12) · [opus]
+
+**Read list** (~250 lines): the phase rules · `.claude/hooks/token-guard-liveness.js` **whole**
+(114 lines) · `test/token-guard-liveness.test.js` (the existing net).
+
+- [ ] Sibling probe (phase rules) — the canary pairs with token-guard, same writers.
+- [ ] Decompose both to CC ≤ 9. ⚠ The canary must never require() token-guard (load isolation
+      is its design property — a load-time throw must not kill both). Helpers stay in-file.
+- [ ] Fleet sync + zero drift (manifested, `pairsWith: token-guard.js`).
+
+**Verify:** liveness suite green; both entries gone from the "no new violations" list.
+**Commit:** `refactor(token-guard-liveness): decompose verdict paths` + `Changelog: none`.
+
+### ☐ 4.4 · M · ~45m — terminal-title: `readTailWrites` (17, :738) · `recordMark` (10, :769) · `recordWrites` (17, :804) · [opus]
+
+**Read list** (~250 lines): the phase rules · `terminal-title.js:713-860` (the /clear-advisor
+evidence pipeline: readContextTokens → readTailWrites → recordMark → recordWrites →
+readMarks/readWriteLedger — grep the names first; line numbers drift) · grep
+`test/terminal-title.test.js` for `readTailWrites|recordMark|recordWrites|advises /clear` and
+read those blocks only.
+
+- [ ] Sibling probe (phase rules) — fleet-synced canonical, terminal-title sessions run often.
+- [ ] Decompose the three to CC ≤ 9. All are exported via `module.exports` (~:2262) — keep
+      the names; tests import them directly.
+- [ ] Fleet sync + zero drift.
+
+**Verify:** `node test/terminal-title.test.js` — 129 green (includes the advisor-gate tests
+fixed 2026-08-05); three entries gone from the "no new violations" list.
+**Commit:** `refactor(terminal-title): advisor evidence pipeline to CC≤9` + `Changelog: none`.
+
+### ☐ 4.5a · M · ~45m — token-guard: usage cluster — `collectUsageById` (16, :366) · `costOfUsage` (13, :384) · `parsePlanLedger` (11, :672) · [opus]
+
+**Read list** (~400 lines): the phase rules · `token-guard.js:360-430` and `:660-730` (grep
+the names first — the file is 4,022 lines and drifts under sibling writers) · 3.7a's Ledger
+entry (collectUsageById/costOfUsage are its alumni — re-read what it extracted before
+re-decomposing).
+
+- [ ] Sibling probe (phase rules).
+- [ ] Decompose the three to CC ≤ 9. These regrew from CC 6/3 within five days of 3.7a —
+      leave a one-line comment at each naming the ratchet, so the next feature wave extracts
+      instead of inlining.
+- [ ] Fleet sync + zero drift.
+
+**Verify:** token-guard suites green (`token-guard-canary/copy/ladder/liveness` + contracts);
+three entries gone from the "no new violations" list.
+**Commit:** `refactor(token-guard): usage cluster to CC≤9` + `Changelog: none`.
+
+### ☐ 4.5b · M · ~45m — token-guard: restart cluster — `firstContextOfHead` (11, :2154) · `coldStartTokens` (12, :2175) · `restartVerdict` (10, :2254) · `restartBullet` (10, :2328) · [opus]
+
+**Read list** (~350 lines): the phase rules · `token-guard.js:2150-2360` (grep the names
+first). Four functions, one contiguous region, all CC 10-12 — the lightest cluster.
+
+- [ ] Sibling probe (phase rules).
+- [ ] Decompose the four to CC ≤ 9.
+- [ ] Fleet sync + zero drift.
+
+**Verify:** token-guard suites green; four entries gone from the "no new violations" list.
+**Commit:** `refactor(token-guard): restart cluster to CC≤9` + `Changelog: none`.
+
+### ☐ 4.5c · M · ~60m — token-guard: guard cluster — `claimAdvisoryGuard` (11, :2857) · `r14TurnRentGuard` (12, :3255) · `emitWriteClaimGuard` (21, :3389) · [opus]
+
+**Read list** (~450 lines): the phase rules · `token-guard.js:2850-2930`, `:3250-3320`,
+`:3380-3460` (grep the names first) · ⚠ these three ARE the live claim/write-guard machinery
+sibling sessions run — the sibling probe is not a formality here.
+
+- [ ] Sibling probe (phase rules) — stand down on ANY live token-guard writer.
+- [ ] Decompose the three to CC ≤ 9. ⚠ Guard output is user-facing warning copy under the
+      token-guard copy discipline — extraction must not reword a single emitted line.
+- [ ] Fleet sync + zero drift.
+
+**Verify:** token-guard suites green; the "no new violations" list is now EMPTY.
+**Commit:** `refactor(token-guard): guard cluster to CC≤9` + `Changelog: none`.
+
+### ☐ 4.6 · S · ~20m — re-census, full suite, push · [opus]
+
+**Read list** (~60 lines): the phase rules · ratchet output only.
+
+- [ ] `node test/complexity-ratchet.test.js` → 4/4 green.
+- [ ] If a BASELINED function incidentally cleared during 4.2–4.5c, the tightness test says
+      so — NOW `--write-baseline` is safe (census clean; the write can only shrink). Commit
+      the shrink here.
+- [ ] `npm test` fully green.
+- [ ] `git push origin main` — the pre-push hook re-runs the full suite (~8–10 min; a quiet
+      terminal there is the suite, not a hang).
+
+**Verify:** push accepted; check mode zero drift; `git log origin/main..main` empty.
+**Commit:** (only if the baseline shrank) `test(ratchet): tighten baseline after Phase 4` + `Changelog: none`.
 
 ---
 
@@ -1338,4 +1503,18 @@ every plan in the repo invisible to `/plan-progress` and `/continue`.
   All new functions ≤ 9; fleet `--write` + check-mode zero drift verified across present targets.
   - Next: **3.7b** (token-guard: decompose `fanVerdict`, CC 31 · L · [opus]) — ⛔ fleet-synced single-file hook.
     Handoff: /clear → /model opus → /continue (next: 3.7b · [opus]).
+
+- **2026-08-05 — Phase 4 authored (push found blocked).** A `git push` was rejected by the
+  pre-push ratchet: 16 unbaselined CC ≥ 10 functions accrued since Phase 3 (token-guard
+  R-series wave + the `6d0c739` fleet landing — none of those sessions pushed, so the debt
+  stayed invisible), plus the stale `meter` baseline entry 3.7a's shrink missed. Substeps
+  4.1–4.6 planned with per-function CC/line figures inlined. Discoveries:
+  `collectUsageById`/`costOfUsage` regrew CC 6→16 / 3→13 in the five days since 3.7a;
+  `C:/CODE/job-agent-extension/.claude/hooks/claim-registry.js` is an unmanifested hand-copy
+  (4.2 manifests it); claim-registry has zero test coverage (4.2 characterizes first).
+  ⛔ Phase 4 OUTRANKS the remaining Phase 3 items (3.7b–3.10): those target BASELINED
+  violations and block nothing; Phase 4 unblocks the push. Same-day unrelated: directive
+  resume-titling fix `757a303`, advisor done-ness-gate fix `016a2e9` (both already synced
+  fleet-wide). Next: **4.1** (S · [opus]).
+    Handoff: /clear → /model opus → /continue (next: 4.1 · [opus]).
 
