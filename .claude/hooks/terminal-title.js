@@ -921,8 +921,13 @@ function clearAdvice(dir, sid, transcriptPath) {
       // With no dead topic the advisory proposes shedding this topic's OWN earlier turns, so the
       // whole window is what has to have produced something.
       const shed = topics > 0 ? all.slice(0, liveIdx) : all;
+      // The same absence-vs-zero rule applies PER TOPIC: a shed topic with no key was never
+      // observed by the ledger (it predates the ledger's creation — recordWrites keys only the
+      // topic current at paint time), so its writes are unknown, not zero. Gate only when the
+      // ledger actually watched at least part of the shed window.
+      const observed = shed.some(e => Array.isArray(ledger[e.ts]));
       const survives = p => { try { return fs.existsSync(p); } catch (_) { return false; } };
-      if (!shed.some(e => (ledger[e.ts] || []).some(survives))) return '';
+      if (observed && !shed.some(e => (ledger[e.ts] || []).some(survives))) return '';
     }
     // Once per topic: pin the CURRENT topic's ts (newest history entry, watermarked or not), so
     // the next title shift re-arms it. A session that never re-titles is advised exactly once.
