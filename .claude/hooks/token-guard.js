@@ -94,6 +94,11 @@
  *   true/false forces. Internal metering stays $-weighted either way (it's the normalization).
  *   officialUsageFetch true — lead reports/check-ins with Anthropic's OWN window percentages
  *   (the /usage numbers) via the OAuth usage endpoint; cached 180s, 4s timeout, fail -> omit.
+ *   meterSilentWarnHours 24 — canary on that meter's fail-OPEN mode (2026-08-05): when the fetch
+ *   dies (endpoint moved, beta header rotted, auth broke), every window guard simply goes quiet —
+ *   indistinguishable from a calm meter. One quiet FYI once the last good reading is older than
+ *   this many hours, one-shot per outage per project (~/.claude/.token-guard/meter-canary.json);
+ *   null/0 disables. Needs one prior good reading — a never-fetched machine has no outage to date.
  *   windowSpikeWarn true · windowSpikeWarnPct 20 — R12a: flag when a single turn (the interval
  *   between two prompts) ate >= N points of the 5h window. Reads the delta of Anthropic's own 5h
  *   meter %, so it SELF-CALIBRATES — no budget to set. When the meter is unreachable it falls back
@@ -290,6 +295,7 @@ const DEFAULTS = {
   planDetect: true,
   showDollars: 'auto',
   officialUsageFetch: true,
+  meterSilentWarnHours: 24,      // canary: FYI once the meter's last good reading is this stale (see header)
   windowSpikeWarn: true,
   windowSpikeWarnPct: 20,
   windowSpikeConfirm: true,      // R12a: render the spike flag as a two-option confirm card (keep going /
@@ -1314,9 +1320,10 @@ async function fetchOfficialUsage(projectDir) {
     let cached = null;
     try { cached = JSON.parse(fs.readFileSync(officialUsageCachePath(projectDir), 'utf8')); } catch (_) { /* none */ }
     if (cached && Date.now() - cached.at < OFFICIAL_USAGE_TTL_MS) {
-      return { data: cached.data, ageMs: Date.now() - cached.at };
+      return { data: cached.data, ageMs: Date.now() - cached.at, at: cached.at };
     }
-    const stale = cached ? { data: cached.data, ageMs: Date.now() - cached.at, stale: true } : null;
+    const stale = cached
+      ? { data: cached.data, ageMs: Date.now() - cached.at, stale: true, at: cached.at } : null;
     const cred = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude', '.credentials.json'), 'utf8'));
     const tok = cred && cred.claudeAiOauth && cred.claudeAiOauth.accessToken;
     if (!tok) return stale;
@@ -1339,7 +1346,7 @@ async function fetchOfficialUsage(projectDir) {
       fs.mkdirSync(stateDir(projectDir), { recursive: true });
       fs.writeFileSync(officialUsageCachePath(projectDir), JSON.stringify({ at: Date.now(), data }));
     } catch (_) { /* cache loss just re-fetches */ }
-    return { data, ageMs: 0 };
+    return { data, ageMs: 0, at: Date.now() };
   } catch (_) { return null; }
 }
 
@@ -1518,6 +1525,47 @@ function saveWindowWarn(name, entry) {
     fs.mkdirSync(path.dirname(windowWarnsPath()), { recursive: true });
     fs.writeFileSync(windowWarnsPath(), JSON.stringify(all));
   } catch (_) { /* lost memory just re-announces at the next rung check */ }
+}
+
+// ── Meter canary (2026-08-05) ────────────────────────────────────────────────────────────────
+// The account-window guards fail OPEN: when the usage fetch dies, R12a/R12b simply stop firing,
+// which reads as a calm meter. The canary dates the outage off the cache's last SUCCESS (off.at)
+// and speaks once per outage: the one-shot key IS that last-success timestamp, so a recovered-
+// then-stalled meter (new at) re-arms naturally. It fires only when a fetch failed THIS prompt
+// (off.stale) — a merely-idle project's old cache never trips it — and a machine with no prior
+// success has no outage to date, so it stays silent (documented in the header).
+function meterCanaryPath() { return path.join(os.homedir(), '.claude', '.token-guard', 'meter-canary.json'); }
+
+function loadMeterCanary(projectDir) {
+  try { return JSON.parse(fs.readFileSync(meterCanaryPath(), 'utf8'))[projectDir] ?? null; } catch (_) { return null; }
+}
+
+function saveMeterCanary(projectDir, at) {
+  try {
+    let all = {};
+    try { all = JSON.parse(fs.readFileSync(meterCanaryPath(), 'utf8')); } catch (_) { /* first write */ }
+    all[projectDir] = at;
+    fs.mkdirSync(path.dirname(meterCanaryPath()), { recursive: true });
+    fs.writeFileSync(meterCanaryPath(), JSON.stringify(all));
+  } catch (_) { /* lost memory just re-announces next prompt */ }
+}
+
+function meterCanaryVerdict(off, warnedAt, warnHours) {
+  if (!warnHours) return null;
+  if (!off || !off.stale || off.at == null) return null;
+  if (off.ageMs < warnHours * 3600000) return null;
+  if (warnedAt === off.at) return null;
+  return { at: off.at, hours: Math.round(off.ageMs / 3600000), warnHours };
+}
+
+function meterCanaryNote(cv) {
+  return (
+    `meter-canary: Anthropic's usage meter has been unreachable for ~${cv.hours}h — the ` +
+    `account-window guards (50/80% warnings, spike flags) are running blind until it returns. ` +
+    `Relay to the user as ONE quiet standalone line, verbatim: ` +
+    `"FYI: Anthropic's usage meter has been unreachable for ~${cv.hours}h (noted once past ` +
+    `${cv.warnHours}h) — window warnings and spike flags are running blind until it returns."`
+  );
 }
 
 // The union of the global memory and this session's legacy warnedWindow field: whichever entry
@@ -2483,13 +2531,16 @@ async function officialUsagePrep(ctx) {
   const cfg = ctx.cfg;
   ctx.crossed = crossedSpendSteps(cfg, ctx.m, ctx.st);
   ctx.official = null;
+  const notes = [];
   if (cfg.officialUsageFetch &&
       (cfg.windowSpikeWarn || cfg.windowThresholdWarn || cfg.windowThresholdGate ||
        ctx.crossed.length)) {
     const off = await fetchOfficialUsage(ctx.projectDir);
     if (off && off.data) ctx.official = off.data;
+    const cv = meterCanaryVerdict(off, loadMeterCanary(ctx.projectDir), cfg.meterSilentWarnHours);
+    if (cv) { saveMeterCanary(ctx.projectDir, cv.at); notes.push(meterCanaryNote(cv)); }
   }
-  return { notes: [], block: null };
+  return { notes, block: null };
 }
 
 // R12 — window guards, both grounded in that meter. The stake here is a THROTTLE (lost access
@@ -3807,6 +3858,7 @@ module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, l
   generateBudgets, slug, driftNote, driftDeferralTick, recoverTail, restartBullet, restartPos,
   restartVerdict, choiceBullet, rentAskCopy,   // test/token-guard-copy.test.js — R14 copy contract
   crossedSpendSteps,                           // test/token-guard-ladder.test.js — session-total ladder
+  meterCanaryVerdict, meterCanaryNote,         // test/token-guard-canary.test.js — meter fail-open canary
   coldStartTokens, firstContextOfHead, clearTail,  // R15b cold-start meter
   writeRecoverPointer, idleReturnNote, resolveConfig, TOKEN_SAVER,
   fiveHourWindow, tightestWindow, windowSpikeVerdict, windowThresholdVerdict, effectiveWarn,
