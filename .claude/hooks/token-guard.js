@@ -18,8 +18,8 @@
  *                       compact additionalContext warnings: fat-context advisory, session-spend
  *                       steps, context-bomb tripwire (R3), idle-return TTL warning (R4),
  *                       workflow completion receipts (R2), scope-drift nudge (R6), window
- *                       spike + threshold flags (R12), plan-first steer (R13a); re-baseline
- *                       the R13b turn-spend meter.
+ *                       spike + threshold flags (R12), plan-first steer (R13a), plan-boundary
+ *                       advisory (R17); re-baseline the R13b turn-spend meter.
  *   Stop             -> append one line to the bounded usage log (now with a main/agents split);
  *                       detect workflow cost growth and queue a receipt for the next prompt.
  *   PreToolUse       -> (a) R2 + R10: gate Workflow launches — R2 confirms the launch COST from a
@@ -615,6 +615,108 @@ function slug(scope) {
     .slice(0, 40)
     .replace(/-+$/g, '');
   return s || 'session';
+}
+
+// ---------------------------------------------------------------------------
+// R17 plan-boundary: the PLAN-DOC Ledger as the substep-position signal — the `## Ledger`
+// section plan-authoring.md requires at the bottom of every phased plan (docs/*.md /
+// .claude/plans/*.md). ⚠ Same word, different artifact: readLedgerTenures/ledgerScopes above
+// parse the terminal-title ledger (.titles/{sid}.history.jsonl) — do not extend those.
+// Grammar verified against the 18 live Ledger-bearing docs (substeps 1.1/1.2 of
+// token-guard-plan-aware-checkpoints.md): real headings often DROP the `~<time>` token,
+// substep ids carry letter suffixes (3.3a, 4.1d), Ledger dates arrive bolded two ways.
+
+// ### ☐ 1.2 · M · ~45m — Sketch the logic        (canonical /plan-progress grammar)
+// ### ☑ 3.3a · L — Modal shell chrome            (real-world: no time token, letter suffix)
+const PLAN_SUBSTEP_RE = /^###\s+([☐☑])\s+(\d+\.\d+[a-z]?)\s+·\s+([SML])(?:\s+·\s+~[\d.]+[mh])?\s+—\s+(.*)$/;
+
+function parsePlanSubsteps(planText) {
+  const out = [];
+  const lines = String(planText || '').split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const m = PLAN_SUBSTEP_RE.exec(lines[i]);
+    if (m) out.push({ id: m[2], done: m[1] === '☑', size: m[3], title: m[4].trim(), line: i + 1 });
+  }
+  return out;
+}
+
+// A plan doc = docs/*.md or .claude/plans/*.md containing `^## Ledger\b` — NEVER `^## Ledger\s*$`:
+// live plans title the section "## Ledger (append after each substep — …)", and the $-anchored
+// match left them silently undiscovered (substep 1.2's Verify catch). Ranked newest-mtime-first —
+// the plan being executed is the one being appended to. Spec-shaped docs (prose checklists, no
+// parseable substeps) rank but analyze to null; planBoundaryVerdict skips them.
+function findActivePlan(projectDir) {
+  const candidates = [];
+  for (const dir of [path.join(projectDir, 'docs'), path.join(projectDir, '.claude', 'plans')]) {
+    let names; try { names = fs.readdirSync(dir); } catch (_) { continue; }
+    for (const n of names) {
+      if (!n.endsWith('.md')) continue;
+      const p = path.join(dir, n);
+      let text; try { text = fs.readFileSync(p, 'utf8'); } catch (_) { continue; }
+      if (!/^## Ledger\b/m.test(text)) continue;
+      let mtimeMs = 0; try { mtimeMs = fs.statSync(p).mtimeMs; } catch (_) {}
+      candidates.push({ path: p, mtimeMs });
+    }
+  }
+  return candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
+}
+
+// A Ledger ENTRY is a top-level date-led bullet — `- 2026-08-05 — …` — with every following
+// indented/continuation line attached to it. The date may be bolded closing after the date
+// (`- **2026-07-31** — …`) or wrapping the whole line (`- **2026-07-25 — plan authored.**`).
+//   step: first \d+\.\d+[a-z]? in the entry text — optional (a backticked hash or a file:line
+//         has no digit.digit pair, so dates/hashes don't false-match).
+//   hash: first backticked 7-40 hex run — optional.
+const PLAN_LEDGER_ENTRY_RE = /^-\s+\*{0,2}(\d{4}-\d{2}-\d{2})\*{0,2}\s+—\s*(.*)$/;
+
+function parsePlanLedger(planText) {
+  const lines = String(planText || '').split(/\r?\n/);
+  const start = lines.findIndex((l) => /^## Ledger\b/.test(l));
+  if (start === -1) return [];
+  const entries = [];
+  for (let i = start + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^## /.test(line)) break;
+    const m = PLAN_LEDGER_ENTRY_RE.exec(line);
+    if (m) entries.push({ date: m[1], text: m[2] });
+    else if (entries.length && line.trim()) entries[entries.length - 1].text += '\n' + line;
+  }
+  for (const e of entries) {
+    const step = /(\d+\.\d+[a-z]?)/.exec(e.text);
+    if (step) e.step = step[1];
+    const hash = /`([0-9a-f]{7,40})`/.exec(e.text);
+    if (hash) e.hash = hash[1];
+  }
+  return entries;
+}
+
+// Boundary logic: Ledger entries are appended AFTER a substep runs (plan-authoring.md), so the
+// default reading of the last entry is "something just finished" -> boundary. The one
+// text-visible mid-substep signal: the last entry references the substep that is still
+// UNCHECKED — a progress note on an open item. Text-only by design — the
+// uncommitted-working-tree case is NAMED in the note copy instead of measured (no
+// child_process in this file; same name-the-condition discipline as restartVerdict's seam).
+function findCurrentSubstep(planText, ledgerEntries) {
+  const substeps = parsePlanSubsteps(planText);
+  if (!substeps.length) return null;
+  const current = substeps.find((s) => !s.done);
+  if (!current) {
+    return { substepId: null, isComplete: true, isBoundary: true, reason: 'all substeps checked — plan complete' };
+  }
+  if (!ledgerEntries.length) {
+    return { substepId: current.id, isComplete: false, isBoundary: true, reason: 'empty Ledger — clean start is a boundary' };
+  }
+  const last = ledgerEntries[ledgerEntries.length - 1];
+  if (last.step === current.id) {
+    return {
+      substepId: current.id, isComplete: false, isBoundary: false,
+      reason: `last Ledger entry (${last.date}) references open substep ${current.id} — mid-substep`,
+    };
+  }
+  return {
+    substepId: current.id, isComplete: false, isBoundary: true,
+    reason: `last Ledger entry closes ${last.step || 'an unnamed step'}; ${current.id} untouched — at a boundary`,
+  };
 }
 
 // The relay instruction the model turns into the standalone warm warning block. Pure + exported so a
@@ -2677,6 +2779,48 @@ function windowStatLines(ctx, haveOfficial) {
   return lines;
 }
 
+// R17 — plan-boundary advisory: when a phased plan doc is in play, WHERE the work sits in it
+// is information the break-advice rules can't see. Mid-substep, a /clear + /continue costs the
+// substep narrative even when token math favors it; at a substep boundary the same break IS the
+// plan's intended loop. The hook computes the text verdict; the model holds relevance — it
+// alone knows whether THIS session is executing that plan (same sizes-vs-meaning split as R6's
+// render gate). Always-on, no config knob (plan doc: Deferred): silence is free — no plan
+// docs, no note.
+function planBoundaryVerdict(projectDir) {
+  for (const cand of findActivePlan(projectDir)) {
+    let text; try { text = fs.readFileSync(cand.path, 'utf8'); } catch (_) { continue; }
+    const v = findCurrentSubstep(text, parsePlanLedger(text));
+    if (v) { v.planPath = cand.path; return v; }
+  }
+  return null;
+}
+
+// The note copy — model-facing steering (never relayed), r13a's framing. Conditional voice
+// throughout: the hook knows the plan's text state; only the model knows if it applies here.
+function planBoundaryNote(v) {
+  const name = path.basename(v.planPath || 'plan');
+  if (!v.isBoundary) {
+    return `plan-boundary (silent steering — never mention or relay this note): the active ` +
+      `plan ${name} is MID-substep ${v.substepId} (${v.reason}). If this session is executing ` +
+      `that plan, finish the substep — work, Verify, commit, Ledger entry — before any ` +
+      `/clear + /continue suggestion: a break now loses the substep narrative and the fresh ` +
+      `session re-pays the plan read.`;
+  }
+  return `plan-boundary (silent steering — never mention or relay this note): the active plan ` +
+    `${name} sits at a substep boundary (${v.reason}). If this session is executing that plan, ` +
+    `a wrapped substep is the natural moment to recommend /clear, then /continue — the next ` +
+    `substep (${v.substepId}) starts on a fresh window. Text verdict only: if this substep's ` +
+    `work sits uncommitted in the tree, treat it as mid-substep instead.`;
+}
+
+function r17PlanBoundaryGuard(ctx) {
+  try {
+    const v = planBoundaryVerdict(ctx.projectDir);
+    if (!v || v.isComplete) return { notes: [], block: null };
+    return { notes: [planBoundaryNote(v)], block: null };
+  } catch (_) { return { notes: [], block: null }; }
+}
+
 // R13a — plan-first steer: the predictive half no meter can do. A hook only sees tokens
 // after they're spent; the model can gauge a request's blast radius BEFORE. One short
 // model-facing line on every prompt (~70 tokens) — cheap against the 10×-normal spiral it
@@ -2733,7 +2877,7 @@ function claimAdvisoryGuard(ctx) {
 // Rule order is note order; officialUsagePrep must precede the three meter consumers after it.
 const PROMPT_GUARDS = [claimAdvisoryGuard, r2ReceiptGuard, r3ContextBombGuard, r4IdleReturnGuard, fatContextGuard,
   r6ScopeDriftGuard, officialUsagePrep, r12aWindowSpikeGuard, r12bWindowThresholdGuard,
-  spendStepGuard, r13aPlanSteerGuard];
+  spendStepGuard, r17PlanBoundaryGuard, r13aPlanSteerGuard];
 
 async function onUserPromptSubmit(data, projectDir) {
   const cfg = loadConfig(projectDir);
@@ -3863,4 +4007,6 @@ module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, l
   writeRecoverPointer, idleReturnNote, resolveConfig, TOKEN_SAVER,
   fiveHourWindow, tightestWindow, windowSpikeVerdict, windowThresholdVerdict, effectiveWarn,
   spikeAttribution, spikeCopyMode,
-  windowSpikeNote, windowSpikeConfirmNote, windowRunway, windowThresholdNote, windowThresholdGateReason };
+  windowSpikeNote, windowSpikeConfirmNote, windowRunway, windowThresholdNote, windowThresholdGateReason,
+  findActivePlan, parsePlanSubsteps, parsePlanLedger, findCurrentSubstep,    // R17 plan-boundary
+  planBoundaryVerdict, planBoundaryNote };
