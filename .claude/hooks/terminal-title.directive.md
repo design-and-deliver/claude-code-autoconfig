@@ -62,6 +62,13 @@ Maintain it across the session:
   compass, not a log: change it rarely.
 - If no title has been set yet, treat your first turn as the baseline: infer the title from
   that turn's prompt and write it immediately, even though nothing has "shifted".
+  Baseline exception -- a turn that RESUMES or RECOVERS prior work (a resume/recovery
+  command, a "pick up where we left off" ask) knows its real goal only AFTER reading the
+  recovered state: do the recovery first, then write the title immediately after it, named
+  from what was actually recovered -- never from a pre-recovery guess (git status, recent
+  commits), which the recovery is about to supersede.
+- Discovering the current title is WRONG -- it names work this session is not actually
+  doing -- IS a shift: overwrite the file immediately, even mid-task.
 - Slash-command turns: the command NAME is an implementation detail -- never put it in the
   title. Name the goal the command ACCOMPLISHES ("{{FOLDER}} {{EMDASH}} <verb the goal>",
   never "{{FOLDER}} {{EMDASH}} <command-name>").
@@ -118,6 +125,10 @@ nothing is solicited, end on a statement, not a '?'.
 No title is set yet -- treat THIS turn as the baseline: infer {scope} {{EMDASH}} {use-case}
 from this prompt and the files in play, and write {{TITLE_FILE}} NOW (first action). Do not
 default to the bare folder name "{{FOLDER}}" unless the work is genuinely repo-wide.
+EXCEPTION -- if this turn resumes/recovers prior work (a /continue-style recovery command,
+a "pick up where we left off" ask), the real goal lives in state you have NOT read yet: run
+the recovery first, then write the title immediately after it, naming the RECOVERED work's
+goal. Never title from a pre-recovery guess (git status, recent commits).
 <!-- /DIRECTIVE:BASELINE -->
 
 <!-- DIRECTIVE:COMMAND -->
