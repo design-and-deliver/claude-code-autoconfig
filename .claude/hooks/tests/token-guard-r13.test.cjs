@@ -126,7 +126,8 @@ test('R13a plan steer rides every prompt; planSteer false removes it', () => {
   const on = mkFixture();
   const ctx = (JSON.parse(promptSubmit(on) || '{}').hookSpecificOutput || {}).additionalContext || '';
   assert.match(ctx, /plan-steer/);
-  assert.match(ctx, /200k/); // quotes the blast-radius bar
+  assert.match(ctx, /100k/);   // quotes the beyond-small bar (= one normal task)
+  assert.match(ctx, /Ledger/); // names the plan-based form /continue resumes from
   const off = mkFixture({ planSteer: false });
   const ctx2 = (JSON.parse(promptSubmit(off) || '{}').hookSpecificOutput || {}).additionalContext || '';
   assert.doesNotMatch(ctx2, /plan-steer/);

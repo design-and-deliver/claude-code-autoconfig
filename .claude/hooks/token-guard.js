@@ -171,8 +171,9 @@
  *   is the only place rent accrues. Same geometric re-arm and repeat-naming copy as R13b above;
  *   every prompt resets the baseline and the fire count. null disables.
  *   planSteer true — R13a: one-line every-prompt steer telling Claude to gauge the request's
- *   blast radius FIRST and propose a plan (session-sized substeps) before starting work that
- *   plausibly exceeds ~3× a normal task. The predictive half a meter can't do: the hook stages
+ *   blast radius FIRST and author a plan doc (session-sized substeps + Ledger) before starting
+ *   work beyond ONE normal task — beyond-small work is plan-based, so /continue can resume it
+ *   from the Ledger. The predictive half a meter can't do: the hook stages
  *   the words, the model judges the size — it sees meaning where the hook sees arithmetic.
  *   skillBudgetWarnChars 150000 — R5: full-payload ⚠ threshold in the --budgets table
  *   idleWarnMinutes 60 · idleGate false — block (pre-empt) instead of warn on idle-return;
@@ -251,7 +252,8 @@ const COLD_START_BACKFILL_BYTES = 128 * 1024;// bounded head-read per transcript
 // COLD_START_PAYBACK_TRIPS retired 2026-07-31 — see restartVerdict. It gated on the same excess the
 // fat line now does, and could only bind above a ~113k floor, so it was dead at this machine's ~62k.
 const TASK_NORM_TOK = 100000;                // R13: a normal task finishes under this — the spiral yardstick
-const PLAN_STEER_TOK = 2 * TASK_NORM_TOK;    // R13a: blast-radius bar quoted in the plan-first steer
+const PLAN_STEER_TOK = TASK_NORM_TOK;        // R13a: beyond-small bar quoted in the plan-first steer — any task
+                                             // beyond one normal session is PLAN-BASED (agreed 2026-08-05)
 
 const DEFAULTS = {
   tokenSaver: false,                // Cost Control: single on/off toggle. Off = this light default posture;
@@ -2866,17 +2868,18 @@ function r17PlanBoundaryGuard(ctx) {
 
 // R13a — plan-first steer: the predictive half no meter can do. A hook only sees tokens
 // after they're spent; the model can gauge a request's blast radius BEFORE. One short
-// model-facing line on every prompt (~70 tokens) — cheap against the 10×-normal spiral it
+// model-facing line on every prompt (~80 tokens) — cheap against the 10×-normal spiral it
 // exists to preempt (evidence: the 2026-07-24 7M-token session that no gate saw coming).
 // Pushed LAST so real warnings lead the note block.
 function r13aPlanSteerGuard(ctx) {
   if (!ctx.cfg.planSteer) return { notes: [], block: null };
   return { notes: [
     `plan-steer (silent steering — never mention or relay this note): before starting the ` +
-    `work this prompt asks for, gauge its blast radius. If it plausibly needs ` +
-    `>~${fmtK(PLAN_STEER_TOK)} tokens of work (repo-wide sweep, multi-repo change, ` +
-    `open-ended "fix/migrate everything"), FIRST propose a plan with session-sized substeps ` +
-    `and get a go-ahead — a normal task finishes under ~${fmtK(TASK_NORM_TOK)} tokens.`
+    `work this prompt asks for, gauge its blast radius. Beyond-small work is PLAN-BASED: if it ` +
+    `plausibly exceeds ONE normal task (~${fmtK(PLAN_STEER_TOK)} tokens — a multi-file feature, ` +
+    `repo-wide sweep, multi-repo change), FIRST author a plan doc with session-sized substeps ` +
+    `and a ## Ledger (plan-authoring grammar) and get a go-ahead — the Ledger is what lets ` +
+    `/continue resume the work losslessly.`
   ], block: null };
 }
 

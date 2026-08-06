@@ -13,6 +13,15 @@ test command is) belong in that repo's plan docs and CLAUDE.md, **not here**; ha
 exactly what let the two copies drift apart between 2026-06 and 2026-07-25 with neither a
 superset.
 
+## When a plan is required
+
+**Any task beyond small is executed plan-based** (standing agreement, 2026-08-05). If the work
+plausibly exceeds one normal session-sized task (~100k tokens — a multi-file feature, a
+migration, anything that will span sessions), author the plan doc FIRST, get a go-ahead, then
+execute one substep per fresh session. The Ledger is the reason: plan-aware /continue resumes
+from it losslessly, where transcript recovery is thin and lossy (interrupted writes, dropped
+tails). Token-guard's R13a steer quotes the same bar on every prompt.
+
 ## Where plans live
 
 `docs/*.md` (tracked — Ledger history rides in git) or `.claude/plans/*.md` (local working
