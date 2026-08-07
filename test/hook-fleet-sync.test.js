@@ -98,23 +98,31 @@ test('token-guard.js is never pushed to the global (~/.claude) target', () => {
     'a global token-guard.js must be left untouched — nothing there wires it');
 });
 
-test('the liveness canary is created wherever token-guard.js is adopted — and only there', () => {
+test("token-guard's partners are created wherever it is adopted — and only there", () => {
   // A guard without its canary is a fleet gap: every token-guard handler is fail-open, so a
-  // dead guard in that repo would be silent. ADOPT-ONLY still holds for everyone else.
+  // dead guard in that repo would be silent. The claim registry is the same shape — the guard
+  // require()s it lazily and fails open, so a drifted or absent copy is silent too, and it sat
+  // unmanifested as a hand-copy until 2026-08-07. ADOPT-ONLY still holds for everyone else.
   const adopted = target({ 'token-guard.js': canonOf('token-guard.js') });
   syncFleet({ write: true, targets: [adopted] });
   assert(inSync(adopted, 'token-guard-liveness.js'),
     'a repo with token-guard.js must be given the canary');
+  assert(inSync(adopted, 'claim-registry.js'),
+    'a repo with token-guard.js must be given the claim registry');
   const unadopted = target({});
   syncFleet({ write: true, targets: [unadopted] });
   assert(read(unadopted, 'token-guard-liveness.js') === null,
     'no guard, no canary — the pair must not create into an unadopted repo');
+  assert(read(unadopted, 'claim-registry.js') === null,
+    'no guard, no registry — the pair must not create into an unadopted repo');
 });
 
 test('check mode reports drift without touching the file; --write then fixes it', () => {
-  // The canary rides at canonical so the only drift in play is the one this case is about.
+  // Every token-guard partner rides at canonical so the only drift in play is the one this case
+  // is about — seed each new pairsWith entry here or its creation reads as a second drift.
   const t = target({ 'token-guard.js': STALE,
-    'token-guard-liveness.js': canonOf('token-guard-liveness.js') });
+    'token-guard-liveness.js': canonOf('token-guard-liveness.js'),
+    'claim-registry.js': canonOf('claim-registry.js') });
   const check = syncFleet({ targets: [t] });
   assert(check.drifted === 1 && check.wrote === 0,
     `check mode: expected 1 drift / 0 writes, got ${check.drifted}/${check.wrote}`);
@@ -212,6 +220,7 @@ test('quiet mode is silent on an in-sync fleet but still reports drift', () => {
     'terminal-title.directive.md': canonOf('terminal-title.directive.md'),
     'token-guard.js': canonOf('token-guard.js'),
     'token-guard-liveness.js': canonOf('token-guard-liveness.js'),
+    'claim-registry.js': canonOf('claim-registry.js'),
   });
   assert(syncFleet({ quiet: true, targets: [clean] }).lines.length === 0,
     'an in-sync fleet must print nothing at all in quiet mode');

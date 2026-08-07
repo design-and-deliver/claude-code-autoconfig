@@ -45,6 +45,11 @@ const MANIFEST = [
   // The canary never require()s its partner (a load-time throw must not kill them both),
   // and wiring (a UserPromptSubmit entry) stays a per-repo opt-in like the guard's own.
   { file: 'token-guard-liveness.js', global: false, pairsWith: 'token-guard.js' },
+  // The cross-session write-claim registry. token-guard require()s it lazily and fails open, so a
+  // repo with the guard and a drifted registry is the same silent-gap shape as a missing canary —
+  // and it WAS an unmanifested hand-copy until 2026-08-07 (job-agent-extension had a byte-identical
+  // copy nobody was keeping honest), which is precisely how token-guard drifted 231 lines.
+  { file: 'claim-registry.js', global: false, pairsWith: 'token-guard.js' },
   // The SessionEnd clean-exit marker. Global (unlike token-guard) because it IS wired in
   // ~/.claude/settings.json — one user-level SessionEnd entry covers every repo, and the marker
   // resolves its own .titles dir per session, so a project copy would only write the same file
