@@ -78,14 +78,14 @@ commit, append a Ledger entry, tick the checkbox, then `/clear` + `/continue`.
 
 **Commit:** CCA only if the actuator touched tracked CCA files; otherwise fleet-repo commits.
 
-### ☐ 1.4 · S · ~20m — Fixture smoke: handoff beats walk-back
+### ☑ 1.4 · S · ~20m — Fixture smoke: handoff beats walk-back
 
 - Read: this doc's 1.2 substep for the staleness rule.
-- [ ] In a scratch project, seed `.claude/hooks/.titles/` with a fake prev sid: a lineage file
+- [x] In a scratch project, seed `.claude/hooks/.titles/` with a fake prev sid: a lineage file
   naming it, plus a fresh `<prevSid>.handoff.md` with distinctive Done/Next content.
-- [ ] Run a headless `claude -p "/continue"` in that project; assert the output resumes from the
+- [x] Run a headless `claude -p "/continue"` in that project; assert the output resumes from the
   handoff's content and reports `VIA=handoff` — not walk-back.
-- [ ] Append the result (pass or the exact miss) to this Ledger.
+- [x] Append the result (pass or the exact miss) to this Ledger.
 
 **Verify:** the headless output contains the handoff's distinctive Next item.
 
@@ -211,3 +211,29 @@ commit, append a Ledger entry, tick the checkbox, then `/clear` + `/continue`.
     provably added none. Both debts (the ratchet, and 1.2's `terminal-title-clear-advice`
     live-topic-gate failure hiding behind the abort) remain separate jobs, and together still
     mean **the pre-push guard will block a push** of 1.1–1.4.
+- 2026-08-07 — 1.4 — **DONE, smoke PASSED**; no code commit (fixture is scratch, per the substep).
+  **Phase 1 is complete.** Fixture lives in `test/.test-temp-handoff-smoke/` (gitignored via
+  `test/.test-temp-*`) and builds a scratch project at `%TEMP%\cca-handoff-smoke`:
+  `seed.py` (fake prev sid `deadbeef-1111-…`, a lineage file keyed to the sid the run is forced
+  to use, a FRESH `<prevSid>.handoff.md`, and a **decoy** transcript containing only unrelated
+  login-CSS work), `probe.py` (execs recover-context.md's REAL Step 2c block, extracted verbatim
+  from the command file so the probe cannot drift from what the model runs), `run.py` (headless
+  run + 4 assertions), `continue-output.txt` (captured output).
+  - **Mechanical layer:** probe prints `HANDOFF=… FRESH` and `VIA=handoff (terminal lineage)`.
+  - **Model layer:** `claude -p "/continue" --session-id … --setting-sources project --model opus`
+    resumed from the note's Next item verbatim (`--zarnak-quibble` → `bin/frobnicate.js:42`),
+    emitted Step 5's fresh-handoff confirmation **verbatim** (`recover-context.md:404`:
+    "Recovered your last session's checkpoint handoff (deadbeef, via handoff) — no transcript
+    replay needed"), and never mentioned the decoy's `login.css` — so the content provably came
+    from the note, not walk-back. It also ran 5e7cd63's git cross-check and correctly refused to
+    ACT on a note whose files don't exist, opening on the `@response success` preamble form.
+  - **Two fixture facts worth reusing:** `CLAUDE_CODE_SESSION_ID` *is* exposed to tool calls, so
+    `--session-id <uuid>` + a pre-seeded `<uuid>.lineage.json` is a deterministic entry point (no
+    mtime racing against the live session's own transcript); and `--setting-sources project`
+    keeps the user-level terminal-title SessionStart hook out of the run, so nothing rewrites the
+    seeded lineage mid-test. Both are why this is repeatable rather than a one-off.
+  - **Suite NOT re-run for this substep** (deviation from the standing rail, stated plainly): 1.4
+    touches zero CCA source — only this plan doc plus a gitignored fixture dir — and token-guard
+    denied the `npm test` call at this turn's round-trip ceiling. The two standing debts
+    (complexity-ratchet's 16; `terminal-title-clear-advice`'s live-topic gate) are untouched by
+    1.4 and still mean **the pre-push guard will block a push** of 1.1–1.4 until they are cleared.
