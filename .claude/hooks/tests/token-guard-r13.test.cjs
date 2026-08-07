@@ -74,6 +74,10 @@ test('R13b fires once a turn crosses the gate — token copy, no $, re-arms abov
   assert.match(lines[3], /^• Restart: (\d+ round trips?|this turn is) carrying ~\d+k of context/);
   // …and the fat-window tail, which R14 no longer has a bullet to print.
   assert.match(lines[3], /Past the fat line — but take the restart FROM a commit point/);
+  // The live call site must thread ctx.sid into restartBullet — a dropped 5th arg renders the
+  // literal '<sid>' placeholder ('<'/'>' are illegal in Windows filenames), so every checkpoint
+  // write would fail while the unit-level copy pin stayed green.
+  assert.match(lines[3], /\.titles\/sid-r13\.handoff\.md/);
   // Re-armed at 400k (above the 300k observed), so the very next call must NOT re-fire.
   assert.equal(gateOut(preToolUse(fix)).permissionDecision, undefined);
 });

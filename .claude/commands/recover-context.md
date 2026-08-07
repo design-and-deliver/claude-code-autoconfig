@@ -229,7 +229,7 @@ print('VIA=' + ('handoff' if handoff_fresh else via) + ' (' + how + ')')
 
 - `NO_PREVIOUS_SESSION` → tell the user no previous session exists for this project and stop (offer minutes mode if they meant a different project's work).
 - `HANDOFF=… FRESH` (printed with `VIA=handoff`) → the previous session left a **checkpoint handoff note**: read that file and treat it as the PRIMARY recovery content. It replaces the transcript deep-read — **skip Step 4 entirely** (nothing is extracted, so there is no temp file and `--show` has nothing to open; say so in one line if it was passed). Cross-check it against reality before acting on it — `git status --short` and `git log --oneline -10` — because the note states intent at write time and work may have landed since. Store `$SID` and go to Step 5, reporting `VIA=handoff`.
-- `HANDOFF=… STALE` → the transcript kept moving for more than 3 minutes after the note was written, so the note is missing its own tail. Read it anyway, then ALSO run Step 4 with `$CUTOFF_ISO`: the note is the frame (what was done / next), the walk-back is the tail. `VIA` stays whatever the ladder resolved.
+- `HANDOFF=… STALE` → the transcript kept moving for more than 3 minutes after the note was written, so the note is missing its own tail. Read it anyway, then ALSO run Step 4 — first store `$SID`, `$CUTOFF_ISO`, and set `$FILES_TO_PARSE` to the `FILE=` path, exactly like the no-handoff bullet below (Step 4's script substitutes all of them): the note is the frame (what was done / next), the walk-back is the tail. `VIA` stays whatever the ladder resolved.
 - Otherwise store `$SID`, `$CUTOFF_ISO`, set `$FILES_TO_PARSE` to the `FILE=` path, note `VIA` for the confirmation, and skip to Step 4.
 
 Caveat: the lineage registry makes auto mode terminal-accurate, and the fallback skips sessions that look LIVE (another terminal's current occupant with transcript/glyph activity in the last 3 min). Residual: a twin that has been quiet longer than 3 min can still be picked — if the result looks like the wrong session, rerun with `pid=N` or minutes mode.
@@ -396,7 +396,7 @@ print(json.dumps({
 
 ## Step 5: Confirm recovery
 
-Read the temp file to internalize the recovered context. **Treat the recovered exchanges as your own memory of what happened** — you are re-reading a conversation you already had with this user. Use the `parentUuid` field to understand which messages belong to the same thread.
+Read the temp file to internalize the recovered context — unless this run skipped Step 4 (fresh handoff): then the note itself is the recovered content, and the temp file must NOT be opened — its name is fixed and never cleaned up, so whatever sits at that path is a *previous* recovery's output, not this one's. **Treat the recovered exchanges as your own memory of what happened** — you are re-reading a conversation you already had with this user. Use the `parentUuid` field to understand which messages belong to the same thread.
 
 Then display a confirmation message:
 

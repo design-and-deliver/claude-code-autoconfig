@@ -139,11 +139,12 @@ commit, append a Ledger entry, tick the checkbox, then `/clear` + `/continue`.
   and the transcript is already parsed by then. Freshness = **file mtime** vs `ts[-1] - 180s`,
   deliberately NOT the note's own ISO first line (model-written copy; can be wrong or
   timezone-naive). Deviations from the written substep, all additive: a skip-guard sentence at
-  Step 4's top (`recover-context.md:294`), a fresh-handoff variant of the Step 5 confirmation
-  (`:381`), and `@version`/`@sideeffect`/`@response` header updates on both commands.
-  Pointers for 1.3/1.4: probe + freshness `recover-context.md:164-179`, print block `:207-213`,
-  FRESH/STALE prose bullets `:218-220`, Step 4 guard `:294`; continue.md's mirror paragraph
-  `:179-188`. Path spelling is identical in all three files (`token-guard.js:2358`'s
+  Step 4's top (`recover-context.md:312`), a fresh-handoff variant of the Step 5 confirmation
+  (`:404`), and `@version`/`@sideeffect`/`@response` header updates on both commands.
+  Pointers for 1.3/1.4 (corrected 2026-08-07 by the verification pass — the child's originals
+  were off by 13–23 lines): probe + freshness `recover-context.md:164-179`, print block
+  `:221-226`, FRESH/STALE prose bullets `:231-232`, Step 4 guard `:312`; continue.md's mirror
+  paragraph `:179-188`. Path spelling is identical in all three files (`token-guard.js:2358`'s
   `handoffPath`) — that was the Verify, plus a live run of the edited Step 2c block against this
   project (prints `VIA=walk-back` with no note present, no `HANDOFF=` line).
   - ⚠️ **Two pre-existing failures, both confirmed at HEAD by stashing this diff** (it touches
@@ -157,3 +158,23 @@ commit, append a Ledger entry, tick the checkbox, then `/clear` + `/continue`.
     together they mean **the pre-push guard will block a push** of 1.1–1.4.
   - `contracts.test.js`'s docs ratchet fails on any command-header edit until
     `node .claude/scripts/sync-docs.js` runs — 1.3/1.4 should just run it before committing.
+- 2026-08-07 — 1.1+1.2 verification — adversarial deep diff review by a fresh Opus instance
+  (Fable quota-constrained; user-approved role swap): VERDICT FIX → fixed same night. The
+  token-guard.js half was fully clean (`node --check`, copy pin 17/17, render harness: real sid
+  templates correctly, sid-less renders `<sid>`; complexity-ratchet unchanged at the same 16).
+  Fixed: (1) MAJOR — fresh-handoff path skipped Step 4 but the downstream "read the temp file"
+  imperatives stayed unconditional, and the extract's temp name is fixed and never cleaned, so a
+  leftover `recovered-context.json` from an EARLIER recovery would be internalized as memory.
+  Carve-outs added: `recover-context.md:399` (Step 5) + `continue.md:192-201` (Step 4). (2)
+  MAJOR — the STALE bullet said "ALSO run Step 4" without storing `$SID`/`$FILES_TO_PARSE`
+  (only the mutually-exclusive no-handoff bullet stored them) → Step 4's script got a literal
+  `'$FILES_TO_PARSE'`; bit direct `/recover-context` only, fixed at `recover-context.md:232`.
+  (3) MINOR — ctx.sid threading at the R13b call site was unpinned: dropping the 5th arg renders
+  literal `<sid>` (illegal in Windows filenames — every checkpoint write fails) with the whole
+  suite green; pinned in `.claude/hooks/tests/token-guard-r13.test.cjs:77-81`. (4) MINOR — 1.2's
+  recover-context pointers were stale by 13–23 lines; corrected in place above.
+  Notes for 1.3/1.4: a live `Write` to `.claude/hooks/.titles/<sid>.handoff.md` in a fleet repo
+  (JAE, interactive) succeeded — the sensitive-path denial that BLOCKED 1.1's headless run does
+  not cover the note path, so the feature is writable where it matters. Known blind spot,
+  accepted: a note written inside a git worktree is invisible to a main-checkout `/continue`
+  (probe searches cwd-relative `.titles` + `~`), which falls back to walk-back correctly.

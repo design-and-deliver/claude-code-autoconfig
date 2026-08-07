@@ -189,12 +189,16 @@ When Step 2 found the session plan-driven, shrink the recovery window — the Le
 handoff and the transcript is only color: raise `$CUTOFF_ISO` to (the transcript's last
 timestamp − 10 minutes) if that is later than the resolved cutoff.
 
-Then run recover-context's **Step 4** (extract) with `$CUTOFF_ISO` and `$FILES_TO_PARSE`.
+Then — unless a FRESH handoff was reported (the note replaced the extract; nothing new was
+written) — run recover-context's **Step 4** (extract) with `$CUTOFF_ISO` and `$FILES_TO_PARSE`.
 Honor `--show` via its Step 6. Do NOT use its Step 5 confirmation or Step 7 wait — /continue
 replaces both below.
 
 Read the extracted temp file and treat the recovered exchanges as your own memory of the
-conversation you were just having with this user — not a document to summarize.
+conversation you were just having with this user — not a document to summarize. On a fresh
+handoff there is no temp file from THIS run — internalize the handoff note itself instead, and
+never open a `recovered-context.json` left behind by an earlier recovery (the extract writes to
+a fixed name and nothing cleans it up, so a leftover is always some other recovery's content).
 
 ## Step 5: Resume (ordinary session)
 
