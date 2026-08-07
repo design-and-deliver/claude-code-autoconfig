@@ -40,22 +40,45 @@ function warnPrompts(projectDir) {
   } catch (_) { return DEFAULT_WARN_PROMPTS; }
 }
 
+// The verdict's four moving parts, split out so each clears the repo's CC ≤ 9 bar (clean-code
+// plan 4.3). Nothing about the folding changed — every point of the old CC 13 was a defensive
+// `||` or a ternary, not a decision.
+
+// Unreadable or corrupt prior state degrades to a fresh count rather than throwing.
+function normalizePrev(prev) {
+  return prev && typeof prev === 'object' ? prev : { silent: 0, lastMtime: null, warnedAt: null };
+}
+
+// "Alive" = the file exists AND its mtime moved since the last look (first sighting counts —
+// lastMtime null against a real mtime).
+function isGuardAlive(guardMtimeMs, lastMtime) {
+  return guardMtimeMs != null && guardMtimeMs !== lastMtime;
+}
+
+function advanceState(prev, guardMtimeMs, alive) {
+  return {
+    silent: alive ? 0 : (prev.silent || 0) + 1,
+    lastMtime: guardMtimeMs,                        // store the observation as-is, absence included
+    warnedAt: alive ? null : prev.warnedAt || null, // recovery re-arms the one-shot
+  };
+}
+
+// The silent count to report, or null to stay quiet. A null/0 threshold disables firing while
+// advanceState keeps counting.
+function shouldFire(next, threshold) {
+  return threshold && next.silent >= threshold && !next.warnedAt ? next.silent : null;
+}
+
 // Pure verdict — pinned by test/token-guard-liveness.test.js.
 //   prev:         { silent, lastMtime, warnedAt } or null (first prompt / unreadable state)
 //   guardMtimeMs: mtime of token-guard's <sid>.json, or null when the file is absent
 //   threshold:    consecutive silent prompts before firing; null/0 disables
 // Returns { next, fire }: next is the state to persist; fire is the silent count when the
-// warning should emit this prompt, else null. "Alive" = the file exists AND its mtime moved
-// since the last look (first sighting counts — lastMtime null against a real mtime).
+// warning should emit this prompt, else null.
 function livenessVerdict(prev, guardMtimeMs, threshold, now) {
-  const p = prev && typeof prev === 'object' ? prev : { silent: 0, lastMtime: null, warnedAt: null };
-  const alive = guardMtimeMs != null && guardMtimeMs !== p.lastMtime;
-  const next = {
-    silent: alive ? 0 : (p.silent || 0) + 1,
-    lastMtime: guardMtimeMs,                 // store the observation as-is, absence included
-    warnedAt: alive ? null : p.warnedAt || null,   // recovery re-arms the one-shot
-  };
-  const fire = threshold && next.silent >= threshold && !next.warnedAt ? next.silent : null;
+  const p = normalizePrev(prev);
+  const next = advanceState(p, guardMtimeMs, isGuardAlive(guardMtimeMs, p.lastMtime));
+  const fire = shouldFire(next, threshold);
   if (fire) next.warnedAt = now || Date.now();
   return { next, fire };
 }
@@ -73,34 +96,55 @@ function livenessNote(fire, threshold, sid) {
     `exits before its first state write).`;
 }
 
+function readJson(file) {
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) { return null; } // first prompt
+}
+
+function guardMtime(dir, sid) {
+  try { return fs.statSync(path.join(dir, `${sid}.json`)).mtimeMs; } catch (_) { return null; } // no write yet
+}
+
+function persistState(dir, file, state) {
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(state));
+  } catch (_) { /* state loss just re-counts — harmless */ }
+}
+
+function resolveProjectDir(data) {
+  return process.env.CLAUDE_PROJECT_DIR || data.cwd || process.cwd();
+}
+
+// The side-effecting half: read both state files, fold ONE prompt through the verdict, persist,
+// and hand back the note to emit ('' = stay silent). Extracted from the stdin 'end' arrow
+// (clean-code plan 4.3) so the I/O path is reachable from a test instead of only via a spawn.
+// Non-UserPromptSubmit events and a missing sid return '' where the arrow used to exit early —
+// same outcome (exit 0, no output), one fewer place that knows about process exit.
+function livenessCheck(data) {
+  if ((data.hook_event_name || '') !== 'UserPromptSubmit') return '';
+  const sid = data.session_id || '';
+  if (!sid) return '';                         // no session to watch — touch nothing
+  const projectDir = resolveProjectDir(data);
+  const dir = stateDir(projectDir);
+  const threshold = warnPrompts(projectDir);   // read once; the old arrow read the config twice
+  const mePath = path.join(dir, `${sid}.liveness.json`);
+  const { next, fire } = livenessVerdict(readJson(mePath), guardMtime(dir, sid), threshold);
+  persistState(dir, mePath, next);
+  return fire ? livenessNote(fire, threshold, sid) : '';
+}
+
 function main() {
   let input = '';
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', c => (input += c));
   process.stdin.on('end', () => {
     try {
-      const data = JSON.parse(input);
-      if ((data.hook_event_name || '') !== 'UserPromptSubmit') return process.exit(0);
-      const sid = data.session_id || '';
-      if (!sid) return process.exit(0);
-      const projectDir = process.env.CLAUDE_PROJECT_DIR || data.cwd || process.cwd();
-      const dir = stateDir(projectDir);
-      const mePath = path.join(dir, `${sid}.liveness.json`);
-      let prev = null;
-      try { prev = JSON.parse(fs.readFileSync(mePath, 'utf8')); } catch (_) { /* first prompt */ }
-      let guardMtimeMs = null;
-      try { guardMtimeMs = fs.statSync(path.join(dir, `${sid}.json`)).mtimeMs; } catch (_) { /* no write yet */ }
-      const { next, fire } = livenessVerdict(prev, guardMtimeMs, warnPrompts(projectDir));
-      try {
-        fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(mePath, JSON.stringify(next));
-      } catch (_) { /* state loss just re-counts — harmless */ }
-      if (fire) {
+      const note = livenessCheck(JSON.parse(input));
+      if (note) {
         process.stdout.write(JSON.stringify({
           hookSpecificOutput: {
             hookEventName: 'UserPromptSubmit',
-            additionalContext:
-              `<token-guard-liveness>${livenessNote(fire, warnPrompts(projectDir), sid)}</token-guard-liveness>`,
+            additionalContext: `<token-guard-liveness>${note}</token-guard-liveness>`,
           },
         }));
       }
@@ -111,4 +155,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { livenessVerdict, livenessNote };
+module.exports = { livenessVerdict, livenessNote, livenessCheck };

@@ -10,8 +10,11 @@
  * The suite requires the CANARY module only: it must stay importable even if token-guard.js
  * is broken (that independence is the whole design).
  */
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { test, assert, summary } = require('./_harness');
-const { livenessVerdict, livenessNote } = require('../.claude/hooks/token-guard-liveness');
+const { livenessVerdict, livenessNote, livenessCheck } = require('../.claude/hooks/token-guard-liveness');
 
 const NOW = 1754300000000;
 const M = 1754300001234.5;   // an mtimeMs — fractional, as Windows/NTFS actually reports
@@ -97,6 +100,78 @@ test('the note carries the count with its threshold, a shortened sid, and no $',
   assert(/deadbeef…/.test(s) && !/deadbeef-1234/.test(s), `sid must be shortened, got: ${s}`);
   assert(!/\$/.test(s), `liveness copy never carries $, got: ${s}`);
   assert(/node --check/.test(s), `the diagnosis step must be actionable, got: ${s}`);
+});
+
+// --- the I/O half (added 2026-08-07, clean-code plan 4.3) --------------------------------
+// livenessCheck is the seam pulled out of main()'s stdin 'end' arrow when it was decomposed
+// from CC 12. Before the extraction that path had NO coverage — only the pure verdict above
+// did — so these characterize it: state really round-trips through the project dir, the
+// config threshold is honored, and an ignored event writes nothing.
+
+const SID = 'feedface-0000-0000-0000-000000000000';
+const PROMPT = { hook_event_name: 'UserPromptSubmit', session_id: SID };
+
+// Run fn against a throwaway project dir. CLAUDE_PROJECT_DIR beats data.cwd inside the hook,
+// so pin it rather than hoping the runner's env is clean; restore it either way.
+function inProject(fn, config) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cca-liveness-'));
+  if (config !== undefined) {
+    fs.mkdirSync(path.join(dir, '.claude'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.claude', 'cca.config.json'), JSON.stringify(config));
+  }
+  const saved = process.env.CLAUDE_PROJECT_DIR;
+  process.env.CLAUDE_PROJECT_DIR = dir;
+  try {
+    return fn(dir);
+  } finally {
+    if (saved === undefined) delete process.env.CLAUDE_PROJECT_DIR;
+    else process.env.CLAUDE_PROJECT_DIR = saved;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+test('livenessCheck: the Nth silent prompt emits the note, and only that one', () => {
+  inProject(() => {
+    const quiet = [livenessCheck(PROMPT), livenessCheck(PROMPT)];
+    assert(quiet.every(n => n === ''),
+      `must stay quiet below the threshold, got: ${JSON.stringify(quiet)}`);
+    const fired = livenessCheck(PROMPT);
+    assert(/3 prompts in a row/.test(fired), `the 3rd silent prompt must fire, got: ${fired}`);
+    assert(livenessCheck(PROMPT) === '', 'one outage must warn exactly once');
+  }, { tokenGuard: { livenessWarnPrompts: 3 } });
+});
+
+test('livenessCheck: a guard whose state file keeps moving never fires', () => {
+  inProject(dir => {
+    const guardFile = path.join(dir, '.claude', 'hooks', '.token-guard', `${SID}.json`);
+    fs.mkdirSync(path.dirname(guardFile), { recursive: true });
+    const notes = [];
+    for (let i = 0; i < 5; i++) {
+      fs.writeFileSync(guardFile, '{}');
+      const stamp = new Date(Date.now() + i * 1000);
+      fs.utimesSync(guardFile, stamp, stamp);
+      notes.push(livenessCheck(PROMPT));
+    }
+    assert(notes.every(n => n === ''), `a live guard must stay silent, got: ${JSON.stringify(notes)}`);
+  });
+});
+
+test('livenessCheck: a null livenessWarnPrompts disables the warning entirely', () => {
+  inProject(() => {
+    const notes = [1, 2, 3, 4, 5].map(() => livenessCheck(PROMPT));
+    assert(notes.every(n => n === ''), `null must disable, got: ${JSON.stringify(notes)}`);
+  }, { tokenGuard: { livenessWarnPrompts: null } });
+});
+
+test('livenessCheck: a wrong event or a missing sid is ignored and writes no state', () => {
+  inProject(dir => {
+    assert(livenessCheck({ hook_event_name: 'Stop', session_id: SID }) === '',
+      'a non-UserPromptSubmit event must be ignored');
+    assert(livenessCheck({ hook_event_name: 'UserPromptSubmit' }) === '',
+      'a payload with no session_id must be ignored');
+    assert(!fs.existsSync(path.join(dir, '.claude', 'hooks', '.token-guard')),
+      'an ignored event must not create the state dir');
+  });
 });
 
 summary();
