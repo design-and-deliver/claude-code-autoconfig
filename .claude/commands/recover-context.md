@@ -1,5 +1,5 @@
 <!-- @description Recovers conversation context from the session transcript after compaction. -->
-<!-- @version 7 -->
+<!-- @version 8 -->
 <!-- @param minutes | integer | optional | How far back to recover, in minutes. Leading dash optional. Min: 1. Bare invocation auto-recovers the last session instead. -->
 <!-- @param pid | integer | optional | Recovery-pointer id from token-guard's idle warning (e.g. pid=3). Resolves the exact session + cutoff from .claude/hooks/.token-guard/recover.json. -->
 <!-- @param --show | flag | optional | Opens the extracted transcript in your default editor. -->
@@ -8,7 +8,8 @@
 <!-- @response no-messages | No messages found in the requested time range. -->
 <!-- @response no-pointer | No recovery pointer found (or that pid is not in it). -->
 <!-- @response no-previous | No previous session found in this project. -->
-<!-- @sideeffect Reads .jsonl transcripts from ~/.claude/projects/, writes temp file -->
+<!-- @response handoff | Recovered your last session's checkpoint handoff — no transcript replay needed. -->
+<!-- @sideeffect Reads .jsonl transcripts from ~/.claude/projects/, writes temp file — both skipped when the previous session left a fresh handoff note -->
 <!-- @example /recover-context | Auto: last ~15 min of this project's previous session -->
 <!-- @example /recover-context -60 | Last 60 minutes of conversation -->
 <!-- @example /recover-context pid=3 | Recover exactly what token-guard's idle warning pointed at -->
@@ -161,7 +162,25 @@ with open(file, encoding='utf-8', errors='replace') as f:
 if not ts:
     print('NO_PREVIOUS_SESSION'); sys.exit(0)
 
+# --- checkpoint handoff: a CONTENT source, above the cutoff ladder rather than in it ---
+# token-guard's restart advisory asks a session past the fat line to write what it ruled out to
+# .titles/<sid>.handoff.md before /clear (ISO timestamp, then ## Done / ## In flight / ## Next /
+# ## Pointers). Where that note exists the walk-back below is guessing at something the previous
+# session already stated. mtime is the freshness authority, NOT the note's own first line: the
+# line is model-written copy and can be wrong or timezone-naive; the mtime cannot.
+handoff = None
+for d in titles_dirs:
+    p = os.path.join(d, prev + '.handoff.md')
+    if os.path.exists(p):
+        handoff = p; break
+# Stale = the transcript kept moving >3min past the write, so the note is missing that tail.
+# (Some drift is normal and expected: the note is written mid-turn, and the turn that writes it
+# still lands messages after it.)
+handoff_fresh = bool(handoff) and os.path.getmtime(handoff) >= ts[-1].timestamp() - 180
+
 # --- cutoff ladder ---
+# Still computed even on a fresh handoff — it costs nothing (the transcript is already parsed)
+# and it is what the stale/unreadable-note fallback needs.
 cutoff = None; via = None
 
 # a. A token-guard pointer for this sid: frozen at idle-fire time, interaction-aware.
@@ -202,11 +221,15 @@ if cutoff is None:
 print('SID=' + prev)
 print('FILE=' + file)
 print('CUTOFF_ISO=' + cutoff.isoformat())
-print('VIA=' + via + ' (' + how + ')')
+if handoff:
+    print('HANDOFF=' + handoff + (' FRESH' if handoff_fresh else ' STALE'))
+print('VIA=' + ('handoff' if handoff_fresh else via) + ' (' + how + ')')
 "
 ```
 
 - `NO_PREVIOUS_SESSION` → tell the user no previous session exists for this project and stop (offer minutes mode if they meant a different project's work).
+- `HANDOFF=… FRESH` (printed with `VIA=handoff`) → the previous session left a **checkpoint handoff note**: read that file and treat it as the PRIMARY recovery content. It replaces the transcript deep-read — **skip Step 4 entirely** (nothing is extracted, so there is no temp file and `--show` has nothing to open; say so in one line if it was passed). Cross-check it against reality before acting on it — `git status --short` and `git log --oneline -10` — because the note states intent at write time and work may have landed since. Store `$SID` and go to Step 5, reporting `VIA=handoff`.
+- `HANDOFF=… STALE` → the transcript kept moving for more than 3 minutes after the note was written, so the note is missing its own tail. Read it anyway, then ALSO run Step 4 with `$CUTOFF_ISO`: the note is the frame (what was done / next), the walk-back is the tail. `VIA` stays whatever the ladder resolved.
 - Otherwise store `$SID`, `$CUTOFF_ISO`, set `$FILES_TO_PARSE` to the `FILE=` path, note `VIA` for the confirmation, and skip to Step 4.
 
 Caveat: the lineage registry makes auto mode terminal-accurate, and the fallback skips sessions that look LIVE (another terminal's current occupant with transcript/glyph activity in the last 3 min). Residual: a twin that has been quiet longer than 3 min can still be picked — if the result looks like the wrong session, rerun with `pid=N` or minutes mode.
@@ -285,6 +308,8 @@ for p in needed:
 Store the output as `$FILES_TO_PARSE` — these are the only files that need full parsing.
 
 ## Step 4: Extract conversation context (both modes)
+
+Skip this step entirely when Step 2c reported `HANDOFF=… FRESH` — the handoff note already says what the walk-back would be inferring, and extracting on top of it just pays for the transcript twice. A `STALE` handoff still runs it.
 
 Run this Python script to extract messages from only the identified files. Substitute `$CUTOFF_ISO` and `$FILES_TO_PARSE`:
 
@@ -376,6 +401,7 @@ Read the temp file to internalize the recovered context. **Treat the recovered e
 Then display a confirmation message:
 
 - Auto mode: **~{tokens} tokens recovered and persisted into context ({N} messages from your last session, {first 8 chars of SID}, via {VIA}).**
+- Auto mode, fresh handoff (Step 4 was skipped — read the note itself instead of a temp file): **Recovered your last session's checkpoint handoff ({first 8 chars of SID}, via handoff) — no transcript replay needed.**
 - Minutes mode: **~{tokens} tokens recovered and persisted into context ({N} messages across {sessions} session(s), last {minutes} minutes).**
 - Pointer mode: **~{tokens} tokens recovered and persisted into context ({N} messages from session {first 8 chars of SID}, pointer pid={PID}).**
 

@@ -1,10 +1,10 @@
 <!-- @description Continues where your previous session in this terminal left off — recovers its context and resumes the work. Plan-aware: if that session was executing a substep of a plan doc, resumes from the plan's Ledger instead of the transcript. -->
-<!-- @version 6 -->
-<!-- @param --show | flag | optional | Opens the recovered transcript in your default editor (no-op on a clean plan handoff — nothing is extracted). -->
+<!-- @version 7 -->
+<!-- @param --show | flag | optional | Opens the recovered transcript in your default editor (no-op on a clean plan handoff or a fresh checkpoint handoff note — nothing is extracted). -->
 <!-- @response success | Picking up where we left off — {what we were doing}. Then the work resumes. -->
 <!-- @response plan | Picking up where we left off — {plan alias}: substep {N.k} done ({hash}); starting {next}. Then the next substep runs. -->
 <!-- @response no-previous | I can't find a previous session for this terminal. -->
-<!-- @sideeffect Reads .jsonl transcripts from ~/.claude/projects/, writes temp file — both skipped on a clean plan handoff -->
+<!-- @sideeffect Reads .jsonl transcripts from ~/.claude/projects/, writes temp file — both skipped on a clean plan handoff or a fresh checkpoint handoff note -->
 <!-- @example /continue | Recover the previous session here and resume its work -->
 Continue where the previous session in this terminal left off.
 
@@ -175,6 +175,15 @@ path), and `$CUTOFF_ISO`.
 
 If it reports no previous session: say "I can't find a previous session for this terminal." and
 suggest `/recover-context -60` for time-window recovery instead — then stop.
+
+**Checkpoint handoff (v8+ of recover-context):** its Step 2c now probes for
+`.claude/hooks/.titles/{$SID}.handoff.md` first — the note token-guard's restart advisory asks a
+session to write before a /clear (ISO timestamp, then `## Done` / `## In flight` / `## Next` /
+`## Pointers`). This is the non-plan analogue of the Ledger, and it ranks the same way: on
+`HANDOFF=… FRESH` (`VIA=handoff`) the note IS the recovery — read it, skip the extract, and
+cross-check `git status --short` before acting, exactly as Step 3 reconciles a Ledger against git.
+On `STALE` the note is the frame and the walk-back supplies the tail. Honor whichever the script
+reports; do not extract on top of a fresh note.
 
 When Step 2 found the session plan-driven, shrink the recovery window — the Ledger is the
 handoff and the transcript is only color: raise `$CUTOFF_ISO` to (the transcript's last
