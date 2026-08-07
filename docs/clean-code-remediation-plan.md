@@ -523,7 +523,25 @@ none of those sessions pushed, so the debt stayed invisible until a push was att
 the offenders are Phase 3 alumni that REGREW: 3.7a extracted `collectUsageById` at CC 6 and
 `costOfUsage` at CC 3 on 2026-07-31; they stand at 16 and 13 five days later. One baseline
 entry is also stale (`meter`, cleared by 3.7a's decompose; the shrink was missed then).
-Census with per-function CC and line figures is inlined in each substep below (2026-08-05).
+Census with per-function CC and line figures is inlined in each substep below (**re-censused
+2026-08-07** — CC values unchanged, `token-guard.js` line pointers moved +3 to +57 and are
+corrected in place; `token-guard.js` is now 4,080 lines).
+
+**Status 2026-08-07 — the ratchet is the ONLY red left.** The sibling debt this phase used to
+share the blame with (`terminal-title-clear-advice.test.cjs:252`, the live-topic gate) was
+cleared in `8cef0a6`; the full `&&` chain's other 27 suites were run individually and are green
+(the 11 that sit AFTER the ratchet in the chain — `gls-downscale` … `plan-progress` — verified
+2026-08-07, since the ratchet's abort means a full run never reaches them). So Phase 4 clears
+the last blocker on pushing, and 4.6's `npm test` should meet no surprises.
+
+**What the CC actually is here — read before decomposing.** ESLint's `complexity` rule forks on
+short-circuit operators, so in this codebase the excess is dominated by defensive `||` fallback
+chains and `try/catch`, NOT by real branching. Worked example: `emitWriteClaimGuard`'s 21 is
+exactly 1 + 4 (`||` in the null-guard) + 5 (`||` in the tool-name test) + 4 (`||` in the path
+fallback) + 1 (`&&`) + 3 (`if`) + 2 (`catch`) + 2 (`|| ''`, `|| {}`) — every point is a
+fallback, none is a decision. The cheapest and safest remedy is therefore hoisting those chains
+into module-level constant tables (a `Set` of tool names) and one-line pure predicates/accessors,
+not restructuring control flow. Several of these clear in a handful of lines each.
 
 **Phase rules (on top of the standing traps):**
 
@@ -566,20 +584,26 @@ it writes the whole census, and today's census is 16 over).
 ### ☐ 4.2 · M · ~45m — claim-registry: characterize, manifest, then decompose `readLiveClaims` (CC 21) · [opus]
 
 **Read list** (~300 lines): the phase rules · `.claude/hooks/claim-registry.js` **whole**
-(140 lines) · grep `claimRegistryMod` in token-guard.js and read those windows (consumers:
-`claimAdvisoryGuard` ~:2857 and `emitWriteClaimGuard` ~:3389; lazy fail-open require ~:3386) ·
-`scripts/sync-hook-fleet.js:33-60` (MANIFEST).
+(140 lines; `readLiveClaims` is `:60-124`) · grep `claimRegistryMod` in token-guard.js and read
+those windows (consumers: `claimAdvisoryGuard` `:2914` and `emitWriteClaimGuard` `:3446`; lazy
+fail-open require `:3441-3444`) · `.claude/hooks/tests/claim-registry.test.cjs` (the existing
+net — see below) · `scripts/sync-hook-fleet.js:33-80` (MANIFEST).
 
-- [ ] **Test-first — claim-registry has ZERO test coverage** (no `test/` file references it,
-      grepped 2026-08-05). Land `test/claim-registry.test.js` first: `readLiveClaims` over
-      fixture `.titles` dirs — live vs expired mtime, self-sid exclusion, malformed claim
-      JSON, missing dir.
+- [ ] **Test-first — but the net is NOT bare.** ⚠ The 2026-08-05 "ZERO test coverage" finding
+      was wrong: it grepped `test/` only and missed `.claude/hooks/tests/claim-registry.test.cjs`
+      (5 tests, importing `writeClaim`/`readLiveClaims`/`claimantsOf` from the real module;
+      `:63` already covers selfSid + malformed JSON + stale sessions). Re-read it FIRST and
+      write only the genuinely missing cases (missing dir, unreadable dir, per-path last-write
+      -wins dedup) rather than a duplicate suite in `test/`.
 - [ ] **Manifest it**: `C:/CODE/job-agent-extension/.claude/hooks/claim-registry.js` is an
       unmanifested hand-copy (found 2026-08-05) — the same arrangement that let token-guard
       drift 231 lines. Add `{ file: 'claim-registry.js', global: false, pairsWith: 'token-guard.js' }`
-      to MANIFEST. Diff the two copies FIRST; if the job-agent copy differs, reconcile before
-      refactoring the canonical.
-- [ ] Decompose `readLiveClaims` to CC ≤ 9.
+      to MANIFEST. Diff the two copies FIRST — **byte-identical as of 2026-08-07**, so this is a
+      no-op reconcile today, but re-check rather than assume.
+- [ ] Decompose `readLiveClaims` to CC ≤ 9. Its 21 is mostly the per-file guard ladder
+      (`existsSync` → `readdirSync` catch → selfSid skip → glyph-mtime skip → `readFileSync`
+      catch) plus the per-line JSON parse: `listClaimFiles(dir)`, `isStaleSid(sid, now)`, and
+      `parseClaimLines(content, sid)` split it cleanly with no logic change.
 - [ ] `node scripts/sync-hook-fleet.js --write` + check mode zero drift.
 
 **Verify:** new suite green; claim-registry gone from the "no new violations" list.
@@ -607,18 +631,27 @@ readMarks/readWriteLedger — grep the names first; line numbers drift) · grep
 read those blocks only.
 
 - [ ] Sibling probe (phase rules) — fleet-synced canonical, terminal-title sessions run often.
-- [ ] Decompose the three to CC ≤ 9. All are exported via `module.exports` (~:2262) — keep
+- [ ] Decompose the three to CC ≤ 9. All are exported via `module.exports` (`:2267`) — keep
       the names; tests import them directly.
+- [ ] ⛔ **`recordWrites`' unconditional keying is load-bearing — do not "tidy" it.**
+      `w[topicTs] = cur` at `terminal-title.js:819` runs even when `cur` is `[]`, and the
+      clear-advisory gate's `observed` guard (`:928`) reads an ABSENT key as *never observed*
+      (unknown → decline to gate) versus an empty array as *a measured zero* (→ gate). Making
+      that write conditional on `cur.length` looks like a null-object cleanup and silently
+      un-gates the advisory. `8cef0a6` re-pinned this from the test side
+      (`.claude/hooks/tests/terminal-title-clear-advice.test.cjs:252-268`), so the net is
+      tighter than it was on 2026-08-05 — but read the contract before you touch the writer.
 - [ ] Fleet sync + zero drift.
 
-**Verify:** `node test/terminal-title.test.js` — 129 green (includes the advisor-gate tests
-fixed 2026-08-05); three entries gone from the "no new violations" list.
+**Verify:** `node test/terminal-title.test.js` — 129 green (re-confirmed 2026-08-07) · `node
+.claude/hooks/tests/terminal-title-clear-advice.test.cjs` — 23 green; three entries gone from
+the "no new violations" list.
 **Commit:** `refactor(terminal-title): advisor evidence pipeline to CC≤9` + `Changelog: none`.
 
-### ☐ 4.5a · M · ~45m — token-guard: usage cluster — `collectUsageById` (16, :366) · `costOfUsage` (13, :384) · `parsePlanLedger` (11, :672) · [opus]
+### ☐ 4.5a · M · ~45m — token-guard: usage cluster — `collectUsageById` (16, :369) · `costOfUsage` (13, :387) · `parsePlanLedger` (11, :687) · [opus]
 
-**Read list** (~400 lines): the phase rules · `token-guard.js:360-430` and `:660-730` (grep
-the names first — the file is 4,022 lines and drifts under sibling writers) · 3.7a's Ledger
+**Read list** (~400 lines): the phase rules · `token-guard.js:360-415` and `:680-710` (grep
+the names first — the file is 4,080 lines and drifts under sibling writers) · 3.7a's Ledger
 entry (collectUsageById/costOfUsage are its alumni — re-read what it extracted before
 re-decomposing).
 
@@ -632,27 +665,47 @@ re-decomposing).
 three entries gone from the "no new violations" list.
 **Commit:** `refactor(token-guard): usage cluster to CC≤9` + `Changelog: none`.
 
-### ☐ 4.5b · M · ~45m — token-guard: restart cluster — `firstContextOfHead` (11, :2154) · `coldStartTokens` (12, :2175) · `restartVerdict` (10, :2254) · `restartBullet` (10, :2328) · [opus]
+### ☐ 4.5b · M · ~45m — token-guard: restart cluster — `firstContextOfHead` (11, :2170) · `coldStartTokens` (12, :2191) · `restartVerdict` (10, :2270) · `restartBullet` (10, :2359) · [opus]
 
-**Read list** (~350 lines): the phase rules · `token-guard.js:2150-2360` (grep the names
-first). Four functions, one contiguous region, all CC 10-12 — the lightest cluster.
+**Read list** (~350 lines): the phase rules · `token-guard.js:2160-2400` (grep the names
+first). Four functions, one contiguous region, all CC 10-12 — the lightest cluster by CC, but
+see the copy trap below before sizing it that way.
 
 - [ ] Sibling probe (phase rules).
 - [ ] Decompose the four to CC ≤ 9.
+- [ ] ⚠ **`restartBullet` is the newest code in this phase and the most tightly pinned.**
+      `f209371` (2026-08-07) gave it an optional 5th `sid` param and the checkpoint-handoff ask;
+      its rendered copy is asserted verbatim by `test/token-guard-copy.test.js:210-235`, and the
+      `ctx.sid` threading at its call site (`:3215`) by
+      `.claude/hooks/tests/token-guard-r13.test.cjs:77-81`. Dropping the 5th arg renders a
+      literal `<sid>` — an illegal Windows filename, so every checkpoint write fails — while
+      the unit-level copy pin stays green. Extraction must not reword one emitted line, and must
+      keep `sid` threaded through any new helper.
 - [ ] Fleet sync + zero drift.
 
-**Verify:** token-guard suites green; four entries gone from the "no new violations" list.
+**Verify:** token-guard suites green (`token-guard-copy` 17/17 and
+`.claude/hooks/tests/token-guard-r13.test.cjs` specifically); four entries gone from the "no new
+violations" list.
 **Commit:** `refactor(token-guard): restart cluster to CC≤9` + `Changelog: none`.
 
-### ☐ 4.5c · M · ~60m — token-guard: guard cluster — `claimAdvisoryGuard` (11, :2857) · `r14TurnRentGuard` (12, :3255) · `emitWriteClaimGuard` (21, :3389) · [opus]
+### ☐ 4.5c · M · ~60m — token-guard: guard cluster — `claimAdvisoryGuard` (11, :2914) · `r14TurnRentGuard` (12, :3312) · `emitWriteClaimGuard` (21, :3446) · [opus]
 
-**Read list** (~450 lines): the phase rules · `token-guard.js:2850-2930`, `:3250-3320`,
-`:3380-3460` (grep the names first) · ⚠ these three ARE the live claim/write-guard machinery
+**Read list** (~450 lines): the phase rules · `token-guard.js:2905-2945`, `:3305-3355`,
+`:3436-3475` (grep the names first) · ⚠ these three ARE the live claim/write-guard machinery
 sibling sessions run — the sibling probe is not a formality here.
 
 - [ ] Sibling probe (phase rules) — stand down on ANY live token-guard writer.
 - [ ] Decompose the three to CC ≤ 9. ⚠ Guard output is user-facing warning copy under the
       token-guard copy discipline — extraction must not reword a single emitted line.
+- [ ] ⚠ **`emitWriteClaimGuard`'s null-guard must survive extraction.** `claim-registry.js` is
+      required lazily inside a bare `try/catch` (`:3441-3444`) and is NOT in the fleet MANIFEST
+      today, so in a synced repo `claimRegistryMod` is legitimately `null` — the
+      `!claimRegistryMod || !claimRegistryMod.writeClaim` head of the guard is a fail-open
+      contract, not defensive noise. (4.2 manifests the file; if 4.2 has already landed, the
+      guard still stays — adoption is opt-in, so a repo can carry token-guard without it.)
+      Its CC 21 is ALL fallback: lift the six tool names to a module-level `Set` and the
+      four-way `input.file_path || input.path || input.TargetFile || input.file` to a
+      `targetPathOf(input)` helper, and the count collapses with the body untouched.
 - [ ] Fleet sync + zero drift.
 
 **Verify:** token-guard suites green; the "no new violations" list is now EMPTY.
@@ -666,9 +719,18 @@ sibling sessions run — the sibling probe is not a formality here.
 - [ ] If a BASELINED function incidentally cleared during 4.2–4.5c, the tightness test says
       so — NOW `--write-baseline` is safe (census clean; the write can only shrink). Commit
       the shrink here.
-- [ ] `npm test` fully green.
-- [ ] `git push origin main` — the pre-push hook re-runs the full suite (~8–10 min; a quiet
-      terminal there is the suite, not a hang).
+- [ ] `npm test` fully green. Expect no surprises past the ratchet: all 11 suites that sit
+      AFTER it in the `&&` chain were run individually and passed on 2026-08-07.
+- [ ] **Move `complexity-ratchet` to the END of the `npm test` chain** (`package.json:25` — it
+      is 16th of 28 today). Its `&&` abort is what hid
+      `terminal-title-clear-advice.test.cjs:252` for two days: every full run died at the
+      ratchet and never reached `hook-tests`, which is LAST, so three sessions in a row reported
+      "everything else green". A style ratchet must not mask behavioral failures. One-line
+      reorder, no logic change — do it here, once the ratchet is green, so the move can't be
+      confused with dodging it.
+- [ ] `git push origin main` — ⚠ **ask for a go-ahead before pushing** (outward-facing, and it
+      carries `1.1`–`1.4` of `docs/checkpoint-handoff-plan.md` with it). The pre-push hook
+      re-runs the full suite (~8–10 min; a quiet terminal there is the suite, not a hang).
 
 **Verify:** push accepted; check mode zero drift; `git log origin/main..main` empty.
 **Commit:** (only if the baseline shrank) `test(ratchet): tighten baseline after Phase 4` + `Changelog: none`.
@@ -1534,4 +1596,37 @@ sibling sessions run — the sibling probe is not a formality here.
     M · [opus]) — test-first (zero coverage today), diff the job-agent-extension hand-copy
     BEFORE touching the canonical, then manifest it.
     Handoff: /clear → /model opus → /continue (next: 4.2 · [opus] — model switch needed from fable).
+- 2026-08-07 — Phase 4 re-census + doc correction (no code). No substep executed; this entry
+  exists because Phase 4's pointers had gone stale enough to cost the executing session real
+  reads. Ran the ratchet census with CC + line + span (scratch script, not committed — it is
+  `test/complexity-ratchet.test.js`'s `census()` plus `m.line` and a brace-matched span).
+  - **The 16 are unchanged in identity and CC.** Corrected in place: every `token-guard.js`
+    pointer in 4.2/4.5a/4.5b/4.5c had drifted **+3 to +57 lines** (mostly `f209371`'s +25), and
+    the file is 4,080 lines, not 4,022. `terminal-title.js` (:738/:769/:804) and
+    `token-guard-liveness.js` (:50/:80) pointers were still exact.
+  - ⚠ **4.2's premise was wrong and is now fixed**: claim-registry does NOT have zero coverage —
+    `.claude/hooks/tests/claim-registry.test.cjs` has 5 tests against the real module, and `:63`
+    already covers selfSid + malformed JSON + stale sessions, i.e. most of what 4.2 proposed to
+    write. The 2026-08-05 finding grepped `test/` only. 4.2's test-first item now says re-read
+    that file and add only the gaps. Also verified: JAE's hand-copy is **byte-identical** today,
+    so the reconcile-before-refactor step is a no-op (re-check anyway).
+  - **Verified finding that should shape every 4.x decomposition:** ESLint's `complexity` forks
+    on `||`/`&&`, so the excess here is overwhelmingly defensive fallback chains, not branching.
+    `emitWriteClaimGuard`'s 21 decomposes arithmetically into 13 fallback points + 3 `if` + 2
+    `catch` + 1 base. Remedy is constant tables + one-line predicates, not restructuring — this
+    phase is smaller and lower-risk than the CC numbers imply. Written into the phase rules.
+  - **Starting state is cleaner than the phase header assumed.** The sibling debt is gone
+    (`8cef0a6` fixed `terminal-title-clear-advice.test.cjs:252` — the TEST was wrong, not the
+    gate; see `docs/checkpoint-handoff-plan.md`'s Ledger), and the 11 suites that sit after the
+    ratchet in the `&&` chain were each run individually and passed. The ratchet is the only red.
+  - New trap notes added where they bind: `recordWrites`' unconditional `w[topicTs] = cur`
+    (`terminal-title.js:819`) is the absence-vs-zero contract the advisory gate reads at `:928`
+    — a null-object "cleanup" there silently un-gates the advisory (4.4); `restartBullet` is
+    copy-pinned verbatim plus its `ctx.sid` threading (4.5b); `emitWriteClaimGuard`'s lazy
+    `require` null-guard is a fail-open contract for unmanifested repos (4.5c).
+  - Added to 4.6: move `complexity-ratchet` to the END of the `npm test` chain. At position 16
+    of 28 its `&&` abort masked a real behavioral failure for two days. Deliberately sequenced
+    AFTER the ratchet goes green so the reorder can't read as dodging it. Also added an explicit
+    ask-before-push gate to 4.6 (it carries checkpoint-handoff 1.1–1.4 out with it).
+  - Next: unchanged — **4.2** · M · [opus]. Handoff: /clear → /continue.
 
