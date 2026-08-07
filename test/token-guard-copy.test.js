@@ -207,6 +207,33 @@ test('the floor figure is quoted exactly once per R13b card', () => {
   assert(!/~101k/.test(card), `the raw window is back, unweighted, beside a written figure: ${card}`);
 });
 
+test('the restart-pays branch asks for a checkpoint handoff', () => {
+  // The WHAT-SURVIVES half of a restart (2026-08-07). A plan's Ledger records completion
+  // explicitly, so /continue resumes plan work losslessly; everything else fell back to
+  // transcript walk-back, which is inference. The card already said "what this turn ruled out
+  // is not on disk" and stopped there — this branch now says where to put it, and /continue
+  // (v8) reads that file ahead of the transcript. Pinned as RENDERED copy because both halves
+  // are a contract with another reader: the path is what the writer writes and the recovery
+  // ladder opens, and the four headings are what it parses.
+  const fat = restartBullet(restartPos(42), 163_000, GAP, rv(163_000, FLOOR), 'abc-123');
+  assert(fat.includes('.claude/hooks/.titles/abc-123.handoff.md'),
+    `the handoff path must be templated with the live sid: ${fat}`);
+  for (const h of ['## Done', '## In flight', '## Next', '## Pointers']) {
+    assert(fat.includes(h), `handoff section ${h} missing from the ask: ${fat}`);
+  }
+  assert(/ISO/.test(fat), `the first-line timestamp went unstated: ${fat}`);
+  // A sid-less caller renders the placeholder, never the string "undefined" — same discipline as
+  // the no-'undefined'-leaks pin above: this is copy a model acts on, and an undefined path is a
+  // file written somewhere nothing reads.
+  const noSid = restartBullet(restartPos(42), 163_000, GAP, rv(163_000, FLOOR));
+  assert(noSid.includes('.claude/hooks/.titles/<sid>.handoff.md'), `placeholder lost: ${noSid}`);
+  assert(!/undefined/.test(noSid), `undefined leaked into the handoff path: ${noSid}`);
+  // ...and the not-fat branch stays clean. Asking for a checkpoint on the card that just
+  // recommended NOT clearing is work for nothing, and it would bury the reading it opens on.
+  const lean = restartBullet(restartPos(42), 141_000, GAP, rv(141_000, FLOOR), 'abc-123');
+  assert(!/handoff/.test(lean), `the not-fat branch must not ask for a handoff: ${lean}`);
+});
+
 test('R14 prices the restart inside the deny option itself', () => {
   // R14 has no Restart bullet (rentAskCopy), and choiceBullet discards rv.why whenever the
   // pending CALL is a bomb — so on the branch that fires most, the card recommended

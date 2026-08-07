@@ -2341,7 +2341,22 @@ const clearTail = rv => rv && rv.coldStart > 0
 // used to support for it.
 const restartPos = reqs => reqs == null
   ? 'this turn is carrying' : `${reqs} round trip${reqs === 1 ? '' : 's'} carrying`;
-function restartBullet(pos, liveContext, gap, rv) {
+// The CHECKPOINT HANDOFF file — the WHAT-SURVIVES half of a restart, which until now existed only
+// for plan work (a plan's Ledger records completion explicitly, so /continue resumes it losslessly;
+// everything else fell back to lossy transcript walk-back). Format, fixed so /continue can read it
+// without parsing prose:
+//
+//     <ISO timestamp>            ← first line, nothing else on it
+//     ## Done                    ← what landed, and where it landed (commit / file)
+//     ## In flight               ← started, not finished — the half-edit a fresh session must not redo
+//     ## Next                    ← the immediate next step, phrased as an instruction
+//     ## Pointers                ← file:line list, the reads the next session would otherwise re-grep
+//
+// Repo-relative on purpose: this string is COPY, read by a model that already has the project dir,
+// and an absolute path would differ per machine and per worktree. A sid-less caller renders the
+// literal `<sid>` placeholder rather than "undefined" — see the no-'undefined'-leaks pin.
+const handoffPath = sid => `.claude/hooks/.titles/${sid || '<sid>'}.handoff.md`;
+function restartBullet(pos, liveContext, gap, rv, sid) {
   if (!liveContext || !(gap > 0)) return '';   // meter came back empty — say nothing over guessing
   // "rebuilds that" was the same fiction restartVerdict carried: a restart does not reload the
   // window, it re-pays the startup floor and carries the next step only. With a measured floor the
@@ -2358,8 +2373,14 @@ function restartBullet(pos, liveContext, gap, rv) {
   // bullets read as reading-then-recommendation instead of saying "push on" twice in four lines.
   if (!rv) return `${head}\n`;
   return rv.clear
+    // The instruction to WRITE the handoff rides on this branch only — it is the one branch that
+    // recommends the /clear, and an ask to checkpoint on a card that just said don't clear is
+    // work for nothing. It also answers the sentence in front of it: "not on disk" is a problem
+    // statement, and until 2026-08-07 the card left it at that.
     ? `${head} Past the fat line — but take the restart FROM a commit point: what this turn ` +
-      `ruled out is not on disk.\n`
+      `ruled out is not on disk. Before /clear, write it to ${handoffPath(sid)} — an ISO ` +
+      `timestamp, then ## Done / ## In flight / ## Next / ## Pointers (file:line) — so ` +
+      `/continue reads that instead of guessing from the transcript.\n`
     // Without a floor the only thing that can be said is that the window is small. With one, say
     // WHY it isn't worth clearing — how much of the window a fresh session would just re-pay — so
     // the tail stops repeating the "rebuilds it back" fiction the head just dropped.
@@ -3191,7 +3212,7 @@ function r13bTurnSpendGuard(ctx) {
     `${nextCheckClause(st.turnGateFires, st.turnGateAt)}\n` +
     restartBullet(
       restartPos(st.turnStartReqs == null ? null : Math.max(1, m.main.turns - st.turnStartReqs)),
-      m.liveContext, st.turnGateAt - turnTok, rv) +
+      m.liveContext, st.turnGateAt - turnTok, rv, ctx.sid) +
     choiceBullet(verdict, {
       neutral: 'approve to push on — or deny, and Claude should stop and propose that plan.',
       denyTail: 'denying means Claude stops and proposes that plan.',
@@ -4046,6 +4067,7 @@ module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, l
   claudeCodeUA, fetchOfficialUsage,
   analyzeSession, renderAnalysis, payloadVerdict, fanVerdict, workflowSource, skillSizes, recordObservedSkill,
   generateBudgets, slug, driftNote, driftDeferralTick, recoverTail, restartBullet, restartPos,
+  handoffPath,                                 // checkpoint handoff — /continue's top recovery rung
   restartVerdict, choiceBullet, rentAskCopy,   // test/token-guard-copy.test.js — R14 copy contract
   crossedSpendSteps,                           // test/token-guard-ladder.test.js — session-total ladder
   meterCanaryVerdict, meterCanaryNote,         // test/token-guard-canary.test.js — meter fail-open canary
