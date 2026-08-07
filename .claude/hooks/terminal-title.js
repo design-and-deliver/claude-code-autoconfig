@@ -735,22 +735,38 @@ function readContextTokens(transcriptPath) {
 // subagent's write lands on disk exactly like the main loop's, and the reason to skip sidechains
 // (their usage is not the main loop's context) says nothing about files.
 const WRITE_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+// The file a single content block targets, or '' for anything that isn't a write tool. Both path
+// keys are read because NotebookEdit names its target `notebook_path` while the other three use
+// `file_path`.
+function writeToolPath(b) {
+  if (!b || b.type !== 'tool_use' || !WRITE_TOOLS.has(b.name)) return '';
+  const p = b.input && (b.input.file_path || b.input.notebook_path);
+  return typeof p === 'string' ? p : '';
+}
+// The write-tool paths one transcript line names, in order. A non-JSON line (which includes the
+// tail window's partial first line) or a turn with no tool_use blocks yields nothing.
+function writePathsOfLine(line) {
+  const t = line.trim();
+  if (!t) return [];
+  let obj;
+  try { obj = JSON.parse(t); } catch (_) { return []; }
+  const blocks = obj && obj.message && obj.message.content;
+  if (!Array.isArray(blocks)) return [];
+  const out = [];
+  for (const b of blocks) {
+    const p = writeToolPath(b);
+    if (p) out.push(p);
+  }
+  return out;
+}
 function readTailWrites(transcriptPath) {
   const content = readTranscriptTail(transcriptPath);
   if (!content) return [];
   const out = [];
   const seen = new Set();
   for (const line of content.split('\n')) {
-    const t = line.trim();
-    if (!t) continue;
-    let obj;
-    try { obj = JSON.parse(t); } catch (_) { continue; } // includes the tail window's partial first line
-    const blocks = obj && obj.message && obj.message.content;
-    if (!Array.isArray(blocks)) continue;
-    for (const b of blocks) {
-      if (!b || b.type !== 'tool_use' || !WRITE_TOOLS.has(b.name)) continue;
-      const p = b.input && (b.input.file_path || b.input.notebook_path);
-      if (typeof p !== 'string' || !p || seen.has(p)) continue;
+    for (const p of writePathsOfLine(line)) {
+      if (seen.has(p)) continue;
       seen.add(p);
       out.push(p);
     }
@@ -766,22 +782,34 @@ function readTailWrites(transcriptPath) {
 // A SHRINK re-bases the whole record: auto-compact replaced the context, so earlier watermarks
 // describe a context that no longer exists — the same rule the history window already applied.
 const MARK_SHRINK = 0.6; // latest below 60% of the prior sample = compaction, not ordinary drift
+// The marks record as it sits on disk, or null when there is none yet / it is unreadable.
+function readMarkFile(mf) {
+  try { return JSON.parse(fs.readFileSync(mf, 'utf8')); } catch (_) { return null; } // first mark of the session
+}
+function writeMarkFile(mf, m) {
+  try { fs.writeFileSync(mf, JSON.stringify(m)); } catch (_) { /* best-effort, like the glyph file */ }
+}
+// No usable record, or a shrink deep enough to mean the context was replaced rather than drifting.
+function needsRebase(m, tokens) {
+  return !m || !(m.fixed > 0) || tokens < m.latest * MARK_SHRINK;
+}
+// A shrink re-bases the CONTEXT watermarks; it says nothing about files already on disk, so the
+// write ledger rides across the re-base deliberately.
+function rebaseMark(m, tokens) {
+  const fresh = { fixed: tokens, latest: tokens, n: 0 };
+  const carried = m && m.writes;
+  if (carried) fresh.writes = carried;
+  return fresh;
+}
 function recordMark(dir, sid, tokens) {
   if (!(tokens > 0)) return null; // 0 = unknown (unflushed transcript); never stamp on a guess
   const mf = path.join(dir, `${sid}.marks.json`);
-  let m = null;
-  try { m = JSON.parse(fs.readFileSync(mf, 'utf8')); } catch (_) { /* first mark of the session */ }
-  if (!m || !(m.fixed > 0) || tokens < m.latest * MARK_SHRINK) {
-    // A shrink re-bases the CONTEXT watermarks; it says nothing about files already on disk, so the
-    // write ledger rides across the re-base deliberately.
-    const carried = m && m.writes;
-    m = { fixed: tokens, latest: tokens, n: 0 };
-    if (carried) m.writes = carried;
-  }
+  let m = readMarkFile(mf);
+  if (needsRebase(m, tokens)) m = rebaseMark(m, tokens);
   m.fixed = Math.min(m.fixed, tokens);
   m.latest = tokens;
   m.n = (m.n || 0) + 1;
-  try { fs.writeFileSync(mf, JSON.stringify(m)); } catch (_) { /* best-effort, like the glyph file */ }
+  writeMarkFile(mf, m);
   return m;
 }
 // Usable only with 2+ samples — one paint cannot separate the fixed floor from the live context.
@@ -801,31 +829,49 @@ function readMarks(dir, sid) {
 // this code (clearAdvice reads that as "unknown"), while an empty list is a measured zero.
 const WRITES_PER_TOPIC = 25;
 const WRITE_TOPICS = 40;
-function recordWrites(dir, sid, topicTs, paths) {
-  if (!topicTs) return null; // nothing to attribute it to — the session's first paint
-  const mf = path.join(dir, `${sid}.marks.json`);
-  let m = null;
-  try { m = JSON.parse(fs.readFileSync(mf, 'utf8')); } catch (_) { /* no marks yet */ }
-  if (!m || typeof m !== 'object') m = {};
+// The topic map and this topic's list, plus whether either had to be conjured — a map or a list
+// that did not exist is itself a change worth persisting, independent of any path being added.
+function topicSlot(m, topicTs) {
   const w = (m.writes && typeof m.writes === 'object') ? m.writes : {};
-  const cur = Array.isArray(w[topicTs]) ? w[topicTs] : [];
-  let changed = !m.writes || !Array.isArray(w[topicTs]); // first run, or this topic's first entry
+  const had = Array.isArray(w[topicTs]);
+  return { w, cur: had ? w[topicTs] : [], fresh: !m.writes || !had }; // first run, or this topic's first entry
+}
+// Append the paints's new paths to the topic's list, capped. True when anything was added.
+function appendTopicPaths(cur, paths) {
+  let added = false;
   for (const p of paths || []) {
     if (cur.length >= WRITES_PER_TOPIC) break; // enough to answer "did this topic produce anything"
     if (cur.indexOf(p) !== -1) continue;
     cur.push(p);
-    changed = true;
+    added = true;
   }
-  w[topicTs] = cur;
+  return added;
+}
+// Drop the oldest topics past the cap. True when anything was evicted.
+function evictOldTopics(w) {
   const keys = Object.keys(w);
-  if (keys.length > WRITE_TOPICS) {
-    keys.sort(); // history ts is ISO-8601, so lexical order is chronological — drop the oldest
-    for (const k of keys.slice(0, keys.length - WRITE_TOPICS)) delete w[k];
-    changed = true;
-  }
+  if (keys.length <= WRITE_TOPICS) return false;
+  keys.sort(); // history ts is ISO-8601, so lexical order is chronological — drop the oldest
+  for (const k of keys.slice(0, keys.length - WRITE_TOPICS)) delete w[k];
+  return true;
+}
+function recordWrites(dir, sid, topicTs, paths) {
+  if (!topicTs) return null; // nothing to attribute it to — the session's first paint
+  const mf = path.join(dir, `${sid}.marks.json`);
+  let m = readMarkFile(mf); // null = no marks yet
+  if (!m || typeof m !== 'object') m = {};
+  const { w, cur, fresh } = topicSlot(m, topicTs);
+  let changed = fresh;
+  if (appendTopicPaths(cur, paths)) changed = true;
+  // ⛔ UNCONDITIONAL, even when `cur` is []. clearAdvice's done-ness gate reads an ABSENT key as
+  // "never observed" (unknown → decline to gate) and an empty array as a MEASURED ZERO (→ gate).
+  // Making this conditional on cur.length looks like a null-object cleanup and silently un-gates
+  // the advisory; `terminal-title-clear-advice.test.cjs:252` pins the contract from the test side.
+  w[topicTs] = cur;
+  if (evictOldTopics(w)) changed = true;
   m.writes = w;
   if (!changed) return m; // steady state: most paints see nothing new, so don't rewrite the file
-  try { fs.writeFileSync(mf, JSON.stringify(m)); } catch (_) { /* best-effort, like the glyph file */ }
+  writeMarkFile(mf, m);
   return m;
 }
 
