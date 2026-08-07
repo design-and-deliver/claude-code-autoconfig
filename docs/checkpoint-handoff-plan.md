@@ -64,12 +64,12 @@ commit, append a Ledger entry, tick the checkbox, then `/clear` + `/continue`.
 
 **Commit:** `feat(continue): recovery ladder reads the checkpoint handoff first`.
 
-### ☐ 1.3 · S · ~20m — Fleet sync
+### ☑ 1.3 · S · ~20m — Fleet sync
 
 - Read: `scripts/sync-hook-fleet.js` header comment only (usage flags).
-- [ ] Confirm no other session is writing job-agent-extension or wifi-app, then run
+- [x] Confirm no other session is writing job-agent-extension or wifi-app, then run
   `node scripts/sync-hook-fleet.js --write`.
-- [ ] Commit each fleet repo's synced files separately (its own conventions apply). ⚠ Both fleet
+- [x] Commit each fleet repo's synced files separately (its own conventions apply). ⚠ Both fleet
   repos have unrelated uncommitted WIP right now (job-agent-extension is running a live session):
   stage ONLY the paths the actuator reported, by explicit `git -C <repo> add <path>` — never
   `git add -A`, never `git commit -a/-am`.
@@ -181,3 +181,33 @@ commit, append a Ledger entry, tick the checkbox, then `/clear` + `/continue`.
   not cover the note path, so the feature is writable where it matters. Known blind spot,
   accepted: a note written inside a git worktree is invisible to a main-checkout `/continue`
   (probe searches cwd-relative `.titles` + `~`), which falls back to walk-back correctly.
+- 2026-08-07 — 1.3 — DONE. Fleet synced; **no CCA commit** (the actuator writes only into targets,
+  so CCA's tree stayed clean — the substep's "CCA only if it touched tracked CCA files" branch).
+  Fleet commits: job-agent-extension `2d86822`, wifi-app `075c06c`, both
+  `feat(hooks): token-guard restart advisory asks for a checkpoint handoff note — sync-down from
+  CCA f209371`. Exactly ONE file moved per repo (`.claude/hooks/token-guard.js`, +25/−3 = 1.1's
+  diff); 1.2's changes are `.claude/commands/*.md`, which the manifest does not carry, so nothing
+  else was due. Verify green: check mode reports "All present targets in sync", `diff` says
+  byte-identical both ways, `node --check` clean on both copies.
+  - **Live-session judgement call** (the substep's "confirm no other session is writing"): JAE had
+    two live sessions — `1baed7ee` idle, and `20d12ef3` `working|PostToolUse` titled "Checkpoint
+    handoff — Run-plan — Finish plan on Opus", i.e. the run-plan orchestrator that spawned THIS
+    session. It writes CCA, not JAE. Proceeded on three checks: JAE's `token-guard.js` was clean
+    vs its own HEAD (nobody had WIP in it), the actuator writes same-dir-temp + rename (never a
+    torn read for the hooks executing it live), and the commit used a **pathspec-limited**
+    `git -C <repo> commit -F <msg> -- .claude/hooks/token-guard.js`, which ignores the index
+    entirely. Confirmed after: both repos' unrelated WIP lists are byte-identical to before.
+    That pathspec form is stronger than the plan's `add <path>` rail — prefer it in future syncs.
+  - `sync-docs.js` was NOT needed (1.2's note only applies to command-header edits, and 1.3 edits
+    no command file).
+  - Suite (run for the standing rail even though 1.3 edits no CCA source): the ENOENT
+    `.titles/<sid>.needle` flake the 1.1 entry warned about fired again — this time in
+    `box-alignment.test.js` (`cca-box-upgrade-*` fixture copy), NOT cli-behavior, so it is the
+    tree-copy race generally rather than one suite. Re-ran clean past it. The re-run then stops
+    exactly where 1.1 and 1.2 said it would: 15 suites green ("ALL TESTS PASSED" ×15, box
+    alignment included), then `complexity-ratchet.test.js` ✗ "no new complexity violations
+    (CC >= 10) beyond the baseline" — **the same 16 functions, unchanged**, and the `&&` chain
+    aborts there so the hook suites still never run. 1.3 touched zero CCA source files, so it
+    provably added none. Both debts (the ratchet, and 1.2's `terminal-title-clear-advice`
+    live-topic-gate failure hiding behind the abort) remain separate jobs, and together still
+    mean **the pre-push guard will block a push** of 1.1–1.4.
