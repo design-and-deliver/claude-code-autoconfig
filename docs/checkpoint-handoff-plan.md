@@ -48,17 +48,17 @@ commit, append a Ledger entry, tick the checkbox, then `/clear` + `/continue`.
 
 **Commit:** `feat(token-guard): restart advisory asks for a checkpoint handoff note`.
 
-### ☐ 1.2 · M · ~45m — recover-context v8: handoff rung atop the recovery ladder
+### ☑ 1.2 · M · ~45m — recover-context v8: handoff rung atop the recovery ladder
 
 - Read: `.claude/commands/recover-context.md:78-210` (Step 2c auto mode + cutoff ladder);
   `.claude/commands/continue.md` (whole file, ~235 lines).
-- [ ] After prev-sid resolution: if `.claude/hooks/.titles/<prevSid>.handoff.md` exists and its
+- [x] After prev-sid resolution: if `.claude/hooks/.titles/<prevSid>.handoff.md` exists and its
   timestamp is ≥ the prev transcript's last activity − 3 min, use it as the PRIMARY recovery
   content (skip the transcript deep-read; still cross-check git status/log against it). If the
   transcript clearly postdates it, call it stale: merge it with the normal walk-back.
-- [ ] Report the source as `VIA=handoff` in the recovery preamble, parallel to the existing
+- [x] Report the source as `VIA=handoff` in the recovery preamble, parallel to the existing
   pointer/title-thread/walk-back labels.
-- [ ] Mirror the new rung in continue.md's description of the flow (one short paragraph).
+- [x] Mirror the new rung in continue.md's description of the flow (one short paragraph).
 
 **Verify:** grep both command files for `handoff.md` — naming identical; suite green.
 
@@ -130,6 +130,30 @@ commit, append a Ledger entry, tick the checkbox, then `/clear` + `/continue`.
     Consequence: **the dev-box pre-push guard will block a push** until that debt is cleared —
     it is a separate job from this plan, and it is not a licence to regrow the shrink-only
     baseline.
-  - Flake worth knowing: `cli-behavior.test.js` can fail ENOENT copying
+  - Flake worth knowing (hit twice more in 1.2 — expect it): `cli-behavior.test.js` can fail ENOENT copying
     `.titles/<sid>.needle` — a transient terminal-title writes and unlinks inside `findConsoles`
     (`terminal-title.js:1869-1876`), raced by the fixture's tree copy. Re-run; it passed clean.
+- 2026-08-07 — 1.2 — DONE (3410d22). recover-context v8 + continue.md v7. The probe sits ABOVE
+  the cutoff ladder, not in it — a handoff is a CONTENT source, not a cutoff — but the ladder
+  still runs and `CUTOFF_ISO` still prints, because the stale/unreadable-note fallback needs it
+  and the transcript is already parsed by then. Freshness = **file mtime** vs `ts[-1] - 180s`,
+  deliberately NOT the note's own ISO first line (model-written copy; can be wrong or
+  timezone-naive). Deviations from the written substep, all additive: a skip-guard sentence at
+  Step 4's top (`recover-context.md:294`), a fresh-handoff variant of the Step 5 confirmation
+  (`:381`), and `@version`/`@sideeffect`/`@response` header updates on both commands.
+  Pointers for 1.3/1.4: probe + freshness `recover-context.md:164-179`, print block `:207-213`,
+  FRESH/STALE prose bullets `:218-220`, Step 4 guard `:294`; continue.md's mirror paragraph
+  `:179-188`. Path spelling is identical in all three files (`token-guard.js:2358`'s
+  `handoffPath`) — that was the Verify, plus a live run of the edited Step 2c block against this
+  project (prints `VIA=walk-back` with no note present, no `HANDOFF=` line).
+  - ⚠️ **Two pre-existing failures, both confirmed at HEAD by stashing this diff** (it touches
+    only `.md` + generated docs HTML, so it cannot reach either): (1) `complexity-ratchet` — the
+    16 CC≥10 violations 1.1 already recorded; (2) `.claude/hooks/tests/terminal-title-clear-advice.test.cjs:252`
+    "writes belonging only to the LIVE topic do not unlock the advisory" — the advisory FIRES
+    where the test expects `''` (`"~140k tokens of 1 earlier topic still ride in context…"`),
+    i.e. the live-topic gate stopped gating. Reached only via `npm run test:hooks`/`hook-tests`,
+    which is LAST in the `&&` chain — every earlier full-suite run aborted at complexity-ratchet
+    and never saw it, which is why 1.1 reported "everything else green". Both are separate jobs;
+    together they mean **the pre-push guard will block a push** of 1.1–1.4.
+  - `contracts.test.js`'s docs ratchet fails on any command-header edit until
+    `node .claude/scripts/sync-docs.js` runs — 1.3/1.4 should just run it before committing.
