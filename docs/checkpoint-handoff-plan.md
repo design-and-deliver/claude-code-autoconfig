@@ -98,3 +98,17 @@ commit, append a Ledger entry, tick the checkbox, then `/clear` + `/continue`.
 ## Ledger
 
 <!-- appended after each substep: date — step — outcome (+ commit hash), deviations, pointers -->
+
+- 2026-08-07 — 1.1 — BLOCKED: no code landed; working tree left clean. The runner spawned this
+  session with run-plan.js's default `--permission-mode acceptEdits`, which still auto-denies
+  writes to sensitive paths — every Edit to `.claude/hooks/token-guard.js` came back "sensitive
+  file", and `-p` mode has nobody to approve. All four substeps edit that file: relaunch with
+  `node scripts/run-plan.js docs/checkpoint-handoff-plan.md --dangerous` (the unattended flag).
+  Analysis is done; prepared edits for the next session: (a) `handoffPath` helper + short format
+  comment above `restartBullet`, and an optional 5th param `sid` on it (token-guard.js:2342-2344);
+  (b) extend the `rv.clear` branch copy (:2360-2362) with one sentence — before /clear, write the
+  handoff note to `handoffPath(sid)` (ISO-timestamp first line, then ## Done / ## In flight /
+  ## Next / ## Pointers with file:line) so /continue reads it ahead of transcript walk-back;
+  (c) pass `ctx.sid` at the R13b call site (:3194); (d) new pin in test/token-guard-copy.test.js
+  (after the floor-quoted-once test): clear branch carries the sid-templated path + the four
+  sections, sid-less callers render the `<sid>` placeholder, not-fat branch stays handoff-free.
