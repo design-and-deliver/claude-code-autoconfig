@@ -253,8 +253,16 @@ test('writes belonging only to the LIVE topic do not unlock the advisory', () =>
   const dir0 = tmpTitles();
   const survivor = path.join(dir0, 'live.ts');
   fs.writeFileSync(survivor, 'x\n');
-  // Keyed to entry 1 — the current topic — so the DEAD topic still produced nothing.
-  const { dir, transcript } = scopeChangeWithWrites({ '2026-07-29T11:00:00.000Z': [survivor] });
+  // The dead topic is keyed to a MEASURED ZERO rather than left absent. recordWrites creates the
+  // key for every topic it observes (`w[topicTs] = cur`, even when cur is []), so an absent key
+  // means "never observed" — unknown, which declines to gate at all (016a2e9) — and this test
+  // would then be asserting on a ledger shape the writer cannot produce. Keyed this way the dead
+  // topic provably produced nothing, and the live topic's surviving write must not be borrowed to
+  // cover for it.
+  const { dir, transcript } = scopeChangeWithWrites({
+    '2026-07-29T10:00:00.000Z': [],
+    '2026-07-29T11:00:00.000Z': [survivor],
+  });
   assert.equal(clearAdvice(dir, SID, transcript), '');
 });
 
