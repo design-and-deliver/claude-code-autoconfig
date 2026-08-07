@@ -622,7 +622,7 @@ net — see below) · `scripts/sync-hook-fleet.js:33-80` (MANIFEST).
 **Verify:** liveness suite green; both entries gone from the "no new violations" list.
 **Commit:** `refactor(token-guard-liveness): decompose verdict paths` + `Changelog: none`.
 
-### ☐ 4.4 · M · ~45m — terminal-title: `readTailWrites` (17, :738) · `recordMark` (10, :769) · `recordWrites` (17, :804) · [opus]
+### ☑ 4.4 · M · ~45m — terminal-title: `readTailWrites` (17, :738) · `recordMark` (10, :769) · `recordWrites` (17, :804) · [opus] (DONE 2026-08-07, see Ledger)
 
 **Read list** (~250 lines): the phase rules · `terminal-title.js:713-860` (the /clear-advisor
 evidence pipeline: readContextTokens → readTailWrites → recordMark → recordWrites →
@@ -630,10 +630,10 @@ readMarks/readWriteLedger — grep the names first; line numbers drift) · grep
 `test/terminal-title.test.js` for `readTailWrites|recordMark|recordWrites|advises /clear` and
 read those blocks only.
 
-- [ ] Sibling probe (phase rules) — fleet-synced canonical, terminal-title sessions run often.
-- [ ] Decompose the three to CC ≤ 9. All are exported via `module.exports` (`:2267`) — keep
+- [x] Sibling probe (phase rules) — fleet-synced canonical, terminal-title sessions run often.
+- [x] Decompose the three to CC ≤ 9. All are exported via `module.exports` (`:2267`) — keep
       the names; tests import them directly.
-- [ ] ⛔ **`recordWrites`' unconditional keying is load-bearing — do not "tidy" it.**
+- [x] ⛔ **`recordWrites`' unconditional keying is load-bearing — do not "tidy" it.**
       `w[topicTs] = cur` at `terminal-title.js:819` runs even when `cur` is `[]`, and the
       clear-advisory gate's `observed` guard (`:928`) reads an ABSENT key as *never observed*
       (unknown → decline to gate) versus an empty array as *a measured zero* (→ gate). Making
@@ -641,7 +641,7 @@ read those blocks only.
       un-gates the advisory. `8cef0a6` re-pinned this from the test side
       (`.claude/hooks/tests/terminal-title-clear-advice.test.cjs:252-268`), so the net is
       tighter than it was on 2026-08-05 — but read the contract before you touch the writer.
-- [ ] Fleet sync + zero drift.
+- [x] Fleet sync + zero drift.
 
 **Verify:** `node test/terminal-title.test.js` — 129 green (re-confirmed 2026-08-07) · `node
 .claude/hooks/tests/terminal-title-clear-advice.test.cjs` — 23 green; three entries gone from
@@ -1714,3 +1714,46 @@ sibling sessions run — the sibling probe is not a formality here.
     during this session, and terminal-title is the fleet-synced canonical that title sessions
     write constantly. Handoff: /clear → /continue (next: 4.4 · [opus] — already on opus, no
     model switch).
+- **2026-08-07 — 4.4 terminal-title: advisor evidence pipeline to CC≤9 — DONE.** Commit
+  `1554fbc` (refactor) + this doc's tick. Clean handoff from 4.3: nothing was mid-flight.
+  - **Ratchet 13 → 10.** All three entries (`readTailWrites` 17, `recordMark` 10,
+    `recordWrites` 17) left the "no new violations" list. **Every remaining violation is now
+    `token-guard.js`** — 4.5a/b/c own the whole tail, and 4.6 follows with nothing else in the
+    way. Helpers added, all CC ≤ 8: `writeToolPath` / `writePathsOfLine` (readTailWrites);
+    `readMarkFile` / `writeMarkFile` / `needsRebase` / `rebaseMark` (recordMark);
+    `topicSlot` / `appendTopicPaths` / `evictOldTopics` (recordWrites). `readMarkFile` and
+    `writeMarkFile` are shared by both writers — the one genuine dedup in the substep.
+  - **The ⛔ unconditional `w[topicTs] = cur` survived, and now says so in-file.** Kept
+    unconditional and given a four-line comment naming the absent-vs-empty contract and the
+    test that pins it — the next reader meets the warning at the line, not only in this plan.
+  - **Mutation-checked all three** (the net bites, not just passes): conditional keying →
+    `an empty write list is recorded as a measured zero` red; `writeToolPath` without the
+    `WRITE_TOOLS` filter → `readTailWrites picks up the write tools` red; `needsRebase`
+    without the shrink term → `recordMark re-bases the floor on a shrink` red. Restored between
+    each.
+  - ⚠ **Fleet targets were 16 lines behind BEFORE this substep** — the sync carried 63 lines,
+    not the 47 this change added. Some earlier terminal-title commit landed without its sync.
+    All 5 present targets now in sync, zero drift; `workforce-oregon` has no copy (skipped).
+    Downstream copies are UNCOMMITTED in their repos, same precedent as 4.2/4.3.
+  - ⚠ **`sync-docs.js` regenerated `autoconfig.docs.html` with a SIBLING's content, and it is
+    deliberately left uncommitted.** Session `0171e67b` (live, `/continue` + `recover-context`
+    rework) had `commands/continue.md` and `commands/recover-context.md` dirty; the regenerated
+    HTML is 100% their prose and 0% terminal-title (this change produces no docs delta). Left
+    on disk but NOT added — reverting it would have turned the docs-ratchet test red, and
+    committing it would have baked their in-flight work into a generated file. **Precedent for
+    4.5/4.6: check whose hunks a sync-docs run swept in before staging that file.**
+    *Resolved minutes later:* `0171e67b` landed `9486fae` and carried the regenerated HTML with
+    its own source, exactly as leaving it unstaged intended. The tree is clean at 4.4's tip.
+  - Sibling probe: `0171e67b` was live throughout, but its only writes were
+    `.claude/scripts/recover-session.py` and its own title file — no hunks on `terminal-title.js`
+    in any repo, so the file-scoped probe was clear and the substep proceeded. It has since
+    dirtied `scripts/sync-hook-fleet.js` and `test/hook-fleet-sync.test.js`; the scoped sync
+    above therefore RAN their in-flight script version (output sane, zero drift, suite green).
+  - **Full suite:** everything before the ratchet green — including
+    `sync-docs.js reproduces autoconfig.docs.html byte-for-byte` — the ratchet the ONE expected
+    red (phase rule, this doc:551), and all 14 after-ratchet suites re-run individually and
+    green (`hook-tests` fail 0, `terminal-title` 129, `terminal-title-clear-advice` 23).
+  - Next: **4.5a** (token-guard usage cluster: `collectUsageById` 16 · `costOfUsage` 13 ·
+    `parsePlanLedger` 11 · M · [opus]). ⛔ Sibling probe is now MANDATORY-hostile, not routine —
+    every remaining substep edits `token-guard.js`, the file R-series sessions write by design.
+    Handoff: /clear → /continue (next: 4.5a · [opus] — already on opus, no model switch).
