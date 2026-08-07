@@ -257,13 +257,16 @@ test('(a) a god-file Read is R8 door work, not a gateVerdict bomb — one gate o
   const fix = primed();
   const god = bigFile(fix);
   const out = gateOut(call(fix, 'Read', { file_path: god }));
-  assert.equal(out.permissionDecision, 'ask');
-  assert.match(out.permissionDecisionReason, /reading god\.ts in full adds/);   // R8's copy
-  assert.equal(out.permissionDecisionReason.split('\n').length, 1);             // not R14's card
+  // Since 2026-08-07 door 2 DIVERTS rather than asks — but the ownership question this test
+  // exists to pin is unchanged: R8 answers for an unranged god-file Read, R14 does not.
+  assert.equal(out.permissionDecision, 'deny');
+  assert.match(out.permissionDecisionReason, /diverted, not loaded: reading god\.ts/); // R8's copy
+  assert.doesNotMatch(out.permissionDecisionReason, /• Choice:/);                      // not R14's card
   // R8's own escape hatch, re-pinned here because dropping (a) makes it the only one left.
   for (const ranged of [{ limit: 80 }, { offset: 3000 }]) {
     const r = gateOut(call(primed(), 'Read', Object.assign({ file_path: god }, ranged)));
-    assert.doesNotMatch(r.permissionDecisionReason, /in full adds/, JSON.stringify(ranged));
+    assert.doesNotMatch(r.permissionDecisionReason, /in full would add|in full adds/,
+      JSON.stringify(ranged));
   }
 });
 

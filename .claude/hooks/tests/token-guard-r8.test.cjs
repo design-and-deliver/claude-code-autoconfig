@@ -116,18 +116,35 @@ test('E2E door 1: payloadGate:false disables', () => {
   assert.equal(runHook(dir, pre('Skill', { skill: 'tg8-big' }, 'sid-off')), '');
 });
 
-test('E2E door 2: big full read asks; ranged and image reads pass', () => {
+// Door 2 became a DIVERT on 2026-08-07 (was an ask): deny + head preview + the next move, so
+// the rent is refused without spending a user interruption to refuse it.
+test('E2E door 2: big full read diverts with a preview; ranged and image reads pass', () => {
   const dir = mkProject();
   const big = path.join(dir, 'big.txt');
-  fs.writeFileSync(big, 'x'.repeat(200000));
+  fs.writeFileSync(big, 'HEADLINE\n' + 'x'.repeat(200000));
   const img = path.join(dir, 'shot.png');
   fs.writeFileSync(img, Buffer.alloc(200000));
   const out = runHook(dir, pre('Read', { file_path: big }, 'sid-read'));
   const j = JSON.parse(out);
-  assert.equal(j.hookSpecificOutput.permissionDecision, 'ask');
-  assert.match(j.hookSpecificOutput.permissionDecisionReason, /big\.txt/);
+  assert.equal(j.hookSpecificOutput.permissionDecision, 'deny');
+  const why = j.hookSpecificOutput.permissionDecisionReason;
+  assert.match(why, /big\.txt/);
+  assert.match(why, /HEADLINE/);              // the head rode along
+  assert.match(why, /Grep/);                  // ...and so did the way out
+  assert.doesNotMatch(why, /[Aa]pprove/);     // a divert never asks for a decision
   assert.equal(runHook(dir, pre('Read', { file_path: big, limit: 100 }, 'sid-read2')), '');
   assert.equal(runHook(dir, pre('Read', { file_path: img }, 'sid-read3')), '');
+});
+
+test('E2E door 2: readDivertTokens:null reverts to the pre-2026-08-07 ask', () => {
+  const dir = mkProject();
+  fs.writeFileSync(path.join(dir, '.claude', 'cca.config.json'),
+    JSON.stringify({ tokenGuard: { readDivertTokens: null } }));
+  const big = path.join(dir, 'big.txt');
+  fs.writeFileSync(big, 'x'.repeat(200000));
+  const j = JSON.parse(runHook(dir, pre('Read', { file_path: big }, 'sid-read-off')));
+  assert.equal(j.hookSpecificOutput.permissionDecision, 'ask');
+  assert.match(j.hookSpecificOutput.permissionDecisionReason, /Approve/);
 });
 
 test('E2E door 3: oversized slash command blocks once, re-send passes', () => {

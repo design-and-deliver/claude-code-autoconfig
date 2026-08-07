@@ -26,8 +26,10 @@
  *                           history-based estimate; R10 flags a fan whose SHAPE is disproportionate
  *                           to the task (a fan-named constant >= threshold, or a fan nested inside a
  *                           fan over run-time data). R10 asks (never blocks) and fires even with R2 off;
- *                       (b) R8: payload pre-gate — ask BEFORE a bomb-sized Skill/Read payload
- *                           lands (R3 warns after; this fires while the rent is avoidable);
+ *                       (b) R8: payload pre-gate — intercept BEFORE a bomb-sized Skill/Read
+ *                           payload lands (R3 warns after; this fires while the rent is still
+ *                           avoidable). Door 1 (Skill) asks the user; door 2 (Read) DIVERTS —
+ *                           deny + head preview + the Grep/ranged-read next move, no ask at all;
  *                       (c) R9: one-shot ask once the turn's accumulator crossed (opt-in);
  *                       (d) R3: one-shot post-bomb gate when bombGateWhenFat is on;
  *                       (e) R13b: turn-spend tripwire — hard ask once ONE turn's work tokens
@@ -143,7 +145,12 @@
  *   backstop. A multiplicative "up to N (a × b)" ceiling rides the ask as honest scale but never
  *   drives the block (blocking on an estimated product would be the false-precision this refuses).
  *   Composes with R2 and fires even when workflowConfirm is off.
- *   payloadGate true — R8 doors 1-2: PreToolUse ask on Skill/Read payloads > bombJumpTokens
+ *   payloadGate true — R8 doors 1-2. Door 1: PreToolUse ask on a Skill payload > bombJumpTokens.
+ *   Door 2: an unranged Read over readDivertTokens (15k est, 8k under token-saver) is DIVERTED —
+ *   denied with a head preview and the Grep/offset next move, no user ask. The bar sits far below
+ *   bombJumpTokens because the action is free: an ask has to earn an interruption, a divert costs
+ *   ~300 tokens and one hop at worst. Sized off the 2026-08-07 forensics, where a 53KB read on
+ *   request 4 of 39 cost ~1.2M tokens and passed the 50k ask bar in silence. null = revert to ask.
  *   commandPayloadGate false — R8 door 3: UserPromptSubmit block on oversized slash commands
  *   miniBombWarn true — R9: mid-turn note to Claude when a turn's tool results sum past
  *   bombJumpTokens · miniBombGate false — R9 escalation: one-shot ask on the next tool call
@@ -277,6 +284,11 @@ const DEFAULTS = {
   fanWarnAgents: 10,
   fanHardCap: 50,
   bombJumpTokens: 50000,
+  readDivertTokens: 15000,       // R8 door 2: divert an unranged Read past this to a head preview.
+                                 // Far below bombJumpTokens on purpose — a divert costs the user
+                                 // nothing (no ask, ~300 tokens of preview), so the bar that a
+                                 // user-interrupting ask had to clear no longer applies. null =
+                                 // off, and door 2 reverts to the pre-2026-08-07 ask at bombJumpTokens.
   bombGateWhenFat: false,
   payloadGate: true,
   commandPayloadGate: false,
@@ -329,6 +341,7 @@ const TOKEN_SAVER = {
   // driftMinContextTokens is left at its principled 100k floor (below it /eval's CUT verdict
   // isn't pre-determined — R6).
   bombJumpTokens: 30000,
+  readDivertTokens: 8000,        // divert sooner; the action is free, so max-protection just lowers the bar
   fanWarnAgents: 5,
   idleWarnMinutes: 30,
   contextWarnTokens: 100000,     // flag context bloat earlier than the 150k default
@@ -899,14 +912,19 @@ const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|ico|svg|pdf)$/i; // vision tokens �
 function payloadVerdict(toolName, toolInput, sizes, cfg) {
   if (!sizes) return null;
   if (toolName === 'Skill') {
+    // No divert for door 1: a skill loads whole or not at all, so there is no head to preview
+    // and the cheaper lever (a disposable subagent) is a real decision only the user can make.
     if (sizes.skillTok == null || sizes.skillTok <= cfg.bombJumpTokens) return null;
-    return { door: 'skill', estTokens: sizes.skillTok, floor: !!sizes.skillFloor };
+    return { door: 'skill', action: 'ask', estTokens: sizes.skillTok, floor: !!sizes.skillFloor };
   }
   if (toolName === 'Read') {
     if (toolInput && (toolInput.offset != null || toolInput.limit != null)) return null;
     if (sizes.fileChars == null || sizes.isImage) return null;
     const tok = Math.round(sizes.fileChars / CHARS_PER_TOKEN);
-    return tok > cfg.bombJumpTokens ? { door: 'read', estTokens: tok } : null;
+    const divert = cfg.readDivertTokens != null;
+    const bar = divert ? cfg.readDivertTokens : cfg.bombJumpTokens;
+    if (tok <= bar) return null;
+    return { door: 'read', action: divert ? 'divert' : 'ask', estTokens: tok };
   }
   return null;
 }
@@ -958,6 +976,31 @@ function readSizes(filePath) {
   if (!filePath) return null;
   try { return { fileChars: fs.statSync(filePath).size, isImage: IMAGE_EXT.test(filePath) }; }
   catch (_) { return null; }
+}
+
+// The divert half of door 2. Reads a fixed HEAD window through a file descriptor — never
+// readFileSync — so the guard that exists to stop a bomb can never load one itself. Two caps,
+// both required: PREVIEW_LINES is what makes it readable, PREVIEW_BYTES is what makes it safe
+// (a minified bundle or a one-line JSON blob is a single "line", and without the byte cap the
+// whole payload would ride in through the preview channel).
+const PREVIEW_BYTES = 1200;
+const PREVIEW_LINES = 12;
+
+function readHead(filePath) {
+  if (!filePath) return null;
+  let fd = null;
+  try {
+    fd = fs.openSync(filePath, 'r');
+    const buf = Buffer.alloc(PREVIEW_BYTES);
+    const n = fs.readSync(fd, buf, 0, PREVIEW_BYTES, 0);
+    if (!n) return null;
+    const head = buf.slice(0, n).toString('utf8').split('\n').slice(0, PREVIEW_LINES).join('\n');
+    return head.trim() ? head : null;
+  } catch (_) {
+    return null; // unreadable head just means a preview-less divert — never break the door
+  } finally {
+    if (fd != null) { try { fs.closeSync(fd); } catch (_) { /* already gone */ } }
+  }
 }
 
 // Door 3: user-typed slash command — resolution order mirrors Claude Code's own
@@ -3133,14 +3176,39 @@ function payloadAskCopy(ti, v) {
     `Approve to read it in full anyway.`;
 }
 
+// Door 2's DIVERT copy — model-facing (a deny's reason goes to Claude, not to the user), so it
+// has to read as a redirect carrying the next move, never as a refusal. Preview first: it
+// answers "is this even the right file?" most of the time, which is what the full read was
+// usually for. Then the two cheap ways to get the rest, so the divert costs one hop at worst.
+function payloadDivertCopy(ti, v, head) {
+  return `⚠️ Hey — diverted, not loaded: reading ${path.basename(String(ti.file_path || ''))} ` +
+    `in full would add ~${fmtK(v.estTokens)} tokens to this conversation permanently, and rent ` +
+    `is that figure times every request left in the session — not a one-time charge.\n\n` +
+    (head ? `Head of the file:\n${head}\n\n` : '') +
+    `The content is one hop away: Grep it for the key you need, or Read it with offset/limit ` +
+    `for a window. Read it whole only once you have established you need all of it.`;
+}
+
+// The two doors R8 gates. A Set keeps the door test one fork instead of one per tool name.
+const PAYLOAD_DOORS = new Set(['Skill', 'Read']);
+
+// A divert lands nothing and asks nobody: no payload enters context, so there is no hop for
+// R3 to attribute and no state to arm. Split out so the door guard stays under the CC bar.
+function payloadDivert(ti, v) {
+  return { kind: 'deny', reason: payloadDivertCopy(ti, v, readHead(String(ti.file_path || ''))) };
+}
+
 // R8 — payload pre-gate, doors 1-2. One ask in the moment the rent is still avoidable;
 // R3 only gets to warn about payloads that never came through here.
 function r8PayloadDoorGuard(ctx) {
   const { cfg, data, projectDir } = ctx;
-  if (!cfg.payloadGate || (data.tool_name !== 'Skill' && data.tool_name !== 'Read')) return null;
+  if (!cfg.payloadGate || !PAYLOAD_DOORS.has(data.tool_name)) return null;
   const ti = data.tool_input || {};
   const v = payloadVerdict(data.tool_name, ti, doorSizes(projectDir, data, ti), cfg);
   if (!v) return null;
+  // It never touches preState — this runs on EVERY tool call, and the common path stays a
+  // stat plus a 1.2KB head read.
+  if (v.action === 'divert') return payloadDivert(ti, v);
   // One decision, one surface: mark the hop so R3 doesn't re-warn what the user just
   // decided at this gate. ttl 1 = disarms at the next prompt if nothing landed (denied).
   // Skill hops carry the name so the landing can be recorded as an observed budget row.
@@ -4066,6 +4134,7 @@ if (require.main === module) {
 module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, ledgerScopes, officialLines,
   claudeCodeUA, fetchOfficialUsage,
   analyzeSession, renderAnalysis, payloadVerdict, fanVerdict, workflowSource, skillSizes, recordObservedSkill,
+  payloadDivertCopy, readHead,                 // test/token-guard-divert.test.js — R8 door 2 divert
   generateBudgets, slug, driftNote, driftDeferralTick, recoverTail, restartBullet, restartPos,
   handoffPath,                                 // checkpoint handoff — /continue's top recovery rung
   restartVerdict, choiceBullet, rentAskCopy,   // test/token-guard-copy.test.js — R14 copy contract
