@@ -18,6 +18,7 @@
  *   --max <n>              max iterations this invocation (default 6)
  *   --permission-mode <m>  passed to claude -p (default acceptEdits)
  *   --dangerous            pass --dangerously-skip-permissions instead (unattended runs)
+ *   --model <m>            passed to claude -p (e.g. opus — spend a different usage pool)
  *   --iter-timeout <min>   kill a hung iteration after N minutes (default 90)
  *   --dry-run              show what would run, spawn nothing
  *
@@ -48,6 +49,7 @@ if (!planPath || !fs.existsSync(planPath)) {
 const maxIter = parseInt(opt('--max', '6'), 10);
 const permissionMode = opt('--permission-mode', 'acceptEdits');
 const dangerous = flag('--dangerous');
+const childModel = opt('--model', '');
 const dryRun = flag('--dry-run');
 const iterTimeoutMs = parseFloat(opt('--iter-timeout', '90')) * 60 * 1000;
 
@@ -129,6 +131,7 @@ function runIteration(n) {
     const args = ['-p', '--output-format', 'text'];
     if (dangerous) args.push('--dangerously-skip-permissions');
     else args.push('--permission-mode', permissionMode);
+    if (childModel) args.push('--model', childModel);
 
     console.log(`\n=== iteration ${n} — spawning fresh session (log: ${logPath}) ===`);
     const child = spawn('claude', args, { cwd, shell: true, stdio: ['pipe', 'pipe', 'pipe'] });
