@@ -237,3 +237,18 @@ commit, append a Ledger entry, tick the checkbox, then `/clear` + `/continue`.
     denied the `npm test` call at this turn's round-trip ceiling. The two standing debts
     (complexity-ratchet's 16; `terminal-title-clear-advice`'s live-topic gate) are untouched by
     1.4 and still mean **the pre-push guard will block a push** of 1.1–1.4 until they are cleared.
+- 2026-08-07 — debt 2 of 2 CLEARED (8cef0a6) — `terminal-title-clear-advice.test.cjs:252`. Not a
+  code regression: the **test** was wrong, and the gate was right. `recordWrites` keys every topic
+  it observes (`terminal-title.js:819`, `w[topicTs] = cur` runs even when `cur` is `[]`), so an
+  absent key means *never observed* → unknown → the `observed` guard (`:928`) deliberately declines
+  to gate (HONEST-NUMBERS CONTRACT, 016a2e9). The fixture seeded ONLY the live topic's key, so the
+  dead topic read as unobserved and the advisory correctly fired where the test expected `''` —
+  a ledger shape the writer cannot produce. Fixed by keying the dead topic to an explicit `[]`.
+  Teeth verified (inverting `observed &&` fails it; restoring passes). File 23/23, hook suite
+  327/327, complexity-ratchet unchanged at the same 16. Fleet: not synced — `sync-hook-fleet.js`'s
+  MANIFEST carries no test files at all (`scripts/sync-hook-fleet.js:33-80`), so this file is
+  CCA-only; JAE's `.claude/hooks/tests/` holds only claim-registry + worktree-gate.
+  - **Remaining blocker is now debt 1 alone**: complexity-ratchet's 16 CC≥10 violations in
+    `claim-registry.js`, `terminal-title.js`, `token-guard-liveness.js`, `token-guard.js`. Until
+    that is cleared the `&&` chain still aborts before the hook suites and **the pre-push guard
+    still blocks a push** of 1.1–1.4.
