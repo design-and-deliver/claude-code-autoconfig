@@ -177,6 +177,10 @@
  *   fat-context advisory (UserPromptSubmit, once per prompt) this one re-checks mid-turn, which
  *   is the only place rent accrues. Same geometric re-arm and repeat-naming copy as R13b above;
  *   every prompt resets the baseline and the fire count. null disables.
+ *   BOTH in-turn tripwires sit out a RECOVERY turn (/continue, /recover-context,
+ *   /migrate-new-session) — see recoveryExempt. `/clear` raises no assistant turn, so the pair
+ *   lands as turn 1 of the fresh session and the recovery runs alone for dozens of re-reading
+ *   trips; the cards fire correctly and then offer /clear + /continue to a user already inside it.
  *   planSteer true — R13a: one-line every-prompt steer telling Claude to gauge the request's
  *   blast radius FIRST and author a plan doc (session-sized substeps + Ledger) before starting
  *   work beyond ONE normal task — beyond-small work is plan-based, so /continue can resume it
@@ -261,6 +265,9 @@ const COLD_START_BACKFILL_BYTES = 128 * 1024;// bounded head-read per transcript
 const TASK_NORM_TOK = 100000;                // R13: a normal task finishes under this — the spiral yardstick
 const PLAN_STEER_TOK = TASK_NORM_TOK;        // R13a: beyond-small bar quoted in the plan-first steer — any task
                                              // beyond one normal session is PLAN-BASED (agreed 2026-08-05)
+// Commands whose whole job is to REBUILD context — the turn R13b and R14 must stay out of
+// (2026-08-07). Bare command names, no leading slash; see isRecoveryTurn.
+const RECOVERY_COMMANDS = new Set(['continue', 'recover-context', 'migrate-new-session']);
 
 const DEFAULTS = {
   tokenSaver: false,                // Cost Control: single on/off toggle. Off = this light default posture;
@@ -1275,7 +1282,8 @@ function loadState(projectDir, sid) {
     turnPayloadTok: 0, turnPayloadWarned: false, miniBombGateArmed: false,
     lastWindowPct: null, lastWindowResetsAt: null, lastWindowAtIso: null, warnedWindow: null,
     lastTurnDeltaUsd: 0, turnStartWorkTok: null, turnGateAt: null, turnGateFires: 0,
-    turnStartCr: null, turnStartReqs: null, rentGateAt: null, rentGateFires: 0 };
+    turnStartCr: null, turnStartReqs: null, rentGateAt: null, rentGateFires: 0,
+    recoveryTurn: false };
   try {
     return Object.assign(blank,
       JSON.parse(fs.readFileSync(path.join(stateDir(projectDir), `${sid}.json`), 'utf8')));
@@ -3002,8 +3010,17 @@ async function onUserPromptSubmit(data, projectDir) {
   // R9 — new turn, new accumulator (persisted by whichever branch saves state below).
   st.turnPayloadTok = 0; st.turnPayloadWarned = false; st.miniBombGateArmed = false;
 
+  // R13b/R14 — rewritten from the prompt EVERY turn, so the exemption is exactly one turn wide.
+  // This must sit above the brand-new-session return below: that return is the branch a
+  // `/clear` + `/continue` pair actually takes (see recoveryExempt), so a flag set after it
+  // would never reach the recovery turn it exists for.
+  st.recoveryTurn = isRecoveryTurn(data.prompt);
+
   const m = meterSession(data.transcript_path, { fleet: cfg.fleetMeter, projectDir });
-  if (!m.main.turns) return; // brand-new session — nothing to say
+  if (!m.main.turns) {
+    saveState(projectDir, sid, st); // turn 1 has no meter to speak from, but the flag must persist
+    return;                         // for the PreToolUse guards that run inside this same turn
+  }
   // R13b — new turn: re-baseline the turn-spend meter and disarm any same-turn re-arm.
   // (Turn 1 of a brand-new session never reaches here — PreToolUse lazy-arms the baseline.)
   st.turnStartWorkTok = workTokens(m); st.turnGateAt = null; st.turnGateFires = 0;
@@ -3241,6 +3258,37 @@ function r3PostBombGateGuard(ctx) {
     `/clear, then /continue to shed it and keep this thread.`);
 }
 
+// Is THIS prompt one of the recovery commands? Accepts the bare `/continue` a user types and
+// the expanded `<command-name>/continue</command-name>` form, because only the first is a
+// contract — reading both costs one regex and removes the way this silently stops working.
+function isRecoveryTurn(prompt) {
+  const s = String(prompt || '').trim();
+  const bare = /^\/([\w:-]+)/.exec(s);
+  const tagged = /<command-name>\s*\/?([\w:-]+)\s*<\/command-name>/.exec(s);
+  return RECOVERY_COMMANDS.has((bare && bare[1]) || '') ||
+    RECOVERY_COMMANDS.has((tagged && tagged[1]) || '');
+}
+
+// The recovery turn is EXEMPT from both in-turn tripwires (2026-08-07). `/clear` produces no
+// assistant turn of its own, so a `/clear` + `/continue` pair lands as turn 1 of the fresh
+// session and `/continue` then runs alone for dozens of round trips re-reading the old thread:
+// 68 trips and 6.5M of raw re-reads on the pair measured that day, six times R14's gate. Both
+// fires were arithmetically correct and completely useless — the only remedy either card offers
+// IS `/clear + /continue`, so the user who had just done exactly what the previous advisory told
+// them got told it again, mid-recovery, twice. That is the same failure this file already refuses
+// elsewhere (see r14TurnRentGuard's silence clause): a blocking confirm whose own advice is what
+// you are already doing is wallpaper, and here it is worse than wallpaper because denying aborts
+// the recovery and leaves the session holding neither the old context nor the new.
+//
+// Exempting the whole turn is deliberate. A cheaper-looking alternative — keep the gate, reword
+// the card — still interrupts a turn whose only honest advice is "let it finish", and the copy
+// would have to name a lever that does not exist. The exemption is one turn wide: the flag is
+// rewritten from the prompt on every UserPromptSubmit, so the turn AFTER the recovery is metered
+// normally, and a spiral that outlives the recovery is caught at the next prompt boundary.
+function recoveryExempt(st) {
+  return !!(st && st.recoveryTurn);
+}
+
 // R13b — turn-spend tripwire: ONE turn's work tokens (main + fleet, delta since the last
 // prompt) crossing turnGateTokens means the task spiraled ~10× past a normal one — nobody
 // consciously chose that spend. Checked before the session gate (the sharper signal), and
@@ -3249,6 +3297,8 @@ function r3PostBombGateGuard(ctx) {
 function r13bTurnSpendGuard(ctx) {
   const { cfg, m, st, verdict } = ctx;
   if (cfg.turnGateTokens == null) return null;
+  if (recoveryExempt(st)) return null; // see recoveryExempt — returns BEFORE the lazy-arm below,
+                                       // so the next prompt re-baselines from scratch
   const nowTok = workTokens(m);
   if (st.turnStartWorkTok == null) {
     // No baseline yet (turn 1 of a fresh session, or a session whose baseline predates the
@@ -3261,6 +3311,14 @@ function r13bTurnSpendGuard(ctx) {
   const turnTok = nowTok - st.turnStartWorkTok;
   const tGate = st.turnGateAt != null ? st.turnGateAt : cfg.turnGateTokens;
   if (turnTok < tGate || skipVerdict(verdict)) return null;
+  return turnSpendAsk(ctx, turnTok);
+}
+
+// The R13b fire path — re-arm, then render the card. Split out of the guard above when the
+// recovery exemption's one guard clause took it to CC 10: the guard is now purely "should this
+// fire?", this is "what does firing say", and each clears the bar on its own.
+function turnSpendAsk(ctx, turnTok) {
+  const { cfg, m, st, verdict } = ctx;
   // Re-arm ABOVE the observed spend, at a width that DOUBLES each same-turn fire — see
   // nextCheckClause for why a flat step stopped working.
   st.turnGateFires = (st.turnGateFires || 0) + 1;
@@ -3380,6 +3438,7 @@ function rentAskCopy(ctx, rent, rvIn) {
 function r14TurnRentGuard(ctx) {
   const { cfg, m, st, verdict } = ctx;
   if (cfg.turnRentGateTokens == null) return null;
+  if (recoveryExempt(st)) return null; // see recoveryExempt — the recovery turn IS the remedy
   if (st.turnStartCr == null) {
     // No baseline (turn 1 of a fresh session, or state written before R14 existed): arm it
     // mid-turn — undercounts this turn rather than billing the whole session's rent to it.
@@ -4138,6 +4197,8 @@ module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, l
   generateBudgets, slug, driftNote, driftDeferralTick, recoverTail, restartBullet, restartPos,
   handoffPath,                                 // checkpoint handoff — /continue's top recovery rung
   restartVerdict, choiceBullet, rentAskCopy,   // test/token-guard-copy.test.js — R14 copy contract
+  isRecoveryTurn,                              // test/token-guard-recovery.test.js — R13b/R14 exemption
+  r13bTurnSpendGuard, r14TurnRentGuard,        // …and the two guards it drives through the exemption
   crossedSpendSteps,                           // test/token-guard-ladder.test.js — session-total ladder
   meterCanaryVerdict, meterCanaryNote,         // test/token-guard-canary.test.js — meter fail-open canary
   coldStartTokens, firstContextOfHead, clearTail,  // R15b cold-start meter
