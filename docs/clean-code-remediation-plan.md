@@ -609,15 +609,15 @@ net — see below) · `scripts/sync-hook-fleet.js:33-80` (MANIFEST).
 **Verify:** new suite green; claim-registry gone from the "no new violations" list.
 **Commit:** `refactor(claim-registry): manifest + decompose readLiveClaims (test-first)` + `Changelog: none`.
 
-### ☐ 4.3 · M · ~30m — token-guard-liveness: `livenessVerdict` (CC 13, :50) + the :80 arrow (CC 12) · [opus]
+### ☑ 4.3 · M · ~30m — token-guard-liveness: `livenessVerdict` (CC 13, :50) + the :80 arrow (CC 12) · [opus] (DONE 2026-08-07, see Ledger)
 
 **Read list** (~250 lines): the phase rules · `.claude/hooks/token-guard-liveness.js` **whole**
 (114 lines) · `test/token-guard-liveness.test.js` (the existing net).
 
-- [ ] Sibling probe (phase rules) — the canary pairs with token-guard, same writers.
-- [ ] Decompose both to CC ≤ 9. ⚠ The canary must never require() token-guard (load isolation
+- [x] Sibling probe (phase rules) — the canary pairs with token-guard, same writers.
+- [x] Decompose both to CC ≤ 9. ⚠ The canary must never require() token-guard (load isolation
       is its design property — a load-time throw must not kill both). Helpers stay in-file.
-- [ ] Fleet sync + zero drift (manifested, `pairsWith: token-guard.js`).
+- [x] Fleet sync + zero drift (manifested, `pairsWith: token-guard.js`).
 
 **Verify:** liveness suite green; both entries gone from the "no new violations" list.
 **Commit:** `refactor(token-guard-liveness): decompose verdict paths` + `Changelog: none`.
@@ -1669,3 +1669,48 @@ sibling sessions run — the sibling probe is not a formality here.
     and own the uncommitted `token-guard.js`; the canary pairs with it and shares those writers.
     Handoff: /clear → /continue (next: 4.3 · [opus] — already on opus, no model switch).
 
+- **2026-08-07 — 4.3 token-guard-liveness: decompose the verdict paths — DONE.** Commit
+  `d23e7cd`. `livenessVerdict` 13 → 3 and the `main()` arrow 12 → 1; both entries gone from the
+  ratchet's new-violations list (16 → 13 — see the membership note below). Liveness suite 15/15;
+  fleet check zero drift.
+  - **Split across two sessions.** `e173e80e` (opus, 10m) did the decompose and wrote the four
+    new I/O tests, then was interrupted mid-mutation-check with nothing verified or committed.
+    This session found the tree dirty, finished it, and committed.
+  - ⚠ **The interrupted session's extraction was NOT behavior-preserving, and its own test
+    caught it.** Lifting the stdin arrow into `livenessCheck(data)` silently dropped the
+    arrow's `if (!sid) return process.exit(0)` — a sessionless payload would have created the
+    state dir, written `.liveness.json`, and fired a blank-sid note on the 3rd such prompt. The
+    in-flight test `a wrong event or a missing sid is ignored and writes no state` was red on
+    arrival; `if (!sid) return '';` at `token-guard-liveness.js:126` restores it. Behavior-
+    preservation is the substep's own rule (this doc:560) — the lesson is that the
+    characterization test has to be written to the OLD arrow's early exits, not to the new
+    function's shape, or the extraction grades itself.
+  - **Decompose shape** (all hoisted `function` decls, single file held, no require() of
+    token-guard): pure half → `normalizePrev` · `isGuardAlive` · `advanceState` · `shouldFire`;
+    I/O half → `readJson` · `guardMtime` · `persistState` · `resolveProjectDir` · `livenessCheck`.
+    `livenessCheck` is added to `module.exports` **for the suite** — the I/O seam previously had
+    ZERO coverage (reachable only by spawning the hook). It reads the config once where the old
+    arrow read it twice; same value, one fewer file read per prompt.
+  - **All four new tests were mutation-checked** and bite: no-op `persistState` → the Nth-prompt
+    test fails; always-null `guardMtime` → the live-guard test fails; a threshold defaulted past
+    null → both disable tests fail. The missing-sid one needed no mutant — it caught a real
+    regression.
+  - **Ratchet membership moved again, in our favor.** `r13bTurnSpendGuard` (flagged in 4.2's
+    ledger as an unlisted arrival) is GONE — the sibling R-series session landed `7ba2813` and
+    it no longer violates. So the 16 → 13 drop is liveness's 2 plus that one, and no 4.x list
+    needs to absorb it. `token-guard.js` fleet drift is also cleared; only the liveness canary
+    was behind (53 lines, both repos).
+  - **Downstream copies synced but UNCOMMITTED**, same precedent as 4.2: `--files
+    token-guard-liveness.js` (scoped, per 4.2's warning) carried it into `job-agent-extension`
+    and `wifi-app`, for those repos' own sessions to land.
+  - **Full suite:** every suite before the ratchet green; the ratchet is the ONE expected red
+    (phase rule, this doc:551); all 14 after-ratchet suites re-run individually and green
+    (`hook-tests` 332/332). `sync-docs.js` produced no diff.
+  - rent: `e173e80e` 3.2M processed / ≈456k effective (30 req) + this session 3.4M / ≈439k
+    (34 req) ≈ **895k effective summed** — M ceiling ≈1.5M holds, tag stands. This session read
+    the plan in slices (trap block + substep + `tail -40` of the Ledger), not whole.
+  - Next: **4.4** (terminal-title: `readTailWrites` 17 · `recordMark` 10 · `recordWrites` 17 ·
+    M · [opus]). ⛔ Sibling probe again — `0914efa8` was live on `/continue` recovery work
+    during this session, and terminal-title is the fleet-synced canonical that title sessions
+    write constantly. Handoff: /clear → /continue (next: 4.4 · [opus] — already on opus, no
+    model switch).
