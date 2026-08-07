@@ -47,6 +47,7 @@ It prints one JSON object and never hard-fails. Fields:
 | `liveSiblings`, `siblingGate` | concurrency gate: `STOP` or `CLEAR` |
 | `cutoffIso`, `via` | the recovery window and which ladder rung set it |
 | `tempFile`, `messages`, `tokens`, `readTempFile` | the extracted context |
+| `droppedOlder`, `clipped` | how many messages the 3k-token size cap dropped / shortened |
 
 On `{"error": "NO_PREVIOUS_SESSION"}` → say "I can't find a previous session for this
 terminal." and suggest `/recover-context -60` for time-window recovery instead, then stop.
@@ -54,6 +55,15 @@ On `PROBE_FAILED`, fall back to `/recover-context`'s prose steps.
 
 The extract already ran, to `tempFile` — always THIS run's content, so the stale-leftover
 hazard (the extract writes a fixed filename and nothing cleans it up) cannot bite.
+
+**The extract is capped at ~3k tokens**, because every other guard in the cutoff ladder
+measures TIME and time is the wrong dimension: a dense session whose title never shifted
+(the compass is supposed to change rarely) reaches back over the whole session. Measured
+2026-08-07 across 363 sessions, the payload is 660 tok at p50 — but one 43-minute session
+extracted 156k. Over the cap, the OLDEST messages go first and any survivors still too big
+are clipped head-and-tail; `via` then gains `, size-capped at 3000 tok`. When you see that,
+**read `tempFile` as a tail, not as the whole thread** — the head is context you re-derive
+from `git log` if it matters. Under the cap (95% of recoveries) the payload is untouched.
 
 ## Step 2: Read the right source
 

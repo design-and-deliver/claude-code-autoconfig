@@ -53,6 +53,8 @@ POINTER_REL = os.path.join('.claude', 'hooks', '.token-guard', 'recover.json')
 PLAN_DIRS = ['docs', '.claude/plans']
 LIVENESS_SECS = 180        # same bar as the dupe-session guard
 HANDOFF_DRIFT = 180        # note is STALE if the transcript ran on past it
+MAX_EXTRACT_TOKENS = 3000  # payload ceiling -- see cap_to_budget()
+MIN_EXTRACT_MSGS = 4       # ...never trimmed below this, however long the messages
 STOP_WORDS = {'plan', 'plans', 'doc', 'docs', 'the', 'and', 'for', 'with'}
 SUBSTEP_RE = re.compile(r'^#{2,4}\s+([☑☐])\s*(.*)$')      # ☑ / ☐
 TRAP_RE = re.compile(r'^#{1,4}.*⛔')                            # ⛔ heading
@@ -373,6 +375,58 @@ def live_siblings(plan_doc, sid_now):
 # Extract
 # --------------------------------------------------------------------------
 
+def clip_middle(text, budget):
+    """Keep a long message's head and tail, elide the middle. Head-heavy: a dump's
+    opening says what it is, its last lines say where it ended."""
+    lim = budget * 4
+    if len(text) <= lim:
+        return text
+    return '%s\n\n... [%d tokens elided] ...\n\n%s' % (
+        text[:lim * 2 // 3], (len(text) - lim) // 4, text[-(lim // 3):])
+
+
+def cap_to_budget(results, budget=MAX_EXTRACT_TOKENS, floor=MIN_EXTRACT_MSGS):
+    """Bound the payload: clip oversized messages, then drop OLDEST ones until it
+    fits `budget`. Returns (kept, {'droppedOlder': n, 'clipped': m}).
+
+    Every other guard here measures TIME -- the 15min walk-back, the 60min marathon
+    floor, the title-thread widening -- and time is the wrong dimension. A dense,
+    fast session never trips the 60min floor, so a title that never shifted (the
+    compass is SUPPOSED to change rarely) reaches back over the entire session.
+    Measured 2026-08-07 across 363 job-agent-extension sessions: the payload is
+    660 tok at p50 and 2,580 at p90, but one 43-minute session extracted 156,512 --
+    a 5,000x overrun no time-based cap can see. At 3k the cap leaves 95% of real
+    recoveries byte-identical.
+
+    ⛔ Message-count trimming ALONE does not bound this, and the floor is why: that
+    same session's 156k sat in FOUR messages, so `floor` (rightly) kept all of them
+    and dropping did nothing. One pasted dump always defeats a count. So when the
+    floor binds, the survivors get clipped to an equal share of what is left.
+
+    Clipping runs LAST, and only then, on purpose: a payload already inside the
+    budget is returned byte-identical. Clipping every long message up front instead
+    (a fixed per-message ceiling) altered 32% of real sessions to fix the 5% that
+    were actually over -- measured, then rejected.
+
+    Oldest-first because recovery reads BACKWARD: the tail is the in-flight work,
+    the head is context the resumed session can re-derive from git if it matters.
+    """
+    est = [len(r['text']) // 4 for r in results]
+    total, i = sum(est), 0
+    while total > budget and len(results) - i > floor:
+        total -= est[i]
+        i += 1
+
+    kept, clipped = results[i:], 0
+    if total > budget and kept:
+        share = max(1, budget // len(kept))
+        for r in kept:
+            short = clip_middle(r['text'], share)
+            if short != r['text']:
+                r['text'], clipped = short, clipped + 1
+    return kept, {'droppedOlder': i, 'clipped': clipped}
+
+
 def extract(paths, cutoff):
     results = []
     for path in paths:
@@ -418,10 +472,11 @@ def extract(paths, cutoff):
                                 'timestamp': ts, 'text': text.strip()})
 
     results.sort(key=lambda r: r['timestamp'])
+    results, capped = cap_to_budget(results)
     tmp = os.path.join(tempfile.gettempdir(), 'recovered-context.json')
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
-    return results, tmp
+    return results, tmp, capped
 
 
 def stamps_and_tail(path, needles=()):
@@ -490,12 +545,14 @@ def main():
         if not needed:
             print(json.dumps({'error': 'NO_TRANSCRIPTS'}))
             return
-        res, tmp = extract(needed, cutoff)
-        print(json.dumps({'mode': 'minutes', 'minutes': args.minutes,
-                          'cutoffIso': cutoff.isoformat(), 'sessions': len(needed),
-                          'messages': len(res),
-                          'tokens': sum(len(r['text']) for r in res) // 4,
-                          'tempFile': tmp, 'readTempFile': True}, indent=2))
+        res, tmp, capped = extract(needed, cutoff)
+        out = {'mode': 'minutes', 'minutes': args.minutes,
+               'cutoffIso': cutoff.isoformat(), 'sessions': len(needed),
+               'messages': len(res),
+               'tokens': sum(len(r['text']) for r in res) // 4,
+               'tempFile': tmp, 'readTempFile': True}
+        out.update(capped)
+        print(json.dumps(out, indent=2))
         return
 
     # ---------- pointer mode ----------
@@ -581,12 +638,17 @@ def main():
     out['cutoffIso'] = cutoff.isoformat()
     out['via'] = via
 
-    res, tmp = extract([path], cutoff)
+    res, tmp, capped = extract([path], cutoff)
+    if capped['droppedOlder'] or capped['clipped']:
+        # The window the time-based cutoff picked was too wide; say so, because the
+        # extract is now a TAIL and the model must not read it as the whole thread.
+        out['via'] += ', size-capped at %d tok' % MAX_EXTRACT_TOKENS
     out.update({'messages': len(res),
                 'tokens': sum(len(r['text']) for r in res) // 4,
                 'tempFile': tmp,
                 # A fresh note already says what the walk-back would infer.
                 'readTempFile': not (handoff and handoff_fresh)})
+    out.update(capped)
     print(json.dumps(out, indent=2))
 
 

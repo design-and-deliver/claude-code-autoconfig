@@ -61,6 +61,7 @@ all happen inside that one process. It prints one JSON object and never hard-fai
 | `handoff`, `handoffState` | checkpoint note path + `FRESH`/`STALE` |
 | `cutoffIso`, `via` | the recovery window and which ladder rung set it |
 | `tempFile`, `messages`, `tokens`, `sessions` | the extracted context |
+| `droppedOlder`, `clipped` | how many messages the 3k-token size cap dropped / shortened |
 | `readTempFile` | whether to actually open `tempFile` |
 
 Errors, each terminal — report and stop:
@@ -85,6 +86,13 @@ the result looks like the wrong session, rerun with `pid=N` or minutes mode.
 exchanges as your own memory of what happened** — you are re-reading a conversation you
 already had with this user. `parentUuid` tells you which messages share a thread.
 
+The extract is capped at ~3k tokens: the cutoff ladder measures TIME, which cannot see a
+dense session (one 43-minute session measured 156k, against a 660-tok p50 across 363
+sessions), and minutes mode spanning many sessions blows past it routinely. Over the cap
+the OLDEST messages go first, then any survivors still too big are clipped head-and-tail.
+`droppedOlder`/`clipped` say whether that happened — when either is non-zero, read the file
+as a **tail**, and say so in Step 4 rather than implying the whole window came back.
+
 **`readTempFile: false`** (a FRESH `handoff`) → read the handoff note at `handoff` INSTEAD,
 and do not open `tempFile`. That note is what token-guard's restart advisory asks a session
 past the fat line to write before a `/clear` — an ISO timestamp, then `## Done` /
@@ -106,6 +114,7 @@ copy and can be wrong or timezone-naive; the mtime cannot.
 - Auto mode, fresh handoff: **Recovered your last session's checkpoint handoff ({sidShort}, via handoff) — no transcript replay needed.**
 - Minutes mode: **~{tokens} tokens recovered and persisted into context ({messages} messages across {sessions} session(s), last {minutes} minutes).**
 - Pointer mode: **~{tokens} tokens recovered and persisted into context ({messages} messages from session {sidShort}, pointer pid={pid}).**
+- Size-capped (`droppedOlder` or `clipped` non-zero) → append: **This is the tail — {droppedOlder} older message(s) dropped to stay inside the 3k-token cap.**
 
 ## Step 5: Open transcript (if --show flag)
 
