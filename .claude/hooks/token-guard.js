@@ -386,43 +386,87 @@ function priceFor(model) {
 const ctxTokens = u => (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) +
   (u.cache_creation_input_tokens || 0);
 
+// ⚠ RATCHET (clean-code plan 4.5a): 3.7a extracted this cluster at CC 6/3 and it regrew to 16/13
+// in five days, because ESLint's complexity rule forks on every `||` and each R-series field
+// arrived as one more inline fallback. A new usage field belongs in one of the one-line accessors
+// below — never inlined back into `collectUsageById` / `costOfUsage`.
+const numOr0 = (v) => v || 0;
+
+// One transcript line -> its assistant record, or null when the line is blank, unparseable, or
+// not an assistant turn carrying usage.
+function parseUsageLine(line) {
+  if (!line.trim()) return null;
+  let o; try { o = JSON.parse(line); } catch (_) { return null; }
+  if (!o || o.type !== 'assistant' || !o.message || !o.message.usage) return null;
+  return o;
+}
+
+function beforeCutoff(o, sinceMs) {
+  return !!(sinceMs && o.timestamp && Date.parse(o.timestamp) < sinceMs);
+}
+
+function recordLineTs(o, out) {
+  if (!o.timestamp) return;
+  const t = Date.parse(o.timestamp);
+  if (t) { out.lastTs = t; out.tsList.push(t); }
+}
+
 function collectUsageById(raw, sinceMs, out) {
   const byId = new Map(); // message.id -> {model, usage} — last occurrence wins
   let last = null;        // last assistant usage in file order = live context source
   let first = null;       // FIRST assistant usage = this session's cold-start reading
   for (const line of raw.split(/\r?\n/)) {
-    if (!line.trim()) continue;
-    let o; try { o = JSON.parse(line); } catch (_) { continue; }
-    if (!o || o.type !== 'assistant' || !o.message || !o.message.usage) continue;
-    if (sinceMs && o.timestamp && Date.parse(o.timestamp) < sinceMs) continue;
+    const o = parseUsageLine(line);
+    if (!o || beforeCutoff(o, sinceMs)) continue;
     const id = o.message.id || `line-${byId.size}`;
     byId.set(id, { model: o.message.model || '', usage: o.message.usage });
     if (!first) first = o.message.usage;
     last = o.message.usage;
-    if (o.timestamp) { const t = Date.parse(o.timestamp); if (t) { out.lastTs = t; out.tsList.push(t); } }
+    recordLineTs(o, out);
   }
   return { byId, first, last };
 }
 
+// TTL breakdown when present; otherwise price the whole write at the cheaper 5m rate.
+function cacheWriteSplit(u) {
+  const total = numOr0(u.cache_creation_input_tokens);
+  const cc = u.cache_creation || {};
+  const cw1h = numOr0(cc.ephemeral_1h_input_tokens);
+  const cw5m = cc.ephemeral_5m_input_tokens != null
+    ? cc.ephemeral_5m_input_tokens : Math.max(0, total - cw1h);
+  return { total, cw1h, cw5m };
+}
+
+// Every billable quantity of one request, defaulted — the single place a new usage field lands.
+function usageBreakdown(u) {
+  const cw = cacheWriteSplit(u);
+  return {
+    inp: numOr0(u.input_tokens),
+    outT: numOr0(u.output_tokens),
+    cr: numOr0(u.cache_read_input_tokens),
+    cwTotal: cw.total, cw1h: cw.cw1h, cw5m: cw.cw5m,
+    searches: numOr0((u.server_tool_use || {}).web_search_requests),
+  };
+}
+
+function usdOfUsage(b, p) {
+  return (b.inp * p.inp + b.outT * p.out + b.cr * p.inp * CACHE_READ_X +
+    b.cw5m * p.inp * CACHE_WRITE_5M_X + b.cw1h * p.inp * CACHE_WRITE_1H_X) / 1e6 +
+    b.searches * WEB_SEARCH_USD_EACH;
+}
+
+function modelBucket(out, model) {
+  return out.perModel[model] ||
+    (out.perModel[model] = { inp: 0, out: 0, cr: 0, cw: 0, searches: 0, usd: 0 });
+}
+
 function costOfUsage(byId, out) {
   for (const { model, usage: u } of byId.values()) {
-    const p = priceFor(model);
-    const inp = u.input_tokens || 0;
-    const outT = u.output_tokens || 0;
-    const cr = u.cache_read_input_tokens || 0;
-    const cwTotal = u.cache_creation_input_tokens || 0;
-    // TTL breakdown when present; otherwise price the whole write at the cheaper 5m rate.
-    const cw1h = (u.cache_creation && u.cache_creation.ephemeral_1h_input_tokens) || 0;
-    const cw5m = (u.cache_creation && u.cache_creation.ephemeral_5m_input_tokens != null)
-      ? u.cache_creation.ephemeral_5m_input_tokens : Math.max(0, cwTotal - cw1h);
-    const searches = (u.server_tool_use && u.server_tool_use.web_search_requests) || 0;
-
-    const usd =
-      (inp * p.inp + outT * p.out + cr * p.inp * CACHE_READ_X + cw5m * p.inp * CACHE_WRITE_5M_X + cw1h * p.inp * CACHE_WRITE_1H_X) / 1e6 +
-      searches * WEB_SEARCH_USD_EACH;
-
-    const m = out.perModel[model] || (out.perModel[model] = { inp: 0, out: 0, cr: 0, cw: 0, searches: 0, usd: 0 });
-    m.inp += inp; m.out += outT; m.cr += cr; m.cw += cwTotal; m.searches += searches; m.usd += usd;
+    const b = usageBreakdown(u);
+    const usd = usdOfUsage(b, priceFor(model));
+    const m = modelBucket(out, model);
+    m.inp += b.inp; m.out += b.outT; m.cr += b.cr; m.cw += b.cwTotal;
+    m.searches += b.searches; m.usd += usd;
     out.lastModel = model; // byId is in file order — the last request's model is what the session runs NOW
     out.usd += usd;
     out.turns++;
@@ -704,24 +748,39 @@ function findActivePlan(projectDir) {
 //   hash: first backticked 7-40 hex run — optional.
 const PLAN_LEDGER_ENTRY_RE = /^-\s+\*{0,2}(\d{4}-\d{2}-\d{2})\*{0,2}\s+—\s*(.*)$/;
 
-function parsePlanLedger(planText) {
+// The `## Ledger` section's body lines (up to the next `## ` heading), or null when the doc has
+// no Ledger at all — the caller's "not a plan doc" signal.
+function ledgerBodyLines(planText) {
   const lines = String(planText || '').split(/\r?\n/);
   const start = lines.findIndex((l) => /^## Ledger\b/.test(l));
-  if (start === -1) return [];
-  const entries = [];
+  if (start === -1) return null;
+  const body = [];
   for (let i = start + 1; i < lines.length; i++) {
-    const line = lines[i];
-    if (/^## /.test(line)) break;
+    if (/^## /.test(lines[i])) break;
+    body.push(lines[i]);
+  }
+  return body;
+}
+
+// ⚠ RATCHET (clean-code plan 4.5a): both annotations are OPTIONAL by design — a Ledger entry
+// with no substep number or no commit hash is valid. Add a new annotation here, not inline.
+function annotateLedgerEntry(e) {
+  const step = /(\d+\.\d+[a-z]?)/.exec(e.text);
+  if (step) e.step = step[1];
+  const hash = /`([0-9a-f]{7,40})`/.exec(e.text);
+  if (hash) e.hash = hash[1];
+}
+
+function parsePlanLedger(planText) {
+  const body = ledgerBodyLines(planText);
+  if (!body) return [];
+  const entries = [];
+  for (const line of body) {
     const m = PLAN_LEDGER_ENTRY_RE.exec(line);
     if (m) entries.push({ date: m[1], text: m[2] });
     else if (entries.length && line.trim()) entries[entries.length - 1].text += '\n' + line;
   }
-  for (const e of entries) {
-    const step = /(\d+\.\d+[a-z]?)/.exec(e.text);
-    if (step) e.step = step[1];
-    const hash = /`([0-9a-f]{7,40})`/.exec(e.text);
-    if (hash) e.hash = hash[1];
-  }
+  for (const e of entries) annotateLedgerEntry(e);
   return entries;
 }
 
