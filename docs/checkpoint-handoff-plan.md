@@ -69,7 +69,10 @@ commit, append a Ledger entry, tick the checkbox, then `/clear` + `/continue`.
 - Read: `scripts/sync-hook-fleet.js` header comment only (usage flags).
 - [ ] Confirm no other session is writing job-agent-extension or wifi-app, then run
   `node scripts/sync-hook-fleet.js --write`.
-- [ ] Commit each fleet repo's synced files separately (its own conventions apply).
+- [ ] Commit each fleet repo's synced files separately (its own conventions apply). ⚠ Both fleet
+  repos have unrelated uncommitted WIP right now (job-agent-extension is running a live session):
+  stage ONLY the paths the actuator reported, by explicit `git -C <repo> add <path>` — never
+  `git add -A`, never `git commit -a/-am`.
 
 **Verify:** canonical vs fleet copies byte-identical (the sync script's own report, or `diff`).
 
