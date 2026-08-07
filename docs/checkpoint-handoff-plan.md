@@ -159,7 +159,7 @@ commit, append a Ledger entry, tick the checkbox, then `/clear` + `/continue`.
   - `contracts.test.js`'s docs ratchet fails on any command-header edit until
     `node .claude/scripts/sync-docs.js` runs — 1.3/1.4 should just run it before committing.
 - 2026-08-07 — 1.1+1.2 verification — adversarial deep diff review by a fresh Opus instance
-  (Fable quota-constrained; user-approved role swap): VERDICT FIX → fixed same night. The
+  (Fable quota-constrained; user-approved role swap): VERDICT FIX → fixed in 5e7cd63. The
   token-guard.js half was fully clean (`node --check`, copy pin 17/17, render harness: real sid
   templates correctly, sid-less renders `<sid>`; complexity-ratchet unchanged at the same 16).
   Fixed: (1) MAJOR — fresh-handoff path skipped Step 4 but the downstream "read the temp file"
