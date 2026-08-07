@@ -581,7 +581,7 @@ it writes the whole census, and today's census is 16 over).
 **Verify:** ratchet 3/4 green (only "no new violations" red); `npm test` otherwise green.
 **Commit:** `test(ratchet): drop stale meter baseline entry` + `Changelog: none`.
 
-### ☐ 4.2 · M · ~45m — claim-registry: characterize, manifest, then decompose `readLiveClaims` (CC 21) · [opus]
+### ☑ 4.2 · M · ~45m — claim-registry: characterize, manifest, then decompose `readLiveClaims` (CC 21) · [opus] (DONE 2026-08-07, see Ledger)
 
 **Read list** (~300 lines): the phase rules · `.claude/hooks/claim-registry.js` **whole**
 (140 lines; `readLiveClaims` is `:60-124`) · grep `claimRegistryMod` in token-guard.js and read
@@ -589,22 +589,22 @@ those windows (consumers: `claimAdvisoryGuard` `:2914` and `emitWriteClaimGuard`
 fail-open require `:3441-3444`) · `.claude/hooks/tests/claim-registry.test.cjs` (the existing
 net — see below) · `scripts/sync-hook-fleet.js:33-80` (MANIFEST).
 
-- [ ] **Test-first — but the net is NOT bare.** ⚠ The 2026-08-05 "ZERO test coverage" finding
+- [x] **Test-first — but the net is NOT bare.** ⚠ The 2026-08-05 "ZERO test coverage" finding
       was wrong: it grepped `test/` only and missed `.claude/hooks/tests/claim-registry.test.cjs`
       (5 tests, importing `writeClaim`/`readLiveClaims`/`claimantsOf` from the real module;
       `:63` already covers selfSid + malformed JSON + stale sessions). Re-read it FIRST and
       write only the genuinely missing cases (missing dir, unreadable dir, per-path last-write
       -wins dedup) rather than a duplicate suite in `test/`.
-- [ ] **Manifest it**: `C:/CODE/job-agent-extension/.claude/hooks/claim-registry.js` is an
+- [x] **Manifest it**: `C:/CODE/job-agent-extension/.claude/hooks/claim-registry.js` is an
       unmanifested hand-copy (found 2026-08-05) — the same arrangement that let token-guard
       drift 231 lines. Add `{ file: 'claim-registry.js', global: false, pairsWith: 'token-guard.js' }`
       to MANIFEST. Diff the two copies FIRST — **byte-identical as of 2026-08-07**, so this is a
       no-op reconcile today, but re-check rather than assume.
-- [ ] Decompose `readLiveClaims` to CC ≤ 9. Its 21 is mostly the per-file guard ladder
+- [x] Decompose `readLiveClaims` to CC ≤ 9. Its 21 is mostly the per-file guard ladder
       (`existsSync` → `readdirSync` catch → selfSid skip → glyph-mtime skip → `readFileSync`
       catch) plus the per-line JSON parse: `listClaimFiles(dir)`, `isStaleSid(sid, now)`, and
       `parseClaimLines(content, sid)` split it cleanly with no logic change.
-- [ ] `node scripts/sync-hook-fleet.js --write` + check mode zero drift.
+- [x] `node scripts/sync-hook-fleet.js --write` + check mode zero drift.
 
 **Verify:** new suite green; claim-registry gone from the "no new violations" list.
 **Commit:** `refactor(claim-registry): manifest + decompose readLiveClaims (test-first)` + `Changelog: none`.
@@ -1629,4 +1629,43 @@ sibling sessions run — the sibling probe is not a formality here.
     AFTER the ratchet goes green so the reorder can't read as dodging it. Also added an explicit
     ask-before-push gate to 4.6 (it carries checkpoint-handoff 1.1–1.4 out with it).
   - Next: unchanged — **4.2** · M · [opus]. Handoff: /clear → /continue.
+- **2026-08-07 — 4.2 claim-registry: manifest + decompose `readLiveClaims` — DONE.** Commit
+  `3a6f382`. `readLiveClaims` 21 → 3 and gone from the ratchet's new-violations list; the
+  claim-registry suite is 9/9 (5 existing + 4 added); fleet check on `claim-registry.js` is
+  zero drift in both adopting repos.
+  - **Split across three sessions.** `4e17f760` (opus, 3h02m) did all the work — tests,
+    decompose, MANIFEST, `--write` — and ended without Verify/commit/Ledger. Its `/continue`
+    successor `22dd1947` was interrupted mid-sibling-probe at 3m. This third session verified,
+    committed and ledgered. Nothing was redone; the tree already held the finished substep.
+  - **Decompose shape** (behavior-preserving, all hoisted `function` decls, single-file
+    constraint held): `listClaimFiles` · `readFileOrNull` · `isStaleSid` · `parseClaimLine` ·
+    `parseClaimLines` · `claimsOfFile`. `listClaimFiles` and `parseClaimLines` are added to
+    `module.exports` **for the suite only** — `getClaimsDir()` is homedir-fixed, so the
+    missing/unreadable-dir seams are otherwise reachable only by moving the live fleet's claims
+    dir aside. Neither is part of the hook contract (token-guard and fleet.js use neither).
+  - **The re-census was right on both counts**: the existing `.claude/hooks/tests/claim-registry.test.cjs`
+    net stood (no duplicate suite in `test/`), and JAE's hand-copy was byte-identical, so the
+    reconcile was a no-op. The added cases are per-path last-write-wins dedup (⚠ the one that
+    mattered — nothing asserted the Map, so a flatten-to-push decompose would have stayed
+    green), missing dir, ENOTDIR dir, the `.jsonl` filter, and blank/malformed/defaulted lines.
+  - **Downstream copies are synced but UNCOMMITTED, deliberately**: `--write` carried the
+    decompose into `job-agent-extension` (modified) and **created** `claim-registry.js` in
+    `wifi-app` (untracked — the manifest entry gives it to every token-guard adopter). Left for
+    those repos' own sessions to land, per the JAE `2d86822` sync-down precedent.
+  - ⚠ **The ratchet's new-violations list is still 16, but the membership moved**: `readLiveClaims`
+    left and **`r13bTurnSpendGuard` (token-guard.js) arrived** — it is in a live sibling's
+    UNCOMMITTED token-guard, not in any 4.x list. 4.6's re-census must expect it (or a successor)
+    and 4.5c may need to absorb it. The only outstanding fleet drift is that same in-flight
+    `token-guard.js` (112 lines behind in JAE + wifi-app) — do NOT `--write` unscoped while the
+    R-series sessions are live; scope with `--files`.
+  - rent: `4e17f760` 1.8M processed / ≈357k effective (19 req) + `22dd1947` 1.3M / ≈215k (16 req)
+    + this session 3.3M / ≈443k (33 req) ≈ **1.0M effective summed** — M ceiling ≈1.5M holds,
+    tag stands. ⚠ `4e17f760` read this plan doc **whole** (36k tokens, its largest payload) in
+    direct violation of the header's read-in-slices rule; that read is ~2/3 of the gap between
+    its rent and a clean M.
+  - Next: **4.3** (token-guard-liveness: `livenessVerdict` CC 13 + the `:80` arrow CC 12 · M ·
+    [opus]). ⛔ Its sibling probe is not a formality this time — two live sessions
+    (`183f8350`, `6c39e290`) are mid-flight on token-guard's `/clear`+`/continue` re-prompt loop
+    and own the uncommitted `token-guard.js`; the canary pairs with it and shares those writers.
+    Handoff: /clear → /continue (next: 4.3 · [opus] — already on opus, no model switch).
 
