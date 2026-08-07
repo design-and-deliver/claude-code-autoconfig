@@ -648,18 +648,18 @@ read those blocks only.
 the "no new violations" list.
 **Commit:** `refactor(terminal-title): advisor evidence pipeline to CC≤9` + `Changelog: none`.
 
-### ☐ 4.5a · M · ~45m — token-guard: usage cluster — `collectUsageById` (16, :369) · `costOfUsage` (13, :387) · `parsePlanLedger` (11, :687) · [opus]
+### ☑ 4.5a · M · ~45m — token-guard: usage cluster — `collectUsageById` (16, :369) · `costOfUsage` (13, :387) · `parsePlanLedger` (11, :687) · [opus] (DONE 2026-08-07, see Ledger)
 
 **Read list** (~400 lines): the phase rules · `token-guard.js:360-415` and `:680-710` (grep
 the names first — the file is 4,080 lines and drifts under sibling writers) · 3.7a's Ledger
 entry (collectUsageById/costOfUsage are its alumni — re-read what it extracted before
 re-decomposing).
 
-- [ ] Sibling probe (phase rules).
-- [ ] Decompose the three to CC ≤ 9. These regrew from CC 6/3 within five days of 3.7a —
+- [x] Sibling probe (phase rules).
+- [x] Decompose the three to CC ≤ 9. These regrew from CC 6/3 within five days of 3.7a —
       leave a one-line comment at each naming the ratchet, so the next feature wave extracts
       instead of inlining.
-- [ ] Fleet sync + zero drift.
+- [x] Fleet sync + zero drift.
 
 **Verify:** token-guard suites green (`token-guard-canary/copy/ladder/liveness` + contracts);
 three entries gone from the "no new violations" list.
@@ -1757,3 +1757,43 @@ sibling sessions run — the sibling probe is not a formality here.
     `parsePlanLedger` 11 · M · [opus]). ⛔ Sibling probe is now MANDATORY-hostile, not routine —
     every remaining substep edits `token-guard.js`, the file R-series sessions write by design.
     Handoff: /clear → /continue (next: 4.5a · [opus] — already on opus, no model switch).
+- **2026-08-07 — 4.5a token-guard: usage cluster to CC≤9 — DONE.** Commit `532f9da` (refactor)
+  + this doc's tick. Clean handoff from 4.4; nothing was mid-flight.
+  - **Ratchet 10 → 7.** All three (`collectUsageById` 16→7, `costOfUsage` 13→2,
+    `parsePlanLedger` 11→7) left the "no new violations" list. Remaining 7 are the restart
+    cluster (4.5b) and the guard cluster (4.5c) — nothing else. Helpers, all CC ≤ 7: `numOr0` /
+    `parseUsageLine` / `beforeCutoff` / `recordLineTs`; `cacheWriteSplit` / `usageBreakdown` /
+    `usdOfUsage` / `modelBucket`; `ledgerBodyLines` / `annotateLedgerEntry`.
+  - **The phase's "it's fallbacks, not branching" read held exactly.** `costOfUsage`'s 13 was 12
+    `||`/`&&`/ternary defaults and ONE `for` — routing them through `numOr0` and two pure
+    shape-builders took it to 2 with no control-flow change at all. Ratchet comments sit at both
+    cluster heads naming the regrowth, so the next R-series field extends an accessor.
+  - **Mutation-checked the four real seams** (4.4's discipline): `beforeCutoff` → false reds
+    `meter respects sinceMs filtering`; `numOr0` without its default reds the two R14 width
+    tests; `modelBucket` without accumulation reds `--analyze TOTALS`; `recordLineTs` no-op reds
+    the meter parse test and R4b. All bite.
+  - ⚠ **Discovery — `e.hash` on a Ledger entry is written and never read.** `parsePlanLedger`
+    sets it, and a repo-wide grep finds ZERO consumers (only `/continue`'s prose relies on the
+    notion). Deleting it was out of 4.5a's behavior-preserving scope; it is a candidate for 4.6's
+    re-census pass or a later dead-code item. Two other mutations came back green for honest
+    reasons, not thin coverage: dropping `parseUsageLine`'s `type !== 'assistant'` guard is an
+    equivalent mutant (no non-assistant line carries `message.usage`), and dropping the hash
+    annotation is invisible precisely because the field is dead.
+  - **Fleet sync:** `--files token-guard.js --write` (scoped, per 4.2's warning) → both present
+    targets updated, check mode zero drift; `workforce-oregon` / `movie-maker` / `test` have no
+    copy. Downstream copies UNCOMMITTED in `job-agent-extension` and `wifi-app` (same precedent
+    as 4.2/4.3/4.4); both `node --check` clean. No pre-existing drift this time — downstream was
+    byte-equal to CCA HEAD before the sync.
+  - **`sync-docs.js` produced NO diff** — unlike 4.4, no sibling hunks to disentangle.
+  - Sibling probe: `0171e67b` idle at start; `0e2e08cf` (job-agent-extension, "agy-autoconfig")
+    went live mid-substep but left no hunks on `token-guard.js` in either repo, so the
+    file-scoped probe stayed clear.
+  - **Full suite:** everything before the ratchet green (contracts + the docs ratchet included),
+    the ratchet the ONE expected red (phase rule, this doc:551), and all 14 after-ratchet suites
+    re-run individually green (`hook-tests` fail 0).
+  - rent: 5.6M processed / ≈686k effective (46 req) — M ceiling ≈1.5M holds, tag stands. Read in
+    slices (trap block + substep + `tail -60` of the Ledger); the largest single read was 6k.
+  - Next: **4.5b** (token-guard restart cluster: `firstContextOfHead` 11 · `coldStartTokens` 12 ·
+    `restartVerdict` 10 · `restartBullet` 10 · M · [opus]). ⛔ Same hostile sibling posture —
+    token-guard is the file R-series sessions write by design.
+    Handoff: /clear → /continue (next: 4.5b · [opus] — already on opus, no model switch).
