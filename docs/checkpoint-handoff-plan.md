@@ -33,16 +33,16 @@ commit, append a Ledger entry, tick the checkbox, then `/clear` + `/continue`.
 
 ## Phase 1 — checkpoint handoff
 
-### ☐ 1.1 · M · ~45m — Handoff format + writer instruction in the restart advisory
+### ☑ 1.1 · M · ~45m — Handoff format + writer instruction in the restart advisory
 
 - Read: `.claude/hooks/token-guard.js:2200-2340` (restartVerdict/restartBullet) and call sites
   `:3170-3230`, `:3300-3320`; `test/token-guard-copy.test.js` (grep for `restartBullet`).
-- [ ] Define the handoff file: `.claude/hooks/.titles/<sid>.handoff.md` — first line an ISO
+- [x] Define the handoff file: `.claude/hooks/.titles/<sid>.handoff.md` — first line an ISO
   timestamp, then `## Done`, `## In flight`, `## Next`, `## Pointers` (file:line list). Document
   the format in a short comment beside restartBullet — no new module needed.
-- [ ] Extend restartBullet's restart-pays copy with ONE line instructing the session: before
+- [x] Extend restartBullet's restart-pays copy with ONE line instructing the session: before
   /clear, write the handoff note to that path (templated with the live sid).
-- [ ] Update the `test/token-guard-copy.test.js` pin for the new copy.
+- [x] Update the `test/token-guard-copy.test.js` pin for the new copy.
 
 **Verify:** `node --check .claude/hooks/token-guard.js` and the full CCA suite green.
 
@@ -112,3 +112,24 @@ commit, append a Ledger entry, tick the checkbox, then `/clear` + `/continue`.
   (c) pass `ctx.sid` at the R13b call site (:3194); (d) new pin in test/token-guard-copy.test.js
   (after the floor-quoted-once test): clear branch carries the sid-templated path + the four
   sections, sid-less callers render the `<sid>` placeholder, not-fat branch stays handoff-free.
+- 2026-08-07 — 1.1 — DONE (f209371). Landed exactly the prepared (a)–(d) above; `handoffPath`
+  is also exported (token-guard.js:4070) so 1.2/1.4 can name the path from one place instead of
+  re-spelling it. Pointers for later substeps: `handoffPath` + format comment
+  `token-guard.js:2344-2358`, the ask itself in restartBullet's `rv.clear` branch `:2376-2383`,
+  R13b call site `:3215`, pin `test/token-guard-copy.test.js:210-235`. Rendered ask reads:
+  "Before /clear, write it to .claude/hooks/.titles/<sid>.handoff.md — an ISO timestamp, then
+  ## Done / ## In flight / ## Next / ## Pointers (file:line) — so /continue reads that instead
+  of guessing from the transcript." 1.2 must match THAT wording, not the plan's paraphrase.
+  - ⚠️ **The suite does NOT start green at HEAD** (contra the plan's rail), and 1.2–1.4 will hit
+    the same wall: `test/complexity-ratchet.test.js` reports 16 new CC≥10 violations beyond the
+    baseline, in `claim-registry.js`, `terminal-title.js`, `token-guard-liveness.js` and
+    `token-guard.js`. Verified pre-existing: stashing this substep's diff and re-running gives a
+    byte-identical 16-item list, so nothing here added one. Baseline last touched 034d0e6
+    (2026-08-05); commits since grew complexity without extracting. Everything else is green
+    (token-guard-copy 17/17 incl. the new pin, cli-behavior 59/59, `node --check` clean).
+    Consequence: **the dev-box pre-push guard will block a push** until that debt is cleared —
+    it is a separate job from this plan, and it is not a licence to regrow the shrink-only
+    baseline.
+  - Flake worth knowing: `cli-behavior.test.js` can fail ENOENT copying
+    `.titles/<sid>.needle` — a transient terminal-title writes and unlinks inside `findConsoles`
+    (`terminal-title.js:1869-1876`), raced by the fixture's tree copy. Re-run; it passed clean.
