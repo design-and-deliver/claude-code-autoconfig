@@ -543,11 +543,27 @@ fallback, none is a decision. The cheapest and safest remedy is therefore hoisti
 into module-level constant tables (a `Set` of tool names) and one-line pure predicates/accessors,
 not restructuring control flow. Several of these clear in a handful of lines each.
 
+**⛔ STATUS 2026-08-07 — PHASE 4 STOPPED EARLY BY AN EXPLICIT OWNER DECISION.** After 4.5a
+cleared its three, Andrew called the remaining refactor off: he is juggling several workstreams
+and the 87 unpushed commits mattered more than the last 7 violations. So the "never grow the
+baseline" rule below was **deliberately overridden** — the 7 were baselined as accepted debt and
+`main` was pushed. This is a knowing trade, not a slip:
+
+- The ratchet still guards against **new** growth; it just no longer blocks on these 7.
+- **4.5b and 4.5c are DEFERRED, not done.** Their bodies stay below with all their traps intact
+  (`restartBullet`'s `sid` threading, `emitWriteClaimGuard`'s fail-open null guard) so a later
+  session can pick them up cold.
+- Re-clearing them later is now a **shrink**, which `--write-baseline` permits — so resuming
+  costs nothing extra beyond the refactor itself.
+- ⚠ The one thing lost: these 7 no longer show up as debt in any output. This block is the only
+  record that they are accepted rather than absent.
+
 **Phase rules (on top of the standing traps):**
 
 - ⛔ **Never grow the baseline.** `--write-baseline` regenerates from the CURRENT census — run
   while the 16 stand and it bakes them in, neutering the ratchet. Allowed only in 4.6, once
-  the census is clean (where it can only shrink).
+  the census is clean (where it can only shrink). *(Overridden 2026-08-07 — see the status
+  block above.)*
 - **`npm test` red on exactly one test is EXPECTED mid-phase** (the ratchet's "no new
   violations"); every OTHER suite must be green before each commit — this phase amends the
   header's "npm test green before and after" to that extent. No pushes until 4.6.
@@ -665,7 +681,7 @@ re-decomposing).
 three entries gone from the "no new violations" list.
 **Commit:** `refactor(token-guard): usage cluster to CC≤9` + `Changelog: none`.
 
-### ☐ 4.5b · M · ~45m — token-guard: restart cluster — `firstContextOfHead` (11, :2170) · `coldStartTokens` (12, :2191) · `restartVerdict` (10, :2270) · `restartBullet` (10, :2359) · [opus]
+### ☐ 4.5b · M · ~45m — token-guard: restart cluster — `firstContextOfHead` (11, :2170) · `coldStartTokens` (12, :2191) · `restartVerdict` (10, :2270) · `restartBullet` (10, :2359) · [opus] — DEFERRED 2026-08-07 (baselined; see the Phase 4 status block)
 
 **Read list** (~350 lines): the phase rules · `token-guard.js:2160-2400` (grep the names
 first). Four functions, one contiguous region, all CC 10-12 — the lightest cluster by CC, but
@@ -688,7 +704,7 @@ see the copy trap below before sizing it that way.
 violations" list.
 **Commit:** `refactor(token-guard): restart cluster to CC≤9` + `Changelog: none`.
 
-### ☐ 4.5c · M · ~60m — token-guard: guard cluster — `claimAdvisoryGuard` (11, :2914) · `r14TurnRentGuard` (12, :3312) · `emitWriteClaimGuard` (21, :3446) · [opus]
+### ☐ 4.5c · M · ~60m — token-guard: guard cluster — `claimAdvisoryGuard` (11, :2914) · `r14TurnRentGuard` (12, :3312) · `emitWriteClaimGuard` (21, :3446) · [opus] — DEFERRED 2026-08-07 (baselined; see the Phase 4 status block)
 
 **Read list** (~450 lines): the phase rules · `token-guard.js:2905-2945`, `:3305-3355`,
 `:3436-3475` (grep the names first) · ⚠ these three ARE the live claim/write-guard machinery
@@ -711,15 +727,18 @@ sibling sessions run — the sibling probe is not a formality here.
 **Verify:** token-guard suites green; the "no new violations" list is now EMPTY.
 **Commit:** `refactor(token-guard): guard cluster to CC≤9` + `Changelog: none`.
 
-### ☐ 4.6 · S · ~20m — re-census, full suite, push · [opus]
+### ☑ 4.6 · S · ~20m — re-census, full suite, push · [opus] (DONE 2026-08-07 via the early-stop override, see Ledger)
 
 **Read list** (~60 lines): the phase rules · ratchet output only.
 
-- [ ] `node test/complexity-ratchet.test.js` → 4/4 green.
-- [ ] If a BASELINED function incidentally cleared during 4.2–4.5c, the tightness test says
-      so — NOW `--write-baseline` is safe (census clean; the write can only shrink). Commit
-      the shrink here.
-- [ ] `npm test` fully green. Expect no surprises past the ratchet: all 11 suites that sit
+- [x] `node test/complexity-ratchet.test.js` → 4/4 green.
+- [x] `--write-baseline` — ⚠ run as a **GROWTH** (54 → 61), not the shrink this item planned.
+      That is the override in the status block above, taken on the owner's call.
+- [ ] ⏸ **Still open — move `complexity-ratchet` to the END of the `npm test` chain.** Not
+      done here: the ratchet is green now, so its `&&` abort masks nothing today, and the
+      reorder was left out to keep the stop-early commit minimal. Do it whenever 4.5b/4.5c
+      resume — the masking risk returns the moment the ratchet goes red again.
+- [x] `npm test` fully green. Expect no surprises past the ratchet: all 11 suites that sit
       AFTER it in the `&&` chain were run individually and passed on 2026-08-07.
 - [ ] **Move `complexity-ratchet` to the END of the `npm test` chain** (`package.json:25` — it
       is 16th of 28 today). Its `&&` abort is what hid
@@ -728,9 +747,10 @@ sibling sessions run — the sibling probe is not a formality here.
       "everything else green". A style ratchet must not mask behavioral failures. One-line
       reorder, no logic change — do it here, once the ratchet is green, so the move can't be
       confused with dodging it.
-- [ ] `git push origin main` — ⚠ **ask for a go-ahead before pushing** (outward-facing, and it
+- [x] `git push origin main` — ⚠ **ask for a go-ahead before pushing** (outward-facing, and it
       carries `1.1`–`1.4` of `docs/checkpoint-handoff-plan.md` with it). The pre-push hook
       re-runs the full suite (~8–10 min; a quiet terminal there is the suite, not a hang).
+      *Go-ahead given 2026-08-07 as part of the stop-early decision.*
 
 **Verify:** push accepted; check mode zero drift; `git log origin/main..main` empty.
 **Commit:** (only if the baseline shrank) `test(ratchet): tighten baseline after Phase 4` + `Changelog: none`.
@@ -1797,3 +1817,27 @@ sibling sessions run — the sibling probe is not a formality here.
     `restartVerdict` 10 · `restartBullet` 10 · M · [opus]). ⛔ Same hostile sibling posture —
     token-guard is the file R-series sessions write by design.
     Handoff: /clear → /continue (next: 4.5b · [opus] — already on opus, no model switch).
+- **2026-08-07 — PHASE 4 STOPPED EARLY, 7 BASELINED, `main` PUSHED — owner decision.** Commit
+  `2b46b40` (baseline) + this doc's status block. ⛔ This entry is the record of a deliberate
+  rule override; read the Phase 4 status block (this doc:546) before resuming 4.5b/4.5c.
+  - **Why:** immediately after 4.5a landed, Andrew called the remaining refactor off — several
+    workstreams in flight, and no time to juggle a refactor alongside them. The live cost of
+    stopping was concrete: `main` sat **87 commits ahead of origin** with a pre-push hook that
+    runs the ratchet, so "park it" meant CCA stayed local-only indefinitely. Baselining the 7
+    bought the push back for one short session and zero refactoring.
+  - **What was traded away:** the 7 no longer appear as debt in ANY output — the ratchet reports
+    clean. The plan's status block + this entry are the only surviving record. 4.5b/4.5c keep
+    their full bodies and traps below, marked DEFERRED, so a later session picks them up cold.
+    Re-clearing them is a SHRINK, which `--write-baseline` allows, so resuming costs only the
+    refactor itself.
+  - **Baseline 54 → 61**, all 7 in `token-guard.js` (`claimAdvisoryGuard`, `coldStartTokens`,
+    `emitWriteClaimGuard`, `firstContextOfHead`, `r14TurnRentGuard`, `restartBullet`,
+    `restartVerdict`). Diff reviewed line-by-line — nothing else swept in.
+  - ⏸ **Left open on purpose:** 4.6's "move `complexity-ratchet` to the END of the `npm test`
+    chain". Skipped to keep the stop-early commit minimal, and harmless while the ratchet is
+    green — but the masking risk it fixes RETURNS the moment the ratchet goes red again, so do
+    it first thing whenever 4.5b/4.5c resume.
+  - **Full suite fully green** for the first time this phase — the `&&` chain ran end to end and
+    reached `hook-tests` (332 pass / 0 fail), which is what proves the ratchet passed rather than
+    aborted. Ratchet 4/4 including "baseline is tight".
+  - Next: nothing scheduled. 4.5b / 4.5c / Phase 3's 3.7b–3.10 remain open and block nothing.
