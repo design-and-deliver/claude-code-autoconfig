@@ -181,6 +181,7 @@ const readIn = (t, sub, f) => {
   try { return fs.readFileSync(path.join(t.root, sub, f), 'utf8'); } catch (_) { return null; }
 };
 const canonRule = f => fs.readFileSync(path.join(__dirname, '..', '.claude', 'rules', f), 'utf8');
+const canonIn = (sub, f) => fs.readFileSync(path.join(__dirname, '..', '.claude', sub, f), 'utf8');
 
 test('a rules entry syncs into .claude/rules — NOT into the hooks dir the fleet points at', () => {
   const t = repoTarget({ rules: { 'plan-authoring.md': STALE } });
@@ -201,6 +202,23 @@ test('ADOPT-ONLY holds across the subdir: hooks adoption does not pull in the ru
     'the adopted hook must still sync');
   assert(readIn(t, 'rules', 'plan-authoring.md') === null,
     'an existing-but-empty rules dir is not adoption — the rule must NOT be created');
+});
+
+test('a pairsSubdir partner is followed ACROSS directories, and still adopt-only', () => {
+  // /continue's doc calls .claude/scripts/recover-session.py. A repo given the command with
+  // no script has an adopted-but-broken command — the exact state ADOPT-ONLY exists to avoid —
+  // and plain pairsWith cannot prevent it: it looks only in the entry's own directory, so a
+  // scripts/ entry could never see a commands/ partner.
+  const adopted = repoTarget({ commands: { 'continue.md': STALE }, scripts: {} });
+  syncFleet({ write: true, files: ['continue.md', 'recover-session.py'], targets: [adopted] });
+  assert(norm(readIn(adopted, 'scripts', 'recover-session.py') || '')
+    === norm(canonIn('scripts', 'recover-session.py')),
+  'a repo holding continue.md must be given the script that doc calls');
+
+  const unadopted = repoTarget({ commands: {}, scripts: {} });
+  syncFleet({ write: true, files: ['continue.md', 'recover-session.py'], targets: [unadopted] });
+  assert(readIn(unadopted, 'scripts', 'recover-session.py') === null,
+    'no command, no script — a cross-subdir pair must not create into an unadopted repo');
 });
 
 test('the files filter scopes the run (sync-terminal-title.js must not touch token-guard)', () => {

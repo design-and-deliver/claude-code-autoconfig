@@ -44,3 +44,6 @@ pilots/
 # original, still read as a fallback so an existing box needs no migration.
 scripts/hook-fleet.local.json
 scripts/terminal-title-fleet.local.json
+
+# Python bytecode (recover-session.py imported by tests)
+__pycache__/

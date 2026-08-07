@@ -82,6 +82,19 @@ const MANIFEST = [
   { file: 'fleet.js', global: false, subdir: 'scripts' },
   { file: 'restore-after-reboot.md', global: true, subdir: 'commands' },
   { file: 'restore-after-reboot.js', global: true, subdir: 'scripts' },
+  // The recovery pair, and the one-shot probe both commands now call instead of inlining
+  // eight sequential python heredocs. These two commands DO ship to users (they are absent
+  // from DEV_ONLY_FILES), and they had already drifted the classic way: job-agent-extension
+  // was on /continue v2 while this repo was on v7 — five versions, hand-ported. The script
+  // is the load-bearing half: a repo that takes a command doc calling
+  // .claude/scripts/recover-session.py and does NOT have that script gets a broken command,
+  // so the two must move together or not at all — hence `pairsSubdir`, which is what lets a
+  // scripts/ entry follow a commands/ partner (the older fleet.md/fleet.js pair could not,
+  // and each half had to be adopted separately).
+  { file: 'continue.md', global: false, subdir: 'commands' },
+  { file: 'recover-context.md', global: false, subdir: 'commands' },
+  { file: 'recover-session.py', global: false, subdir: 'scripts',
+    pairsWith: 'continue.md', pairsSubdir: 'commands' },
 ];
 
 const PAD = 46;                                               // report column for the target label
@@ -175,7 +188,13 @@ function classify(target, entry, canonText) {
   const cur = readOr(path.join(dir, entry.file));
   if (cur == null) {
     // ADOPT-ONLY: absent means unadopted, unless this entry pairs with a file that IS here.
-    const partnerPresent = entry.pairsWith != null && readOr(path.join(dir, entry.pairsWith)) != null;
+    // `pairsSubdir` lets the partner live one directory over — a command and the script it
+    // calls never share a dir, yet shipping the command without the script is exactly the
+    // "adopted but broken" state ADOPT-ONLY exists to avoid.
+    const partnerDir = entry.pairsSubdir
+      ? targetDirFor(target, { subdir: entry.pairsSubdir })
+      : dir;
+    const partnerPresent = entry.pairsWith != null && readOr(path.join(partnerDir, entry.pairsWith)) != null;
     return { verdict: partnerPresent ? 'create' : 'miss', cur: null, dir };
   }
   return { verdict: norm(cur) === norm(canonText) ? 'ok' : 'update', cur, dir };
