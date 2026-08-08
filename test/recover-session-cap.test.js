@@ -75,7 +75,14 @@ function runWith(sizes) {
   fs.writeFileSync(path.join(proj, 'aaaaaaaa-0000-0000-0000-000000000000.jsonl'),
     lines.join('\n') + '\n');
 
-  const env = { ...process.env, USERPROFILE: home, HOME: home, TMP: tmp, TEMP: tmp };
+  // TMPDIR too, and it is the load-bearing one: Python's tempfile.gettempdir() consults TMPDIR
+  // BEFORE TEMP and TMP, so sandboxing only the latter two leaves the script writing
+  // recovered-context.json into the real system temp dir whenever TMPDIR happens to be set.
+  // On this box that is GIT, not npm: an interactive shell and a plain `npm run` both leave
+  // TMPDIR unset, but Git-for-Windows exports TMPDIR=/tmp to every hook it runs, and npm
+  // inherits it. So the suite passed standalone AND under a hand-run `npm test`, then failed
+  // all 6 cases inside the pre-push hook — blocking a push on 2026-08-07.
+  const env = { ...process.env, USERPROFILE: home, HOME: home, TMPDIR: tmp, TMP: tmp, TEMP: tmp };
   delete env.HOMEDRIVE;       // expanduser prefers USERPROFILE, but leave it nothing to fall back to
   delete env.HOMEPATH;
   delete env.CLAUDE_CODE_SESSION_ID;
