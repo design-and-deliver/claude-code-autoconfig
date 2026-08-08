@@ -53,10 +53,10 @@ const read = (t, f) => {
 };
 const inSync = (t, f) => norm(read(t, f) || '') === norm(canonOf(f));
 
-function runCli(args, fleetFile) {
+function runCli(args, fleetFile, env) {
   const r = spawnSync('node', [SCRIPT, ...args], {
     encoding: 'utf8',
-    env: { ...process.env, CCA_HOOK_FLEET_FILE: fleetFile },
+    env: { ...process.env, CCA_HOOK_FLEET_FILE: fleetFile, ...(env || {}) },
   });
   return { status: r.status, out: (r.stdout || '') + (r.stderr || '') };
 }
@@ -269,6 +269,69 @@ test('CLI: drift exits 1, --write exits 0, and --only scopes the run', () => {
   assert(inSync(scoped, 'token-guard.js'), 'the scoped target must be synced');
   assert(read(excluded, 'token-guard.js') === STALE, 'the unscoped target must be untouched');
   assert(runCli(['--only', only], fleetFile).status === 0, 're-check must exit 0');
+});
+
+// --- canonical with uncommitted edits (the 2026-08-07 push block) ----------------------------
+// Several sessions edit fleet-synced files in this repo by design. Reading canonical from the
+// WORKING TREE meant any one of them holding a file open made every downstream copy read as
+// drifted, exit 1, and block every other session's push — a `--no-verify` bypass on an 89-commit
+// push, over a file nobody had committed. Check mode now asks HEAD for a second opinion.
+
+// A throwaway CCA-shaped git repo whose canonical token-guard.js is committed, then dirtied in
+// the working tree — the sibling-mid-edit state, which cannot be staged in the real repo.
+function canonicalRepo(committed, workingTree) {
+  const root = path.join(tmpRoot, `canon${++seq}`);
+  const hooks = path.join(root, '.claude', 'hooks');
+  fs.mkdirSync(hooks, { recursive: true });
+  fs.writeFileSync(path.join(hooks, 'token-guard.js'), committed);
+  const git = (...a) => spawnSync('git', a, { cwd: root, encoding: 'utf8', windowsHide: true });
+  git('init', '-q');
+  git('config', 'user.email', 'test@example.com');
+  git('config', 'user.name', 'test');
+  git('add', '-A');
+  git('commit', '-qm', 'canonical');
+  fs.writeFileSync(path.join(hooks, 'token-guard.js'), workingTree);
+  return root;
+}
+
+test('check mode: a target matching HEAD passes while canonical has uncommitted edits', () => {
+  const committed = '// canonical v1\n';
+  const root = canonicalRepo(committed, committed + '// a sibling is mid-edit\n');
+  // The downstream copy is current with everything that has actually been committed.
+  const t = target({ 'token-guard.js': committed }, { label: 'at-head-repo' });
+  const fleetFile = path.join(tmpRoot, 'fleet-head.json');
+  fs.writeFileSync(fleetFile, JSON.stringify([t]));
+  const args = ['--only', t.dir, '--files', 'token-guard.js'];
+
+  const r = runCli(args, fleetFile, { CCA_CANONICAL_ROOT: root });
+  assert(r.status === 0,
+    `a copy matching HEAD must not fail the pre-push guard, got exit ${r.status}: ${r.out.trim()}`);
+  assert(/in sync with HEAD/.test(r.out), `the reason must be narrated, got: ${r.out.trim()}`);
+  assert(!r.out.includes('[DRIFT]'), 'uncommitted canonical work is not downstream drift');
+
+  // The tolerance is exactly one deep: a copy matching NEITHER canonical is still real drift.
+  const stale = target({ 'token-guard.js': STALE }, { label: 'stale-repo' });
+  const staleFleet = path.join(tmpRoot, 'fleet-head-stale.json');
+  fs.writeFileSync(staleFleet, JSON.stringify([stale]));
+  const s = runCli(['--only', stale.dir, '--files', 'token-guard.js'], staleFleet,
+    { CCA_CANONICAL_ROOT: root });
+  assert(s.status === 1, `a genuinely stale copy must still exit 1, got ${s.status}`);
+  assert(s.out.includes('[DRIFT]'), 'real drift must still be reported');
+});
+
+test('write mode keeps using the working tree, so edit -> --write -> commit still works', () => {
+  const committed = '// canonical v1\n';
+  const dirty = committed + '// not committed yet\n';
+  const root = canonicalRepo(committed, dirty);
+  const t = target({ 'token-guard.js': committed }, { label: 'write-tree-repo' });
+  const fleetFile = path.join(tmpRoot, 'fleet-head-write.json');
+  fs.writeFileSync(fleetFile, JSON.stringify([t]));
+
+  const w = runCli(['--write', '--only', t.dir, '--files', 'token-guard.js'], fleetFile,
+    { CCA_CANONICAL_ROOT: root });
+  assert(w.status === 0, `--write must exit 0, got ${w.status}: ${w.out.trim()}`);
+  assert(norm(read(t, 'token-guard.js') || '') === norm(dirty),
+    '--write must propagate canonical AS EDITED — HEAD tolerance is a check-mode-only rule');
 });
 
 test('a value-less --files reads as absent instead of throwing', () => {

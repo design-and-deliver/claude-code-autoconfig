@@ -155,6 +155,13 @@ terminal-title — token-guard is the file that actually drifted 231 lines, prec
 nothing checked it. A blocked push means an adopting repo is stale: run
 `node scripts/sync-hook-fleet.js --write`, commit the target repo, push again.
 
+**Check mode compares against HEAD, not the working tree** (2026-08-07). Several sessions edit
+fleet-synced files here at once, and reading canonical from the working tree meant any one of them
+holding a file open made every downstream copy read as drifted — blocking every *other* session's
+push over a change nobody had committed. A target matching HEAD is therefore let through, narrated
+as `in sync with HEAD (canonical has uncommitted edits)`. `--write` deliberately keeps using the
+working tree, since edit → `--write` → commit is the normal authoring loop.
+
 `test/hook-fleet-sync.test.js` runs everywhere (it drives the actuator against throwaway dirs)
 and pins its semantics — adopt-only, the `~/.claude` token-guard carve-out, check-vs-write, the
 exit codes this hook depends on. It does **not** replace the guard: it proves the actuator is

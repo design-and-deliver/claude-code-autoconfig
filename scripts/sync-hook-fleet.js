@@ -15,6 +15,11 @@
  *   node scripts/sync-hook-fleet.js --write --quiet --only <projectDir>
  *                                                 # session-start pull: silent unless it acted
  *
+ * The two modes read canonical from deliberately different places. CHECK gates the pre-push hook,
+ * so it asks "is any copy stale against what this repo has COMMITTED?" and tolerates a target
+ * matching HEAD. WRITE asks "make every copy match canonical as it is right now" and always uses
+ * the working tree. See tolerateAtHead().
+ *
  * NOT shipped to users (scripts/ is outside package.json "files"). This file IS tracked in a
  * public repo, so personal paths must never be hardcoded — the per-machine repo list lives in
  * the gitignored sibling scripts/hook-fleet.local.json (falling back to the older
@@ -24,6 +29,12 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { spawnSync } = require('child_process');
+
+// This checkout's root. CCA_CANONICAL_ROOT overrides it — same test seam as CCA_HOOK_FLEET_FILE:
+// the HEAD-tolerance case below needs a canonical file with real uncommitted edits, which can
+// only be staged in a throwaway git repo, never in this one.
+const repoRoot = () => process.env.CCA_CANONICAL_ROOT || path.join(__dirname, '..');
 
 // The canonical fleet manifest. ADOPT-ONLY is the default and the important safety property:
 // a target that does not already have the file is SKIPPED, never created. Syncing must not be
@@ -101,7 +112,7 @@ const PAD = 46;                                               // report column f
 
 // An entry lives under .claude/<subdir>/, defaulting to the hooks dir the fleet grew up in.
 const subdirOf = entry => entry.subdir || 'hooks';
-const canonicalFor = entry => path.join(__dirname, '..', '.claude', subdirOf(entry), entry.file);
+const canonicalFor = entry => path.join(repoRoot(), '.claude', subdirOf(entry), entry.file);
 
 // Where THIS entry belongs inside a target repo. The per-machine fleet file records each target
 // as its .claude/hooks dir, so a non-hooks entry resolves as that dir's sibling — no fleet-file
@@ -144,6 +155,36 @@ const linesBehind = (current, canonical) => {
   const have = new Set(norm(current).split('\n'));
   return norm(canonical).split('\n').filter(l => !have.has(l)).length;
 };
+
+// The canonical AS COMMITTED — the version a push actually carries. Consulted only when a target
+// would otherwise read as drifted, so an in-sync fleet spawns no git at all; the cache is cleared
+// per syncFleet() run so a long-lived caller never reads a stale blob. Null means "no second
+// opinion" (not a git checkout, git absent, or the file not committed yet), which leaves the
+// working-tree verdict standing exactly as before.
+const headCache = new Map();
+function canonicalAtHead(entry) {
+  const rel = `.claude/${subdirOf(entry)}/${entry.file}`;
+  if (!headCache.has(rel)) {
+    const r = spawnSync('git', ['show', `HEAD:${rel}`], {
+      cwd: repoRoot(), encoding: 'utf8', windowsHide: true, maxBuffer: 32 * 1024 * 1024,
+    });
+    headCache.set(rel, r.status === 0 ? r.stdout : null);
+  }
+  return headCache.get(rel);
+}
+
+// CHECK MODE ONLY: a target that matches the committed canonical is not stale with respect to
+// anything being pushed, so it must not fail the pre-push guard. Without this, ANY session with
+// uncommitted edits to a canonical file makes every downstream copy read as drifted and blocks
+// every other session's push — which is exactly what happened on 2026-08-07, when a sibling
+// mid-edit on recover-session.py cost a `--no-verify` bypass on a 89-commit push.
+// WRITE MODE deliberately does not get this tolerance: `--write` means "make the fleet match
+// canonical as it is right now", which is the edit -> --write -> commit workflow's whole point.
+function tolerateAtHead(entry, cur, mode) {
+  if (mode.write || cur == null) return false;
+  const head = canonicalAtHead(entry);
+  return head != null && norm(cur) === norm(head);
+}
 
 // Resolve to a comparable absolute form — the --only filter compares a project dir against
 // target hook dirs that were authored by hand in the local fleet file (mixed slashes, mixed case
@@ -200,12 +241,27 @@ function classify(target, entry, canonText) {
   return { verdict: norm(cur) === norm(canonText) ? 'ok' : 'update', cur, dir };
 }
 
-// The two "nothing to do" verdicts. Narrated only outside quiet mode — this runs on every
-// SessionStart, and a hook that speaks when there is no news trains you to stop reading it.
-function noteNoop(verdict, label, quiet, say, tally) {
-  if (verdict === 'miss') tally.missing++;
+// The three "nothing to do" outcomes, as a lookup rather than a branch chain. `head` says WHY it
+// is being let through — silence there would read as a plain in-sync fleet and hide the fact that
+// canonical has uncommitted work the fleet has not seen yet.
+const NOOP_LINE = {
+  miss: l => `  [miss]  ${l} not found (skipped)`,
+  ok: l => `  [ ok ]  ${l} in sync`,
+  head: l => `  [ ok ]  ${l} in sync with HEAD (canonical has uncommitted edits)`,
+};
+
+// Narrated only outside quiet mode — this runs on every SessionStart, and a hook that speaks when
+// there is no news trains you to stop reading it.
+function noteNoop(kind, label, quiet, say, tally) {
+  if (kind === 'miss') tally.missing++;
   if (quiet) return;
-  say(verdict === 'miss' ? `  [miss]  ${label} not found (skipped)` : `  [ ok ]  ${label} in sync`);
+  say(NOOP_LINE[kind](label));
+}
+
+// Which no-op this pair is, or null if there is real work to do.
+function noopKind(verdict, entry, cur, mode) {
+  if (verdict === 'miss' || verdict === 'ok') return verdict;
+  return tolerateAtHead(entry, cur, mode) ? 'head' : null;
 }
 
 // Every target here is a file the OTHER live sessions are executing right now — the hooks read
@@ -234,8 +290,9 @@ function writeAtomic(dest, text) {
 function applyOne(target, entry, canonText, mode, say, tally) {
   const label = `${target.label} ${entry.file}`.padEnd(PAD);
   const { verdict, cur, dir } = classify(target, entry, canonText);
-  if (verdict === 'miss' || verdict === 'ok') {
-    noteNoop(verdict, label, mode.quiet, say, tally);
+  const noop = noopKind(verdict, entry, cur, mode);
+  if (noop) {
+    noteNoop(noop, label, mode.quiet, say, tally);
     return;
   }
   const created = verdict === 'create';
@@ -272,6 +329,7 @@ function syncFleet(opts) {
   const lines = [];
   const say = s => lines.push(s);
   const tally = { drifted: 0, wrote: 0, missing: 0, lines };
+  headCache.clear();
 
   const { canon, missingFile } = loadCanonical(entries);
   if (canon == null) {
