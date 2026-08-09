@@ -1347,7 +1347,7 @@ function loadState(projectDir, sid) {
     lastLiveContext: null, scanOffset: 0, warnedIdleAt: 0, knownWf: {},
     warnedColdWriteAt: 0, idleFiredAt: 0,
     pendingWfReceipt: null, bombGateArmed: false, curScope: null, curScopePrompts: 0,
-    nudgedScope: null, driftSnooze: null,
+    nudgedScope: null, driftSnooze: null, promptsSinceStart: 0,
     approvedPayloadHop: null, payloadGateOkOnce: null,
     turnPayloadTok: 0, turnPayloadWarned: false, miniBombGateArmed: false, turnReads: {},
     lastWindowPct: null, lastWindowResetsAt: null, lastWindowAtIso: null, warnedWindow: null,
@@ -1445,6 +1445,28 @@ function logLine(projectDir, msg) {
     try { if (fs.statSync(log).size > USAGE_LOG_ROTATE_BYTES) fs.renameSync(log, `${log}.1`); } catch (_) { /* none yet */ }
     fs.appendFileSync(log, `${new Date().toISOString()}  ${msg}\n`);
   } catch (_) { /* logging must never throw */ }
+}
+
+// ── R19 instrumentation (2026-08-09): how much work had the user actually gotten done when a
+// restart card fired? Every card ending on "/clear, then /continue" interrupts a thread, and the
+// user then waits out a cold start before resuming. But every one of them gates on tokens,
+// dollars, or context size — NOTHING in this file has ever counted the user's own prompts. So a
+// card firing on prompt 1 is indistinguishable in the logs from one firing on prompt 30, and the
+// first case reads as "this tool is inefficient" rather than "this tool is thrifty" (Andrew
+// 2026-08-09 — "inserting a speedbump after every 1 or 2 requests is painful as well").
+//
+// DELIBERATELY LOG-ONLY. No card's fire condition changes here. The point is to measure the
+// premise — do these actually land at prompt 1-2? — before any floor gets picked, because a
+// threshold guessed today is a threshold nobody can justify tomorrow. Read the result with:
+//   grep restart-advice ~/.claude/.token-guard/usage.log   (or the project's state dir)
+function logRestartAdvice(projectDir, st, where, text) {
+  try {
+    if (!text || !/\/clear/.test(text)) return;
+    const n = st && st.promptsSinceStart;
+    if (!n) return; // no counter yet (pre-R19 state file) — log nothing rather than log a wrong 0
+    logLine(projectDir,
+      `restart-advice  prompt#${n}  ${where}  ${String(text).slice(0, 120).replace(/\s+/g, ' ')}`);
+  } catch (_) { /* instrumentation must never throw */ }
 }
 
 // ---------------------------------------------------------------------------
@@ -3044,6 +3066,7 @@ function r13aPlanSteerGuard(ctx) {
 // (Claude never sees them), so they follow the warning copy rules directly.
 function emitBlock(ctx, reason) {
   saveState(ctx.projectDir, ctx.sid, ctx.st);
+  logRestartAdvice(ctx.projectDir, ctx.st, 'prompt-block', reason);
   process.stdout.write(JSON.stringify({ decision: 'block', reason }));
 }
 
@@ -3105,6 +3128,13 @@ async function onUserPromptSubmit(data, projectDir) {
   // would never reach the recovery turn it exists for.
   st.recoveryTurn = isRecoveryTurn(data.prompt);
 
+  // R19 — count the user's own prompts, not round trips. This sits ABOVE the brand-new-session
+  // return for the same reason recoveryTurn does: prompt 1 is the single most interesting reading
+  // (a card firing there means the user never finished one request), and the early return below
+  // is exactly the branch prompt 1 takes. A recovery turn deliberately restarts the count at 1 —
+  // after a /clear the user IS starting over, which is the whole cost being measured.
+  st.promptsSinceStart = st.recoveryTurn ? 1 : (st.promptsSinceStart || 0) + 1;
+
   const m = meterSession(data.transcript_path, { fleet: cfg.fleetMeter, projectDir });
   if (!m.main.turns) {
     saveState(projectDir, sid, st); // turn 1 has no meter to speak from, but the flag must persist
@@ -3128,6 +3158,7 @@ async function onUserPromptSubmit(data, projectDir) {
 
   saveState(projectDir, sid, st);
   if (notes.length) {
+    logRestartAdvice(projectDir, st, 'prompt-note', notes.join(' | '));
     process.stdout.write(JSON.stringify({
       hookSpecificOutput: {
         hookEventName: 'UserPromptSubmit',
@@ -3813,7 +3844,13 @@ function onPreToolUse(data, projectDir) {
   emitWriteClaimGuard(ctx);
   for (const guard of PRETOOL_GUARDS) {
     const d = guard(ctx);
-    if (d) return d.kind === 'deny' ? deny('PreToolUse', d.reason) : ask('PreToolUse', d.reason);
+    if (!d) continue;
+    // R19 — mid-turn cards (the bomb deny's Restart line, the fat-context asks) recommend the
+    // same /clear as the prompt-side ones, so they belong in the same reading. ctx.st is lazy and
+    // may still be null; a guard that spoke has almost always forced it, and reading it here
+    // costs one file read on a path that is already firing a card.
+    logRestartAdvice(projectDir, ctx.st || loadState(projectDir, ctx.sid), 'pretool-' + d.kind, d.reason);
+    return d.kind === 'deny' ? deny('PreToolUse', d.reason) : ask('PreToolUse', d.reason);
   }
 }
 
