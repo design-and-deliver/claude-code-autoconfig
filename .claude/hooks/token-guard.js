@@ -41,7 +41,12 @@
  *                           The blind spot R13b cannot see by construction: ordinary work done
  *                           over many round trips at a fat context. Every other context guard
  *                           speaks only at a prompt boundary; this one re-checks mid-turn;
- *                       (g) v1 hard gate on total session spend (default off, re-arms stepwise).
+ *                       (g) v1 hard gate on total session spend (default off, re-arms stepwise);
+ *                       (h) R18: re-read divert — a Read whose bytes THIS TURN already read is
+ *                           denied with a pointer back to the earlier tool result. R8 prices a
+ *                           read by size and so cannot see this: re-read files sit under its bar,
+ *                           and ranged reads skip its door entirely. Exempt when the file changed
+ *                           on disk, when the window widens, or for images.
  *   PostToolUse      -> R9: mini-bomb accumulator — per-turn sum of tool-result payloads; when
  *                       the total crosses bombJumpTokens, one mid-turn note to Claude (payloads
  *                       individually too small for R8's doors, bomb-sized in aggregate).
@@ -296,6 +301,11 @@ const DEFAULTS = {
                                  // nothing (no ask, ~300 tokens of preview), so the bar that a
                                  // user-interrupting ask had to clear no longer applies. null =
                                  // off, and door 2 reverts to the pre-2026-08-07 ask at bombJumpTokens.
+  reReadDivertTokens: 2000,      // R18: divert a Read whose bytes this turn ALREADY read, past this
+                                 // estimate. An order of magnitude under readDivertTokens on
+                                 // purpose — a re-read buys literally nothing (the content is in
+                                 // context either way), so the bar is only high enough to keep the
+                                 // divert off trivial windows. null = off.
   bombGateWhenFat: false,
   payloadGate: true,
   commandPayloadGate: false,
@@ -349,6 +359,7 @@ const TOKEN_SAVER = {
   // isn't pre-determined — R6).
   bombJumpTokens: 30000,
   readDivertTokens: 8000,        // divert sooner; the action is free, so max-protection just lowers the bar
+  reReadDivertTokens: 800,       // R18: same reasoning one tier down — a re-read is pure waste at any size
   fanWarnAgents: 5,
   idleWarnMinutes: 30,
   contextWarnTokens: 100000,     // flag context bloat earlier than the 150k default
@@ -1338,7 +1349,7 @@ function loadState(projectDir, sid) {
     pendingWfReceipt: null, bombGateArmed: false, curScope: null, curScopePrompts: 0,
     nudgedScope: null, driftSnooze: null,
     approvedPayloadHop: null, payloadGateOkOnce: null,
-    turnPayloadTok: 0, turnPayloadWarned: false, miniBombGateArmed: false,
+    turnPayloadTok: 0, turnPayloadWarned: false, miniBombGateArmed: false, turnReads: {},
     lastWindowPct: null, lastWindowResetsAt: null, lastWindowAtIso: null, warnedWindow: null,
     lastTurnDeltaUsd: 0, turnStartWorkTok: null, turnGateAt: null, turnGateFires: 0,
     turnStartCr: null, turnStartReqs: null, rentGateAt: null, rentGateFires: 0,
@@ -3084,6 +3095,10 @@ async function onUserPromptSubmit(data, projectDir) {
   // R9 — new turn, new accumulator (persisted by whichever branch saves state below).
   st.turnPayloadTok = 0; st.turnPayloadWarned = false; st.miniBombGateArmed = false;
 
+  // R18 — the re-read ledger is TURN-local by definition: "already in context" is a claim about
+  // this turn's tool results, and a new prompt is exactly where that stops being safe to assume.
+  st.turnReads = {};
+
   // R13b/R14 — rewritten from the prompt EVERY turn, so the exemption is exactly one turn wide.
   // This must sit above the brand-new-session return below: that return is the branch a
   // `/clear` + `/continue` pair actually takes (see recoveryExempt), so a flag set after it
@@ -3636,10 +3651,130 @@ function spendGatesGuard(ctx) {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// R18 — turn-local re-read divert (2026-08-09). The complement to R8 door 2, which prices a Read
+// by SIZE and therefore cannot see the cheapest waste there is: reading a file this turn ALREADY
+// read. Those bytes are in context; the second read buys nothing, pays for them twice, and then
+// re-pays on every request after it.
+//
+// R8 misses this class by construction, both ways round. The files that actually get re-read sit
+// UNDER its 15k divert bar (a 6k-token file read three times is 12k of pure waste and never once
+// trips a door), and a RANGED read is exempt from its door entirely — which is precisely the
+// shape a plan's "Read modal.tsx:3459-3485" produces, twice, an hour apart in the same turn.
+//
+// The bar is an order of magnitude below R8's because the ACTION is cheaper than R8's already-
+// cheap divert. A deny costs no extra round trip: its reason lands in the same tool-result slot
+// the file would have occupied, ~80 tokens instead of N thousand. There is no ask, so there is
+// no interruption to justify.
+//
+// Three exemptions keep it off every LEGITIMATE re-read:
+//   1. the file changed on disk since (mtime moved) — an Edit, or another session's write, makes
+//      the in-context copy stale and the re-read real;
+//   2. the new window is not covered by what was already read — widening is new information;
+//   3. images — vision tokens are not chars/2.6, the same reason R8 declines to price them.
+
+// A Read's line window. A bare Read is 1..EOF; hi === null means "to the end of the file".
+function readWindow(ti) {
+  const off = Number(ti.offset);
+  const lim = Number(ti.limit);
+  const lo = Number.isFinite(off) && off > 0 ? off : 1;
+  if (!Number.isFinite(lim) || lim <= 0) return { lo, hi: null };
+  return { lo, hi: lo + lim - 1 };
+}
+
+// Is `inner` already covered by `outer`? An open-ended outer covers everything from its start;
+// an open-ended inner is covered only by another open-ended outer.
+function windowCovered(inner, outer) {
+  if (inner.lo < outer.lo) return false;
+  if (outer.hi === null) return true;
+  if (inner.hi === null) return false;
+  return inner.hi <= outer.hi;
+}
+
+// Ranged reads can only be priced from the file's total size plus a per-line estimate — the hook
+// never opens the file to count lines (the guard against loading a bomb must not load one). The
+// whole-file figure is always the ceiling, so the estimate can only ever under-warn.
+const CHARS_PER_LINE_EST = 45;
+
+function windowTokens(win, stamp) {
+  const whole = Math.round(stamp.chars / CHARS_PER_TOKEN);
+  if (win.hi === null) return whole;
+  const lines = win.hi - win.lo + 1;
+  return Math.min(whole, Math.round((lines * CHARS_PER_LINE_EST) / CHARS_PER_TOKEN));
+}
+
+// Pure rule half (exported for fixtures, like payloadVerdict): prior ledger entry + this request
+// => divert or fall through. No fs, so the exemptions are testable without a real file.
+function reReadVerdict(prior, win, stamp, cfg) {
+  if (!prior || !stamp) return null;
+  if (prior.mtime !== stamp.mtime) return null;      // changed on disk — the re-read is real
+  if (!windowCovered(win, prior)) return null;       // widening — new information
+  const tok = windowTokens(win, stamp);
+  return tok > cfg.reReadDivertTokens ? { estTokens: tok } : null;
+}
+
+// One stat per Read — the same cost R8's door already pays on this path.
+function readStamp(filePath) {
+  try {
+    const s = fs.statSync(filePath);
+    return { mtime: s.mtimeMs, chars: s.size };
+  } catch (_) { return null; }   // unstatable file — never guessed at, same as R8
+}
+
+const CASE_INSENSITIVE_FS = process.platform === 'win32' || process.platform === 'darwin';
+
+function reReadKey(filePath) {
+  const abs = path.resolve(filePath);
+  return CASE_INSENSITIVE_FS ? abs.toLowerCase() : abs;
+}
+
+// The cheap pre-checks, all mechanical: is this an armed, non-image Read? Returns the path or null.
+function reReadTarget(cfg, data) {
+  if (cfg.reReadDivertTokens == null) return null;
+  if (data.tool_name !== 'Read') return null;
+  const fp = String((data.tool_input ?? {}).file_path ?? '');
+  if (!fp || IMAGE_EXT.test(fp)) return null;
+  return fp;
+}
+
+// Model-facing copy (a deny's reason goes to Claude, not the user), so it reads as a redirect
+// carrying the next move. Two jobs beyond the diagnosis: name where the content already is, and
+// close the retry loop explicitly — an unqualified deny invites the identical Read again.
+function reReadDivertCopy(filePath, prior, v) {
+  const win = prior.hi === null ? 'in full' : `lines ${prior.lo}-${prior.hi}`;
+  return `⚠️ Hey — diverted, not re-read: this turn already read ` +
+    `${path.basename(filePath)} ${win}, so its contents are ALREADY in this conversation. ` +
+    `Scroll back to that earlier tool result instead of paying ~${fmtK(v.estTokens)} tokens ` +
+    `for the same bytes a second time — and re-paying them on every request after this one.\n\n` +
+    `Do NOT retry this Read. If you need a part the earlier read did not cover, Read it with an ` +
+    `offset/limit OUTSIDE that window — widening is never diverted. If the file changes on disk ` +
+    `(your own Edit counts), it re-opens automatically.`;
+}
+
+function r18ReReadGuard(ctx) {
+  const fp = reReadTarget(ctx.cfg, ctx.data);
+  if (!fp) return null;
+  const stamp = readStamp(fp);
+  if (!stamp) return null;
+  const st = preState(ctx);
+  if (!st.turnReads) st.turnReads = {};
+  const key = reReadKey(fp);
+  const win = readWindow(ctx.data.tool_input ?? {});
+  const v = reReadVerdict(st.turnReads[key], win, stamp, ctx.cfg);
+  if (v) return { kind: 'deny', reason: reReadDivertCopy(fp, st.turnReads[key], v) };
+  // Recorded on FALL-THROUGH and from the last guard in the fold, so the ledger only ever holds
+  // reads nothing else blocked. A read the user then denies by hand is the one stale case left,
+  // and the copy's widen/Edit escapes cover it without a second gate.
+  st.turnReads[key] = { lo: win.lo, hi: win.hi, mtime: stamp.mtime };
+  saveState(ctx.projectDir, ctx.sid, st);
+  return null;
+}
+
 // Rule order is decision order: R2's Workflow doors first (they decide without touching state),
-// then the one-shot payload/bomb gates, then the metered spend tripwires last.
+// then the one-shot payload/bomb gates, then the metered spend tripwires, and R18 last — it is
+// the only guard that WRITES on fall-through, so it must not record a read a later guard stops.
 const PRETOOL_GUARDS = [r2WorkflowLaunchGuard, r8PayloadDoorGuard, r9MiniBombGateGuard,
-  r3PostBombGateGuard, spendGatesGuard];
+  r3PostBombGateGuard, spendGatesGuard, r18ReReadGuard];
 
 let claimRegistryMod = null;
 try {
@@ -4270,6 +4405,8 @@ module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, l
   claudeCodeUA, fetchOfficialUsage,
   analyzeSession, renderAnalysis, payloadVerdict, fanVerdict, workflowSource, skillSizes, recordObservedSkill,
   payloadDivertCopy, readHead,                 // test/token-guard-divert.test.js — R8 door 2 divert
+  reReadVerdict, readWindow, windowCovered, windowTokens, reReadDivertCopy, reReadTarget,
+                                               // test/token-guard-reread.test.js — R18 re-read divert
   generateBudgets, slug, driftNote, driftDeferralTick, recoverTail, restartBullet, restartPos,
   handoffPath,                                 // checkpoint handoff — /continue's top recovery rung
   restartVerdict, choiceBullet, rentAskCopy,   // test/token-guard-copy.test.js — R14 copy contract
