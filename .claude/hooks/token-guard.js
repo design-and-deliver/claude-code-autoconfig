@@ -2033,8 +2033,23 @@ const ordinal = n => {
 // keeps the plain forward-looking phrasing — there is no repeat to name yet.
 const nextCheckClause = (fires, nextAt, unit = '') => fires <= 1
   ? ` Next check ≈ ${fmtK(nextAt)}${unit} this turn.`
-  : ` This is the ${ordinal(fires)} check this turn — each approval doubles the gap to the ` +
-    `next (≈ ${fmtK(nextAt)}${unit}).`;
+  : ` Each approval doubles the gap to the next (≈ ${fmtK(nextAt)}${unit}).`;
+// Meter tag — the FIRST thing on both in-turn cards. R13b and R14 measure DIFFERENT quantities
+// (work tokens vs unweighted cache re-reads) on INDEPENDENT re-arm ladders, but the cards were
+// otherwise indistinguishable: same `⚠️ Hey — this … turn`, same Cost/Restart/Choice bullets, and
+// both cite round trips × context (R13b's restart bullet reads almost exactly like R14's
+// headline). So a turn that fires both renders as ONE ladder that inexplicably breaks its own
+// doubling rule. Observed 2026-08-08, session 563f51a8: R14 walked 115k → 232k → 435k of re-reads,
+// promising ≈835k next; rent then topped out at ~725k so R14 never spoke again, and the 4th card
+// was R13b's FIRST fire at its flat 1M floor. Read as one sequence that is a 2.3x jump out of
+// nowhere; read as two meters it is two correct ladders. The tag is what makes them two.
+// The ordinal lives HERE and not in nextCheckClause above: "3rd check" is only meaningful once
+// you know 3rd check OF WHAT, and saying it in both places is the restatement this file's copy
+// rules keep cutting.
+// `fires || 1` because rentAskCopy is callable standalone (the copy-contract test does exactly
+// that) with an st that never went through the guard's `st.rentGateFires = fires` assignment —
+// ordinal(undefined) would render "NaNth check" into a user-facing card.
+const meterTag = (label, fires) => `⚠️ ${label} · ${ordinal(fires || 1)} check — `;
 // Geometric re-arm: width = base × 2^(fires-1), measured from what was actually observed (so a
 // single huge landing can never re-fire on the very next tool call). fires counts THIS fire.
 const reArmAt = (observed, base, fires) => observed + base * Math.pow(2, fires - 1);
@@ -3390,7 +3405,8 @@ function turnSpendAsk(ctx, turnTok) {
   // tighter two-bullet cut; R13b keeps the lever because "a plan with session-sized substeps"
   // is a different instruction from its headline, not a restatement of it.
   return gateAsk(ctx,
-    `⚠️ Hey — this ONE turn has burned ~${fmtK(turnTok)} tokens.\n` +
+    `${meterTag('TASK SIZE', st.turnGateFires)}this ONE turn has burned ` +
+    `~${fmtK(turnTok)} tokens.\n` +
     `• Cost: a normal task finishes under ~${fmtK(TASK_NORM_TOK)}, so the work has likely ` +
     `spiraled well past what was anticipated.\n` +
     `• Lever: a plan with session-sized substeps, not a longer turn.` +
@@ -3468,7 +3484,8 @@ function rentAskCopy(ctx, rent, rvIn) {
   const avg = Math.round(rent / reqs);
   const perTrip = Math.round(m.liveContext * CACHE_READ_X);
   const s = reqs === 1 ? '' : 's';
-  return `⚠️ Hey — this turn has made ${reqs} round trip${s}, now carrying ` +
+  return `${meterTag('RENT', st.rentGateFires)}this turn has made ${reqs} round trip${s}, ` +
+    `now carrying ` +
     `~${fmtK(m.liveContext)} of context each.\n` +
     `• Cost: ${reqs} trip${s} × ~${fmtK(avg)}${reqs === 1 ? '' : ' avg'} context × ` +
     // Rate rendered FROM the constant, never a literal "10%": the card's arithmetic and the

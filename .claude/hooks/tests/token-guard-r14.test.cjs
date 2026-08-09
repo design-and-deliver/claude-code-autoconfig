@@ -79,7 +79,7 @@ test('R14 fires once a turn\'s re-reads cross the gate — round-trip copy, re-a
   assert.equal(lines.length, 3);
   // 'now ... each' is load-bearing: this figure is the CURRENT per-trip context, not a total and
   // not the turn's average — the ambiguity that had Andrew differencing it against the Cost line.
-  assert.match(lines[0], /^⚠️ Hey — .*round trip, now carrying ~\d+k of context each\.$/);
+  assert.match(lines[0], /^⚠️ RENT · 1st check — .*round trip, now carrying ~\d+k of context each\.$/);
   assert.deepEqual(lines.slice(1).map(l => l.slice(0, 8)), ['• Cost: ', '• Choice']);
   assert.doesNotMatch(out.permissionDecisionReason, /• Lever|• Restart/);
   // Converts with the Cost figure, or the card re-mixes units in one breath. The ' of re-reads'

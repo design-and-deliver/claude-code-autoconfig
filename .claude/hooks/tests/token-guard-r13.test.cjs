@@ -67,7 +67,9 @@ test('R13b fires once a turn crosses the gate — token copy, no $, re-arms abov
   // bullets on 2026-07-29; R13b keeps four, so this is now the ONLY place restartBullet renders.
   const lines = out.permissionDecisionReason.split('\n');
   assert.equal(lines.length, 5);
-  assert.match(lines[0], /^⚠️ Hey — this ONE turn has burned ~300k tokens\.$/);
+  // The meter tag leads (2026-08-08): R13b and R14 were indistinguishable in the terminal, so a
+  // turn firing both read as one ladder that broke its own doubling rule. See meterTag.
+  assert.match(lines[0], /^⚠️ TASK SIZE · 1st check — this ONE turn has burned ~300k tokens\.$/);
   assert.deepEqual(lines.slice(1).map(l => l.slice(0, 8)),
     ['• Cost: ', '• Lever:', '• Restar', '• Choice']);
   // R13b's headline states tokens, not trips — so its Restart bullet KEEPS the position clause.
