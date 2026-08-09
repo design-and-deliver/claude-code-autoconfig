@@ -343,6 +343,78 @@ test('a value-less --files reads as absent instead of throwing', () => {
   assert(!/TypeError/.test(r.out), `must not crash: ${r.out.trim().split('\n')[0]}`);
 });
 
+// --- wiring audit (the 2026-08-09 "in sync but inert" gap) -----------------------------------
+// Byte-sync is not liveness: worktree-gate.js sat present-and-unwired in THIS repo for nine days
+// while the report said [ ok ] for it everywhere, and format.js still ships to every user install
+// wired by nothing. These cases pin the audit's two halves — it must find that, and it must stay
+// quiet about claim-registry.js, the require()d library it would be trivial to cry wolf over.
+
+// A throwaway repo shaped like a real adopting checkout: <root>/.claude/{hooks,settings*.json}.
+// target() above hands back a BARE hooks dir whose parent is the shared tmpRoot, so a settings
+// file written there would wire hooks for every other case at once.
+function wiringTarget(hooks, settings) {
+  const label = `w${++seq}`;
+  const claudeDir = path.join(tmpRoot, label, '.claude');
+  const dir = path.join(claudeDir, 'hooks');
+  fs.mkdirSync(dir, { recursive: true });
+  for (const n of Object.keys(hooks || {})) fs.writeFileSync(path.join(dir, n), hooks[n]);
+  for (const n of Object.keys(settings || {})) fs.writeFileSync(path.join(claudeDir, n), settings[n]);
+  return { label, dir };
+}
+
+// Every fixture name is zz-prefixed: the audit also reads the real ~/.claude/settings.json (one
+// user-tier entry legitimately wires a hook for every repo), so a plausible name could be wired
+// on the dev box and silently drop a case.
+const HOOK = 'const raw = [];\nprocess.stdin.on("data", c => raw.push(c));\n';
+const LIB = 'module.exports = { claim: () => true };  // no stdin: a require()d library\n';
+const wiredAs = (event, file) =>
+  JSON.stringify({ hooks: { [event]: [{ hooks: [{ command: `node .claude/hooks/${file}` }] }] } });
+
+test('wiring audit: a stdin-reading hook nothing runs is reported, and is not drift', () => {
+  const t = wiringTarget({ 'zz-orphan-hook.js': HOOK });
+  const r = syncFleet({ targets: [t] });
+  const line = r.lines.find(l => l.includes('[!wire]'));
+  assert(line && line.includes('zz-orphan-hook.js'),
+    `the orphan must be named, got: ${r.lines.join(' | ') || '(nothing)'}`);
+  assert(r.unwired === 1, `exactly one finding, got ${r.unwired}`);
+  assert(r.drifted === 0, 'an unwired hook is a finding, not drift — it must not touch the exit code');
+});
+
+test('wiring audit: a require()d library and a wired hook are both silent', () => {
+  const t = wiringTarget(
+    { 'zz-lib.js': LIB, 'zz-wired-hook.js': HOOK },
+    { 'settings.json': wiredAs('SessionStart', 'zz-wired-hook.js') },
+  );
+  assert(syncFleet({ targets: [t] }).unwired === 0,
+    'claim-registry.js is the real-world false positive this must never re-create');
+
+  // settings.local.json is a first-class wiring channel, not a stray file: it is exactly where
+  // CCA dogfoods worktree-gate.js, since the tracked settings.json is the SHIPPED template.
+  const local = wiringTarget({ 'zz-local-hook.js': HOOK },
+    { 'settings.local.json': wiredAs('PreToolUse', 'zz-local-hook.js') });
+  assert(syncFleet({ targets: [local] }).unwired === 0,
+    'a hook wired only in settings.local.json is live, not orphaned');
+});
+
+test('wiring audit: quiet mode (the SessionStart pull) stays out of it', () => {
+  const t = wiringTarget({ 'zz-quiet-orphan.js': HOOK });
+  const r = syncFleet({ quiet: true, targets: [t] });
+  assert(r.unwired === 0 && !r.lines.some(l => l.includes('[!wire]')),
+    'a standing condition narrated on every session start is a report that gets tuned out');
+});
+
+test('CLI: an unwired hook is reported without changing the exit code', () => {
+  const t = wiringTarget({ 'zz-cli-orphan.js': HOOK });
+  const fleetFile = path.join(tmpRoot, 'fleet-wire.json');
+  fs.writeFileSync(fleetFile, JSON.stringify([t]));
+  const r = runCli(['--only', t.dir], fleetFile);
+  assert(r.status === 0,
+    `a wiring finding must never block a push, got exit ${r.status}: ${r.out.trim()}`);
+  assert(r.out.includes('[!wire]') && r.out.includes('zz-cli-orphan.js'),
+    `the finding must still be printed, got: ${r.out.trim()}`);
+  assert(/never fails/.test(r.out), 'the summary must say out loud that this is not a failure');
+});
+
 try { fs.rmSync(tmpRoot, { recursive: true, force: true }); } catch (_) { /* best-effort */ }
 
 summary();

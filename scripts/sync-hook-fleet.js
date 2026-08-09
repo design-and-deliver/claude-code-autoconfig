@@ -258,6 +258,83 @@ function noteNoop(kind, label, quiet, say, tally) {
   say(NOOP_LINE[kind](label));
 }
 
+// --- wiring audit ---------------------------------------------------------------------------
+//
+// Byte-sync is not liveness. A hook can be present in every repo, byte-identical to canonical,
+// and invoked by nothing — which is what worktree-gate.js was in THIS repo from 2026-07-31 to
+// 2026-08-09, and what format.js still is in four of five repos AND in every user install (it
+// ships, and no settings template wires it). The sync report showed `[ ok ]` for all of them,
+// because it only ever asked whether the bytes matched.
+//
+// This audit asks the other half of the question. It walks the hooks DIRECTORY rather than the
+// manifest on purpose: format.js is not a manifest entry, so a manifest-driven check would have
+// missed the very finding that motivated this.
+
+// A hook is a file Claude Code EXECUTES with a JSON payload on stdin; a library is one a hook
+// require()s. That read is the whole discriminator, and it is precise here — claim-registry.js
+// (require()d by token-guard.js, zero stdin reads) is correctly unwired and must never be
+// reported, or the audit becomes noise nobody reads.
+const readsStdin = text => text.includes('process.stdin');
+
+// Every settings file that can wire a hook for this repo. The user-level one counts for EVERY
+// repo — one ~/.claude entry covers them all, which is exactly how session-close.js is wired —
+// so omitting it would report every global hook as dead in every project.
+function wiringText(hooksDir) {
+  const claudeDir = path.dirname(hooksDir);
+  return [
+    path.join(claudeDir, 'settings.json'),
+    path.join(claudeDir, 'settings.local.json'),
+    path.join(os.homedir(), '.claude', 'settings.json'),
+  ].map(f => readOr(f) ?? '').join('\n');
+}
+
+// Substring-matching the basename is deliberate over parsing the JSON: a wiring entry always
+// names the file it runs, and the failure directions are asymmetric. A false NEGATIVE (the name
+// appears in a comment) costs one unreported hook; a false POSITIVE cries wolf about a hook that
+// is actually live, and this line runs on a report people are supposed to keep reading.
+function unwiredIn(hooksDir) {
+  let names;
+  try { names = fs.readdirSync(hooksDir).filter(f => f.endsWith('.js')); }
+  catch (_) { return []; }                                  // no hooks dir — nothing to audit
+  const wiring = wiringText(hooksDir);
+  const isHook = f => {
+    const text = readOr(path.join(hooksDir, f));
+    return text != null && readsStdin(text);
+  };
+  return names.filter(f => !wiring.includes(f) && isHook(f));
+}
+
+// The canonical checkout is audited too, though it is never a sync TARGET — a repo cannot drift
+// from itself, so nothing else here ever looks at it, and that blind spot is precisely where
+// worktree-gate.js sat unwired for nine days. opts.targets is the suite's seam: when the caller
+// names its targets explicitly, audit exactly those and never reach for this machine's real repo.
+function auditDirs(targets, opts) {
+  if (opts.targets) return targets;
+  const self = { label: path.basename(repoRoot()), dir: path.join(repoRoot(), '.claude', 'hooks') };
+  const included = !opts.only || key(self.dir).startsWith(key(opts.only));
+  return included ? [self, ...targets] : targets;
+}
+
+// Reported, never failed. ADOPT-ONLY's whole point is that a repo may hold a hook it has
+// deliberately not turned on; an audit that set a non-zero exit would turn that legitimate state
+// into a blocked push, and the fix everyone would reach for is deleting the audit.
+//
+// The quiet check lives HERE rather than at the call site: quiet mode is the SessionStart pull,
+// and an unwired hook is a standing condition rather than news — narrating it on every session
+// start is how a report gets tuned out. It surfaces on the deliberate
+// `node scripts/sync-hook-fleet.js` run instead.
+function auditWiring(targets, opts, say) {
+  if (opts.quiet) return 0;
+  let found = 0;
+  for (const t of auditDirs(targets, opts)) {
+    for (const file of unwiredIn(t.dir)) {
+      say(`  [!wire] ${`${t.label} ${file}`.padEnd(PAD)} present, but no settings entry runs it`);
+      found++;
+    }
+  }
+  return found;
+}
+
 // Which no-op this pair is, or null if there is real work to do.
 function noopKind(verdict, entry, cur, mode) {
   if (verdict === 'miss' || verdict === 'ok') return verdict;
@@ -328,7 +405,7 @@ function syncFleet(opts) {
   const entries = opts.files ? MANIFEST.filter(e => opts.files.includes(e.file)) : MANIFEST;
   const lines = [];
   const say = s => lines.push(s);
-  const tally = { drifted: 0, wrote: 0, missing: 0, lines };
+  const tally = { drifted: 0, wrote: 0, missing: 0, unwired: 0, lines };
   headCache.clear();
 
   const { canon, missingFile } = loadCanonical(entries);
@@ -339,12 +416,14 @@ function syncFleet(opts) {
   }
   if (!quiet) header(entries, canon, write, say);
 
-  for (const t of (opts.targets || resolveTargets(opts.only))) {
+  const targets = opts.targets || resolveTargets(opts.only);
+  for (const t of targets) {
     for (const e of entries) {
       if (t.isGlobal && !e.global) continue;                  // not part of this file's fleet
       applyOne(t, e, canon[e.file], { write, quiet }, say, tally);
     }
   }
+  tally.unwired = auditWiring(targets, opts, say);          // no-op in quiet mode, by its own rule
   return tally;
 }
 
@@ -360,6 +439,11 @@ function report(r, write) {
     process.exitCode = 1;
   } else {
     console.log(`All present targets in sync (${r.missing} missing/skipped).`);
+  }
+  // Deliberately after the summary and outside the exit-code branches: an unwired hook is a
+  // finding, not a failure, and it must not read as the reason a push was blocked.
+  if (r.unwired) {
+    console.log(`${r.unwired} hook(s) present but unwired — see [!wire] above. Reported only; never fails.`);
   }
 }
 
