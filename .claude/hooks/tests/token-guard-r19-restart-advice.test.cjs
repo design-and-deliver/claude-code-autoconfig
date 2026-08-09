@@ -66,7 +66,7 @@ test('a restart card names the prompt it fired on — and prompt 1 is legible as
   assert.equal(fireRestartCard(fix, 'm2').permissionDecision, 'ask');
   const lines = adviceLines(fix);
   assert.equal(lines.length, 1);
-  assert.match(lines[0], /restart-advice {2}prompt#1 {2}pretool-ask/);
+  assert.match(lines[0], /restart-advice {2}prompt#1 {2}from=fresh {2}sid=sid-r19 {2}pretool-ask/);
   // The card's own copy rides along, so the log says WHICH card fired, not just that one did.
   assert.match(lines[0], /TASK SIZE/);
 });
@@ -76,7 +76,7 @@ test('the counter follows the user\'s prompts, not round trips', () => {
   prompt(fix); prompt(fix); prompt(fix);
   preToolUse(fix); preToolUse(fix);   // round trips inside a turn must not advance it
   assert.equal(fireRestartCard(fix, 'm2').permissionDecision, 'ask');
-  assert.match(adviceLines(fix).pop(), /prompt#3 {2}pretool-ask/);
+  assert.match(adviceLines(fix).pop(), /prompt#3 {2}from=fresh/);
 });
 
 test('a recovery turn restarts the count at 1 — after a /clear the user IS starting over', () => {
@@ -85,7 +85,41 @@ test('a recovery turn restarts the count at 1 — after a /clear the user IS sta
   prompt(fix, '/continue');           // reset to 1 …
   prompt(fix, 'carry on');            // … so the next real prompt is 2, not 4
   assert.equal(fireRestartCard(fix, 'm2').permissionDecision, 'ask');
-  assert.match(adviceLines(fix).pop(), /prompt#2 {2}pretool-ask/);
+  assert.match(adviceLines(fix).pop(), /prompt#2 {2}from=recovery/);
+});
+
+test('from= separates the pathology from the by-design reset, and is sticky across the run', () => {
+  // The whole point of the flag: BOTH of these fire on a low prompt number, and only the first
+  // one means "the user never finished a request". Without from= they are the same line.
+  const cold = mkFixture();
+  prompt(cold);
+  assert.equal(fireRestartCard(cold, 'm2').permissionDecision, 'ask');
+  assert.match(adviceLines(cold).pop(), /prompt#1 {2}from=fresh/);
+
+  const resumed = mkFixture();
+  prompt(resumed, '/continue');
+  prompt(resumed, 'carry on');        // sticky: prompt 2 of a RESUMED thread, not a fresh one
+  assert.equal(fireRestartCard(resumed, 'm2').permissionDecision, 'ask');
+  assert.match(adviceLines(resumed).pop(), /prompt#2 {2}from=recovery/);
+});
+
+test('two sessions sharing one project log stay tellable apart', () => {
+  // usage.log is per-PROJECT, the counter is per-SESSION, and this repo runs up to six at once.
+  // Interleaved bare prompt#N lines are unreadable — which is how the first real capture failed.
+  const fix = mkFixture();
+  prompt(fix);                                          // session A, prompt 1
+  assert.equal(fireRestartCard(fix, 'm2').permissionDecision, 'ask');
+
+  const asB = p => runHook(fix, Object.assign({ session_id: 'sid-bbbbbbbb-tail' }, p));
+  asB({ hook_event_name: 'UserPromptSubmit', prompt: 'hi' });   // session B baselines here …
+  asB({ hook_event_name: 'UserPromptSubmit', prompt: 'again' });// … at its own prompt 2
+  fs.appendFileSync(fix.tp, usageLine('m3', 300000));
+  const outB = JSON.parse(asB({ hook_event_name: 'PreToolUse', tool_name: 'Bash' }) || '{}');
+  assert.equal((outB.hookSpecificOutput || {}).permissionDecision, 'ask');
+
+  const [a, b] = adviceLines(fix);
+  assert.match(a, /prompt#1 {2}from=fresh {2}sid=sid-r19 /);
+  assert.match(b, /prompt#2 {2}from=fresh {2}sid=sid-bbbb /);   // sidShort — first 8 chars
 });
 
 test('log-only: an ordinary prompt writes no advice line', () => {

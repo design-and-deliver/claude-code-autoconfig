@@ -1347,7 +1347,7 @@ function loadState(projectDir, sid) {
     lastLiveContext: null, scanOffset: 0, warnedIdleAt: 0, knownWf: {},
     warnedColdWriteAt: 0, idleFiredAt: 0,
     pendingWfReceipt: null, bombGateArmed: false, curScope: null, curScopePrompts: 0,
-    nudgedScope: null, driftSnooze: null, promptsSinceStart: 0,
+    nudgedScope: null, driftSnooze: null, promptsSinceStart: 0, promptsFromRecovery: false,
     approvedPayloadHop: null, payloadGateOkOnce: null,
     turnPayloadTok: 0, turnPayloadWarned: false, miniBombGateArmed: false, turnReads: {},
     lastWindowPct: null, lastWindowResetsAt: null, lastWindowAtIso: null, warnedWindow: null,
@@ -1459,14 +1459,34 @@ function logLine(projectDir, msg) {
 // premise — do these actually land at prompt 1-2? — before any floor gets picked, because a
 // threshold guessed today is a threshold nobody can justify tomorrow. Read the result with:
 //   grep restart-advice ~/.claude/.token-guard/usage.log   (or the project's state dir)
-function logRestartAdvice(projectDir, st, where, text) {
+//
+// The line carries sid and `from=` because usage.log is per-PROJECT while the counter is
+// per-SESSION: up to six sessions share one log here, so bare `prompt#1` lines interleave from
+// sessions that have nothing to do with each other. And `prompt#1` is itself two different
+// readings — a genuinely fresh session (the pathology: the user never finished one request) and
+// the deliberate reset a recovery turn does (`from=recovery`, working as designed). Both gaps
+// were found by trying to read the first two real lines this produced and failing (2026-08-09).
+function logRestartAdvice(projectDir, sid, st, where, text) {
   try {
     if (!text || !/\/clear/.test(text)) return;
     const n = st && st.promptsSinceStart;
     if (!n) return; // no counter yet (pre-R19 state file) — log nothing rather than log a wrong 0
+    const from = st.promptsFromRecovery ? 'recovery' : 'fresh';
     logLine(projectDir,
-      `restart-advice  prompt#${n}  ${where}  ${String(text).slice(0, 120).replace(/\s+/g, ' ')}`);
+      `restart-advice  prompt#${n}  from=${from}  sid=${String(sid || '?').slice(0, 8)}  ` +
+      `${where}  ${String(text).slice(0, 120).replace(/\s+/g, ' ')}`);
   } catch (_) { /* instrumentation must never throw */ }
+}
+
+// R19 — advance the per-session prompt counter and record which kind of start this run of it
+// counts FROM. The epoch flag is sticky across the run: a session resumed by /continue keeps
+// `from=recovery` on prompt 5 too, because the reading that matters is "5 prompts into a
+// resumed thread", not "prompt 5 happened to be an ordinary one". Extracted rather than inlined
+// so onUserPromptSubmit's branch count stays where it was.
+function countPrompt(st) {
+  if (st.recoveryTurn) { st.promptsSinceStart = 1; st.promptsFromRecovery = true; return; }
+  if (!st.promptsSinceStart) st.promptsFromRecovery = false; // first prompt of a fresh session
+  st.promptsSinceStart = (st.promptsSinceStart || 0) + 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -3066,7 +3086,7 @@ function r13aPlanSteerGuard(ctx) {
 // (Claude never sees them), so they follow the warning copy rules directly.
 function emitBlock(ctx, reason) {
   saveState(ctx.projectDir, ctx.sid, ctx.st);
-  logRestartAdvice(ctx.projectDir, ctx.st, 'prompt-block', reason);
+  logRestartAdvice(ctx.projectDir, ctx.sid, ctx.st, 'prompt-block', reason);
   process.stdout.write(JSON.stringify({ decision: 'block', reason }));
 }
 
@@ -3133,7 +3153,7 @@ async function onUserPromptSubmit(data, projectDir) {
   // (a card firing there means the user never finished one request), and the early return below
   // is exactly the branch prompt 1 takes. A recovery turn deliberately restarts the count at 1 —
   // after a /clear the user IS starting over, which is the whole cost being measured.
-  st.promptsSinceStart = st.recoveryTurn ? 1 : (st.promptsSinceStart || 0) + 1;
+  countPrompt(st);
 
   const m = meterSession(data.transcript_path, { fleet: cfg.fleetMeter, projectDir });
   if (!m.main.turns) {
@@ -3158,7 +3178,7 @@ async function onUserPromptSubmit(data, projectDir) {
 
   saveState(projectDir, sid, st);
   if (notes.length) {
-    logRestartAdvice(projectDir, st, 'prompt-note', notes.join(' | '));
+    logRestartAdvice(projectDir, sid, st, 'prompt-note', notes.join(' | '));
     process.stdout.write(JSON.stringify({
       hookSpecificOutput: {
         hookEventName: 'UserPromptSubmit',
@@ -3849,7 +3869,8 @@ function onPreToolUse(data, projectDir) {
     // same /clear as the prompt-side ones, so they belong in the same reading. ctx.st is lazy and
     // may still be null; a guard that spoke has almost always forced it, and reading it here
     // costs one file read on a path that is already firing a card.
-    logRestartAdvice(projectDir, ctx.st || loadState(projectDir, ctx.sid), 'pretool-' + d.kind, d.reason);
+    logRestartAdvice(projectDir, ctx.sid, ctx.st || loadState(projectDir, ctx.sid),
+      'pretool-' + d.kind, d.reason);
     return d.kind === 'deny' ? deny('PreToolUse', d.reason) : ask('PreToolUse', d.reason);
   }
 }
