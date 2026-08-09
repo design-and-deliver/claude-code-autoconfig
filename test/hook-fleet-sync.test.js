@@ -345,9 +345,9 @@ test('a value-less --files reads as absent instead of throwing', () => {
 
 // --- wiring audit (the 2026-08-09 "in sync but inert" gap) -----------------------------------
 // Byte-sync is not liveness: worktree-gate.js sat present-and-unwired in THIS repo for nine days
-// while the report said [ ok ] for it everywhere, and format.js still ships to every user install
-// wired by nothing. These cases pin the audit's two halves — it must find that, and it must stay
-// quiet about claim-registry.js, the require()d library it would be trivial to cry wolf over.
+// while the report said [ ok ] for it everywhere. These cases pin both halves — the audit must
+// find that, and it must stay quiet about the two states that only LOOK like it: claim-registry.js
+// (a require()d library) and format.js (wired by /autoconfig only where a scripts.format exists).
 
 // A throwaway repo shaped like a real adopting checkout: <root>/.claude/{hooks,settings*.json}.
 // target() above hands back a BARE hooks dir whose parent is the shared tmpRoot, so a settings
@@ -394,6 +394,15 @@ test('wiring audit: a require()d library and a wired hook are both silent', () =
     { 'settings.local.json': wiredAs('PreToolUse', 'zz-local-hook.js') });
   assert(syncFleet({ targets: [local] }).unwired === 0,
     'a hook wired only in settings.local.json is live, not orphaned');
+});
+
+test('wiring audit: a conditionally-wired hook is never a finding', () => {
+  // format.js unwired is a supported configuration, not an oversight — /autoconfig Step 3b wires
+  // it only where the project has a `scripts.format`. Reporting it would make the audit's whole
+  // standing output a permanent line nobody reads, hiding the one real finding it exists for.
+  const t = wiringTarget({ 'format.js': HOOK });
+  assert(syncFleet({ targets: [t] }).unwired === 0,
+    'format.js is on the conditionally-wired list; its absence from settings is a decision');
 });
 
 test('wiring audit: quiet mode (the SessionStart pull) stays out of it', () => {

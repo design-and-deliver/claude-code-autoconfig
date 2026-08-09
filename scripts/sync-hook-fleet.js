@@ -262,19 +262,26 @@ function noteNoop(kind, label, quiet, say, tally) {
 //
 // Byte-sync is not liveness. A hook can be present in every repo, byte-identical to canonical,
 // and invoked by nothing — which is what worktree-gate.js was in THIS repo from 2026-07-31 to
-// 2026-08-09, and what format.js still is in four of five repos AND in every user install (it
-// ships, and no settings template wires it). The sync report showed `[ ok ]` for all of them,
-// because it only ever asked whether the bytes matched.
+// 2026-08-09, authored here and wired in neither settings file. The sync report showed `[ ok ]`
+// for it the whole time, because it only ever asked whether the bytes matched.
 //
 // This audit asks the other half of the question. It walks the hooks DIRECTORY rather than the
-// manifest on purpose: format.js is not a manifest entry, so a manifest-driven check would have
-// missed the very finding that motivated this.
+// manifest on purpose: format.js is not a manifest entry, so a manifest-driven check would see
+// only the files the fleet already tracks.
 
 // A hook is a file Claude Code EXECUTES with a JSON payload on stdin; a library is one a hook
 // require()s. That read is the whole discriminator, and it is precise here — claim-registry.js
 // (require()d by token-guard.js, zero stdin reads) is correctly unwired and must never be
 // reported, or the audit becomes noise nobody reads.
 const readsStdin = text => text.includes('process.stdin');
+
+// Hooks whose absence from a settings file is a DECISION, not an oversight. /autoconfig Step 3b
+// (.claude/commands/autoconfig.md) wires format.js only in a project that has a `scripts.format`
+// — job-agent-extension does and is wired; CCA, wifi-app and movie-maker deliberately do not.
+// Reporting a conditional hook turns the audit's ENTIRE standing output into a line that is
+// correct, permanent, and ignorable, which is how the one real finding it exists to surface
+// would get scrolled past. Add here only when NOT wiring is a supported configuration.
+const CONDITIONALLY_WIRED = new Set(['format.js']);
 
 // Every settings file that can wire a hook for this repo. The user-level one counts for EVERY
 // repo — one ~/.claude entry covers them all, which is exactly how session-close.js is wired —
@@ -301,7 +308,7 @@ function unwiredIn(hooksDir) {
     const text = readOr(path.join(hooksDir, f));
     return text != null && readsStdin(text);
   };
-  return names.filter(f => !wiring.includes(f) && isHook(f));
+  return names.filter(f => !CONDITIONALLY_WIRED.has(f) && !wiring.includes(f) && isHook(f));
 }
 
 // The canonical checkout is audited too, though it is never a sync TARGET — a repo cannot drift
