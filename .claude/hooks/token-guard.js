@@ -90,6 +90,10 @@
  *   2026-07-18 suppression removed the EVENT, not just the $ denomination: a 15M-token session
  *   sailed to the hardGateUSD backstop with no earlier session-total voice. Same check-in,
  *   stepped in tokens — read off sessionTokens(m), the figure the gate copy already shows.
+ *   sessionGateTokens 6000000 — R20, the BLOCKING session-total gate (2026-08-09). The ladder
+ *   above only PRINTS, and both in-turn gates (R13b/R14) re-baseline every turn, so a session
+ *   can reach 12.8M without one card that stops. Same axis as the ladder, same sessionTokens(m)
+ *   figure, but an ask; re-arms by doubling like the in-turn ladders. null disables.
  *   windowBudgetUSD null — your 5h-window budget in WEIGHTED $-equivalent, the mix-robust proxy
  *   for Max metering (Anthropic confirms cached content is discounted and model choice affects
  *   depletion, but publishes no multipliers — support.claude.com 9797557 / 14552983). Set an
@@ -287,6 +291,7 @@ const DEFAULTS = {
   contextExcessTokens: 88000,
   sessionWarnUSD: [5, 15, 30],
   sessionWarnTokens: [5000000, 10000000],  // subscription-side session-total ladder (see header)
+  sessionGateTokens: 6000000,              // R20 blocking session-total gate (see header)
   windowBudgetUSD: null,
   hardGateUSD: null,
   gateStepUSD: 5,
@@ -1353,6 +1358,7 @@ function loadState(projectDir, sid) {
     lastWindowPct: null, lastWindowResetsAt: null, lastWindowAtIso: null, warnedWindow: null,
     lastTurnDeltaUsd: 0, turnStartWorkTok: null, turnGateAt: null, turnGateFires: 0,
     turnStartCr: null, turnStartReqs: null, rentGateAt: null, rentGateFires: 0,
+    sessionGateAt: null, sessionGateFires: 0,   // R20 — session-scoped, never reset per turn
     recoveryTurn: false };
   try {
     return Object.assign(blank,
@@ -2084,8 +2090,11 @@ const ordinal = n => {
 // turnGateAt walked 1M -> 6M in session c9ad7711, approved every time). Five identical asks are
 // a keystroke, not a decision; two or three escalating ones stay a decision. The first fire
 // keeps the plain forward-looking phrasing — there is no repeat to name yet.
-const nextCheckClause = (fires, nextAt, unit = '') => fires <= 1
-  ? ` Next check ≈ ${fmtK(nextAt)}${unit} this turn.`
+// `scope` is a parameter and not the hardcoded "this turn" it used to be because R20 measures a
+// SESSION total — a card that re-arms across turns must not promise its next check "this turn".
+// Defaulted, so R13b's and R14's rendered copy is byte-identical to before.
+const nextCheckClause = (fires, nextAt, unit = '', scope = 'this turn') => fires <= 1
+  ? ` Next check ≈ ${fmtK(nextAt)}${unit} ${scope}.`
   : ` Each approval doubles the gap to the next (≈ ${fmtK(nextAt)}${unit}).`;
 // Meter tag — the FIRST thing on both in-turn cards. R13b and R14 measure DIFFERENT quantities
 // (work tokens vs unweighted cache re-reads) on INDEPENDENT re-arm ladders, but the cards were
@@ -3166,6 +3175,8 @@ async function onUserPromptSubmit(data, projectDir) {
   // R14 — same re-baseline for the rent meter (re-reads + round trips since this prompt).
   st.turnStartCr = crTokens(m); st.turnStartReqs = m.main.turns; st.rentGateAt = null;
   st.rentGateFires = 0;
+  // R20 is deliberately absent from this re-baseline: sessionGateAt/sessionGateFires measure the
+  // SESSION, and resetting them here would recreate the exact blind spot R20 exists to close.
   ctx.m = m;
   ctx.usd$ = wantDollars(cfg); // false => tokens-only copy (subscription users)
 
@@ -3674,19 +3685,82 @@ function r4bColdWriteReceiptGuard(ctx) {
     `/continue — it reloads the recent thread of this conversation.`);
 }
 
+// R20 — the session-total tripwire. The gap R13b and R14 structurally CANNOT see: both baseline
+// at TURN start (turnStartWorkTok / turnStartCr) and reset every turn, so forty ordinary turns
+// each under their own gates accumulate a 12.8M-token session with nothing ever blocking.
+// Measured 2026-08-09 on a session that reached 12.8M and met its first BLOCKING card at the
+// hand-armed hardGateUSD backstop — i.e. only because that user had armed one by hand.
+//
+// The session-total axis was not silent: sessionWarnTokens prints check-ins at 5M and 10M. But a
+// printed notice scrolls away with the rest of the turn's output, and the 5M one had gone unread.
+// Only an ask stops. That is the whole difference this guard adds — same axis, blocking.
+//
+// It reads sessionTokens(m), the SAME figure the check-in ladder and the gate's subscription copy
+// already show, so the three can never disagree about how big the session is.
+//
+// 6M and not the intuitive 4M: total÷requests does NOT recover the window (measured median 42:1),
+// and 4M failed to separate a session worth clearing from a long lean one, where ~8M did. 6M sits
+// inside that band and one rung under the 10M check-in it would otherwise talk over.
+function r20SessionTotalGuard(ctx) {
+  const { cfg, m, st, verdict } = ctx;
+  if (cfg.sessionGateTokens == null) return null;
+  if (recoveryExempt(st)) return null;   // a /clear + /continue recovery IS this card's own remedy
+  const tok = sessionTokens(m);
+  const gate = st.sessionGateAt != null ? st.sessionGateAt : cfg.sessionGateTokens;
+  if (tok < gate || skipVerdict(verdict)) return null;
+  return sessionTotalAsk(ctx, tok);
+}
+
+// The R20 fire path — re-arm, then render. Split from the guard for the reason turnSpendAsk is:
+// "should this fire?" and "what does firing say" each clear the complexity bar on their own.
+function sessionTotalAsk(ctx, tok) {
+  const { cfg, m, st, verdict } = ctx;
+  // Re-arm ABOVE what was observed, doubling the width each fire — the same ladder R13b and R14
+  // walk, for the same reason: repeats must get rarer instead of becoming wallpaper.
+  st.sessionGateFires = (st.sessionGateFires || 0) + 1;
+  st.sessionGateAt = reArmAt(tok, cfg.sessionGateTokens, st.sessionGateFires);
+  const rv = restartVerdict(m.liveContext, st.sessionGateAt - tok, cfg.contextWarnTokens,
+    coldStartTokens(ctx.projectDir, ctx.sid, m, ctx.data && ctx.data.transcript_path),
+    cfg.contextExcessTokens);
+  // ONE cost bullet, and it deliberately does not re-price the rent: R14 owns trips × context and
+  // says it live, so repeating it here would be the restatement this file's copy rules keep
+  // cutting. What only THIS card can say is the direction — a session total is monotonic, so
+  // unlike both in-turn gates it cannot be answered by finishing the turn.
+  //
+  // The context figure is m.liveContext, the MEASURED window — never tok/turns. That division is
+  // exactly the 42:1 ratio the threshold work retired, and quoting it would put a number on the
+  // card that the reader cannot check against anything.
+  const reqs = m.main.turns;
+  return gateAsk(ctx,
+    `${meterTag('SESSION', st.sessionGateFires)}this session has spent ~${fmtK(tok)} tokens ` +
+    `over ${reqs} request${reqs === 1 ? '' : 's'}.\n` +
+    `• Cost: ~${fmtK(m.liveContext)} of context rides into every further request, and a session ` +
+    `total only grows — landing this turn does not shrink it; only /clear starts the count over.` +
+    `${nextCheckClause(st.sessionGateFires, st.sessionGateAt, '', 'this session')}\n` +
+    choiceBullet(verdict, {
+      neutral: 'approve to push on — or deny, and Claude should land this turn at a commit point ' +
+        `so you can /clear + /continue${clearTail(rv)}.`,
+      denyTail: 'denying lands this turn at a commit point so you can /clear + ' +
+        `/continue${clearTail(rv)}.`,
+    }, rv));
+}
+
 // The spend gates share one meter with R4b: PreToolUse runs on every tool call, so meter ONCE
 // and only when at least one of them is armed. Order matters — the idle receipt first (it
 // explains the very context the others are about to price), then R13b (sharpest), then R14,
-// then the session backstop.
+// then R20 (the session axis the three turn-scoped ones can't see), then the session backstop.
 const SPEND_GUARDS = [r4bColdWriteReceiptGuard, r13bTurnSpendGuard, r14TurnRentGuard,
-  sessionSpendGuard];
+  r20SessionTotalGuard, sessionSpendGuard];
+
+// Table, not a `||` chain: the chain was already four forks wide before R20 and every new gate
+// pushed the enclosing function's complexity up for no added meaning.
+const SPEND_ARM_KEYS = ['hardGateUSD', 'turnGateTokens', 'turnRentGateTokens', 'sessionGateTokens'];
 
 function spendGatesGuard(ctx) {
   const { cfg, data } = ctx;
   // Meter only when something in this block can actually speak. R4b rides the same meter but is
   // NOT a spend gate, so a config with every spend gate disabled must still reach it.
-  const spendArmed = cfg.hardGateUSD != null || cfg.turnGateTokens != null ||
-    cfg.turnRentGateTokens != null;
+  const spendArmed = SPEND_ARM_KEYS.some(k => cfg[k] != null);
   if (!spendArmed && !cfg.idleWarnMinutes) return null;
   preState(ctx);
   // What the PENDING call argues for. Computed once; both in-turn tripwires consult it. A
@@ -4470,6 +4544,7 @@ module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, l
   restartVerdict, choiceBullet, rentAskCopy,   // test/token-guard-copy.test.js — R14 copy contract
   isRecoveryTurn,                              // test/token-guard-recovery.test.js — R13b/R14 exemption
   r13bTurnSpendGuard, r14TurnRentGuard,        // …and the two guards it drives through the exemption
+  r20SessionTotalGuard,                        // test/token-guard-session-gate.test.js — R20
   crossedSpendSteps,                           // test/token-guard-ladder.test.js — session-total ladder
   meterCanaryVerdict, meterCanaryNote,         // test/token-guard-canary.test.js — meter fail-open canary
   coldStartTokens, firstContextOfHead, clearTail,  // R15b cold-start meter
