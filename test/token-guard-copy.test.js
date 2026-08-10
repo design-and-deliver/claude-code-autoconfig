@@ -117,7 +117,10 @@ test('rent and work are comparable', () => {
 
 test('next-check tail converts with the cost figure', () => {
   const s = CARD();
-  assert(/each approval doubles the gap to the next \(≈ 840k\)/.test(s),
+  // Case-insensitive on the leading letter: the tail is a sentence of its own on the rendered
+  // card, so it capitalizes. What this test is for is the CONVERSION (840k, not 8.4M) — pinning
+  // the lowercase "e" made it fail on a capitalization that changed no number and no unit.
+  assert(/[Ee]ach approval doubles the gap to the next \(≈ 840k\)/.test(s),
     `tail must convert too, or the card re-mixes units: ${s}`);
   assert(!/8\.4M/.test(s), `raw threshold still printed: ${s}`);
 });
