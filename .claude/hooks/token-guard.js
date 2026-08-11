@@ -2241,8 +2241,30 @@ const BASH_BOMBS = [
   [isBigCat, 'cats a file big enough to dominate the window — a Read with offset/limit costs a fraction'],
   [isGitFullPatch, 'prints a full patch rather than a --stat, and the whole diff is re-read on every remaining trip'],
 ];
+// Every row's sentence above is a claim about output that STAYS — "re-read on every remaining
+// trip", "lands in context and stays there". A real pipe into head/tail/wc discards the rest
+// before it ever reaches the tool result, so on those commands the claim is simply false and the
+// row must not fire: `cd api && npx jest 2>&1 | tail -35` lands ~35 lines and drew the full-suite
+// deny anyway (observed 2026-08-10, session 12cbde51) — from a card whose own stated criterion is
+// output that is large, unbounded AT CALL TIME, and resident afterward. Checked here rather than
+// per row so the four rows cannot drift on it; (b) had carried its own copy of this test since
+// R16 and was the only row honoring it, which is exactly how the asymmetry survived.
+//
+// Split on a SINGLE `|` only — shellSegs collapses `|` and `&&` into one split, and `npx jest &&
+// tail -5 log` bounds nothing, the suite's output has already landed. Erring toward a false
+// NEGATIVE is deliberate: that yields a neutral card still carrying the turn's rent numbers, and
+// the user can land anyway. A false positive spends their attention on a sentence that isn't true,
+// and a gate caught overstating once gets dismissed by reflex the next time it is right.
+//
+// Scope note: this prices CONTEXT only. The suite still costs the same wall-clock either way, and
+// R13b/R14 still argue for landing the turn on their own numbers.
+const OUTPUT_BOUND = /^(?:head|tail|wc)\b/;
+const hasOutputBound = (cmd) => String(cmd || '')
+  .split(/(?<!\|)\|(?!\|)/).slice(1).some(s => OUTPUT_BOUND.test(s.trim()));
+
 function bashVerdict(cmd) {
   if (isTurnEnder(cmd)) return { kind: 'skip' };
+  if (hasOutputBound(cmd)) return null;
   const hit = BASH_BOMBS.find(([matches]) => matches(cmd));
   return hit ? { kind: 'deny', why: hit[1] } : null;
 }
@@ -4545,6 +4567,7 @@ module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, l
   isRecoveryTurn,                              // test/token-guard-recovery.test.js — R13b/R14 exemption
   r13bTurnSpendGuard, r14TurnRentGuard,        // …and the two guards it drives through the exemption
   r20SessionTotalGuard,                        // test/token-guard-session-gate.test.js — R20
+  bashVerdict,                                 // test/token-guard-bomb-gate.test.js — the Bash bomb rows
   crossedSpendSteps,                           // test/token-guard-ladder.test.js — session-total ladder
   meterCanaryVerdict, meterCanaryNote,         // test/token-guard-canary.test.js — meter fail-open canary
   coldStartTokens, firstContextOfHead, clearTail,  // R15b cold-start meter
