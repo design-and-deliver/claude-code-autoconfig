@@ -2,12 +2,13 @@
 /**
  * statusline-cost.js — Claude Code statusLine command: the ambient session-cost readout.
  *
- * Three distilled figures, always visible under the prompt — session total, live context
- * (the per-turn re-read), fresh-start cost — plus a /clear + /continue nudge that appears
- * only when a restart actually pays. The statusline is the one surface that can say this
- * on every turn without becoming wallpaper: it renders outside the transcript, costs zero
- * context tokens, and never repeats into scrollback. token-guard's cards stay the
- * interrupts; this is the gauge between them.
+ * When (and only when) a fresh session would be meaningfully cheaper, the statusline shows
+ * three distilled figures — session total, live context (the per-turn re-read), fresh-start
+ * cost — and a /clear + /continue remedy line. The rest of the time it is EMPTY: figures
+ * with nothing to do about them are noise (Andrew, 2026-08-12). The statusline is the one
+ * surface that can carry this without becoming wallpaper: it renders outside the
+ * transcript, costs zero context tokens, and never repeats into scrollback. token-guard's
+ * cards stay the interrupts; this is the gauge between them.
  *
  * GLOBAL-tier like session-close.js: wired once in ~/.claude/settings.json (statusLine
  * key), covers every repo. All metering comes from the PROJECT's own token-guard.js,
@@ -104,16 +105,17 @@ function render(tg, data, projectDir) {
   const cold = tg.coldStartTokens(projectDir, data.session_id, m, data.transcript_path)
     || COLD_START_FALLBACK_TOK;
   // Andrew's format (2026-08-12): labeled fields that carry their own explanation, and the
-  // remedy as a full sentence on its own line — not abbreviated gauge segments.
-  const DIM = '\x1b[2m', YEL = '\x1b[33m', OFF = '\x1b[0m';
-  let line = `${DIM}session tokens = ${fmtK(session)} (${fmtK(ctx)} cache price)   ` +
-    `new session cost = ${fmtK(cold)}${OFF}`;
+  // remedy as a full sentence on its own line. ALL-OR-NOTHING — the figures alone are noise
+  // when there is nothing to do about them, so the whole block gates on the nudge condition
+  // and the statusline stays empty otherwise.
   const savings = ctx - cold;
-  if (savings >= (cfg.contextWarnTokens || NUDGE_MIN_SAVINGS_TOK) && !midPlanSubstep(tg, projectDir)) {
-    line += `\n${YEL}/clear then /continue to save up to ${fmtK(savings)} tokens per turn ` +
-      `for new topics${OFF}`;
-  }
-  return line;
+  if (savings < (cfg.contextWarnTokens || NUDGE_MIN_SAVINGS_TOK)) return '';
+  if (midPlanSubstep(tg, projectDir)) return '';
+  const DIM = '\x1b[2m', YEL = '\x1b[33m', OFF = '\x1b[0m';
+  return `${DIM}session tokens = ${fmtK(session)} (${fmtK(ctx)} cache price) ·  ` +
+    `new session cost = ${fmtK(cold)}${OFF}\n` +
+    `${YEL}/clear then /continue to save up to ${fmtK(savings)} tokens per turn ` +
+    `for new topics${OFF}`;
 }
 
 (function main() {
