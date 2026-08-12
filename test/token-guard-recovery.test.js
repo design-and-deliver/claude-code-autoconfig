@@ -17,7 +17,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { test, assert, summary } = require('./_harness');
-const { isRecoveryTurn, r13bTurnSpendGuard, r14TurnRentGuard, resolveConfig } =
+const { isRecoveryTurn, r13bTurnSpendGuard, r14TurnRentGuard, resolveConfig,
+  recordRecoverySpend, loadRecoverySpend, recoveryWasteVerdict, recoveryCostNote,
+  r21RecoveryCostGuard } =
   require('../.claude/hooks/token-guard');
 
 const CFG = resolveConfig({});
@@ -131,6 +133,94 @@ test('the brand-new-session return persists state so PreToolUse can read the fla
     HOOK_SRC.indexOf('if (!m.main.turns) {') + 220);
   assert(/saveState\(/.test(block),
     'turn 1 must save state on the way out, or the flag dies before the guards run');
+});
+
+// --- R21: the recovery-cost meter (2026-08-12) ---------------------------------------------
+//
+// The exemption above made recovery turns invisible to every tripwire — deliberately. R21 is
+// the ledger that keeps the habit honest: each recovery turn's spend is recorded at Stop, and
+// once per 24h a note fires IF the trailing day crossed recoveryWasteTokens. Healthy days
+// (under the line, or nothing to report) stay silent by contract.
+
+const DAY = 86400000;
+
+test('recovery spend round-trips through the store with rounded figures', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cca-r21-'));
+  recordRecoverySpend(dir, 'sid-1', 120000, 1.5, 1000);
+  recordRecoverySpend(dir, 'sid-2', 80000.4, 0.257, 2000);
+  const store = loadRecoverySpend(dir);
+  assert(store.samples.length === 2, 'two samples recorded');
+  assert(store.samples[0].sid === 'sid-1' && store.samples[0].at === 1000,
+    'a sample carries sid + timestamp');
+  assert(store.samples[1].tok === 80000 && store.samples[1].usd === 0.26,
+    'tok rounds to whole tokens, usd to cents');
+});
+
+test('verdict is null while healthy: empty day, under the line, stale spend, or already reported', () => {
+  const now = 10 * DAY;
+  const line = 2000000;
+  assert(recoveryWasteVerdict({ samples: [], lastReportAt: 0 }, line, now) === null,
+    'an empty store is silent');
+  const under = { samples: [{ at: now - 1000, tok: 500000, usd: 1 }], lastReportAt: 0 };
+  assert(recoveryWasteVerdict(under, line, now) === null, 'under the line is silent');
+  const stale = { samples: [{ at: now - 2 * DAY, tok: 9000000, usd: 9 }], lastReportAt: 0 };
+  assert(recoveryWasteVerdict(stale, line, now) === null, 'spend older than 24h is out of window');
+  const reported = { samples: [{ at: now - 1000, tok: 3000000, usd: 3 }],
+    lastReportAt: now - 3600000 };
+  assert(recoveryWasteVerdict(reported, line, now) === null,
+    'a report shipped within 24h holds the one-shot');
+});
+
+test('verdict totals ONLY the trailing day once the line is crossed', () => {
+  const now = 10 * DAY;
+  const store = { samples: [
+    { at: now - 1000, tok: 1500000, usd: 2 },
+    { at: now - 2000, tok: 900000, usd: 1.5 },
+    { at: now - 2 * DAY, tok: 5000000, usd: 9 },   // out of window — must not count
+  ], lastReportAt: 0 };
+  const v = recoveryWasteVerdict(store, 2000000, now);
+  assert(v && v.n === 2 && v.tok === 2400000,
+    `two in-window samples totalling 2.4M — got ${JSON.stringify(v)}`);
+  assert(Math.abs(v.usd - 3.5) < 1e-9, 'usd sums the same window');
+});
+
+test('the note names count, tokens, and the crossed line; $ only when usd$ is on', () => {
+  const v = { n: 3, tok: 2400000, usd: 3.5 };
+  const withUsd = recoveryCostNote(v, 2000000, true);
+  assert(/3 recoveries/.test(withUsd) && /2\.4M/.test(withUsd) && /2\.0M/.test(withUsd),
+    'count, total, and threshold all appear');
+  assert(/\$3\.50/.test(withUsd), 'API billing carries the $ figure');
+  const tokensOnly = recoveryCostNote(v, 2000000, false);
+  assert(!/\$/.test(tokensOnly), 'subscription copy never carries a $ figure');
+  assert(/1 recovery /.test(recoveryCostNote({ n: 1, tok: 2400000, usd: 1 }, 2000000, false)),
+    'a single recovery reads singular');
+});
+
+test('the guard fires once, stamps the store, and stays quiet for the next 24h', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cca-r21-'));
+  recordRecoverySpend(dir, 's1', 3000000, 4, Date.now());
+  const first = r21RecoveryCostGuard({ cfg: CFG, projectDir: dir, usd$: false });
+  assert(first.notes.length === 1 && /recovery-cost/.test(first.notes[0]),
+    `over the line -> one note — got ${JSON.stringify(first.notes)}`);
+  const second = r21RecoveryCostGuard({ cfg: CFG, projectDir: dir, usd$: false });
+  assert(second.notes.length === 0, 'the report is one-shot per 24h');
+  assert(loadRecoverySpend(dir).lastReportAt > 0,
+    'the stamp lives in the store, not session state — the habit spans sessions');
+});
+
+test('recoveryWasteTokens null disables the report end to end', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cca-r21-'));
+  recordRecoverySpend(dir, 's1', 9000000, 9, Date.now());
+  const off = r21RecoveryCostGuard({ cfg: resolveConfig({ recoveryWasteTokens: null }),
+    projectDir: dir, usd$: false });
+  assert(off.notes.length === 0, 'a null line must silence the report');
+});
+
+test('Stop bills a recovery turn to the ledger (source-order check, like the flag wiring above)', () => {
+  const stopBlock = HOOK_SRC.slice(HOOK_SRC.indexOf('function onStop('),
+    HOOK_SRC.indexOf('// PreToolUse guards'));
+  assert(/st\.recoveryTurn/.test(stopBlock) && /recordRecoverySpend\(/.test(stopBlock),
+    'onStop must call recordRecoverySpend when st.recoveryTurn is set');
 });
 
 summary();

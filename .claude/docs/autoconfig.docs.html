@@ -1375,7 +1375,7 @@
             },
             'continue': {
                 title: 'continue.md',
-                desc: 'Continues where your previous session in this terminal left off — recovers its context and resumes the work. Plan-aware: if that session was executing a substep of a plan doc, resumes from the plan\'s Ledger instead of the transcript.<div style="margin-top: 12px;"><strong>Parameters</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Name</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Type</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>--show</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>flag</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Opens the recovered transcript in your default editor (no-op on a clean plan handoff or a fresh checkpoint handoff note — nothing is read).</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Picking up where we left off — {what we were doing}. Then the work resumes.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>plan</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Picking up where we left off — {plan alias}: substep {N.k} done ({hash}); starting {next}. Then the next substep runs.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-previous</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">I can\'t find a previous session for this terminal.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Reads .jsonl transcripts from ~/.claude/projects/, writes temp file</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/continue</code> <span style="opacity: 0.6;">— Recover the previous session here and resume its work</span></div></div></div>',
+                desc: 'Recovers where your previous session in this terminal left off — rebuilds its context on a cheap model, reports the state and the precise next action, then stops for your go-ahead. Plan-aware: if that session was executing a substep of a plan doc, the report comes from the plan\'s Ledger instead of the transcript.<div style="margin-top: 12px;"><strong>Parameters</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Name</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Type</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>--show</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>flag</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Opens the recovered transcript in your default editor (no-op on a clean plan handoff or a fresh checkpoint handoff note — nothing is read).</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Picking up where we left off — {what we were doing}. State summary + the one next action, then a go-ahead question.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>plan</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Picking up where we left off — {plan alias}: substep {N.k} done ({hash}); next: {N.next}. Then a go-ahead question.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-previous</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">I can\'t find a previous session for this terminal.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Reads .jsonl transcripts from ~/.claude/projects/, writes temp file</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/continue</code> <span style="opacity: 0.6;">— Recover the previous session here, see where it stands, reply "go" to resume</span></div></div></div>',
                 trigger: '/continue'
             },
             'disable-arcade-beeps': {
@@ -1828,36 +1828,36 @@ Keep the subject line under 50 chars. Add body if the change needs explanation.`
             },
             'continue': {
                 filename: 'continue.md',
-                content: `Continue where the previous session in this terminal left off.
+                content: `---
+description: Recover the previous session's context on Sonnet, report where it stands, then stop for your go-ahead
+argument-hint: [--show]
+model: sonnet
+---
+<!-- @description Recovers where your previous session in this terminal left off — rebuilds its context on a cheap model, reports the state and the precise next action, then stops for your go-ahead. Plan-aware: if that session was executing a substep of a plan doc, the report comes from the plan's Ledger instead of the transcript. -->
+<!-- @version 9 -->
+<!-- @param --show | flag | optional | Opens the recovered transcript in your default editor (no-op on a clean plan handoff or a fresh checkpoint handoff note — nothing is read). -->
+<!-- @response success | Picking up where we left off — {what we were doing}. State summary + the one next action, then a go-ahead question. -->
+<!-- @response plan | Picking up where we left off — {plan alias}: substep {N.k} done ({hash}); next: {N.next}. Then a go-ahead question. -->
+<!-- @response no-previous | I can't find a previous session for this terminal. -->
+<!-- @sideeffect Reads .jsonl transcripts from ~/.claude/projects/, writes temp file -->
+<!-- @example /continue | Recover the previous session here, see where it stands, reply "go" to resume -->
+Continue where the previous session in this terminal left off.
 
-This is the no-ceremony wrapper around \`/recover-context\`'s auto mode: recover the last
-session's context, then RESUME the work — unlike \`/recover-context\`, which recovers and
-waits for direction. No arguments; it figures everything out itself.
+This is the no-ceremony wrapper around \`/recover-context\`'s auto mode: no arguments, it
+figures everything out itself, and it is plan-aware (below). Since v9 it runs on Sonnet
+(the \`model:\` frontmatter above): recovery is mechanical re-reading — probe, read,
+reconcile — and a cheap model handles it fully, at a fraction of the cost on a
+Fable/Opus session. What the cheap model must NOT do is the resumed work itself.
+\`model:\` scopes to the whole turn, so this command ends its turn at the report: state
+recovered, the one next action named, a go-ahead question. The user's next prompt
+("go") starts a fresh turn on the session's main model, with the recovered context
+already in the conversation — recovery cheap, work at full quality.
 
-It is also **plan-aware**: when the previous session was executing a substep of a phased
-plan doc (the plan-authoring pattern — a \`docs/*.md\` or \`.claude/plans/*.md\` with a
-\`## Ledger\` section), the plan doc + Ledger is the handoff, not the transcript.
-
-**Every probe runs in ONE call (Step 1).** Recovery cost is \`round trips × resident
-context\`, and this command used to spend eight to fifteen sequential round trips on pure
-filesystem reads whose results never changed what the next probe did — while the context
-they recovered was ~700 tokens at p50 (measured 2026-08-07 across 245 real \`/continue\`
-sessions). The probes were separate only because this doc used to write them as separate
-prose steps. Everything below Step 1 is a DECISION, not a lookup.
-
-## Step 1: Probe (one call)
-
-From the project root — the script is in the project tier or the user tier:
-
-\`\`\`bash
-python3 .claude/scripts/recover-session.py 2>/dev/null \\
-  || python3 ~/.claude/scripts/recover-session.py
-\`\`\`
-
-It prints one JSON object and never hard-fails. Fields:
-
-| field | meaning |
-|---|---|`
+⛔ **End the turn on a plain text question — never an AskUserQuestion picker.** A picker
+answer continues the SAME turn, so the work it green-lights would run on the cheap
+recovery model — exactly what the stop exists to prevent. This overrides any local
+end-of-turn convention that prefers a picker for closed choices. Ask in text, end the
+message, wait.`
             },
             'disable-arcade-beeps': {
                 filename: 'disable-arcade-beeps.md',

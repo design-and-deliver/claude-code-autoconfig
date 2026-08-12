@@ -190,6 +190,14 @@
  *   /migrate-new-session) — see recoveryExempt. `/clear` raises no assistant turn, so the pair
  *   lands as turn 1 of the fresh session and the recovery runs alone for dozens of re-reading
  *   trips; the cards fire correctly and then offer /clear + /continue to a user already inside it.
+ *   recoveryWasteTokens 2000000 — R21: the recovery-cost meter (2026-08-12). The exemption
+ *   above makes recovery turns invisible by design, so nothing ever reported what the /clear
+ *   habit itself costs. Each recovery turn's spend is billed at Stop to
+ *   .token-guard/recovery-spend.json (beside cold-start.json); at most once per 24h, when the
+ *   trailing day's recovery total crosses this line, the next prompt carries a one-line relay
+ *   note ("N recoveries in the last 24h cost ~X tokens"). Under the line it stays silent — a
+ *   healthy clear habit never hears from it. Tokens are work-weighted (R13b's unit); the $
+ *   figure rides only under wantDollars. null disables both the log and the report.
  *   planSteer true — R13a: one-line every-prompt steer telling Claude to gauge the request's
  *   blast radius FIRST and author a plan doc (session-sized substeps + Ledger) before starting
  *   work beyond ONE normal task — beyond-small work is plan-based, so /continue can resume it
@@ -271,6 +279,8 @@ const COLD_START_BACKFILL_FILES = 8;         // newest sibling transcripts sampl
 const COLD_START_BACKFILL_BYTES = 128 * 1024;// bounded head-read per transcript — never load a fat .jsonl
 // COLD_START_PAYBACK_TRIPS retired 2026-07-31 — see restartVerdict. It gated on the same excess the
 // fat line now does, and could only bind above a ~113k floor, so it was dead at this machine's ~62k.
+const RECOVERY_KEEP_MAX = 200;               // R21: recovery-spend.json sample cap (weeks of clears)
+const DAY_MS = 86400000;                     // R21: the reporting window, and the report's own one-shot
 const TASK_NORM_TOK = 100000;                // R13: a normal task finishes under this — the spiral yardstick
 const PLAN_STEER_TOK = TASK_NORM_TOK;        // R13a: beyond-small bar quoted in the plan-first steer — any task
                                              // beyond one normal session is PLAN-BASED (agreed 2026-08-05)
@@ -318,6 +328,7 @@ const DEFAULTS = {
   miniBombGate: false,
   turnGateTokens: 1000000,          // R13b: hard ask when ONE turn's work tokens cross this (null = off)
   turnRentGateTokens: 1000000,      // R14: hard ask when ONE turn's cache RE-READS cross this (null = off)
+  recoveryWasteTokens: 2000000,     // R21: daily recovery-spend reporting line (null = off — see header)
   planSteer: true,                  // R13a: every-prompt plan-first steer (model-facing, never relayed)
   skillBudgetWarnChars: 150000,
   idleWarnMinutes: 60,
@@ -376,6 +387,7 @@ const TOKEN_SAVER = {
   windowSpikeWarnPct: 10,        // flag a smaller single-turn window bite than the 20 default
   turnGateTokens: 500000,        // R13b: half the default gate-width — spirals stopped at 5× normal, not 10×
   turnRentGateTokens: 500000,    // R14: same halving for rent — ~5 round trips at 100k context
+  recoveryWasteTokens: 1000000,  // R21: report a wasteful clear habit at half the default line
 };
 
 // Layer DEFAULTS < TOKEN_SAVER (when on) < explicit user config. Pure + exported for
@@ -2416,6 +2428,69 @@ function coldStartTokens(projectDir, sid, m, transcriptPath) {
   return tok.length % 2 ? tok[mid] : Math.round((tok[mid - 1] + tok[mid]) / 2);
 }
 
+// ── R21 recovery-spend meter: what the /clear habit actually COSTS here (2026-08-12) ──────────
+// The R13b/R14 recovery exemption made recovery turns invisible by design: exempt from every
+// tripwire, they became the one spend category nothing in this file ever added up. So a
+// clear-happy day — every card obeyed, every recovery clean — could quietly cost more than the
+// sessions it tidied, with no reading anywhere to say so. This meter closes that loop with the
+// same posture as cold-start.json one shelf up: measure every time, stay silent while healthy,
+// speak once when not (Andrew 2026-08-12 — "only report to user if it reveals waste").
+//
+// Recording is one append per recovery turn (the Stop path — st.recoveryTurn survives until the
+// next prompt rewrites it). Reporting is recoveryWasteVerdict: the trailing 24h total against
+// the recoveryWasteTokens line, at most one note per 24h, stamped in the STORE rather than
+// session state because the habit being measured spans sessions by definition.
+function recoverySpendPath(projectDir) { return path.join(stateDir(projectDir), 'recovery-spend.json'); }
+
+function loadRecoverySpend(projectDir) {
+  try {
+    const j = JSON.parse(fs.readFileSync(recoverySpendPath(projectDir), 'utf8'));
+    return { samples: Array.isArray(j.samples) ? j.samples : [],
+      lastReportAt: j.lastReportAt || 0 };
+  } catch (_) { return { samples: [], lastReportAt: 0 }; }
+}
+
+function saveRecoverySpend(projectDir, store) {
+  try {
+    fs.mkdirSync(stateDir(projectDir), { recursive: true });
+    fs.writeFileSync(recoverySpendPath(projectDir), JSON.stringify({
+      samples: store.samples.slice(-RECOVERY_KEEP_MAX), lastReportAt: store.lastReportAt }));
+  } catch (_) { /* a lost sample only blurs the daily reading — never break the hook */ }
+}
+
+// One recovery turn -> one sample. tok is work-weighted (R13b's unit, so the two readings share
+// a yardstick); usd is the turn's weighted delta — both computed by the Stop path that calls this.
+function recordRecoverySpend(projectDir, sid, tok, usd, nowMs) {
+  const store = loadRecoverySpend(projectDir);
+  store.samples.push({ at: nowMs, sid,
+    tok: Math.round(tok), usd: Math.round(usd * 100) / 100 });
+  saveRecoverySpend(projectDir, store);
+}
+
+// The daily reading. Null while healthy: an empty day, a total under the line, or a report
+// already shipped within 24h. The caller stamps lastReportAt only when the note actually ships,
+// so a quiet check today never eats tomorrow's report.
+function recoveryWasteVerdict(store, wasteTokens, nowMs) {
+  const dayAgo = nowMs - DAY_MS;
+  if ((store.lastReportAt || 0) > dayAgo) return null;
+  const day = store.samples.filter(s => (s.at || 0) > dayAgo);
+  const tok = day.reduce((a, s) => a + (s.tok || 0), 0);
+  if (!day.length || tok < wasteTokens) return null;
+  return { n: day.length, tok, usd: day.reduce((a, s) => a + (s.usd || 0), 0) };
+}
+
+// Relay copy: ONE line to the user, factual, with the crossed line named (a number the user
+// sees carries its threshold). $ rides only under wantDollars, like every other card here.
+function recoveryCostNote(v, wasteTokens, usd$) {
+  const amount = `~${fmtK(v.tok)} tokens` + (usd$ ? ` (≈${fmtUSD(v.usd)})` : '');
+  const word = v.n === 1 ? 'recovery' : 'recoveries';
+  return `recovery-cost: ${v.n} ${word} (/continue-style turns) in the last 24h cost ` +
+    `${amount}, over the ${fmtK(wasteTokens)}/day reporting line. Relay this to the user as ` +
+    `ONE standalone line before your answer — "♻️ FYI — ${v.n} session ${word} in the last ` +
+    `24h cost ${amount}; if any of those /clears were reflexive, letting sessions run longer ` +
+    `is cheaper." — then a horizontal rule, then the answer. Never expand it into a section.`;
+}
+
 // ── restartVerdict / restartBullet: price the option the Choice bullet leaves unpriced (R15) ──
 // Approving buys ONE more doubled leg; the standing alternative is /clear + /continue. The rebuild
 // PRICE is metered and varies honestly — a 40k context at the 1M fire is nearly free to rebuild, a
@@ -3152,9 +3227,26 @@ function claimAdvisoryGuard(ctx) {
 }
 
 // Rule order is note order; officialUsagePrep must precede the three meter consumers after it.
+// R21 — the recovery-cost daily reading (the meter lives beside cold-start.json above).
+// Note-only and last in the fold: it never blocks, and its one-shot lives in the store, so the
+// report lands in whichever session prompts first once the line is crossed.
+function r21RecoveryCostGuard(ctx) {
+  const notes = [];
+  if (ctx.cfg.recoveryWasteTokens != null) {
+    const store = loadRecoverySpend(ctx.projectDir);
+    const v = recoveryWasteVerdict(store, ctx.cfg.recoveryWasteTokens, Date.now());
+    if (v) {
+      notes.push(recoveryCostNote(v, ctx.cfg.recoveryWasteTokens, ctx.usd$));
+      store.lastReportAt = Date.now();
+      saveRecoverySpend(ctx.projectDir, store);
+    }
+  }
+  return { notes, block: null };
+}
+
 const PROMPT_GUARDS = [claimAdvisoryGuard, r2ReceiptGuard, r3ContextBombGuard, r4IdleReturnGuard, fatContextGuard,
   r6ScopeDriftGuard, officialUsagePrep, r12aWindowSpikeGuard, r12bWindowThresholdGuard,
-  spendStepGuard, r17PlanBoundaryGuard, r13aPlanSteerGuard];
+  spendStepGuard, r17PlanBoundaryGuard, r13aPlanSteerGuard, r21RecoveryCostGuard];
 
 async function onUserPromptSubmit(data, projectDir) {
   const cfg = loadConfig(projectDir);
@@ -3237,6 +3329,15 @@ function onStop(data, projectDir) {
   if (cfg.windowSpikeWarn && delta > LEDGER_ENTRY_DUST_USD) {
     appendSpendLedger({ ts: new Date().toISOString(), sid,
       proj: path.basename(projectDir || ''), usd: Math.round(delta * 10000) / 10000 });
+  }
+
+  // R21 — a recovery turn just ended (st.recoveryTurn survives until the next prompt rewrites
+  // it): bill it to the recovery ledger beside cold-start.json. Turn 1 of a fresh session has
+  // no work baseline (R13b's lazy-arm sits out recovery turns), so || 0 bills the whole session
+  // to the turn — which on that branch IS the turn.
+  if (st.recoveryTurn && cfg.recoveryWasteTokens != null) {
+    recordRecoverySpend(projectDir, sid,
+      Math.max(0, workTokens(m) - (st.turnStartWorkTok || 0)), Math.max(0, delta), Date.now());
   }
 
   // R2: workflow growth -> usage-log receipt + queue a one-line receipt for the next prompt +
@@ -4566,6 +4667,8 @@ module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, l
   restartVerdict, choiceBullet, rentAskCopy,   // test/token-guard-copy.test.js — R14 copy contract
   isRecoveryTurn,                              // test/token-guard-recovery.test.js — R13b/R14 exemption
   r13bTurnSpendGuard, r14TurnRentGuard,        // …and the two guards it drives through the exemption
+  recordRecoverySpend, loadRecoverySpend, recoveryWasteVerdict, recoveryCostNote,
+  r21RecoveryCostGuard,                        // …R21 recovery-cost meter, same suite
   r20SessionTotalGuard,                        // test/token-guard-session-gate.test.js — R20
   bashVerdict,                                 // test/token-guard-bomb-gate.test.js — the Bash bomb rows
   crossedSpendSteps,                           // test/token-guard-ladder.test.js — session-total ladder
