@@ -72,14 +72,16 @@ function pruneCaches(dir) {
   } catch (_) {}
 }
 
+function bucketSum(per) {
+  let t = 0;
+  for (const v of Object.values(per || {})) t += (v.inp || 0) + (v.out || 0) + (v.cr || 0) + (v.cw || 0);
+  return t;
+}
+
 // Session total = every bucket of every model, main + agents — the same sum token-guard's
 // sessionTokens() renders (not exported, so summed here from the tested perModel contract).
 function totalTokens(m) {
-  let t = 0;
-  for (const per of [m.main && m.main.perModel, m.agents && m.agents.perModel]) {
-    for (const v of Object.values(per || {})) t += (v.inp || 0) + (v.out || 0) + (v.cr || 0) + (v.cw || 0);
-  }
-  return t;
+  return bucketSum((m.main || {}).perModel) + bucketSum((m.agents || {}).perModel);
 }
 
 // Mid-substep is the one moment the nudge must NOT show: a /clear there loses the substep
@@ -95,9 +97,13 @@ function midPlanSubstep(tg, projectDir) {
   } catch (_) { return false; }
 }
 
-function render(tg, data, projectDir) {
+function loadConfig(tg, projectDir) {
   const user = (readJson(path.join(projectDir, '.claude', 'cca.config.json')) || {}).tokenGuard || {};
-  const cfg = tg.resolveConfig ? tg.resolveConfig(user) : user;
+  return tg.resolveConfig ? tg.resolveConfig(user) : user;
+}
+
+function render(tg, data, projectDir) {
+  const cfg = loadConfig(tg, projectDir);
   const m = tg.meterSession(data.transcript_path, { fleet: cfg.fleetMeter !== false, projectDir });
   const session = totalTokens(m);
   if (!session) return '';
@@ -118,25 +124,40 @@ function render(tg, data, projectDir) {
     `for new topics${OFF}`;
 }
 
+function readInput() {
+  let data; try { data = JSON.parse(fs.readFileSync(0, 'utf8')); } catch (_) { return null; }
+  if (!data || !data.transcript_path || !data.session_id) return null;
+  let st; try { st = fs.statSync(data.transcript_path); } catch (_) { return null; }
+  return { data, st };
+}
+
+function cacheHit(cached, st) {
+  if (!cached) return false;
+  return (cached.mtimeMs === st.mtimeMs && cached.size === st.size)
+    || Date.now() - (cached.at || 0) < MID_TURN_REUSE_MS;
+}
+
+function computeLine(data, projectDir, cached) {
+  try {
+    const tg = require(path.join(projectDir, '.claude', 'hooks', 'token-guard.js'));
+    return render(tg, data, projectDir) || '';
+  } catch (_) {
+    return (cached && cached.line) || '';   // no token-guard here, or a mid-edit copy — stay dark,
+  }                                          // but cache the miss so require isn't retried per refresh
+}
+
 (function main() {
-  let data; try { data = JSON.parse(fs.readFileSync(0, 'utf8')); } catch (_) { return; }
-  if (!data || !data.transcript_path || !data.session_id) return;
+  const input = readInput();
+  if (!input) return;
+  const { data, st } = input;
   const projectDir = (data.workspace && data.workspace.project_dir) || data.cwd || process.cwd();
-  let st; try { st = fs.statSync(data.transcript_path); } catch (_) { return; }
   const cacheFile = cachePath(data.session_id);
   const cached = readJson(cacheFile);
-  if (cached && ((cached.mtimeMs === st.mtimeMs && cached.size === st.size)
-    || Date.now() - (cached.at || 0) < MID_TURN_REUSE_MS)) {
+  if (cacheHit(cached, st)) {
     if (cached.line) process.stdout.write(cached.line);
     return;
   }
-  let line = '';
-  try {
-    const tg = require(path.join(projectDir, '.claude', 'hooks', 'token-guard.js'));
-    line = render(tg, data, projectDir) || '';
-  } catch (_) {
-    line = (cached && cached.line) || '';   // no token-guard here, or a mid-edit copy — stay dark,
-  }                                          // but cache the miss so require isn't retried per refresh
+  const line = computeLine(data, projectDir, cached);
   writeCache(cacheFile, { mtimeMs: st.mtimeMs, size: st.size, at: Date.now(), line });
   pruneCaches(path.dirname(cacheFile));
   if (line) process.stdout.write(line);
