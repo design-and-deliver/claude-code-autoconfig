@@ -51,6 +51,7 @@
     "!.claude/hooks/token-guard.js",
     "!.claude/hooks/token-guard-liveness.js",
     "!.claude/hooks/session-close.js",
+    "!.claude/hooks/statusline-cost.js",
     "!.claude/hooks/worktree-gate.js",
     "!.claude/hooks/claim-registry.js",
     "!.claude/cca.config.json",
