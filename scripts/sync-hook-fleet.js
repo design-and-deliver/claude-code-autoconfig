@@ -66,6 +66,10 @@ const MANIFEST = [
   // resolves its own .titles dir per session, so a project copy would only write the same file
   // twice. Dev-only in bin/cli.js: user installs wire no SessionEnd.
   { file: 'session-close.js', global: true },
+  // The statusLine session-cost readout. Global for the session-close.js reason: wired once in
+  // ~/.claude/settings.json (statusLine key), and it require()s the PROJECT's token-guard.js as
+  // a read-only library — so no per-repo copy exists to drift. Dev-only in bin/cli.js.
+  { file: 'statusline-cost.js', global: true },
   // The PreToolUse worktree gate. Dev-only (DEV_ONLY_FILES in bin/cli.js) and per-repo for the
   // same reason as token-guard: ~/.claude/settings.json wires no PreToolUse entry for it, so a
   // global copy would be an inert file that reads as adoption. It landed in two repos on
