@@ -103,11 +103,15 @@ function render(tg, data, projectDir) {
   const ctx = m.liveContext || 0;
   const cold = tg.coldStartTokens(projectDir, data.session_id, m, data.transcript_path)
     || COLD_START_FALLBACK_TOK;
+  // Andrew's format (2026-08-12): labeled fields that carry their own explanation, and the
+  // remedy as a full sentence on its own line — not abbreviated gauge segments.
   const DIM = '\x1b[2m', YEL = '\x1b[33m', OFF = '\x1b[0m';
-  let line = `${DIM}session ${fmtK(session)} · ctx ${fmtK(ctx)}/turn · fresh ~${fmtK(cold)}${OFF}`;
+  let line = `${DIM}session tokens = ${fmtK(session)} (${fmtK(ctx)} cache price)   ` +
+    `new session cost = ${fmtK(cold)}${OFF}`;
   const savings = ctx - cold;
   if (savings >= (cfg.contextWarnTokens || NUDGE_MIN_SAVINGS_TOK) && !midPlanSubstep(tg, projectDir)) {
-    line += ` ${YEL}· /clear + /continue saves ~${fmtK(savings)}/turn${OFF}`;
+    line += `\n${YEL}/clear then /continue to save up to ${fmtK(savings)} tokens per turn ` +
+      `for new topics${OFF}`;
   }
   return line;
 }
