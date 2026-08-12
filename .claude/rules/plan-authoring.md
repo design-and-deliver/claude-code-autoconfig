@@ -34,7 +34,8 @@ are no-ops — there the Ledger entry itself is the durable record, so skip thos
 1. **Header**: goal, links to source audits/evidence, and "how to execute" (one substep per
    fresh session; Verify; commit; Ledger entry; then `/clear` + `/continue` — /continue (v2+)
    is plan-aware: it detects the plan-substep session via the title history, reads the Ledger,
-   verifies the last commit hash against git, and resumes at the next unchecked substep.
+   verifies the last commit hash against git, and (v9+) reports the next unchecked substep on
+   a cheap recovery model, executing it on the session's main model after your go-ahead.
    Fallback where /continue is absent: start a fresh session pointed at the plan doc).
    The header also carries the **read-this-doc-in-slices instruction**: name the ⛔ trap
    section's line range and tell the session to read that range + its own substep + the Ledger

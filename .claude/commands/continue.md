@@ -1,16 +1,33 @@
-<!-- @description Continues where your previous session in this terminal left off — recovers its context and resumes the work. Plan-aware: if that session was executing a substep of a plan doc, resumes from the plan's Ledger instead of the transcript. -->
-<!-- @version 8 -->
+---
+description: Recover the previous session's context on Sonnet, report where it stands, then stop for your go-ahead
+argument-hint: [--show]
+model: sonnet
+---
+<!-- @description Recovers where your previous session in this terminal left off — rebuilds its context on a cheap model, reports the state and the precise next action, then stops for your go-ahead. Plan-aware: if that session was executing a substep of a plan doc, the report comes from the plan's Ledger instead of the transcript. -->
+<!-- @version 9 -->
 <!-- @param --show | flag | optional | Opens the recovered transcript in your default editor (no-op on a clean plan handoff or a fresh checkpoint handoff note — nothing is read). -->
-<!-- @response success | Picking up where we left off — {what we were doing}. Then the work resumes. -->
-<!-- @response plan | Picking up where we left off — {plan alias}: substep {N.k} done ({hash}); starting {next}. Then the next substep runs. -->
+<!-- @response success | Picking up where we left off — {what we were doing}. State summary + the one next action, then a go-ahead question. -->
+<!-- @response plan | Picking up where we left off — {plan alias}: substep {N.k} done ({hash}); next: {N.next}. Then a go-ahead question. -->
 <!-- @response no-previous | I can't find a previous session for this terminal. -->
 <!-- @sideeffect Reads .jsonl transcripts from ~/.claude/projects/, writes temp file -->
-<!-- @example /continue | Recover the previous session here and resume its work -->
+<!-- @example /continue | Recover the previous session here, see where it stands, reply "go" to resume -->
 Continue where the previous session in this terminal left off.
 
-This is the no-ceremony wrapper around `/recover-context`'s auto mode: recover the last
-session's context, then RESUME the work — unlike `/recover-context`, which recovers and
-waits for direction. No arguments; it figures everything out itself.
+This is the no-ceremony wrapper around `/recover-context`'s auto mode: no arguments, it
+figures everything out itself, and it is plan-aware (below). Since v9 it runs on Sonnet
+(the `model:` frontmatter above): recovery is mechanical re-reading — probe, read,
+reconcile — and a cheap model handles it fully, at a fraction of the cost on a
+Fable/Opus session. What the cheap model must NOT do is the resumed work itself.
+`model:` scopes to the whole turn, so this command ends its turn at the report: state
+recovered, the one next action named, a go-ahead question. The user's next prompt
+("go") starts a fresh turn on the session's main model, with the recovered context
+already in the conversation — recovery cheap, work at full quality.
+
+⛔ **End the turn on a plain text question — never an AskUserQuestion picker.** A picker
+answer continues the SAME turn, so the work it green-lights would run on the cheap
+recovery model — exactly what the stop exists to prevent. This overrides any local
+end-of-turn convention that prefers a picker for closed choices. Ask in text, end the
+message, wait.
 
 It is also **plan-aware**: when the previous session was executing a substep of a phased
 plan doc (the plan-authoring pattern — a `docs/*.md` or `.claude/plans/*.md` with a
@@ -125,44 +142,47 @@ first makes the Ledger actively wrong. The dupe-session guard misses it too — 
   done substep's commit may live entirely elsewhere). Then ask the user how to proceed
   rather than choosing for them; standing down is the default.
 
-## Step 4: Resume (ordinary session)
+## Step 4: Report (ordinary session)
 
 Silently reconstruct: the active task and its state, the next action that was in flight, and
-what was already completed. Before acting, cross-check reality — `git status --short`, plus a
-quick look at any file the tail claims was mid-edit — the recovered tail may predate work
-that already landed.
+what was already completed. Cross-check reality — `git status --short`, plus a quick look at
+any file the tail claims was mid-edit — the recovered tail may predate work that already
+landed.
 
 Then open your reply with exactly this line (bold, em-dash clause naming the work):
 
 > **Picking up where we left off** — {one short clause: what we were doing}.
 
-And continue, by ending state:
+Follow with a few lines of state: what's done, what's in flight, and the ONE next action,
+named precisely enough that "go" is a sufficient answer. Then end the turn, by ending state:
 
-- **Work was mid-flight** (a task underway, a named next step): carry on with it now, under
-  the same rules as any turn — proceed with reversible work; confirm first before anything
-  destructive or outward-facing.
+- **Work was mid-flight** (a task underway, a named next step): ask the go-ahead — "Resume
+  {next action}?" — and stop. Do not start the work in this turn (see the ⛔ above: plain
+  text question, no picker).
 - **The session ended waiting on the user** (an open question, a pending decision): re-ask
   that question, refreshed with anything you can now verify yourself.
 - **The work was finished**: say so in one line, then ask what's next.
 
-Never re-do work the tail (or git) already shows as done.
+Never report as pending what the tail (or git) already shows done.
 
-## Step 5: Resume (plan-driven session)
+## Step 5: Report (plan-driven session)
 
 The plan doc is read, the Ledger/git reconciliation done, and the concurrency gate cleared
 (if it did not clear, you already stopped). Open your reply with the same line,
 plan-flavored:
 
-> **Picking up where we left off** — {plan alias}: substep {N.k} done ({hash}); starting {N.next}.
+> **Picking up where we left off** — {plan alias}: substep {N.k} done ({hash}); next: {N.next}.
 
-Then act by Step 3's state:
+Then report by Step 3's state and STOP — the substep itself runs on the main model after
+the go-ahead:
 
-- **Clean handoff**: execute the next unchecked substep start-to-finish per the plan doc —
-  including its Verify step, its commit, and appending its Ledger entry. Close by prompting
-  the user to `/clear` then `/continue`.
-- **Mid-flight**: FINISH that substep — complete the work, run its Verify, commit, append
-  the Ledger — then stop and prompt `/clear` + `/continue`. Do not also start the next
-  substep.
+- **Clean handoff**: name the next unchecked substep (number, title, size tag) and its
+  first action, ask the go-ahead, and end the turn. The go-turn executes it start-to-finish
+  per the plan doc — including its Verify step, its commit, and appending its Ledger entry —
+  and closes by prompting the user to `/clear` then `/continue`.
+- **Mid-flight**: report exactly what the open substep is missing (work, Verify, commit, or
+  Ledger entry), ask the go-ahead to FINISH it, and end the turn. The go-turn completes that
+  substep only — it does not also start the next one.
 - **Plan complete** (`plan.nextSubstep` is null and every substep is checked): say so in one
   line, then ask what's next.
 
