@@ -137,6 +137,22 @@ def glyph_mtime(sid, floor=0.0):
     return m
 
 
+def is_closed(sid, activity):
+    """session-close.js stamps {sid}.closed on every orderly SessionEnd, so a
+    marker at-or-after the last activity is proof of death -- release the session
+    immediately instead of waiting out the liveness window (a just-finished
+    headless run, or a tab closed seconds ago, is otherwise invisible to recovery
+    for LIVENESS_SECS). A marker OLDER than the activity means the session was
+    resumed after closing -- still live. The 2s grace absorbs same-moment write
+    ordering at SessionEnd; no marker (a kill, or a user install without the
+    dev-only hook) falls back to quiescence."""
+    for d in TITLES_DIRS:
+        c = os.path.join(d, sid + '.closed')
+        if os.path.exists(c) and os.path.getmtime(c) >= activity - 2:
+            return True
+    return False
+
+
 def resolve_previous(sid_now):
     prev = how = None
     if sid_now:
@@ -171,7 +187,8 @@ def resolve_previous(sid_now):
         s = os.path.splitext(os.path.basename(p))[0]
         if s not in occupied:
             return False
-        return time.time() - glyph_mtime(s, os.path.getmtime(p)) < LIVENESS_SECS
+        act = glyph_mtime(s, os.path.getmtime(p))
+        return not is_closed(s, act) and time.time() - act < LIVENESS_SECS
 
     files = [p for p in files if not is_live(p)]
     if not files:
@@ -359,7 +376,8 @@ def live_siblings(plan_doc, sid_now):
             sid = os.path.basename(g)[:-6]
             if sid == sid_now or sid in hits:
                 continue
-            if time.time() - os.path.getmtime(g) > LIVENESS_SECS:
+            gm = os.path.getmtime(g)
+            if time.time() - gm > LIVENESS_SECS or is_closed(sid, gm):
                 continue
             title = ((last_title_entry(sid) or {}).get('title') or '').strip()
             if toks(title.split('—')[0]) & want:
