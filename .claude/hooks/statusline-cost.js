@@ -131,6 +131,110 @@ function readInput() {
   return { data, st };
 }
 
+// ---- /cost-compare report mode ---------------------------------------------
+// `node statusline-cost.js --report [transcript.jsonl]` prints the two figures
+// the continue-vs-fresh decision actually turns on — live context (the per-turn
+// re-read) and fresh-start cost — with the comparison spelled out. Session
+// total is deliberately absent: it is sunk cost, and no decision recovers it
+// (Andrew, 2026-08-13); /usage-report owns the spend detail. It is the
+// on-demand readout for the times the ambient line is deliberately empty. Run from a
+// shell, not from Claude Code's statusLine, so there is no stdin payload:
+// project = cwd, transcript = the argument, else the newest one for this
+// project. Unlike the statusline path it fails LOUD — an interactive command
+// with a broken meter should say so, not go dark.
+
+function projectSlug(dir) {
+  return path.resolve(dir).replace(/[^a-zA-Z0-9]/g, '-');
+}
+
+// Newest-mtime transcript can belong to a SIBLING session when several run on
+// one repo — callers who know their own transcript path should pass it.
+function newestTranscript(projectDir) {
+  const dir = path.join(os.homedir(), '.claude', 'projects', projectSlug(projectDir));
+  let best = null, bestM = -1;
+  for (const n of fs.readdirSync(dir)) {
+    if (!n.endsWith('.jsonl')) continue;
+    const p = path.join(dir, n);
+    let mt; try { mt = fs.statSync(p).mtimeMs; } catch (_) { continue; }
+    if (mt > bestM) { bestM = mt; best = p; }
+  }
+  return best;
+}
+
+function reportMain(transcriptArg) {
+  const projectDir = process.cwd();
+  let transcript = transcriptArg;
+  if (!transcript) {
+    try { transcript = newestTranscript(projectDir); } catch (_) {}
+  }
+  if (!transcript) {
+    console.log(`cost-compare: no session transcript found for ${projectDir}`);
+    return;
+  }
+  const sid = path.basename(transcript, '.jsonl');
+  let tg;
+  try {
+    tg = require(path.join(projectDir, '.claude', 'hooks', 'token-guard.js'));
+  } catch (_) {
+    console.log('cost-compare: this repo has no token-guard meter (.claude/hooks/token-guard.js) — no figures to report.');
+    return;
+  }
+  const cfg = loadConfig(tg, projectDir);
+  const m = tg.meterSession(transcript, { fleet: cfg.fleetMeter !== false, projectDir });
+  const session = totalTokens(m);
+  if (!session) {
+    console.log(`cost-compare: session ${sid.slice(0, 8)} metered to zero tokens — nothing to compare yet.`);
+    return;
+  }
+  const ctx = m.liveContext || 0;
+  const measured = tg.coldStartTokens(projectDir, sid, m, transcript);
+  const cold = measured || COLD_START_FALLBACK_TOK;
+  const savings = ctx - cold;
+  // 0.1× cache-read price, one decimal (trailing .0 dropped): 120k → 12k, 66k → 6.6k
+  const k1 = (n) => `${(n / 10000).toFixed(1).replace(/\.0$/, '')}k`;
+
+  const lines = [
+    `session ${sid.slice(0, 8)} — ${path.basename(path.resolve(projectDir))}`,
+    '',
+    `* current session — ${k1(ctx)} token cost (${fmtK(ctx)} * 0.1 cache) per turn`,
+    `* new session — ${fmtK(cold)} token cost, reduced to +${k1(cold)} per turn`,
+    '',
+  ];
+  // The contextWarnTokens bar gates when the STATUSLINE may interrupt; a
+  // solicited report just states the economics — the user asking is already
+  // past the flow question (Andrew, 2026-08-13). Every figure is in what-you-
+  // actually-pay terms (raw × 0.1 cache rate), so the verdict must charge the
+  // fresh session its full first-turn cold start before crediting the per-turn
+  // saving. Output shape: a "verdict:" line naming the action (stay the course
+  // vs /clear) + a "rationale:" line with the why (Andrew, 2026-08-13). A
+  // break-even horizon of BREAKEVEN_STAY_TURNS+ turns is too far out to bank on.
+  const BREAKEVEN_STAY_TURNS = 3;
+  if (savings > 0) {
+    const upfront = cold - ctx * 0.1;
+    // Subtract the ROUNDED operands so any printed saving matches the bullets —
+    // rounding from raw values lets "13.7k - 6.6k = 7.2k"-style drift slip through.
+    const save1 = `${(+(k1(ctx).slice(0, -1)) - +(k1(cold).slice(0, -1))).toFixed(1).replace(/\.0$/, '')}k`;
+    const turns = upfront > 0 ? Math.ceil(upfront / (savings * 0.1)) : 0;
+    if (upfront <= 0) {
+      lines.push('verdict: /clear');
+      lines.push(`rationale: purge the old bloated context to save ${save1} tokens, starting on the first turn`);
+    } else if (turns < BREAKEVEN_STAY_TURNS) {
+      lines.push('verdict: /clear');
+      lines.push(`rationale: purge the old bloated context — ${fmtK(upfront)} upfront breaks even within ${turns} turns, then saves ${save1} tokens per turn`);
+    } else {
+      lines.push('verdict: stay the course');
+      lines.push(`rationale: it would take you ${turns}+ turns to break even`);
+    }
+  } else {
+    lines.push('verdict: stay the course');
+    lines.push('rationale: a new session costs more every turn — it never breaks even');
+  }
+  if (midPlanSubstep(tg, projectDir)) {
+    lines.push('note: an active plan is mid-substep — finish the substep (work, Verify, commit, Ledger entry) before any /clear.');
+  }
+  console.log(lines.join('\n'));
+}
+
 function cacheHit(cached, st) {
   if (!cached) return false;
   return (cached.mtimeMs === st.mtimeMs && cached.size === st.size)
@@ -147,6 +251,10 @@ function computeLine(data, projectDir, cached) {
 }
 
 (function main() {
+  if (process.argv[2] === '--report') {
+    try { reportMain(process.argv[3]); } catch (e) { console.log(`cost-compare: ${e.message}`); }
+    return;
+  }
   const input = readInput();
   if (!input) return;
   const { data, st } = input;
