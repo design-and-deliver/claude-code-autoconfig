@@ -28,6 +28,6 @@ line names the session id it metered, so a mismatch is visible.
 Relay the output verbatim as markdown, NOT in a code block — a code block would suppress
 the bold. Keep every line's text exactly as printed, with one formatting touch: render
 each bullet's leading label in bold — `**current session**`, `**new session**`,
-`**verdict:**`, `**rationale:**` — and let the `*` bullet lines render as list items
+`**verdict**`, `**rationale**` — and let the `*` bullet lines render as list items
 as-is. Add nothing — the verdict + rationale pair is the interpretation. If it reports
 the repo has no token-guard meter, relay that one line as-is.

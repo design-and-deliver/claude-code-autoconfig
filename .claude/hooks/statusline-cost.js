@@ -197,21 +197,23 @@ function requireGuard(projectDir) {
 // Both surfaces share breakEven(); the statusline only interrupts when the
 // verdict is /clear, while a solicited report SPEAKS the verdict either way —
 // the user asking is already past the flow question (Andrew, 2026-08-13).
-// Output shape: a "verdict:" line naming the action (stay the course vs
-// /clear) + a "rationale:" line with the why (Andrew, 2026-08-13).
+// Output shape: a "verdict —" line naming the action (stay the course vs
+// /clear) + a "rationale —" line with the why (Andrew, 2026-08-13; the em-dash
+// separator matches the session bullets' labels — Andrew, 2026-08-14, which is
+// also why no rationale wording carries its own mid-sentence em-dash).
 function verdictLines(be, bold) {
   if (be.clear) {
-    return [`* ${bold('verdict:')} /clear`,
+    return [`* ${bold('verdict')} — /clear`,
       be.upfront <= 0
-        ? `* ${bold('rationale:')} purge the old bloated context to save ${be.save1} tokens, starting on the first turn`
-        : `* ${bold('rationale:')} purge the old bloated context — ${fmtK(be.upfront)} upfront breaks even within ${be.turns} turns, then saves ${be.save1} tokens per turn`];
+        ? `* ${bold('rationale')} — purge the old bloated context to save ${be.save1} tokens, starting on the first turn`
+        : `* ${bold('rationale')} — purge the old bloated context: ${fmtK(be.upfront)} upfront breaks even within ${be.turns} turns, then saves ${be.save1} tokens per turn`];
   }
   if (be.savings > 0) {
-    return [`* ${bold('verdict:')} stay the course`,
-      `* ${bold('rationale:')} a new session would take you ${be.turns}+ turns to break even`];
+    return [`* ${bold('verdict')} — stay the course`,
+      `* ${bold('rationale')} — a new session would take you ${be.turns}+ turns to break even`];
   }
-  return [`* ${bold('verdict:')} stay the course`,
-    `* ${bold('rationale:')} a new session costs more every turn — it never breaks even`];
+  return [`* ${bold('verdict')} — stay the course`,
+    `* ${bold('rationale')} — a new session costs more every turn; it never breaks even`];
 }
 
 function reportMain(transcriptArg) {
