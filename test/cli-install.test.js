@@ -503,7 +503,7 @@ console.log('Legacy Hook-Command Migration:');
 
 // The settings-merge helpers live in bin/lib/settings-merge.js (Phase 3 seam 2) — require
 // them directly (a real module under test) instead of source-extracting them from cli.js.
-const { migrateLegacyHookCommands, mergeSettingsInto } = require('../bin/lib/settings-merge.js');
+const { migrateLegacyHookCommands, migrateRetiredPermissionRules, mergeSettingsInto } = require('../bin/lib/settings-merge.js');
 
 test('migrateLegacyHookCommands rewrites managed relative commands, leaves user commands alone', () => {
   const migrate = migrateLegacyHookCommands;
@@ -591,6 +591,40 @@ test('cli.js migrates BEFORE merging on the settings upgrade path (ordering guar
   assert(migrateAt !== -1, 'upgrade path must call migrateLegacyHookCommands');
   assert(mergeAt !== -1, 'upgrade path must call mergeSettingsInto');
   assert(migrateAt < mergeAt, 'migration must run before the merge or upgrades double the hooks');
+});
+
+test('migrateRetiredPermissionRules strips retired rules, leaves user rules alone', () => {
+  const s = {
+    permissions: {
+      allow: ['Read(./**)', 'Edit(./**)', 'Write(./**)', 'Write(./dist/**)'],
+      deny: ['Write(./nul)', 'Edit(./nul)', 'Read(./.env)'],
+    },
+  };
+  migrateRetiredPermissionRules(s);
+  assert(!s.permissions.allow.includes('Write(./**)'), 'retired allow Write(./**) must be scrubbed');
+  assert(!s.permissions.deny.includes('Write(./nul)'), 'retired deny Write(./nul) must be scrubbed');
+  assert(!s.permissions.deny.includes('Edit(./nul)'), 'retired deny Edit(./nul) must be scrubbed');
+  assert(s.permissions.allow.includes('Write(./dist/**)'), 'a user-authored Write rule must survive');
+  assert(s.permissions.allow.includes('Edit(./**)'), 'Edit(./**) must survive');
+  assert(s.permissions.deny.includes('Read(./.env)'), 'user deny rules must survive');
+  migrateRetiredPermissionRules({});
+  migrateRetiredPermissionRules({ permissions: {} });
+});
+
+test('cli.js scrubs retired permission rules on the settings upgrade path', () => {
+  const src = fs.readFileSync(CLI_PATH, 'utf8');
+  const scrubAt = src.indexOf('migrateRetiredPermissionRules(userSettings);');
+  const mergeAt = src.indexOf('mergeSettingsInto(userSettings, pkgSettings);');
+  assert(scrubAt !== -1, 'upgrade path must call migrateRetiredPermissionRules');
+  assert(scrubAt < mergeAt, 'scrub must run before the merge (parallel to the legacy-hook ordering)');
+});
+
+test('shipped settings.json contains no retired permission rule (would be re-merged forever)', () => {
+  const shipped = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '.claude', 'settings.json'), 'utf8'));
+  const all = [...(shipped.permissions.allow || []), ...(shipped.permissions.deny || [])];
+  for (const rule of ['Write(./**)', 'Write(./nul)', 'Edit(./nul)']) {
+    assert(!all.includes(rule), `retired rule ${rule} must not ship in .claude/settings.json`);
+  }
 });
 
 summary();
