@@ -226,7 +226,7 @@ function reportMain(transcriptArg) {
       lines.push(`* ${bold('rationale:')} purge the old bloated context — ${fmtK(upfront)} upfront breaks even within ${turns} turns, then saves ${save1} tokens per turn`);
     } else {
       lines.push(`* ${bold('verdict:')} stay the course`);
-      lines.push(`* ${bold('rationale:')} it would take you ${turns}+ turns to break even`);
+      lines.push(`* ${bold('rationale:')} a new session would take you ${turns}+ turns to break even`);
     }
   } else {
     lines.push(`* ${bold('verdict:')} stay the course`);
