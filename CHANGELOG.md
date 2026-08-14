@@ -4,6 +4,21 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.220
+- feat(continue): /continue now opens with 'Recovering the previous session's active context.' — the old improvised line was vaguer than what recovery actually returns
+- fix(recovery): /continue can now recover a session the moment it ends — it no longer waits out a 3-minute liveness window before a just-closed session becomes visible.
+- feat(continue): /continue now recovers on a cheap model and stops at a "Picking up where we left off" report — reply "go" and the work resumes on your session's main model at full quality.
+- perf(recovery): /continue and /recover-context no longer blow up your context window on a long session — recovery now brings back the most recent thread instead of the whole transcript
+- feat(recovery): /continue and /recover-context are much faster and cheaper — they gather everything in a single step instead of a dozen, work correctly in git worktrees, and no longer mistake an unrelated session for a plan you were executing
+- fix(continue): /continue and /recover-context no longer mistake a leftover file from an earlier recovery for this session's context
+- fix(terminal-title): The 'awaiting your reply' tab signal now also catches statement-shaped closers on yes/no questions
+- fix(terminal-title): More reliable terminal tab status updates
+- perf(continue): Resuming a plan with /continue no longer re-reads the whole plan document, so long plans cost far less to pick back up
+- feat(continue): /continue now stops instead of racing when another session is already working the same plan doc
+- feat(continue): /continue resumes plan work faster — after a cleanly finished plan step it reads the plan itself instead of re-recovering the old session's transcript
+- fix(ccr): Hardened the session-recovery launcher against tampered recovery pointer files
+- fix(plugins): Plugin removal no longer claims success when settings.json could not be updated - it explains the problem and stays safely retryable
+
 ## v1.0.219
 - fix(terminal-title): /clear now resets the tab title to "New session" instead of carrying the old session's title; /continue still restores it
 
@@ -59,11 +74,6 @@
 - feat(token-guard): The stale-session warning can now end with a one-click Yes/No card — pick Yes and a recovered session opens in a new terminal window, no retyping.
 
 ## v1.0.214
-- feat(token-guard): New ccr command — when the token-guard blocks a stale idle session, just exit and type ccr to pick the same work up in a fresh, cheap session, no retyping the recovery command.
-- feat(token-guard): The "this session has drifted" nudge now checks whether your current message actually returns to the earlier topic (and whether that earlier work ever finished) before speaking up — and if the moment is wrong it quietly retries a few prompts later instead of never offering again.
-- feat(token-guard): Subscription users no longer get dollar-step usage check-ins (those are for API-billed sessions, where dollars are real). Instead you get a quiet one-line FYI when a usage window passes 50%, and the ⚠️ heads-up at 80%.
-- refactor(token-guard): The 80% usage heads-up no longer blocks your prompt — it now appears as one short line at the end of the reply. Want the hard stop back? Turn on token-saver or set tokenGuard.windowThresholdGate to true.
-- feat(terminal-title): Your tab-title hook now tells you when /clear would actually save
 - feat(terminal-title): Terminal tab titles are now remembered per session, so you can look back at how a session's work shifted over time.
 
 ## v1.0.213
