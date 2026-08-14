@@ -1829,12 +1829,12 @@ Keep the subject line under 50 chars. Add body if the change needs explanation.`
             'continue': {
                 filename: 'continue.md',
                 content: `---
-description: Recover the previous session's context on Sonnet, report where it stands, then stop for your go-ahead
+description: Recover the previous session's active context on Sonnet, report where it stands, then stop for your go-ahead
 argument-hint: [--show]
 model: sonnet
 ---
 <!-- @description Recovers where your previous session in this terminal left off — rebuilds its context on a cheap model, reports the state and the precise next action, then stops for your go-ahead. Plan-aware: if that session was executing a substep of a plan doc, the report comes from the plan's Ledger instead of the transcript. -->
-<!-- @version 9 -->
+<!-- @version 10 -->
 <!-- @param --show | flag | optional | Opens the recovered transcript in your default editor (no-op on a clean plan handoff or a fresh checkpoint handoff note — nothing is read). -->
 <!-- @response success | Picking up where we left off — {what we were doing}. State summary + the one next action, then a go-ahead question. -->
 <!-- @response plan | Picking up where we left off — {plan alias}: substep {N.k} done ({hash}); next: {N.next}. Then a go-ahead question. -->
