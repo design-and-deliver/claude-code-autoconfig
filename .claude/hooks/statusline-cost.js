@@ -184,21 +184,46 @@ function newestTranscript(projectDir) {
   return best;
 }
 
+function resolveTranscript(projectDir, transcriptArg) {
+  if (transcriptArg) return transcriptArg;
+  try { return newestTranscript(projectDir); } catch (_) { return null; }
+}
+
+function requireGuard(projectDir) {
+  try { return require(path.join(projectDir, '.claude', 'hooks', 'token-guard.js')); }
+  catch (_) { return null; }
+}
+
+// Both surfaces share breakEven(); the statusline only interrupts when the
+// verdict is /clear, while a solicited report SPEAKS the verdict either way —
+// the user asking is already past the flow question (Andrew, 2026-08-13).
+// Output shape: a "verdict:" line naming the action (stay the course vs
+// /clear) + a "rationale:" line with the why (Andrew, 2026-08-13).
+function verdictLines(be, bold) {
+  if (be.clear) {
+    return [`* ${bold('verdict:')} /clear`,
+      be.upfront <= 0
+        ? `* ${bold('rationale:')} purge the old bloated context to save ${be.save1} tokens, starting on the first turn`
+        : `* ${bold('rationale:')} purge the old bloated context — ${fmtK(be.upfront)} upfront breaks even within ${be.turns} turns, then saves ${be.save1} tokens per turn`];
+  }
+  if (be.savings > 0) {
+    return [`* ${bold('verdict:')} stay the course`,
+      `* ${bold('rationale:')} a new session would take you ${be.turns}+ turns to break even`];
+  }
+  return [`* ${bold('verdict:')} stay the course`,
+    `* ${bold('rationale:')} a new session costs more every turn — it never breaks even`];
+}
+
 function reportMain(transcriptArg) {
   const projectDir = process.cwd();
-  let transcript = transcriptArg;
-  if (!transcript) {
-    try { transcript = newestTranscript(projectDir); } catch (_) {}
-  }
+  const transcript = resolveTranscript(projectDir, transcriptArg);
   if (!transcript) {
     console.log(`cost-compare: no session transcript found for ${projectDir}`);
     return;
   }
   const sid = path.basename(transcript, '.jsonl');
-  let tg;
-  try {
-    tg = require(path.join(projectDir, '.claude', 'hooks', 'token-guard.js'));
-  } catch (_) {
+  const tg = requireGuard(projectDir);
+  if (!tg) {
     console.log('cost-compare: this repo has no token-guard meter (.claude/hooks/token-guard.js) — no figures to report.');
     return;
   }
@@ -223,24 +248,7 @@ function reportMain(transcriptArg) {
     `* ${bold('new session')} — ${fmtK(cold)} token cost, reduced to +${k1(cold)} per turn thereafter`,
     '',
   ];
-  // Both surfaces share breakEven(); the statusline only interrupts when the
-  // verdict is /clear, while a solicited report SPEAKS the verdict either way —
-  // the user asking is already past the flow question (Andrew, 2026-08-13).
-  // Output shape: a "verdict:" line naming the action (stay the course vs
-  // /clear) + a "rationale:" line with the why (Andrew, 2026-08-13).
-  const be = breakEven(ctx, cold);
-  if (be.clear) {
-    lines.push(`* ${bold('verdict:')} /clear`);
-    lines.push(be.upfront <= 0
-      ? `* ${bold('rationale:')} purge the old bloated context to save ${be.save1} tokens, starting on the first turn`
-      : `* ${bold('rationale:')} purge the old bloated context — ${fmtK(be.upfront)} upfront breaks even within ${be.turns} turns, then saves ${be.save1} tokens per turn`);
-  } else if (be.savings > 0) {
-    lines.push(`* ${bold('verdict:')} stay the course`);
-    lines.push(`* ${bold('rationale:')} a new session would take you ${be.turns}+ turns to break even`);
-  } else {
-    lines.push(`* ${bold('verdict:')} stay the course`);
-    lines.push(`* ${bold('rationale:')} a new session costs more every turn — it never breaks even`);
-  }
+  lines.push(...verdictLines(breakEven(ctx, cold), bold));
   console.log(lines.join('\n'));
 }
 
@@ -259,11 +267,7 @@ function computeLine(data, projectDir, cached) {
   }                                          // but cache the miss so require isn't retried per refresh
 }
 
-(function main() {
-  if (process.argv[2] === '--report') {
-    try { reportMain(process.argv[3]); } catch (e) { console.log(`cost-compare: ${e.message}`); }
-    return;
-  }
+function statuslineMain() {
   const input = readInput();
   if (!input) return;
   const { data, st } = input;
@@ -278,4 +282,12 @@ function computeLine(data, projectDir, cached) {
   writeCache(cacheFile, { mtimeMs: st.mtimeMs, size: st.size, at: Date.now(), line });
   pruneCaches(path.dirname(cacheFile));
   if (line) process.stdout.write(line);
+}
+
+(function main() {
+  if (process.argv[2] === '--report') {
+    try { reportMain(process.argv[3]); } catch (e) { console.log(`cost-compare: ${e.message}`); }
+    return;
+  }
+  statuslineMain();
 })();
