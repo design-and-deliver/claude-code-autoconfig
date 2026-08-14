@@ -2589,7 +2589,7 @@ function restartVerdict(liveContext, gap, fatAt, coldStart, excessBudget) {
   const payback = shed > 0 ? Math.ceil(coldStart / shed) : null;
   // why names the NET and where it came from, never the floor's own figure. The floor is quoted
   // exactly once per card, by whichever line describes the restart itself — restartBullet on
-  // R13b, the deny tail on R14 (which has no Restart bullet). Until 2026-07-30 this clause
+  // R13b, the rationale line on R14, the deny tail on R20. Until 2026-07-30 this clause
   // carried it too, so an R13b card printed "~61k of startup" twice inside four lines, and an
   // R14 card printed it only when the recommendation happened to come from the numbers.
   // One test now — `fat` alone, against a line that already knows the floor. The old second
@@ -2615,6 +2615,8 @@ function restartVerdict(liveContext, gap, fatAt, coldStart, excessBudget) {
 // one sentence on the card that spells the clearing option out, and choiceBullet throws rv.why
 // away on a bomb deny. Putting the two halves of the trade in one clause is the whole point —
 // a price and the number of trips that price takes to earn back, side by side, in one unit.
+// R20 is the remaining rider: R14's condensed card prices the same trade in its rationale line
+// (rentVerdictLines, 2026-08-14) and no longer routes through here.
 const clearTail = rv => rv && rv.coldStart > 0
   ? ` — a fresh session here re-pays ~${fmtK(rv.coldStart)} of startup` +
     (rv.payback ? `, ~${rv.payback} trip${rv.payback === 1 ? '' : 's'} to break even` : '') +
@@ -3620,18 +3622,47 @@ function turnSpendAsk(ctx, turnTok) {
     }, rv));
 }
 
-// The R14 ask. Headline reading, then TWO bullets — cost, choice. A single wrapped paragraph
-// buried the ask under the arithmetic (Andrew 2026-07-26), and four bullets buried it again
-// under a briefing (Andrew 2026-07-29). The two that went, and why they must not come back:
-//   · `• Lever: a smaller resident context, not a shorter task.` — the headline one line up
-//     already reads trips × context; naming the lever a second time is restatement, not advice.
-//   · `• Restart: … rebuilds that ~163k for ~16% of the ~1.0M more …` — the ratio is real, but
-//     it only means something once the reader holds a second number (the gap to the next check)
-//     that nothing else in the message needs. Priced against the Choice bullet, which already
-//     says land at a commit point and /clear + /continue, it bought a line and a denominator.
-// The one number worth keeping out of them is when this gate speaks again, so nextCheckClause
-// rides at the end of the Cost line. This is the only guard message that carries \n; if the
-// dialog ever collapses them the bullets still read as "• "-separated clauses.
+// The verdict + rationale pair — R14's Choice paragraph, collapsed to two label — value lines:
+// the verdict names the action, the rationale names the evidence, one em-dash per line (the
+// label's own — the same no-double-dash rule the /cost-compare labels took on 2026-08-14).
+// Branches mirror choiceBullet's: the pending CALL outranks the numbers, then rv decides.
+// The approve branch is unreachable through r14TurnRentGuard (it silences status-quo fires —
+// see the guard below) but must stay renderable: rentAskCopy is callable standalone, and an
+// approve that ever ships must carry its why (the 2026-07-30 regression the copy contract pins).
+const rentVerdictLines = (verdict, rv) => {
+  const deny = '• verdict — deny: land at a commit point, then /clear + /continue';
+  if (verdict && verdict.kind === 'deny')
+    return `${deny}\n• rationale — approving continues the current work, whose next step ` +
+      `${verdict.why}`;
+  if (rv && rv.clear) {
+    // The measured floor's one appearance on this card (restartVerdict's one-owner rule):
+    // price and payback in a single clause, in trips — the unit the reader has. Unmeasured
+    // floor => rv.why's own wording; this script does not quote a floor it has not measured.
+    const why = rv.coldStart > 0 && rv.payback
+      ? `a fresh session's ~${fmtK(rv.coldStart)} cold start repays itself in ` +
+        `~${rv.payback} trip${rv.payback === 1 ? '' : 's'}`
+      : rv.why;
+    return `${deny}\n• rationale — ${why}`;
+  }
+  if (rv) return `• verdict — approve: push on\n• rationale — ${rv.why}`;
+  // Dead meter: name no side and print no rationale — a rationale line with nothing measured
+  // behind it is the bluff the neutral copy exists to avoid.
+  return '• verdict — your call: approve to push on, or deny to land at a commit point, ' +
+    'then /clear + /continue';
+};
+
+// The R14 ask. Headline reading, then FOUR label — value bullets: this turn / if it continues /
+// verdict / rationale — the label-dash grammar /cost-compare's readout wears (Andrew 2026-08-14:
+// the four-bullet shape reads at a glance; the Choice paragraph collapses into the verdict +
+// rationale pair above). Two earlier cuts still govern the card: a single wrapped paragraph
+// buried the ask under the arithmetic (Andrew 2026-07-26), and a Lever bullet was restatement
+// of the headline's trips × context (cut 2026-07-29, along with the Restart bullet whose one
+// load-bearing number, the measured floor, now lives in the rationale line). What the collapse
+// KEPT, each a standing correction: the checkable trips × avg × rate = multiplication, rent and
+// work in one cache-weighted unit, and the next-check number. The editorial tail ("that is
+// rent, not progress") went with the paragraph — the RENT meter tag names the phenomenon. This
+// is the only guard message that carries \n; if the dialog ever collapses them the bullets
+// still read as "• "-separated clauses.
 function rentAskCopy(ctx, rent, rvIn) {
   const { cfg, m, st, verdict } = ctx;
   const reqs = Math.max(1, m.main.turns - (st.turnStartReqs || 0));
@@ -3649,9 +3680,10 @@ function rentAskCopy(ctx, rent, rvIn) {
   // input + output + cache writes. Null baseline (turnGateTokens off) => report rent alone.
   const work = st.turnStartWorkTok == null ? null
     : Math.max(0, workTokens(m) - st.turnStartWorkTok - rent * CACHE_READ_X);
-  // Named inline, because "actual work" is the one figure on the card with no formula beside it
-  // and no way to derive it from the other two (see the equation below for why that matters).
-  const vs = work == null ? '' : `, against ~${fmtK(work)} of actual work (new input + output)`;
+  // The "(new input + output)" parenthetical went with the 2026-08-14 condensation: the label
+  // grammar wants one short comparison clause, and the equation this figure sits beside is what
+  // makes the two sides readable as the same unit.
+  const vs = work == null ? '' : ` vs ~${fmtK(work)} of actual work`;
   // Rent renders CACHE-WEIGHTED so it shares a unit with `work`, which already counts cache
   // reads at 0.1x (workOne). Raw against weighted in one sentence inflated the ratio 10x: the
   // card read "~4.4M of re-reads against ~161k of actual work" — 27:1, where the same-unit
@@ -3684,24 +3716,18 @@ function rentAskCopy(ctx, rent, rvIn) {
   const avg = Math.round(rent / reqs);
   const perTrip = Math.round(m.liveContext * CACHE_READ_X);
   const s = reqs === 1 ? '' : 's';
-  return `${meterTag('RENT', st.rentGateFires)}this turn has made ${reqs} round trip${s}, ` +
-    `now carrying ` +
-    `~${fmtK(m.liveContext)} of context each.\n` +
-    `• Cost: ${reqs} trip${s} × ~${fmtK(avg)}${reqs === 1 ? '' : ' avg'} context × ` +
+  return `${meterTag('RENT', st.rentGateFires)}${reqs} round trip${s} this turn, ` +
+    `~${fmtK(m.liveContext)} context each.\n` +
+    `• this turn — ${reqs} × ~${fmtK(avg)}${reqs === 1 ? '' : ' avg'} × ` +
     // Rate rendered FROM the constant, never a literal "10%": the card's arithmetic and the
     // weight it multiplies by cannot drift apart if only one of them can be edited.
-    `${Math.round(CACHE_READ_X * 100)}% (a cache read) = ~${fmtK(billed)} of re-reads${vs} — ` +
-    `that is rent, not progress, and it compounds: the next trip bills ~${fmtK(perTrip)} ` +
-    `at the current size.` +
-    // Same conversion — an unweighted tail would re-mix the units the Cost figure just unified.
-    // The ' of re-reads' suffix goes with it: the Cost line now names the unit six words earlier.
+    `${Math.round(CACHE_READ_X * 100)}% (a cache read) = ~${fmtK(billed)} of re-reads${vs}\n` +
+    // "at the current size" is the compounding, said in one clause: perTrip prices the NEXT
+    // trip at the live window, not the turn's average (see the avg comment above).
+    `• if it continues — ~${fmtK(perTrip)} more rent per trip at the current size.` +
+    // Same conversion — an unweighted tail would re-mix the units the this-turn line just unified.
     `${nextCheckClause(st.rentGateFires, Math.round(st.rentGateAt * CACHE_READ_X))}\n` +
-    choiceBullet(verdict, {
-      neutral: 'approve to push on — or deny, and Claude should land this turn at a commit ' +
-        `point so you can /clear + /continue${clearTail(rv)}.`,
-      denyTail: 'denying lands this turn at a commit point so you can /clear + ' +
-        `/continue${clearTail(rv)}.`,
-    }, rv);
+    rentVerdictLines(verdict, rv);
 }
 
 // R14 — in-turn RENT tripwire. The failure R13b structurally cannot see: a turn whose work
@@ -3739,7 +3765,7 @@ function r14TurnRentGuard(ctx) {
   // arrive at what they were already doing — it is the wallpaper this file keeps warning
   // about, now on the branch that fires MOST (a lean window under the fat line). The card is
   // worth an interruption only when the losing option is live, so it speaks exactly when
-  // choiceBullet would say `deny (recommended)`: a bomb CALL, or a fat window. rv == null
+  // rentVerdictLines would open on `verdict — deny`: a bomb CALL, or a fat window. rv == null
   // (nothing measured) still speaks — the neutral copy is an honest "no reading", and
   // suppressing on an unmeasured floor would retire the tripwire entirely on a fresh machine.
   //

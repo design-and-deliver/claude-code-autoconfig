@@ -27,8 +27,9 @@ const {
   coldStartTokens, firstContextOfHead, clearTail, restartBullet, restartPos,
 } = require('../.claude/hooks/token-guard');
 
-// R14's slots, verbatim from rentAskCopy — the path that shipped the regression.
-const R14 = {
+// R20's slots, verbatim from sessionTotalAsk — the same strings R14 wore when it shipped the
+// regression (R14's card renders rentVerdictLines since 2026-08-14; its condensed pins are below).
+const R20 = {
   neutral: 'approve to push on — or deny, and Claude should land this turn at a commit '
     + 'point so you can /clear + /continue carrying only the next step.',
   denyTail: 'denying lands this turn at a commit point so you can /clear + /continue '
@@ -36,7 +37,7 @@ const R14 = {
 };
 const GAP = 1_000_000;   // forward budget to the next check
 const FAT = 150_000;     // cfg.contextWarnTokens default
-const bullet = live => choiceBullet(null, R14, restartVerdict(live, GAP, FAT));
+const bullet = live => choiceBullet(null, R20, restartVerdict(live, GAP, FAT));
 
 test('approve carries its why', () => {
   const s = bullet(141_000);   // the 4.4M fire — under the fat line
@@ -62,9 +63,9 @@ test('denyTail sentence-cased on approve', () => {
 
 test('dead meter falls back to neutral copy', () => {
   // Nothing measured -> name no side. A recommendation with no evidence is noise.
-  const s = choiceBullet(null, R14, null);
+  const s = choiceBullet(null, R20, null);
   assert(!/\(recommended\)/.test(s), `a dead meter must not recommend a side: ${s}`);
-  assert(s.includes(R14.neutral), `neutral copy dropped: ${s}`);
+  assert(s.includes(R20.neutral), `neutral copy dropped: ${s}`);
 });
 
 test("no 'undefined' leaks into copy", () => {
@@ -72,7 +73,7 @@ test("no 'undefined' leaks into copy", () => {
   for (const live of [141_000, 163_000]) {
     assert(!/undefined/.test(bullet(live)), `undefined leaked at liveContext=${live}`);
   }
-  assert(!/undefined/.test(choiceBullet(null, R14, null)), 'undefined leaked in neutral copy');
+  assert(!/undefined/.test(choiceBullet(null, R20, null)), 'undefined leaked in neutral copy');
 });
 
 /* ── R14's rendered card: one unit across the whole message ──────────────────────────────────
@@ -81,7 +82,7 @@ test("no 'undefined' leaks into copy", () => {
  * ~161k of actual work" — so the ratio it asserted, 27:1, was a unit artifact of a true 2.7:1.
  * Rent now renders cache-weighted, and the next-check tail converts with it or the card
  * re-mixes units in the same breath. Reproduces the exact fire from the screenshot.           */
-const CARD = () => rentAskCopy({
+const CARD = (rvIn, verdict = null) => rentAskCopy({
   cfg: { contextWarnTokens: 150_000 },
   m: {
     liveContext: 141_000,
@@ -90,8 +91,8 @@ const CARD = () => rentAskCopy({
   },
   // work = workTokens(601k) - 0 - 4.4M*0.1 = 161k
   st: { turnStartReqs: 0, turnStartWorkTok: 0, rentGateAt: 8_400_000, rentGateFires: 3 },
-  verdict: null,
-}, 4_400_000);
+  verdict,
+}, 4_400_000, rvIn);
 
 // These two assert the INVARIANT, not the sentence. Written 2026-07-30 they pinned the exact
 // prose — `(a cache read, ~10% weight)` — and a legitimate rewrite the next day (the explicit
@@ -237,10 +238,10 @@ test('the restart-pays branch asks for a checkpoint handoff', () => {
   assert(!/handoff/.test(lean), `the not-fat branch must not ask for a handoff: ${lean}`);
 });
 
-test('R14 prices the restart inside the deny option itself', () => {
-  // R14 has no Restart bullet (rentAskCopy), and choiceBullet discards rv.why whenever the
-  // pending CALL is a bomb — so on the branch that fires most, the card recommended
-  // /clear + /continue and priced it at nothing until clearTail rode along in denyTail.
+test('the deny tail prices the restart (clearTail, riding R20)', () => {
+  // Born on R14: no Restart bullet meant the card recommended /clear + /continue and priced
+  // it at nothing until clearTail rode along in denyTail. R14's condensed card prices the
+  // same trade in its rationale line now (pinned below); R20's denyTail still rides this.
   const priced = clearTail(rv(163_000, FLOOR));
   // Both halves of the trade in one clause, in one unit: a price, and the trips that price takes
   // to earn back (62k floor ÷ ~10k shed a trip = 7). Deliberately a FLOOR — the cache-write
@@ -252,6 +253,47 @@ test('R14 prices the restart inside the deny option itself', () => {
   // Unmeasured => the pre-2026-07-30 wording, word for word, so R14's slots read unchanged.
   assert(clearTail(rv(163_000, null)) === ' carrying only the next step', 'fallback wording moved');
   assert(clearTail(null) === ' carrying only the next step', 'a dead meter must not price it');
+});
+
+/* ── R14's condensed card: four label — value bullets (2026-08-14) ───────────────────────────
+ * The Choice paragraph collapsed into a verdict + rationale pair wearing the same label-dash
+ * grammar as /cost-compare's readout. Pinned as rendered strings for the same reason as every
+ * block above: the failure mode here is copy that parses fine and reads wrong.               */
+test('the card wears the four-bullet label grammar', () => {
+  const s = CARD(rv(163_000, FLOOR));
+  for (const label of ['• this turn — ', '• if it continues — ', '• verdict — ', '• rationale — ']) {
+    assert(s.includes(label), `label missing from the card: "${label}"\n${s}`);
+  }
+});
+
+test('a fat window reads deny, priced by the measured cold start', () => {
+  const s = CARD(rv(163_000, FLOOR));
+  assert(/• verdict — deny: land at a commit point, then \/clear \+ \/continue/.test(s), s);
+  // Price and payback in one clause, in trips — clearTail's trade, owned by the rationale here.
+  assert(/• rationale — a fresh session's ~62k cold start repays itself in ~7 trips/.test(s), s);
+});
+
+test('an unmeasured floor keeps the fat-line wording in the rationale', () => {
+  // Same no-floor-no-claim discipline as clearTail's fallback: the script does not quote a
+  // price it has not measured, so the rationale falls back to rv.why's own reading.
+  const s = CARD(rv(163_000, null));
+  assert(/• rationale — ~163k of context is past the ~150k fat line/.test(s), s);
+  assert(!/cold start/.test(s), `an unmeasured floor must not be priced: ${s}`);
+});
+
+test('a dead meter names no side and prints no rationale', () => {
+  const s = CARD(null);
+  assert(/• verdict — your call: approve to push on, or deny to land at a commit point/.test(s), s);
+  assert(!/• rationale — /.test(s), `a rationale with nothing measured behind it is a bluff: ${s}`);
+});
+
+test('a bomb call names the subject in the rationale', () => {
+  // The 2026-08-05 fix carries over: the sentence needs a subject, or "deny — this runs the
+  // whole test suite" reads as the DENY running the suite.
+  const s = CARD(rv(141_000, FLOOR), { kind: 'deny', why: 'runs the whole 40-minute suite' });
+  assert(/• verdict — deny: land at a commit point/.test(s), s);
+  assert(/• rationale — approving continues the current work, whose next step runs the whole 40-minute suite/
+    .test(s), s);
 });
 
 test('the cold-start meter says nothing rather than guessing', () => {

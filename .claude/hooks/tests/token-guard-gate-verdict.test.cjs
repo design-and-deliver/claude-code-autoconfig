@@ -26,7 +26,11 @@
 // "land at a commit point" its own Choice bullet was asking for, three lines above. Two behaviors
 // are pinned here: a turn-ender DEFERS the gate entirely (no fire, no re-arm — silence beats a
 // green "approve recommended" label, which would teach the user the warnings are theatre), and a
-// bomb (full suite / explicitly-unbounded Grep) fires with deny LEADING the Choice bullet.
+// bomb (full suite / explicitly-unbounded Grep) fires with deny LEADING the verdict line.
+//
+// 2026-08-14: R14's Choice bullet condensed into a verdict + rationale pair (rentVerdictLines) —
+// the side rides `• verdict — deny:`, the evidence (bomb why, fat reading, restart price) rides
+// `• rationale — `. The pins below read those two lines; the pivot logic is unchanged.
 // Run: node --test token-guard-gate-verdict.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
@@ -104,17 +108,17 @@ test('one non-turn-ender segment disqualifies the whole command (fails closed)',
   assert.equal(out.permissionDecision, 'ask');
 });
 
-test('full test suite fires with deny LEADING the Choice bullet', () => {
+test('full test suite fires with deny LEADING the verdict line', () => {
   const fix = primed();
   const out = gateOut(call(fix, 'Bash', { command: 'pnpm test --run' }));
   assert.equal(out.permissionDecision, 'ask');
   const lines = out.permissionDecisionReason.split('\n');
-  assert.equal(lines.length, 3);                       // R14's pinned shape (3 since the 07-29 cut)
-  assert.match(lines[2], /^• Choice: deny \(recommended\) — /);
-  assert.match(lines[2], /whole test suite/);
+  assert.equal(lines.length, 5);                       // R14's pinned shape (5 since the 08-14 condensation)
+  assert.match(lines[3], /^• verdict — deny: /);
+  assert.match(lines[4], /whole test suite/);
   // Advisory, not authoritarian: the approve path is still stated — and states what approve
   // DOES (continues the work, whose next step is the suite), per Andrew 2026-08-05.
-  assert.match(lines[2], /approving continues the current work, whose next step runs/);
+  assert.match(lines[4], /^• rationale — approving continues the current work, whose next step runs/);
 });
 
 // The two ways a full suite actually gets typed. Both read as "scoped" to a check that anchors at
@@ -125,14 +129,14 @@ test('a full suite behind `cd &&` still fires — the check is per segment, not 
   const fix = primed();
   const out = gateOut(call(fix, 'Bash', { command: 'cd C:/CODE/repo && pnpm test --run' }));
   assert.equal(out.permissionDecision, 'ask');
-  assert.match(out.permissionDecisionReason.split('\n')[2], /^• Choice: deny \(recommended\) — /);
+  assert.match(out.permissionDecisionReason.split('\n')[3], /^• verdict — deny: /);
 });
 
 test('redirects and pipes are not scope — `pnpm test --run 2>&1 | tail -30` is a full suite', () => {
   const fix = primed();
   const out = gateOut(call(fix, 'Bash', { command: 'pnpm test --run 2>&1 | tail -30' }));
   assert.equal(out.permissionDecision, 'ask');
-  assert.match(out.permissionDecisionReason.split('\n')[2], /^• Choice: deny \(recommended\) — /);
+  assert.match(out.permissionDecisionReason.split('\n')[3], /^• verdict — deny: /);
 });
 
 // A scoped run still gets a recommendation — the NUMBERS one — so the assertion here is about
@@ -143,20 +147,19 @@ test('a SCOPED test run is not a bomb — no call-driven deny', () => {
   const fix = primed();
   const out = gateOut(call(fix, 'Bash', { command: 'pnpm test --run src/utils/foo.test.ts' }));
   assert.equal(out.permissionDecision, 'ask');
-  const lines = out.permissionDecisionReason.split('\n');
-  assert.doesNotMatch(lines[2], /whole test suite/);
+  assert.doesNotMatch(out.permissionDecisionReason, /whole test suite/);
 
   // The other half of the redirect fix: stripping operators must not swallow a REAL path arg.
   // This is the literal command from the 2026-07-26 screenshot — cd, pipe, redirect AND a scope.
   const piped = gateOut(call(primed(), 'Bash',
     { command: 'cd C:/CODE/repo && pnpm test --run src/utils/foo.test.ts 2>&1 | tail -30' }));
-  assert.doesNotMatch(piped.permissionDecisionReason.split('\n')[2], /whole test suite/);
+  assert.doesNotMatch(piped.permissionDecisionReason, /whole test suite/);
 });
 
 test('explicitly-unbounded Grep is a bomb; an unset head_limit (caps at 250) is not', () => {
   const bomb = gateOut(call(primed(), 'Grep',
     { pattern: 'foo', output_mode: 'content', head_limit: 0 }));
-  assert.match(bomb.permissionDecisionReason.split('\n')[2], /^• Choice: deny \(recommended\) — /);
+  assert.match(bomb.permissionDecisionReason.split('\n')[3], /^• verdict — deny: /);
   assert.match(bomb.permissionDecisionReason, /explicitly unbounded/);
 
   const ordinary = gateOut(call(primed(), 'Grep', { pattern: 'foo', output_mode: 'content' }));
@@ -203,16 +206,18 @@ test('…and deny on a FAT window — clearing stops that rent from the next tri
   // primed() leaves ~300k resident, past the 150k fat line.
   const lines = gateOut(call(primed(), 'Bash', { command: 'ls -la' }))
     .permissionDecisionReason.split('\n');
-  assert.match(lines[2], /^• Choice: deny \(recommended\) — /);
-  assert.match(lines[2], /past the ~150k fat line/);   // the fat READING, now on the Choice line
-  assert.match(lines[2], /Approving continues the current work; /);  // the losing option stays on the card
+  assert.match(lines[3], /^• verdict — deny: land at a commit point/);
+  assert.match(lines[4], /^• rationale — .*past the ~150k fat line/);  // the fat READING, on its own line
+  // The "Approving continues…" clause left the numbers branch with the 08-14 condensation:
+  // the approve-does sentence survives only where approve has a concrete next step to name —
+  // the bomb branch (pinned above and in token-guard-copy.test.js).
 });
 
 // Evidence and verdict used to be two bullets that could contradict each other; since the
 // 2026-07-29 cut they are ONE line, so the thing to pin is that the line's side tracks the
 // WINDOW. Expectation comes from the fixture, not from a second printed line — reading the
 // pivot off the message would agree with itself no matter which way the code went.
-test('the Choice side tracks the window — fat recommends deny, lean says nothing', () => {
+test('the verdict side tracks the window — fat recommends deny, lean says nothing', () => {
   // Two fat fixtures at different gate widths, plus a lean one, so the pivot is checked on BOTH
   // sides — a same-side sweep would pass on a verdict that never varied. Since the 2026-07-31
   // silence guard the lean side is the ABSENCE of a card rather than an approve card, but it is
@@ -222,11 +227,11 @@ test('the Choice side tracks the window — fat recommends deny, lean says nothi
                             [primed({ turnRentGateTokens: 250000 }), true],
                             [lean(), false]]) {
     const raw = call(fix, 'Bash', { command: 'ls -la' });
-    if (!fat) { assert.doesNotMatch(raw, /• Choice/); continue; }
-    const choiceLine = gateOut(raw).permissionDecisionReason.split('\n')[2];
-    assert.match(choiceLine, /^• Choice: deny \(recommended\) — /);
+    if (!fat) { assert.doesNotMatch(raw, /• verdict/); continue; }
+    const lines = gateOut(raw).permissionDecisionReason.split('\n');
+    assert.match(lines[3], /^• verdict — deny: /);
     // The fat branch is the only one that names the line it crossed.
-    assert.match(choiceLine, /past the ~150k fat line/);
+    assert.match(lines[4], /past the ~150k fat line/);
   }
 });
 
@@ -246,7 +251,8 @@ function bigFile(fix, name = 'god.ts') {
   fs.writeFileSync(p, 'x'.repeat(BIG));
   return p;
 }
-const choice = out => out.permissionDecisionReason.split('\n')[2];
+const verdictOf = out => out.permissionDecisionReason.split('\n')[3];
+const rationaleOf = out => out.permissionDecisionReason.split('\n')[4];
 
 // (a) — the class that was in the written patch and got DROPPED on inspection. R8's payload door
 // already owns the unranged-Read shape, fires earlier, and prices it off cfg.bombJumpTokens; a
@@ -261,7 +267,7 @@ test('(a) a god-file Read is R8 door work, not a gateVerdict bomb — one gate o
   // exists to pin is unchanged: R8 answers for an unranged god-file Read, R14 does not.
   assert.equal(out.permissionDecision, 'deny');
   assert.match(out.permissionDecisionReason, /diverted, not loaded: reading god\.ts/); // R8's copy
-  assert.doesNotMatch(out.permissionDecisionReason, /• Choice:/);                      // not R14's card
+  assert.doesNotMatch(out.permissionDecisionReason, /• verdict/);                      // not R14's card
   // R8's own escape hatch, re-pinned here because dropping (a) makes it the only one left.
   for (const ranged of [{ limit: 80 }, { offset: 3000 }]) {
     const r = gateOut(call(primed(), 'Read', Object.assign({ file_path: god }, ranged)));
@@ -273,17 +279,17 @@ test('(a) a god-file Read is R8 door work, not a gateVerdict bomb — one gate o
 test('(b) an unbounded Bash search is a bomb; -m/-l/-c or a downstream head clears it', () => {
   const bomb = gateOut(call(primed(), 'Bash', { command: 'rg TODO src/' }));
   assert.equal(bomb.permissionDecision, 'ask');
-  assert.match(choice(bomb), /^• Choice: deny \(recommended\) — /);
+  assert.match(verdictOf(bomb), /^• verdict — deny: /);
   // The bomb's own why, in the plain-language wording it took on 2026-07-31 — "-m/-l bound" named
   // the flags a fix would use, which is the reader's job to know, not the card's to assume.
-  assert.match(choice(bomb), /no result cap/);
+  assert.match(rationaleOf(bomb), /no result cap/);
   // Behind a cd, same as the full-suite case — the check is per segment, not anchored.
-  assert.match(choice(gateOut(call(primed(), 'Bash', { command: 'cd C:/CODE/repo && grep -rn foo .' }))),
+  assert.match(rationaleOf(gateOut(call(primed(), 'Bash', { command: 'cd C:/CODE/repo && grep -rn foo .' }))),
     /no result cap/);
 
   for (const cmd of ['rg TODO -l src/', 'rg -c TODO src/', 'rg --max-count 5 TODO src/',
                      'grep -rn foo . | head -20', 'rg TODO src/ | wc -l']) {
-    assert.doesNotMatch(choice(gateOut(call(primed(), 'Bash', { command: cmd }))),
+    assert.doesNotMatch(rationaleOf(gateOut(call(primed(), 'Bash', { command: cmd }))),
       /no result cap/, cmd);
   }
 });
@@ -293,12 +299,12 @@ test('(c) catting a big file is a bomb; a small cat is not', () => {
   const god = bigFile(fix, 'huge.log');
   const bomb = gateOut(call(fix, 'Bash', { command: 'cat ' + god }));
   assert.equal(bomb.permissionDecision, 'ask');
-  assert.match(choice(bomb), /^• Choice: deny \(recommended\) — /);
-  assert.match(choice(bomb), /cats a file big enough/);
+  assert.match(verdictOf(bomb), /^• verdict — deny: /);
+  assert.match(rationaleOf(bomb), /cats a file big enough/);
 
   const small = path.join(fix.proj, 'package.json');
   fs.writeFileSync(small, '{"name":"x"}');
-  assert.doesNotMatch(choice(gateOut(call(primed(), 'Bash', { command: 'cat ' + small }))),
+  assert.doesNotMatch(rationaleOf(gateOut(call(primed(), 'Bash', { command: 'cat ' + small }))),
     /cats a file big enough/);
 });
 
@@ -306,14 +312,14 @@ test('(d) a full-patch git command is a bomb; the --stat spellings stay turn-end
   for (const cmd of ['git diff', 'git show HEAD', 'git log -p -5', 'git log --patch']) {
     const out = gateOut(call(primed(), 'Bash', { command: cmd }));
     assert.equal(out.permissionDecision, 'ask', cmd);
-    assert.match(choice(out), /prints a full patch/, cmd);
+    assert.match(rationaleOf(out), /prints a full patch/, cmd);
   }
   // These are turn-enders: they must not merely stay neutral, they must DEFER the gate entirely.
   for (const cmd of ['git diff --stat', 'git diff --cached --stat', 'git log --oneline -5']) {
     assert.equal(gateOut(call(primed(), 'Bash', { command: cmd })).permissionDecision, undefined, cmd);
   }
   // --name-only is not in the turn-ender allowlist, so it fires — but not as a patch bomb.
-  assert.doesNotMatch(choice(gateOut(call(primed(), 'Bash', { command: 'git diff --name-only' }))),
+  assert.doesNotMatch(rationaleOf(gateOut(call(primed(), 'Bash', { command: 'git diff --name-only' }))),
     /prints a full patch/);
 });
 

@@ -161,12 +161,11 @@ test('escalated copy still ends on the deny-side instruction, and stays token-de
   preToolUse(fix);
   fs.appendFileSync(fix.tp, roundTrip('m3', 150000));
   const r = reason(fix);
-  // The escalation clause rides the "Lever" bullet, so it cannot eat the ask on the last one.
-  // Which side the Choice bullet recommends is the ratio's business (gate-verdict pins that);
+  // The escalation clause rides the "if it continues" line, so it cannot eat the ask below it.
+  // Which side the verdict names is the ratio's business (gate-verdict pins that);
   // what this test guards is that the deny path is still spelled out whichever side wins.
-  assert.match(r, /^• Choice: (?:approve|deny) \(recommended\) — /m);
-  assert.match(r, /denying lands this turn at a commit point/);
-  assert.match(r, /\/clear \+ \/continue/);
+  assert.match(r, /^• verdict — /m);
+  assert.match(r, /land at a commit point, then \/clear \+ \/continue/);
   assert.doesNotMatch(r, /\$/);
 });
 
