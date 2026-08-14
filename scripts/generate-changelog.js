@@ -53,8 +53,14 @@ const OVERRIDES = {
   // Multi-line trailers truncate at line one (bulletFor's regex keeps only the first
   // line), so these pushed commits would ship mid-sentence fragments — reworded whole:
   '9486fae': 'feat(recovery): /continue and /recover-context are much faster and cheaper — they gather everything in a single step instead of a dozen, work correctly in git worktrees, and no longer mistake an unrelated session for a plan you were executing',
-  '016a2e9': "fix(terminal-title): The /clear advisor no longer stays silent for sessions whose earlier topics predate the advisor's own bookkeeping",
-  'bbf754f': "feat(terminal-title): The tab hooks can now suggest /clear + /continue once enough of your context belongs to topics you've already finished — with the measured token figure attached, and staying silent when it can't measure",
+  // /clear advisor — reserved for the paid cost-control tier (decision 2026-08-14): the
+  // advisory is gated on the project-tier token-guard.js, so user installs never see it.
+  // Nulled rather than reworded — advertising it would announce a feature users can't get.
+  '016a2e9': null, 'bbf754f': null,
+  // …and the v1.0.214 bullets that advertised it (120d3c7) or other token-guard features
+  // (ccr's guard flow, drift card, warn ladder, 80% heads-up) — CHANGELOG regenerates from
+  // all tags on every release, so these nulls scrub the historical sections too:
+  '120d3c7': null, '52bcf21': null, 'c15ab1c': null, '4f0abf1': null, 'eea8c2e': null,
   'c5e9125': 'feat(continue): /continue now stops instead of racing when another session is already working the same plan doc',
   '21fc336': "fix(terminal-title): The 'awaiting your reply' tab signal now also catches statement-shaped closers on yes/no questions",
   // Subject names the review process, not the fix — reword to the visible outcome:

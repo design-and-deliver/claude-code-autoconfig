@@ -21,7 +21,8 @@
  *                       (tokens, read from the transcript's usage), and Stop surfaces a one-shot
  *                       systemMessage when the topics buried behind the current one outweigh 2× the
  *                       session's fixed overhead — the point where a /clear pays for itself in a
- *                       handful of turns (see clearAdvice)
+ *                       handful of turns (see clearAdvice; dormant unless the project-tier
+ *                       token-guard.js is installed beside this hook)
  *   SessionStart     -> ✻ idle "Claude Code — New session" after a /clear (a /continue re-arms the
  *                       carry of the previous title); an existing/carried title on resume/compact/relaunch
  *                       + inject the FULL RULES block — once per session instead of every prompt
@@ -898,6 +899,12 @@ function readWriteLedger(dir, sid) {
 // cannot see, so the wording stays conditional ("if they're done") and the user decides.
 function clearAdvice(dir, sid, transcriptPath) {
   try {
+    // Install gate: the advisory belongs to the cost-control tooling family and ships dormant —
+    // it speaks only where the project-tier token-guard.js sits beside the hooks dir (the same
+    // discriminator statusline-cost.js keys on; user installs never receive that file). The
+    // ledger/watermark writes elsewhere in this hook stay unconditional either way — R6 drift
+    // and /migrate-new-session read them regardless of whether the advisory may speak.
+    if (!fs.existsSync(path.join(dir, '..', 'token-guard.js'))) return '';
     const ADVICE_FLOOR = 40000; // below this much dead history a /clear isn't worth a nudge in any repo
     const hf = path.join(dir, `${sid}.history.jsonl`);
     const all = fs.readFileSync(hf, 'utf8').trim().split('\n')

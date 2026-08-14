@@ -2510,13 +2510,13 @@ Maintain it across the session:
  *                       (tokens, read from the transcript's usage), and Stop surfaces a one-shot
  *                       systemMessage when the topics buried behind the current one outweigh 2× the
  *                       session's fixed overhead — the point where a /clear pays for itself in a
- *                       handful of turns (see clearAdvice)
+ *                       handful of turns (see clearAdvice; dormant unless the project-tier
+ *                       token-guard.js is installed beside this hook)
  *   SessionStart     -> ✻ idle "Claude Code — New session" after a /clear (a /continue re-arms the
  *                       carry of the previous title); an existing/carried title on resume/compact/relaunch
  *                       + inject the FULL RULES block — once per session instead of every prompt
  *                       (~90% less directive overhead); resume/compact re-inject so a squeezed
- *                       context re-learns the rules.
- *`
+ *                       context re-learns the rules.`
             },
             'feedback-feedback': {
                 filename: 'FEEDBACK.md',

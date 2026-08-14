@@ -28,8 +28,14 @@ const { clearAdvice, recordMark, readTailWrites, recordWrites, readWriteLedger }
 
 const SID = 'test-sid';
 
+// Real shape: <hooks>/.titles with token-guard.js beside it — the advisory's install gate
+// checks for that sibling (dev/fleet boxes have it; user installs don't, see the gate test).
 function tmpTitles() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'tt-advice-'));
+  const hooks = fs.mkdtempSync(path.join(os.tmpdir(), 'tt-advice-'));
+  fs.writeFileSync(path.join(hooks, 'token-guard.js'), '// present = cost tooling installed\n');
+  const titles = path.join(hooks, '.titles');
+  fs.mkdirSync(titles);
+  return titles;
 }
 
 // History entries carry `tokens` only when the transcript had flushed usage at paint time, so both
@@ -65,6 +71,13 @@ function singleTopicFatSession() {
 test('a single-topic fat session is advised at all (the starved case)', () => {
   const { dir, transcript } = singleTopicFatSession();
   assert.match(clearAdvice(dir, SID, transcript), /\/clear cuts per-turn input cost/);
+});
+
+test('without token-guard.js beside the hooks dir the advisory is silent (user installs)', () => {
+  const { dir, transcript } = singleTopicFatSession();
+  fs.rmSync(path.join(dir, '..', 'token-guard.js'));
+  assert.equal(clearAdvice(dir, SID, transcript), '',
+    'the fat session that always advises on dev boxes must stay silent in a user install');
 });
 
 test('single-topic wording avoids the "N earlier topics" lie', () => {

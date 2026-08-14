@@ -251,6 +251,9 @@ function seedHistory(cwd, sid, rows) {
   const hf = path.join(cwd, '.claude', 'hooks', '.titles', `${sid}.history.jsonl`);
   fs.mkdirSync(path.dirname(hf), { recursive: true });
   fs.writeFileSync(hf, rows.map(r => JSON.stringify(r)).join('\n') + '\n');
+  // The advisory's install gate wants token-guard.js beside .titles (user installs lack it);
+  // planting it here keeps the silent-case tests proving thresholds, not the gate.
+  fs.writeFileSync(path.join(cwd, '.claude', 'hooks', 'token-guard.js'), '// cost tooling marker\n');
   return hf;
 }
 
