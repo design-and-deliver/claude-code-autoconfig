@@ -193,11 +193,14 @@ function reportMain(transcriptArg) {
   // 0.1× cache-read price, one decimal (trailing .0 dropped): 120k → 12k, 66k → 6.6k
   const k1 = (n) => `${(n / 10000).toFixed(1).replace(/\.0$/, '')}k`;
 
+  // Bold the labels on a real terminal; piped/captured output (Claude's Bash
+  // relay, tests) stays plain — the /cost-compare command re-bolds via markdown.
+  const bold = process.stdout.isTTY ? (s) => `\x1b[1m${s}\x1b[22m` : (s) => s;
   const lines = [
     `session ${sid.slice(0, 8)} — ${path.basename(path.resolve(projectDir))}`,
     '',
-    `* current session — ${k1(ctx)} token cost (${fmtK(ctx)} * 0.1 cache) per turn`,
-    `* new session — ${fmtK(cold)} token cost, reduced to +${k1(cold)} per turn`,
+    `* ${bold('current session')} — ${k1(ctx)} token cost (${fmtK(ctx)} * 0.1 cache) per turn`,
+    `* ${bold('new session')} — ${fmtK(cold)} token cost, reduced to +${k1(cold)} per turn thereafter`,
     '',
   ];
   // The contextWarnTokens bar gates when the STATUSLINE may interrupt; a
@@ -209,9 +212,6 @@ function reportMain(transcriptArg) {
   // vs /clear) + a "rationale:" line with the why (Andrew, 2026-08-13). A
   // break-even horizon of BREAKEVEN_STAY_TURNS+ turns is too far out to bank on.
   const BREAKEVEN_STAY_TURNS = 3;
-  // Bold the labels on a real terminal; piped/captured output (Claude's Bash
-  // relay, tests) stays plain — the /cost-compare command re-bolds via markdown.
-  const bold = process.stdout.isTTY ? (s) => `\x1b[1m${s}\x1b[22m` : (s) => s;
   if (savings > 0) {
     const upfront = cold - ctx * 0.1;
     // Subtract the ROUNDED operands so any printed saving matches the bullets —
@@ -219,21 +219,18 @@ function reportMain(transcriptArg) {
     const save1 = `${(+(k1(ctx).slice(0, -1)) - +(k1(cold).slice(0, -1))).toFixed(1).replace(/\.0$/, '')}k`;
     const turns = upfront > 0 ? Math.ceil(upfront / (savings * 0.1)) : 0;
     if (upfront <= 0) {
-      lines.push(`${bold('verdict:')} /clear`);
-      lines.push(`${bold('rationale:')} purge the old bloated context to save ${save1} tokens, starting on the first turn`);
+      lines.push(`* ${bold('verdict:')} /clear`);
+      lines.push(`* ${bold('rationale:')} purge the old bloated context to save ${save1} tokens, starting on the first turn`);
     } else if (turns < BREAKEVEN_STAY_TURNS) {
-      lines.push(`${bold('verdict:')} /clear`);
-      lines.push(`${bold('rationale:')} purge the old bloated context — ${fmtK(upfront)} upfront breaks even within ${turns} turns, then saves ${save1} tokens per turn`);
+      lines.push(`* ${bold('verdict:')} /clear`);
+      lines.push(`* ${bold('rationale:')} purge the old bloated context — ${fmtK(upfront)} upfront breaks even within ${turns} turns, then saves ${save1} tokens per turn`);
     } else {
-      lines.push(`${bold('verdict:')} stay the course`);
-      lines.push(`${bold('rationale:')} it would take you ${turns}+ turns to break even`);
+      lines.push(`* ${bold('verdict:')} stay the course`);
+      lines.push(`* ${bold('rationale:')} it would take you ${turns}+ turns to break even`);
     }
   } else {
-    lines.push(`${bold('verdict:')} stay the course`);
-    lines.push(`${bold('rationale:')} a new session costs more every turn — it never breaks even`);
-  }
-  if (midPlanSubstep(tg, projectDir)) {
-    lines.push('note: an active plan is mid-substep — finish the substep (work, Verify, commit, Ledger entry) before any /clear.');
+    lines.push(`* ${bold('verdict:')} stay the course`);
+    lines.push(`* ${bold('rationale:')} a new session costs more every turn — it never breaks even`);
   }
   console.log(lines.join('\n'));
 }
