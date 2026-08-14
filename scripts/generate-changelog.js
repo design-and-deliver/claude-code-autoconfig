@@ -61,6 +61,10 @@ const OVERRIDES = {
   // (ccr's guard flow, drift card, warn ladder, 80% heads-up) — CHANGELOG regenerates from
   // all tags on every release, so these nulls scrub the historical sections too:
   '120d3c7': null, '52bcf21': null, 'c15ab1c': null, '4f0abf1': null, 'eea8c2e': null,
+  // …and the v1.0.215/217 token-guard bullets missed in that pass (spike/spend-gate cards,
+  // window rungs, idle-return + stale-session recovery cards) — same dev-gated family:
+  'a5043d9': null, 'cfe199d': null, 'adc2ce0': null, 'e5ebf85': null, 'b5715ae': null,
+  '26c1deb': null, '1d15e99': null,
   'c5e9125': 'feat(continue): /continue now stops instead of racing when another session is already working the same plan doc',
   '21fc336': "fix(terminal-title): The 'awaiting your reply' tab signal now also catches statement-shaped closers on yes/no questions",
   // Subject names the review process, not the fix — reword to the visible outcome:

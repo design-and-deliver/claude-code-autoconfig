@@ -45,9 +45,6 @@
 - fix: Node 18 or newer is now required (matches what we test on)
 - fix(cli): A corrupted settings or config file now produces a clear error instead of silent data loss
 - fix(docs): The interactive docs no longer show commands that aren't part of your install
-- fix(token-guard): the "something just loaded a huge payload" warning now gives honest
-- fix(token-guard): Spend-gate confirmations now show token counts instead of dollar amounts when you're on a Claude subscription plan.
-- feat(token-guard): the usage-spike warning now tells you what matters — how long until
 - fix(autoconfig): /autoconfig sets up the format hook in the reliable path-anchored form
 - fix(commands): /validate-cca-install no longer reports false "missing command" errors
 - fix(install): Removed the outdated curl installer — install with npx claude-code-autoconfig instead
@@ -64,14 +61,10 @@
 - feat(retro): New opt-in /enable-retro — when enabled, Claude logs tech debt and improvement ideas it notices into .claude/retro as small structured story files you can pick up later.
 - feat(commit-guard): Claude now reminds you when a lot of uncommitted work piles up, and knows to stay quiet while you're actively committing in any terminal. New /check-commit command runs the check on demand.
 - feat(terminal-title): Terminal tabs for plan-driven work now lead with the plan's name, so parallel sessions from the same plan group together visually.
-- feat(token-guard): Usage-spike warnings now tell you when other open sessions drove the spend, instead of blaming your last turn here.
 - feat(terminal-title): Claude now answers yes/no questions with a numbered 1-yes/2-no
-- fix(token-guard): Usage-window checkpoints now announce once per window cycle across all your sessions, instead of repeating in every new session.
 - feat(commands): New /continue command — after /clear (or a fresh session in the same
 - feat(terminal-title): /recover-context (no arguments) now recovers exactly the session that
 - feat(commands): /recover-context now works with no arguments — after /clear or in a
-- feat(token-guard): The "session sat idle" warning now gives you a short command to type in
-- feat(token-guard): The stale-session warning can now end with a one-click Yes/No card — pick Yes and a recovered session opens in a new terminal window, no retyping.
 
 ## v1.0.214
 - feat(terminal-title): Terminal tab titles are now remembered per session, so you can look back at how a session's work shifted over time.
