@@ -74,8 +74,11 @@ test('version bumps and chores are housekeeping; feat/fix are not', () => {
   assert(isHousekeeping('1.0.199') === true, 'bare version subject');
   assert(isHousekeeping('chore: update changelog') === true, 'chore:');
   assert(isHousekeeping('chore(release): x') === true, 'chore(scope):');
+  assert(isHousekeeping('plan: tick 1.2 + ledger') === true, 'plan: tick/ledger bookkeeping');
+  assert(isHousekeeping('plan(clean-code): record the Phase 4 early-stop override') === true, 'plan(scope):');
   assert(isHousekeeping('feat(x): y') === false, 'feat');
   assert(isHousekeeping('fix: y') === false, 'fix');
+  assert(isHousekeeping('feat(run-plan): --model passthrough') === false, 'feat mentioning plan stays');
 });
 
 test('revert and merge commits are housekeeping (BH-9) — never leak into the changelog', () => {

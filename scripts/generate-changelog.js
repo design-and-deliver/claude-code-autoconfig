@@ -30,6 +30,35 @@ const OVERRIDES = {
   '629c11c': null, // token-guard dev-only staging — dev-gated
   '0bf89e3': null, // token-guard R12a confirm card — trailer reads user-facing but the feature is dev-gated
   '9f57ce4': null, // /analyze-session zero-token tip — the command is dev-only
+
+  // ---- v1.0.219 → next-release remediation (already-pushed batch, audited 2026-08-14).
+  // Everything nulled below describes dev-gated tooling (DEV_ONLY_FILES in bin/cli.js) or
+  // maintainer-only workflow — users never receive those files, so the bullets must not
+  // surface. Trailers on pushed commits can't be reworded; OVERRIDES is the sanctioned fix.
+  // token-guard (dev-gated):
+  '7563802': null, '37b1abc': null, '28632d9': null, '8a59c51': null, '7ba2813': null,
+  'a237056': null, '39f4fae': null, 'cf1a9b2': null, '26f4efa': null, '0024049': null,
+  'a50b945': null, 'a51194b': null, '6319304': null, 'b8be1ab': null,
+  // statusline / cost-compare (dev-gated):
+  '3d01c5d': null, '3f8d0e9': null, 'e1c4236': null, '6b8a5c9': null, '412c0f5': null,
+  '820d285': null, '8b19379': null, '6c932b2': null, '9f61e99': null, '65bc86c': null,
+  // fleet / claim-registry / worktree tooling (dev-gated):
+  '3b0bdd0': null, 'b7f046c': null, '727c25a': null, '6d0c739': null, '0c7a467': null,
+  '8dcb360': null, '42aa8cd': null, '109b768': null,
+  // run-plan + hook-sync + rules bullets (scripts/ never ships; the "kept in sync" story
+  // is the dev-box fleet actuator, not anything a user install does):
+  'b76f611': null, '763feaa': null, '7085d1c': null, '5d7621d': null, 'ef5824e': null,
+  // maintainer-facing docs/test/diagnostics bullets:
+  '4d73c4d': null, '757a303': null, '38f62c5': null, 'da683dc': null, 'f423dae': null,
+  // Multi-line trailers truncate at line one (bulletFor's regex keeps only the first
+  // line), so these pushed commits would ship mid-sentence fragments — reworded whole:
+  '9486fae': 'feat(recovery): /continue and /recover-context are much faster and cheaper — they gather everything in a single step instead of a dozen, work correctly in git worktrees, and no longer mistake an unrelated session for a plan you were executing',
+  '016a2e9': "fix(terminal-title): The /clear advisor no longer stays silent for sessions whose earlier topics predate the advisor's own bookkeeping",
+  'bbf754f': "feat(terminal-title): The tab hooks can now suggest /clear + /continue once enough of your context belongs to topics you've already finished — with the measured token figure attached, and staying silent when it can't measure",
+  'c5e9125': 'feat(continue): /continue now stops instead of racing when another session is already working the same plan doc',
+  '21fc336': "fix(terminal-title): The 'awaiting your reply' tab signal now also catches statement-shaped closers on yes/no questions",
+  // Subject names the review process, not the fix — reword to the visible outcome:
+  '5e7cd63': 'fix(continue): /continue and /recover-context no longer mistake a leftover file from an earlier recovery for this session\'s context',
 };
 
 // The changelog line for one commit, or null to omit it. Precedence:
@@ -53,15 +82,17 @@ function bulletFor(hash, subject, body, overrides = OVERRIDES) {
   return subject;
 }
 
-// Version-bump, chore, revert, and merge commits never reach the changelog (BH-9).
-// `revert`/`chore` are matched as conventional-commit types (`type:` or `type(scope):`);
-// `Merge …`/`Revert …` catch git's own default subjects for merge/revert commits (a
-// belt over the `--no-merges` log filter, and it makes reverts drop even when authored
-// as a conventional `revert:` bullet). A feature that merely mentions the word — e.g.
-// `feat(cli): add a revert command` — is NOT housekeeping and must survive.
+// Version-bump, chore, revert, plan, and merge commits never reach the changelog (BH-9).
+// `revert`/`chore`/`plan` are matched as conventional-commit types (`type:` or
+// `type(scope):`) — `plan:` subjects are plan-doc tick/ledger bookkeeping and are always
+// maintainer-facing. `Merge …`/`Revert …` catch git's own default subjects for
+// merge/revert commits (a belt over the `--no-merges` log filter, and it makes reverts
+// drop even when authored as a conventional `revert:` bullet). A feature that merely
+// mentions the word — e.g. `feat(cli): add a revert command`, `feat(run-plan): …` — is
+// NOT housekeeping and must survive.
 function isHousekeeping(subject) {
   return /^\d+\.\d+\.\d+$/.test(subject)
-    || /^(chore|revert)(:|\()/.test(subject)
+    || /^(chore|revert|plan)(:|\()/.test(subject)
     || /^(Merge |Revert )/.test(subject);
 }
 
