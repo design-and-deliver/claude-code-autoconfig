@@ -136,6 +136,12 @@ and an edit invalidates the read so it often gets paid twice.
 - **Every substep names its Read list** — exact files and line ranges (`modal.tsx:3459-3485`),
   not "the modal". If the plan authored the pointers during discovery, it already knows them;
   writing them down is what converts that spend into savings for the executing session.
+- **Never author a substep against a file you haven't opened.** Pointers from memory or from
+  another doc's description produce phantom work — 2026-08-15: a substep planned an
+  owner-liveness feature its target script already had, because the plan was authored without
+  reading it. The executor (especially one at the model floor) builds the duplicate rather
+  than questioning the plan. During authoring, open every file a substep edits — at least at
+  Grep-then-window depth — and take the Read list's pointers from that look, not from recall.
 - **The plan doc is itself a read — scope it.** A mature plan runs 300+ lines / ~27k tokens, and
   a session that opens it whole re-reads all of it on every subsequent request. An executing
   session needs exactly three slices: the **⛔ trap section**, **its own substep**, and the
@@ -158,6 +164,28 @@ and an edit invalidates the read so it often gets paid twice.
 - **Bulk output goes to files.** Probes, subagent discovery, API captures: write full results to
   a file (fixtures dir, scratchpad) and surface only a short key summary. The plan references
   the path; it never inlines the report, and the executing session never prints raw JSON.
+
+## Model floor (author for the weakest executor that will run it)
+
+The plan's detail level is a contract with the executing model, not taste. Judgment spent at
+authoring time is paid ONCE, on the strong model; judgment left inside a substep is re-paid by
+every executing session — and a weak executor resolves ambiguity wrong instead of asking.
+
+- **The header declares a model floor**: the weakest model tier the plan is written for —
+  a per-plan choice, not a fixed rung. Sonnet-class is the realistic floor for real code
+  work; declare a Haiku-class floor only when every substep is purely mechanical (renames,
+  config flips, verbatim command sequences — no code judgment left). Example header line:
+  "Model floor: Sonnet-class; keep 3.1 off Haiku". Executing sessions pick their model
+  against it (`/model` before `/continue` on a handoff that changes tier — model is
+  per-session; never switch mid-session).
+- **A substep still containing an open design decision is above every floor.** Either decide
+  it in the doc — name the chosen primitive, spell the exact commands — or mark the substep
+  for a stronger model with a tag in its title, after the dash (e.g. `[opus]`), where the
+  effort-tag regex can't be broken.
+- **The completeness lint: "could a session on the declared floor execute this cold?"** Ambiguity a strong
+  executor quietly resolves mid-flight is precisely what a weak one gets wrong. If the answer
+  is no, the plan is underspecified — elaborate at authoring time, where the fix costs a
+  paragraph instead of a burned session.
 
 ## Ledger (required section at the bottom of every plan)
 
