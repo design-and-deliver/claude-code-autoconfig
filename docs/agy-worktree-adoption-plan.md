@@ -258,3 +258,27 @@ arrived dirty in the worktree and `git status --porcelain` in main is unchanged.
   safety is solved repo-wide. Uncommitted diff at handoff: `bootstrap-worktree.js`,
   `sync-worktrees.js`, `parallel-session-worktrees.md`, `sync-worktrees.test.js`
   (+107/-7 lines, all four files).
+- 2026-08-15 — 1.1 CLOSED (`3ed42f9`), rescoped to opt-in — decided by the resuming
+  session, given "you decide." Before deciding anything, found the hazard was live, not
+  hypothetical: THIS worktree's own `node_modules` was itself a junction into the main
+  checkout (bootstrap had run it during setup, before the flag existed) — an `ExitWorktree
+  remove` on it later would have emptied the main checkout a third time. Unlinked it
+  (`fs.rmdirSync`, non-recursive) and ran a real `npm install` here first, before deciding
+  anything else, since the checkout can't be modified from within it — see ⛔9 pointer.
+  Verdict: junctioning ships gated behind `CCA_UNSAFE_NODE_MODULES_JUNCTION=1`, default
+  `npm install`, because proof item (a) in ⛔5 (native `git worktree remove`) is confirmed
+  UNSAFE and nothing in this repo can patch git's own removal code — kept rather than
+  reverted, since the code is correct and tested for the creation side and the
+  sync-worktrees.js guard is independent defense-in-depth. Rewrote 1.1's Verify step (it
+  literally was the reproduction recipe for ⛔9) and re-ran it safely: smoke worktree,
+  flag set, junction confirmed, `npm test` green through the junction, then **unlinked
+  before removing** — `git worktree remove --force` only after the junction was gone —
+  main checkout confirmed intact after. Added trap ⛔9 to this doc and a matching "⛔
+  node_modules junction is opt-in" section to `parallel-session-worktrees.md` (includes
+  the unlink-before-remove recovery recipe for a worktree caught with an existing
+  junction). **Open, not solved:** native `git worktree remove` / `ExitWorktree remove`
+  are still unprotected against a hand-set or future-flagged junction — no substep here
+  attempts that; it would need either a fix upstream in git, or every removal call site
+  (including the harness's `ExitWorktree`, which this repo cannot modify) routed through
+  an unlink-first wrapper. Flagging for a future session/plan rather than blocking this
+  one indefinitely. Full suite green pre- and post-commit (341/341).
