@@ -3,11 +3,13 @@
 // ============================================================================
 // Settings merge helpers (shared by the upgrade path and the plugin installer)
 //
-// Three public functions that fold a settings fragment (hooks / env / permissions)
+// Four public functions that fold a settings fragment (hooks / env / permissions)
 // into a user's .claude/settings.json:
 //   - migrateLegacyHookCommands: rewrite legacy cwd-relative hook commands to the
 //     ${CLAUDE_PROJECT_DIR:-.}-anchored form (must run BEFORE a merge, or the merge
 //     doubles the hook — see the ordering guard in test/cli-install.test.js).
+//   - migrateRetiredPermissionRules: strip permission rules CCA once shipped and has
+//     withdrawn (the additive merge would otherwise preserve them forever).
 //   - mergeSettingsInto:  additively fold a fragment in (never overwrite user values);
 //     optionally records the true delta it added into an accumulator (BH-1).
 //   - unmergeSettingsFrom: strip back out only what was recorded as added (falling back to
@@ -51,6 +53,32 @@ function migrateLegacyHookCommands(userSettings) {
         if (m) hook.command = 'node "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/' + m[1] + '"';
       }
     }
+  }
+}
+
+// Permission rules CCA once shipped and has since withdrawn. Two families:
+//   - Write(./**): Claude Code (v2.1.x) no longer matches Write(path) rules at all — only
+//     Edit(path) rules gate file-editing tools — and prints a startup warning for each one
+//     it finds. Edit(./**) (still shipped) already covers every file-editing tool.
+//   - Write(./nul) / Edit(./nul): shipped briefly, removed in 15a24fc because they block
+//     Windows bash `> nul` redirections; the same Write() warning now flags the first.
+// The merge below is additive-only, so an upgraded project keeps these forever — and prints
+// the warnings at the top of every new session — unless they are scrubbed here. Exact
+// literals only: a user's own Write(...) rules are theirs, warning or not.
+const RETIRED_PERMISSION_RULES = {
+  allow: ['Write(./**)'],
+  deny: ['Write(./nul)', 'Edit(./nul)']
+};
+
+// Strip the retired rules IN PLACE, mutating the given settings object. Runs on the upgrade
+// path alongside migrateLegacyHookCommands (fresh installs copy the package file, which no
+// longer contains them).
+function migrateRetiredPermissionRules(userSettings) {
+  if (!userSettings || !userSettings.permissions) return;
+  for (const key of PERMISSION_KEYS) {
+    const rules = userSettings.permissions[key];
+    if (!Array.isArray(rules)) continue;
+    userSettings.permissions[key] = rules.filter(r => !RETIRED_PERMISSION_RULES[key].includes(r));
   }
 }
 
@@ -265,6 +293,7 @@ function unmergeSettingsFrom(userSettings, fragment, added) {
 
 module.exports = {
   migrateLegacyHookCommands,
+  migrateRetiredPermissionRules,
   mergeSettingsInto,
   unmergeSettingsFrom
 };

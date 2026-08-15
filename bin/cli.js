@@ -6,7 +6,7 @@ const readline = require('readline');
 const { execSync, spawn } = require('child_process');
 const { formatUpdateSummary } = require('./update-summary.js');
 const { runPluginCommand } = require('./lib/plugins.js');
-const { migrateLegacyHookCommands, mergeSettingsInto, unmergeSettingsFrom } = require('./lib/settings-merge.js');
+const { migrateLegacyHookCommands, migrateRetiredPermissionRules, mergeSettingsInto, unmergeSettingsFrom } = require('./lib/settings-merge.js');
 const { pullUpdates } = require('./lib/updates.js');
 const { cleanupNulFile } = require('./lib/nul-cleanup.js');
 
@@ -592,6 +592,11 @@ function main() {
         // Upgrade legacy relative hook commands FIRST so the anchored template entries below
         // dedupe against them instead of doubling up (see migrateLegacyHookCommands).
         migrateLegacyHookCommands(userSettings);
+
+        // Scrub permission rules CCA once shipped and has withdrawn (e.g. Write(./**), which
+        // newer Claude Code warns about at session start) — the additive merge below never
+        // removes anything, so old installs keep them forever without this.
+        migrateRetiredPermissionRules(userSettings);
 
         // Additively fold package hooks/env/permissions into the user's settings
         // (shared with the plugin installer — see mergeSettingsInto).

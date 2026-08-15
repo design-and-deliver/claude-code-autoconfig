@@ -129,7 +129,6 @@
     "allow": [
       "Read(./**)",
       "Edit(./**)",
-      "Write(./**)",
       "Glob",
       "Grep",
       "WebSearch",

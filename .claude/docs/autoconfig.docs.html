@@ -1475,8 +1475,8 @@
             },
             'format-hook': {
                 title: 'format.js',
-                desc: 'format.js in hooks/',
-                trigger: 'PostToolUse hook'
+                desc: 'Runs project formatter after Write/Edit operations',
+                trigger: 'PostToolUse on Write|Edit'
             },
             'mark-commit-active-hook': {
                 title: 'mark-commit-active.js',
@@ -2684,7 +2684,6 @@ Claude reads this file but must never write to it. When Claude discovers project
     "allow": [
       "Read(./**)",
       "Edit(./**)",
-      "Write(./**)",
       "Glob",
       "Grep",
       "WebSearch",
