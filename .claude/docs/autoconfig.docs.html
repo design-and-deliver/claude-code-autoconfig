@@ -1834,7 +1834,7 @@ argument-hint: [--show]
 model: sonnet
 ---
 <!-- @description Recovers where your previous session in this terminal left off — rebuilds its context on a cheap model, reports the state and the precise next action, then stops for your go-ahead. Plan-aware: if that session was executing a substep of a plan doc, the report comes from the plan's Ledger instead of the transcript. -->
-<!-- @version 10 -->
+<!-- @version 11 -->
 <!-- @param --show | flag | optional | Opens the recovered transcript in your default editor (no-op on a clean plan handoff or a fresh checkpoint handoff note — nothing is read). -->
 <!-- @response success | Picking up where we left off — {what we were doing}. State summary + the one next action, then a go-ahead question. -->
 <!-- @response plan | Picking up where we left off — {plan alias}: substep {N.k} done ({hash}); next: {N.next}. Then a go-ahead question. -->
@@ -1844,8 +1844,8 @@ model: sonnet
 Continue where the previous session in this terminal left off.
 
 This is the no-ceremony wrapper around \`/recover-context\`'s auto mode: no arguments, it
-figures everything out itself, and it is plan-aware (below). Since v9 it runs on Sonnet
-(the \`model:\` frontmatter above): recovery is mechanical re-reading — probe, read,
+figures everything out itself, and it is plan-aware (below). Since v9 it is pinned to
+Sonnet (the \`model:\` frontmatter above): recovery is mechanical re-reading — probe, read,
 reconcile — and a cheap model handles it fully, at a fraction of the cost on a
 Fable/Opus session. What the cheap model must NOT do is the resumed work itself.
 \`model:\` scopes to the whole turn, so this command ends its turn at the report: state
