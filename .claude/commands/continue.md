@@ -1,10 +1,10 @@
 ---
-description: Recover the previous session's active context on Sonnet, report where it stands, then stop for your go-ahead
+description: Recover the previous session's last active context on Sonnet, report where it stands, then stop for your go-ahead
 argument-hint: [--show]
 model: sonnet
 ---
 <!-- @description Recovers where your previous session in this terminal left off — rebuilds its context on a cheap model, reports the state and the precise next action, then stops for your go-ahead. Plan-aware: if that session was executing a substep of a plan doc, the report comes from the plan's Ledger instead of the transcript. -->
-<!-- @version 11 -->
+<!-- @version 12 -->
 <!-- @param --show | flag | optional | Opens the recovered transcript in your default editor (no-op on a clean plan handoff or a fresh checkpoint handoff note — nothing is read). -->
 <!-- @response success | Picking up where we left off — {what we were doing}. State summary + the one next action, then a go-ahead question. -->
 <!-- @response plan | Picking up where we left off — {plan alias}: substep {N.k} done ({hash}); next: {N.next}. Then a go-ahead question. -->
@@ -57,7 +57,7 @@ prose steps. Everything below Step 1 is a DECISION, not a lookup.
 
 Say exactly:
 
-> Recovering the previous session's active context.
+> Recovering the previous session's last active context.
 
 Not the vaguer "Recovering the previous session's context." — "active" is the accurate
 word: what comes back is the in-flight tail of that session (cutoff ladder + 3k cap) or
@@ -85,6 +85,7 @@ It prints one JSON object and never hard-fails. Fields:
 | `plan` | `trapSection`, `nextSubstep`, `ledgerTail` line ranges + the substep map |
 | `git` | `log` (15) and `statusShort`, on a plan match |
 | `liveSiblings`, `siblingGate` | concurrency gate: `STOP` or `CLEAR` |
+| `stopReason` | present only as `unexplained-interrupt` — see Step 4 |
 | `cutoffIso`, `via` | the recovery window and which ladder rung set it |
 | `tempFile`, `messages`, `tokens`, `readTempFile` | the extracted context |
 | `droppedOlder`, `clipped` | how many messages the 3k-token size cap dropped / shortened |
@@ -187,6 +188,16 @@ named precisely enough that "go" is a sufficient answer. Then end the turn, by e
 - **The work was finished**: say so in one line, then ask what's next.
 
 Never report as pending what the tail (or git) already shows done.
+
+⛔ **`stopReason: unexplained-interrupt` overrides the "ended waiting" branch.** The last
+thing the user typed was a bare `[Request interrupted by user…]` — no reason given — and
+the dead session, having no idea why, very likely signed off by asking for one ("what made
+you stop me?"). That question is stale by construction: an interrupt followed by `/clear`
+is usually mechanical (Escape, or a restart the user had already queued), and even when it
+wasn't, the user answers by telling you, not by being asked. **Never replay it.** Report the
+state, name what was in flight when the interrupt landed, and close on the forward go-ahead
+instead — "Resume {next action}?". One neutral clause noting the stop was unexplained is
+fine; an interrogation about it is not.
 
 ## Step 5: Report (plan-driven session)
 

@@ -60,6 +60,11 @@ MAX_ACTION_LINES = 15      # newest state-changing tool calls kept -- see action
 STOP_WORDS = {'plan', 'plans', 'doc', 'docs', 'the', 'and', 'for', 'with'}
 SUBSTEP_RE = re.compile(r'^#{2,4}\s+([☑☐])\s*(.*)$')      # ☑ / ☐
 TRAP_RE = re.compile(r'^#{1,4}.*⛔')                            # ⛔ heading
+INTERRUPT_RE = re.compile(r'^\[Request interrupted by user')   # see classify_stop()
+# User-role lines the harness authors, not the human -- skipped when asking "what
+# did the user last SAY". Task notifications in particular land after an interrupt.
+HARNESS_PREFIXES = ('<task-notification>', '<system-reminder>', '<local-command',
+                    '<command-name>', '<command-message>')
 
 
 def iso(s):
@@ -573,6 +578,50 @@ def stamps_and_tail(path, needles=()):
     return stamps, '\n'.join(tail), mentions
 
 
+def classify_stop(tail):
+    """Why did the previous session stop? Only one answer is worth reporting.
+
+    A transcript records `[Request interrupted by user for tool use]` with NO
+    reason attached, and the harness cannot tell an objection ("stop, that's
+    wrong") from a mechanical stop (Escape, or a `/clear` the user had already
+    queued from a token-guard restart advisory). The recovering session then
+    guesses -- and the /continue doc's "session ended waiting on the user ->
+    re-ask that question" rule makes it guess ACTIVELY WRONG: it replays the
+    dead session's "what made you stop me?" at a user who has since moved on,
+    burning the first exchange of a fresh window on a question the /clear
+    itself already answered. Observed 2026-08-15 recovering the see-it-work
+    plan session.
+
+    So: if the last thing the human actually TYPED was the bare interrupt
+    marker, say so and let the doc route around it. Anything else -- a real
+    message after the interrupt, no interrupt at all -- returns {} and the
+    normal Step 4 ladder applies unchanged.
+    """
+    for line in reversed(tail.split('\n')):
+        try:
+            obj = json.loads(line)
+        except Exception:
+            continue
+        if obj.get('type') != 'user' or obj.get('isMeta'):
+            continue
+        content = (obj.get('message', {}) or {}).get('content', '')
+        if isinstance(content, list):
+            if any(isinstance(c, dict) and c.get('type') == 'tool_result' for c in content):
+                continue
+            text = ' '.join(c.get('text', '') for c in content
+                            if isinstance(c, dict) and c.get('type') == 'text')
+        else:
+            text = content if isinstance(content, str) else ''
+        text = text.strip()
+        if not text or text.startswith(HARNESS_PREFIXES):
+            continue
+        if INTERRUPT_RE.search(text):
+            return {'stopReason': 'unexplained-interrupt',
+                    'stopReasonAt': obj.get('timestamp')}
+        return {}          # the human said something after it -- that's the reason
+    return {}
+
+
 # --------------------------------------------------------------------------
 
 def main():
@@ -656,6 +705,7 @@ def main():
     title = (title_entry or {}).get('title', '') or ''
     out.update({'sid': sid, 'sidShort': sid[:8], 'file': path.replace('\\', '/'),
                 'how': how, 'lastTitle': title})
+    out.update(classify_stop(tail))
 
     # ---------- checkpoint handoff (a CONTENT source, above the ladder) ----------
     handoff, handoff_fresh = find_handoff(sid, stamps[-1])
