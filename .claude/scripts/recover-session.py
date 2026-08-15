@@ -55,6 +55,8 @@ LIVENESS_SECS = 180        # same bar as the dupe-session guard
 HANDOFF_DRIFT = 180        # note is STALE if the transcript ran on past it
 MAX_EXTRACT_TOKENS = 3000  # payload ceiling -- see cap_to_budget()
 MIN_EXTRACT_MSGS = 4       # ...never trimmed below this, however long the messages
+ACTION_TOOLS = {'Bash', 'Edit', 'Write', 'MultiEdit', 'NotebookEdit'}
+MAX_ACTION_LINES = 15      # newest state-changing tool calls kept -- see action_line()
 STOP_WORDS = {'plan', 'plans', 'doc', 'docs', 'the', 'and', 'for', 'with'}
 SUBSTEP_RE = re.compile(r'^#{2,4}\s+([☑☐])\s*(.*)$')      # ☑ / ☐
 TRAP_RE = re.compile(r'^#{1,4}.*⛔')                            # ⛔ heading
@@ -445,8 +447,30 @@ def cap_to_budget(results, budget=MAX_EXTRACT_TOKENS, floor=MIN_EXTRACT_MSGS):
     return kept, {'droppedOlder': i, 'clipped': clipped}
 
 
+def action_line(block):
+    """One-line record of a state-changing tool call, for the extract payload.
+
+    Text-only extraction has a blind spot: a session's last commit, push, or
+    deploy often happens in tool-only turns with no assistant narration, so the
+    recovered tail reads as if the work stopped earlier than it did. Seen live
+    2026-08-15: a tail ended at "re-running the typecheck gate" while the commit
+    AND the push had already landed in the following, text-less turns -- only a
+    git cross-check saved the report. Read-only tools stay excluded on purpose:
+    lookups carry no state the resumed session can't re-derive.
+    """
+    name = block.get('name', '')
+    if name not in ACTION_TOOLS:
+        return None
+    inp = block.get('input') or {}
+    if name == 'Bash':
+        what = (inp.get('description') or (inp.get('command') or '')[:80]).strip()
+    else:
+        what = os.path.basename(inp.get('file_path', '') or inp.get('notebook_path', '') or '')
+    return ('[action] %s: %s' % (name, what)).rstrip(': ')
+
+
 def extract(paths, cutoff):
-    results = []
+    results, actions = [], []
     for path in paths:
         with open(path, encoding='utf-8', errors='replace') as f:
             for line in f:
@@ -483,12 +507,25 @@ def extract(paths, cutoff):
                 elif isinstance(content, list):
                     text = '\n'.join(c.get('text', '') for c in content
                                      if isinstance(c, dict) and c.get('type') == 'text')
+                    if not text.strip():
+                        # Tool-only turn: keep a compact action record instead of
+                        # dropping the line -- see action_line() for why.
+                        acts = [a for a in (action_line(c) for c in content
+                                            if isinstance(c, dict) and c.get('type') == 'tool_use') if a]
+                        if acts:
+                            actions.append({'parentUuid': obj.get('parentUuid', ''),
+                                            'type': t, 'timestamp': ts,
+                                            'text': ' | '.join(acts)})
+                        continue
 
                 if not text.strip():
                     continue
                 results.append({'parentUuid': obj.get('parentUuid', ''), 'type': t,
                                 'timestamp': ts, 'text': text.strip()})
 
+    # Newest actions only: the blind spot is the unnarrated END of a session, and
+    # the narrative text already summarizes the middle ("all 10 fixes applied").
+    results.extend(actions[-MAX_ACTION_LINES:])
     results.sort(key=lambda r: r['timestamp'])
     results, capped = cap_to_budget(results)
     tmp = os.path.join(tempfile.gettempdir(), 'recovered-context.json')

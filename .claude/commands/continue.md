@@ -4,7 +4,7 @@ argument-hint: [--show]
 model: sonnet
 ---
 <!-- @description Recovers where your previous session in this terminal left off — rebuilds its context on a cheap model, reports the state and the precise next action, then stops for your go-ahead. Plan-aware: if that session was executing a substep of a plan doc, the report comes from the plan's Ledger instead of the transcript. -->
-<!-- @version 10 -->
+<!-- @version 11 -->
 <!-- @param --show | flag | optional | Opens the recovered transcript in your default editor (no-op on a clean plan handoff or a fresh checkpoint handoff note — nothing is read). -->
 <!-- @response success | Picking up where we left off — {what we were doing}. State summary + the one next action, then a go-ahead question. -->
 <!-- @response plan | Picking up where we left off — {plan alias}: substep {N.k} done ({hash}); next: {N.next}. Then a go-ahead question. -->
@@ -14,8 +14,8 @@ model: sonnet
 Continue where the previous session in this terminal left off.
 
 This is the no-ceremony wrapper around `/recover-context`'s auto mode: no arguments, it
-figures everything out itself, and it is plan-aware (below). Since v9 it runs on Sonnet
-(the `model:` frontmatter above): recovery is mechanical re-reading — probe, read,
+figures everything out itself, and it is plan-aware (below). Since v9 it is pinned to
+Sonnet (the `model:` frontmatter above): recovery is mechanical re-reading — probe, read,
 reconcile — and a cheap model handles it fully, at a fraction of the cost on a
 Fable/Opus session. What the cheap model must NOT do is the resumed work itself.
 `model:` scopes to the whole turn, so this command ends its turn at the report: state
@@ -28,6 +28,19 @@ answer continues the SAME turn, so the work it green-lights would run on the che
 recovery model — exactly what the stop exists to prevent. This overrides any local
 end-of-turn convention that prefers a picker for closed choices. Ask in text, end the
 message, wait.
+
+**Model check (v11): verify the pin, don't assume it.** Claude Code currently ignores
+command `model:` frontmatter at runtime — a known bug (anthropics/claude-code#45191,
+closed "not planned"): the pin is parsed into command_permissions as `claude-sonnet-5`,
+yet every call in the turn runs on the session's main model. Verified live on 2.1.220,
+interactive and headless alike, on Fable and Opus sessions both. Your system prompt
+names the model you are actually running on. If it is not a Sonnet-class model, append
+one final line to the report:
+
+> ⚠ recovery ran on {model} — the Sonnet pin didn't take.
+
+Nothing else changes — the recovery steps are identical on any model. The line exists so
+a failed pin is visible instead of silently costing ~4× per /continue.
 
 It is also **plan-aware**: when the previous session was executing a substep of a phased
 plan doc (the plan-authoring pattern — a `docs/*.md` or `.claude/plans/*.md` with a
