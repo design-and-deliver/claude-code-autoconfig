@@ -174,6 +174,36 @@ test('--write actually removes the directory and the merged branch', () => {
   assert(branches.includes('main'), 'main must never be deleted');
 });
 
+// Regression for the 2026-08-15 incident: a junctioned node_modules must be unlinked on its own
+// before the orphan's recursive delete, or the delete follows the junction and destroys whatever
+// real directory it points at (proved by hand against the main checkout's actual node_modules).
+test('a junctioned node_modules is unlinked, not recursed into, on --write', () => {
+  const JUNCTION_ORPHAN = path.join(WT, 'reapable-junction');
+  fs.mkdirSync(path.join(JUNCTION_ORPHAN, 'src'), { recursive: true });
+  fs.copyFileSync(path.join(repo, 'src', 'a.ts'), path.join(JUNCTION_ORPHAN, 'src', 'a.ts'));
+  fs.copyFileSync(path.join(repo, 'src', 'b.ts'), path.join(JUNCTION_ORPHAN, 'src', 'b.ts'));
+
+  // The canary lives OUTSIDE the worktree base entirely — real content that must survive.
+  const canary = path.join(tmp, 'canary-node-modules');
+  fs.mkdirSync(canary, { recursive: true });
+  fs.writeFileSync(path.join(canary, 'real-package.js'), 'module.exports = "do not delete";\n');
+  fs.symlinkSync(canary, path.join(JUNCTION_ORPHAN, 'node_modules'), 'junction');
+
+  try {
+    const o = orphanNamed(run(), 'reapable-junction');
+    assert(o.verdict === 'REAP', `expected REAP, got ${o.verdict} (${o.reason})`);
+
+    run('--write');
+
+    assert(!fs.existsSync(JUNCTION_ORPHAN), 'the junctioned orphan should be gone after --write');
+    assert(fs.existsSync(path.join(canary, 'real-package.js')),
+      'the canary file behind the junction must survive — a recursive delete followed the link and destroyed real content');
+  } finally {
+    fs.rmSync(JUNCTION_ORPHAN, { recursive: true, force: true });
+    fs.rmSync(canary, { recursive: true, force: true });
+  }
+});
+
 test('a second run is a clean no-op', () => {
   const r = run();
   assert(r.orphans.length === 0, `expected no orphans left; got ${JSON.stringify(r.orphans.map((o) => o.name))}`);

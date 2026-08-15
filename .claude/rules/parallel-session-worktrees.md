@@ -55,6 +55,34 @@ that do not announce themselves:
 `scripts/bootstrap-worktree.js` copies those from the main checkout and runs `npm install`.
 Run it before the first edit.
 
+## ⛔ node_modules junction is opt-in, not automatic
+
+Bootstrap CAN link `node_modules` to the main checkout's instead of installing — seconds
+instead of minutes, when the main checkout has `node_modules` and the worktree's
+`package-lock.json` is byte-identical to it — but only when `CCA_UNSAFE_NODE_MODULES_JUNCTION=1`
+is set in the environment. **Default is `npm install`, unconditionally.**
+
+Why it defaults off: confirmed 2026-08-15 that `git worktree remove --force` — the exact
+path `ExitWorktree remove` and every manual cleanup uses — recurses through a Windows
+junction and deletes the **target's real contents**, not just the link. It happened for
+real: a Verify run against this repo's own main checkout emptied its actual `node_modules`,
+and it reproduced again against this very worktree mid-session before the flag existed.
+`.claude/scripts/sync-worktrees.js`'s own `--write` reap loop now unlinks a junction before
+deleting (see its header comment), but that guards only its own trash sweep — it does
+nothing for native `git worktree remove` or `ExitWorktree`, which is what ordinary cleanup
+(step 5 above) actually calls. Full writeups: `ARTICLES/junction-verify-emptied-main-node-modules.html`,
+`ARTICLES/confirmed-worktree-remove-recurses-through-junction.html`. Open work to make this
+safe by default is tracked in `docs/agy-worktree-adoption-plan.md`'s Ledger under substep 1.1.
+
+**If you ever find a worktree's `node_modules` IS a junction** (check with
+`node -e "console.log(require('fs').lstatSync('node_modules').isSymbolicLink())"`), unlink it
+before that worktree is ever removed: `node -e "require('fs').rmdirSync('node_modules')"` on
+Windows (removes only the reparse point — never `rm -rf` or a recursive delete on it), then
+`npm install` for a real, independent one. **Never run `npm install`/`npm update` inside a
+worktree whose `node_modules` IS a junction** — npm writes through the link into the main
+checkout's real `node_modules`; bootstrap refuses the install path itself when it detects one,
+but this only matters if you run npm by hand.
+
 ## ⛔ baseRef is `head` here, and the setting is gitignored
 
 `worktree.baseRef` defaults to `fresh` — branch from `origin/<default-branch>`. That default is

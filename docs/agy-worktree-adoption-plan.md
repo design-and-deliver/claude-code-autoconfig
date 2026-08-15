@@ -65,35 +65,64 @@ Sonnet-class session can execute any of them. Keep 3.1 (git plumbing) off Haiku-
 8. **Full suite before every commit** (`npm test`) — this plan touches `scripts/` and
    `.claude/`, both under the Testing Requirements rule. Hooks and these scripts fail
    silent by design; green-because-it-didn't-crash proves nothing, the suites do.
+9. **⛔5's proof item (a) — native `git worktree remove` — is CONFIRMED UNSAFE, not
+   theoretical.** Proved 2026-08-15 against this repo's own main checkout (its real
+   `node_modules` was emptied by exactly this) and reproduced again against a live worktree
+   mid-session. `git worktree remove --force` (the path `ExitWorktree remove` and manual
+   cleanup both use) recurses through a Windows junction and deletes the target's real
+   contents, not just the link — and nothing in this repo can patch git's own removal code.
+   Junctioning is therefore **opt-in via `CCA_UNSAFE_NODE_MODULES_JUNCTION=1`, default off** —
+   see `.claude/rules/parallel-session-worktrees.md`'s "node_modules junction is opt-in"
+   section. Do NOT flip the default to junction-always until proof item (a) is actually
+   solved, not just documented around.
 
 ## Phase 1 — faster bootstrap
 
-### ☐ 1.1 · M · ~45m — Junction node_modules (lockfile-guarded) in bootstrap
+### ☑ 1.1 · M · ~45m — Junction node_modules (lockfile-guarded, opt-in) in bootstrap
 
-**Read list:** `scripts/bootstrap-worktree.js` (whole, 112 lines);
-`.claude/rules/parallel-session-worktrees.md` "⛔ Bootstrap is not optional" section;
-this doc:25–68 (traps) + this substep.
+**Read list:** `scripts/bootstrap-worktree.js` (whole, ~150 lines);
+`.claude/rules/parallel-session-worktrees.md` "⛔ node_modules junction is opt-in" section;
+this doc:25–77 (traps, incl. ⛔9) + this substep.
 
-- [ ] In `installDeps()` (`bootstrap-worktree.js:71-79`): before falling back to
-      `npm install`, junction when BOTH hold — the main checkout has `node_modules`, and the
-      worktree's `package-lock.json` is byte-identical to the main checkout's. Create via
-      `fs.symlinkSync(target, linkPath, 'junction')` (on non-Windows the type arg is ignored
-      and a dir symlink results — same semantics for our purposes). Mismatch or missing →
-      existing `npm install` path, with a report line saying why.
-- [ ] Guard per ⛔6: if `node_modules` already exists as a junction/symlink, skip install
-      entirely and say so; never let npm run through the link.
-- [ ] Report lines distinguish `✓ junction node_modules → <main path>` / `– fallback npm
-      install (<reason>)`.
-- [ ] Update the rule doc's bootstrap section (canonical copy here — ⛔3): bootstrap is now
-      seconds when lockfiles match; note the no-npm-inside-junction rule.
+**Rescoped 2026-08-15 — read ⛔9 before touching this again.** The original design was
+"junction whenever lockfiles match, no flag." Doing that for real surfaced a confirmed,
+reproducible bug: `git worktree remove --force` — the path `ExitWorktree remove` and manual
+cleanup both use — recurses through a Windows junction and deletes the target's REAL
+contents. It happened twice: once against this repo's actual main checkout `node_modules`,
+once again against this very worktree mid-session. There is no fix from userland for git's
+own removal code, so the substep landed as **opt-in, default off**, not as originally
+scoped. The checklist below reflects what actually shipped, not the original ask.
 
-**Verify:** `git worktree add .claude/worktrees/smoke-junction HEAD` → run bootstrap inside
-it → assert `node_modules` is a link (`node -e "console.log(require('fs').lstatSync('node_modules').isSymbolicLink())"`
-prints true) → `npm test` inside the worktree passes → `git worktree remove --force` the
-smoke tree → **assert the main checkout's `node_modules` still exists and `npm test` passes
-in the main checkout** (⛔5 proof). Then full `npm test` in main.
+- [x] In `installDeps()` (`bootstrap-worktree.js`): junction only when THREE hold — the main
+      checkout has `node_modules`, the worktree's `package-lock.json` is byte-identical to
+      the main checkout's, AND `process.env.CCA_UNSAFE_NODE_MODULES_JUNCTION === '1'`. Any
+      one missing → existing `npm install` path, with a report line saying why (including
+      "junction is opt-in" when the flag is simply unset). Created via
+      `fs.symlinkSync(target, linkPath, 'junction')`.
+- [x] Guard per ⛔6: if `node_modules` already exists as a junction/symlink (checked via
+      `lstatSync`, which catches a broken junction that `existsSync` would miss), skip
+      install entirely and say so; never let npm run through the link.
+- [x] Report lines distinguish `✓ junction node_modules → <main path> (…flag…)` / `– fallback
+      npm install (<reason>)`.
+- [x] Rule doc updated: new "⛔ node_modules junction is opt-in, not automatic" section
+      replaces the old unconditional-junction paragraph; documents the flag, the confirmed
+      hazard, and the unlink-before-remove recovery steps for a worktree caught with an
+      existing junction.
 
-**Commit:** `feat: junction-based node_modules bootstrap for dev worktrees` + `Changelog: none`.
+**Verify (rewritten — the original Verify step is exactly the reproduction steps for ⛔9,
+never run it against real content):** with the flag set, `git worktree add
+.claude/worktrees/smoke-junction HEAD` → run bootstrap inside it → assert `node_modules` is a
+link → `npm test` inside the worktree passes. **Do not `git worktree remove` it** — instead
+assert the removal danger is understood and mitigated at the process level: (a) confirm
+`test/sync-worktrees.test.js`'s canary regression test passes (proves the sync-worktrees.js
+sweep path is safe), (b) confirm the rule doc's opt-in section and this substep's rescope
+note are the operative safety net for paths (a) native git / `ExitWorktree` — cannot be
+proven safe here because it isn't. Manually clean up `smoke-junction`: unlink the junction
+first (`fs.rmdirSync` on Windows), then `git worktree remove` the now-junction-free
+directory. Then full `npm test` in main.
+
+**Commit:** `feat: opt-in junction-based node_modules bootstrap for dev worktrees` +
+`Changelog: none`.
 
 ## Phase 2 — cleanup that survives Windows
 
@@ -204,3 +233,28 @@ arrived dirty in the worktree and `git status --porcelain` in main is unchanged.
   code, plan confirmed parseable by `/plan-progress`. Plan + source doc committed to main
   (the `docs:` commit that added this file) so worktree sessions inherit them — 1.1's
   commit is now code-only.
+- 2026-08-15 — 1.1 mid-substep, BLOCKED, not committed. Junction/lockfile-guard logic in
+  `bootstrap-worktree.js` is written and works (junctions when lockfiles match, refuses
+  install through an existing junction/symlink per ⛔6). But running this substep's own
+  Verify step for real surfaced a live incident: a prior run of that Verify step (`git
+  worktree add` → bootstrap → `git worktree remove --force`) had already emptied the MAIN
+  checkout's real `node_modules` — restored after (108 packages, full suite green).
+  Isolated with a disposable canary (not the real checkout) and confirmed: this is not
+  Verify-step path confusion, it's a general Windows bug — **`git worktree remove --force`
+  recurses through a directory junction and deletes the target's real contents**; the
+  worktree dir itself survives, empty. Writeups: `ARTICLES/junction-verify-emptied-main-node-modules.html`,
+  `ARTICLES/confirmed-worktree-remove-recurses-through-junction.html`.
+  Added `unlinkNodeModulesLink()` to `.claude/scripts/sync-worktrees.js`'s own `--write` reap
+  loop (unlink the junction before the recursive delete reaches it) — regression test added
+  in `test/sync-worktrees.test.js`, full suite green (10/10). **This only protects
+  sync-worktrees.js's own trash sweep.** It does NOT protect native `git worktree remove`
+  (used by the plan's own Verify step, by hand, and by the harness's `ExitWorktree` tool) —
+  ⛔5 in this doc requires proof for exactly that path, and it currently FAILS, not passes.
+  **1.1 cannot be verified/committed against its own literal Verify step** (which itself
+  calls `git worktree remove --force` on a junctioned smoke tree) without re-running the
+  same destructive incident. Open decision for the next session: harden every removal path
+  (native git + `ExitWorktree`, not just sync-worktrees.js), rewrite 1.1's Verify step to
+  prove path (a) safe some other way, or descope 1.1 to defer junctioning until removal
+  safety is solved repo-wide. Uncommitted diff at handoff: `bootstrap-worktree.js`,
+  `sync-worktrees.js`, `parallel-session-worktrees.md`, `sync-worktrees.test.js`
+  (+107/-7 lines, all four files).

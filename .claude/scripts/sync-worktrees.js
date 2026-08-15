@@ -6,6 +6,15 @@
 // file watcher), the recursive delete aborts partway, and git has already forgotten the entry. The
 // result is a directory that no git command will ever mention again:
 //
+// ⛔ A junctioned node_modules (bootstrap-worktree.js links it to the main checkout's, instead of
+// installing) makes the SAME recursive delete dangerous in the opposite direction: proved
+// 2026-08-15 that `git worktree remove --force` on a worktree whose node_modules is a Windows
+// junction recurses THROUGH it and deletes the real target's contents — the directory itself
+// survives, everything inside it is gone. Nothing here can patch git's own removal, so the reap
+// step below unlinks a junctioned node_modules on its own BEFORE the recursive delete ever reaches
+// it (see unlinkNodeModulesLink). `git worktree remove` / `ExitWorktree remove` get no such
+// protection — see the ⛔ trap section in parallel-session-worktrees.md.
+//
 //   git worktree list      → only the base checkout
 //   .git/worktrees/        → empty
 //   git worktree prune     → nothing to do
@@ -257,11 +266,30 @@ if (!opts.keepBranches) {
     .filter((b) => !PROTECTED.has(b) && b !== baseBranch && !checkedOut.has(b));
 }
 
+// A junction/symlink node_modules must be unlinked on its own BEFORE any recursive delete of the
+// worktree that contains it. Unlinking the link itself never touches the target — rmdir on
+// Windows removes just the reparse point, unlink on POSIX removes just the symlink — but a
+// recursive walk that doesn't special-case reparse points follows it and deletes the real
+// content on the other end (proved 2026-08-15 against the main checkout's real node_modules).
+function unlinkNodeModulesLink(dir) {
+  const nm = path.join(dir, 'node_modules');
+  let st;
+  try {
+    st = fs.lstatSync(nm);
+  } catch {
+    return; // no node_modules here — nothing to protect
+  }
+  if (!st.isSymbolicLink()) return; // a real directory is safe to recurse into normally
+  if (process.platform === 'win32') fs.rmdirSync(nm);
+  else fs.unlinkSync(nm);
+}
+
 // ---- 6. act (only under --write) --------------------------------------
 const actions = [];
 if (opts.write) {
   for (const o of orphans.filter((x) => x.verdict === 'REAP')) {
     try {
+      unlinkNodeModulesLink(o.dir);
       // maxRetries/retryDelay is the whole point on Windows: EBUSY from a watcher that is on its
       // way out succeeds on the second or third swing.
       fs.rmSync(o.dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
