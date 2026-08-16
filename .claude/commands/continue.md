@@ -1,10 +1,10 @@
 ---
-description: Recover the previous session's last active context on Sonnet, report where it stands, then stop for your go-ahead
+description: Recover the previous session's last active use case on Sonnet, report where it stands, then stop for your go-ahead
 argument-hint: [--show]
 model: sonnet
 ---
 <!-- @description Recovers where your previous session in this terminal left off — rebuilds its context on a cheap model, reports the state and the precise next action, then stops for your go-ahead. Plan-aware: if that session was executing a substep of a plan doc, the report comes from the plan's Ledger instead of the transcript. -->
-<!-- @version 12 -->
+<!-- @version 13 -->
 <!-- @param --show | flag | optional | Opens the recovered transcript in your default editor (no-op on a clean plan handoff or a fresh checkpoint handoff note — nothing is read). -->
 <!-- @response success | Picking up where we left off — {what we were doing}. State summary + the one next action, then a go-ahead question. -->
 <!-- @response plan | Picking up where we left off — {plan alias}: substep {N.k} done ({hash}); next: {N.next}. Then a go-ahead question. -->
@@ -57,11 +57,11 @@ prose steps. Everything below Step 1 is a DECISION, not a lookup.
 
 Say exactly:
 
-> Recovering the previous session's last active context.
+> Recovering the previous session's last active use case.
 
-Not the vaguer "Recovering the previous session's context." — "active" is the accurate
-word: what comes back is the in-flight tail of that session (cutoff ladder + 3k cap) or
-its plan Ledger, never the whole transcript.
+Not the vaguer "Recovering the previous session's context." — "last active use case"
+names what actually comes back: the in-flight tail of that session (cutoff ladder + 3k
+cap) or its plan Ledger, never the whole transcript.
 
 ## Step 1: Probe (one call)
 
