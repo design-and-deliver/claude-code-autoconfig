@@ -36,8 +36,18 @@ already have.
 3. Work, test, commit inside the worktree. Commit normally; the branch is yours alone.
 4. Merge back from the main checkout (`C:\CODE\claude-code-autoconfig`), never from inside the
    worktree — a worktree shares the repo's index and object store, so `git` run there against
-   `main` fights whatever the other sessions are doing.
-5. `ExitWorktree` with `remove` once merged, or `keep` to resume later.
+   `main` fights whatever the other sessions are doing. **Do this automatically, without asking
+   first, whenever it's a clean fast-forward or a conflict-free merge** (2026-08-16 standing
+   preference — no PR review gate here; a first-cut landing with minor rough edges is fine,
+   fix forward later). Only stop and ask when the merge actually conflicts — the user resolves
+   the collision, you don't guess which side wins.
+5. Once merged, prompt to clean up right away rather than leaving it for later — a live
+   worktree nobody remembers is exactly the state that's hard to track. The `ExitWorktree`
+   tool itself won't fire without the user asking (its own instructions refuse proactive
+   calls), so surface the offer instead of silently deciding either way: name the worktree,
+   say it merged clean, and ask `remove` vs `keep`. Use `/fleet` to see what every
+   worktree/session on this repo is doing before assuming one is safe to touch or abandon,
+   and `/sync-worktrees` to reap anything left orphaned anyway.
 
 ## ⛔ Bootstrap is not optional
 
