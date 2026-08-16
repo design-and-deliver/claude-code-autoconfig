@@ -1,5 +1,5 @@
 <!-- @description Reap what the worktree loop leaves behind: orphaned directories, stale registrations, merged branches. -->
-<!-- @version 1 -->
+<!-- @version 2 -->
 <!-- @param write | flag | optional | Actually delete. Without it this is a dry run. -->
 <!-- @param keep-branches | flag | optional | Reap directories only; leave merged branches alone. -->
 <!-- @response report | Orphan directories with a per-directory verdict, then stale registrations, merged branches, and (under --write) what was actually removed. -->
@@ -47,8 +47,22 @@ Add interpretation only when a directory is not `REAP`:
   are and that the directory was left alone; the user decides whether to salvage or force it.
 - **HELD** — a session wrote to that tree in the last 3 minutes. Say which one is still live
   (`/fleet` names it) rather than suggesting a retry.
-- **PARTIAL** — the delete started and Windows kept some files. Say that a process still holds a
+- **TRASHED** — `--write` couldn't fully delete the directory (a handle was still open), so it was
+  *renamed* into `.claude/worktrees/.trash/<name>-<epoch>` instead of left in place under its old
+  name — renaming a locked directory succeeds on Windows even when deleting it doesn't. It no
+  longer shows as an orphan; every later `--write` run retries deleting it from `.trash/` until
+  whatever held it lets go. Say that it's parked, not gone, and that no action is needed.
+- **PARTIAL** — even the rename into `.trash/` failed. Rare — say that a process still holds a
   handle (usually a dev server or an editor with the folder open) and that re-running finishes it.
+
+## TRASH — the `.trash/` sweep
+
+Every run (dry or `--write`) also lists what's waiting in `.claude/worktrees/.trash/`: directories
+a previous `--write` couldn't delete outright and parked there instead (see TRASHED, above).
+`.trash/` itself is excluded from the orphan scan, so it's never mistaken for one. Under
+`--write`, each entry gets the same delete attempt as a fresh orphan — unlink a junctioned
+`node_modules` first (⛔5, never recurse through the link), then `fs.rmSync` with the same retry
+options — and whatever still won't die is left for the next run.
 
 ## Step 3 — what it will not do
 
@@ -65,6 +79,7 @@ something, say that and point at `/fleet` for the roster.
 | Gitignored files | Filtered out first — `crx-key.ts`, `.env`, `dev-build-number.json` are never in the object store, and counting them would make every orphan permanently undeletable. |
 | Liveness | A tree whose session transcript was written in the last 3 min is `HELD`. |
 | Registered worktrees | Anything in `git worktree list` is skipped entirely. |
+| Undeletable dirs | A `REAP` directory `--write` can't fully delete is renamed into `.trash/` (`TRASHED`) and retried every later run, instead of left in place forever. |
 | Branches | `git branch -d`, never `-D` — if the merge math is wrong, git refuses. `main`/`master` are protected outright, as is any branch checked out in a worktree. |
 | Default | Dry run. `--write` is the only thing that deletes. |
 
