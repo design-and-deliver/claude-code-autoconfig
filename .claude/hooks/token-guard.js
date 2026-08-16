@@ -3844,6 +3844,11 @@ function r4bColdWriteReceiptGuard(ctx) {
 // printed notice scrolls away with the rest of the turn's output, and the 5M one had gone unread.
 // Only an ask stops. That is the whole difference this guard adds — same axis, blocking.
 //
+// Crossing the threshold is necessary but not sufficient: since 2026-08-16 the card also has to
+// have something to say. It blocks only when the restart verdict argues for clearing (or the
+// pending call is a bomb) — see sessionTotalAsk. Under the fat line it stays silent WITHOUT
+// re-arming, so the check rides along until the window is actually worth shedding.
+//
 // It reads sessionTokens(m), the SAME figure the check-in ladder and the gate's subscription copy
 // already show, so the three can never disagree about how big the session is.
 //
@@ -3860,17 +3865,39 @@ function r20SessionTotalGuard(ctx) {
   return sessionTotalAsk(ctx, tok);
 }
 
-// The R20 fire path — re-arm, then render. Split from the guard for the reason turnSpendAsk is:
-// "should this fire?" and "what does firing say" each clear the complexity bar on their own.
+// The R20 fire path — read the restart verdict, silence the status-quo branch, then re-arm and
+// render. Split from the guard for the reason turnSpendAsk is: "should this fire?" and "what does
+// firing say" each clear the complexity bar on their own. (The threshold half of "should this
+// fire?" stays in the guard; the verdict half lives here because it needs the re-armed width.)
 function sessionTotalAsk(ctx, tok) {
   const { cfg, m, st, verdict } = ctx;
   // Re-arm ABOVE what was observed, doubling the width each fire — the same ladder R13b and R14
-  // walk, for the same reason: repeats must get rarer instead of becoming wallpaper.
-  st.sessionGateFires = (st.sessionGateFires || 0) + 1;
-  st.sessionGateAt = reArmAt(tok, cfg.sessionGateTokens, st.sessionGateFires);
-  const rv = restartVerdict(m.liveContext, st.sessionGateAt - tok, cfg.contextWarnTokens,
+  // walk, for the same reason: repeats must get rarer instead of becoming wallpaper. Computed
+  // here but COMMITTED below, only if the card actually speaks.
+  const fires = (st.sessionGateFires || 0) + 1;
+  const nextAt = reArmAt(tok, cfg.sessionGateTokens, fires);
+  const rv = restartVerdict(m.liveContext, nextAt - tok, cfg.contextWarnTokens,
     coldStartTokens(ctx.projectDir, ctx.sid, m, ctx.data && ctx.data.transcript_path),
     cfg.contextExcessTokens);
+  // Silence on the status-quo branch — R14's rule (Andrew 2026-07-31), which R20 did not inherit
+  // when it landed nine days later. Re-raised 2026-08-16 by a card that blocked an 8.3M session
+  // only to recommend approving. A session total being monotonic is why this gate EXISTS, but it
+  // is not a remedy: the only lever the card offers is /clear + /continue, and under the fat line
+  // that sheds almost nothing while re-paying a cold start. So a blocking confirm here buys a
+  // round trip and the reader's attention to arrive at what they were already doing — approve is
+  // the default action. The card is worth an interruption only when the losing option is live: a
+  // bomb CALL, or a window fat enough that clearing pays. rv == null (nothing measured) still
+  // speaks — the neutral copy is an honest "no reading", and suppressing on an unmeasured floor
+  // would retire the session axis entirely on a fresh machine.
+  //
+  // NO re-arm on this path, for R14's reason: a fire that never reached the reader is not a
+  // repeat, so leaving the threshold where it is keeps the check live on every later call and the
+  // gate speaks on the first call AFTER the window crosses the fat line — instead of sitting out
+  // a doubled width that a silent fire would have bought. That matters more here than on R14: a
+  // session total never comes back down, so a width skipped now is skipped for good.
+  if (!(verdict && verdict.kind === 'deny') && rv && !rv.clear) return null;
+  st.sessionGateFires = fires;
+  st.sessionGateAt = nextAt;
   // ONE cost bullet, and it deliberately does not re-price the rent: R14 owns trips × context and
   // says it live, so repeating it here would be the restatement this file's copy rules keep
   // cutting. What only THIS card can say is the direction — a session total is monotonic, so

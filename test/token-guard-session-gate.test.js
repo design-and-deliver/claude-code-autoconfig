@@ -24,7 +24,12 @@ const HOOK_SRC = fs.readFileSync(
 // A meter shaped like meterSession's return. `tok` lands as unweighted processed tokens, which
 // is exactly what sessionTokens() sums — the same figure the check-in ladder and the backstop
 // copy already read, so the three can never disagree about how big the session is.
-function meter({ tok = 0, turns = 40, liveContext = 128000 } = {}) {
+//
+// liveContext defaults FAT (above the 150k default fat line) because since the 2026-08-16 silence
+// guard a fat window is a precondition of R20 speaking at all — under the line its only remedy
+// (/clear + /continue) sheds almost nothing, so the card stays quiet. Cases that care about the
+// lean branch pass their own liveContext.
+function meter({ tok = 0, turns = 40, liveContext = 180000 } = {}) {
   return {
     main: { perModel: { 'claude-opus-5': { inp: 0, out: 0, cr: tok, cw: 0, searches: 0, usd: 0 } },
       turns, firstContext: 0 },
@@ -106,6 +111,54 @@ test('a turn-ender defers the gate without re-arming', () => {
   assert(!st.sessionGateFires, 'a deferred check is not a fire');
 });
 
+// --- the status-quo silence (2026-08-16) -----------------------------------------------------
+// R14 took this rule on 2026-07-31; R20 landed nine days later without it and shipped a blocking
+// card whose own Choice bullet read `approve (recommended)` — a round trip spent to arrive at the
+// user's default action. Every case here returns an ask on the pre-silence code.
+
+test('a lean window silences the card — approve is the default action', () => {
+  const st = state();
+  const d = r20SessionTotalGuard(ctxFor(st, meter({ tok: 8300000, liveContext: 100000 }), null));
+  assert(d === null,
+    `under the 150k fat line clearing sheds little, so the card must not block: ${JSON.stringify(d)}`);
+});
+
+test('the silenced check does NOT re-arm — it rides until the window turns fat', () => {
+  const st = state();
+  r20SessionTotalGuard(ctxFor(st, meter({ tok: 8300000, liveContext: 100000 }), null));
+  assert(st.sessionGateAt === null && !st.sessionGateFires,
+    `a fire that never reached the reader is not a repeat, so the width must stay put: ${st.sessionGateAt}`);
+  // Same session, same total, the window now past the line: the deferred check speaks at once
+  // rather than sitting out a doubled width.
+  const d = r20SessionTotalGuard(ctxFor(st, meter({ tok: 8300000, liveContext: 180000 }), null));
+  assert(d && d.kind === 'ask',
+    `the first call after the window crosses the fat line must speak: ${JSON.stringify(d)}`);
+  assert(st.sessionGateFires === 1, 'that fire is the first, not the second');
+});
+
+test('a bomb CALL still speaks under the fat line — the losing option is live', () => {
+  const st = state();
+  const d = r20SessionTotalGuard(
+    ctxFor(st, meter({ tok: 8300000, liveContext: 100000 }), { kind: 'deny', why: 'runs the whole test suite' }));
+  assert(d && d.kind === 'ask', `a bomb outranks the lean-window silence: ${JSON.stringify(d)}`);
+  assert(/deny \(recommended\)/.test(d.reason), `the bomb branch owns the verdict: ${d.reason}`);
+});
+
+test('an unmeasured window still speaks — the script does not suppress on no reading', () => {
+  const st = state();
+  const d = r20SessionTotalGuard(ctxFor(st, meter({ tok: 8300000, liveContext: 0 }), null));
+  assert(d && d.kind === 'ask',
+    `rv == null is an honest "no reading", not a reason to retire the session axis: ${JSON.stringify(d)}`);
+});
+
+test('every card that DOES speak recommends deny, never approve', () => {
+  const st = state();
+  const { reason } = r20SessionTotalGuard(ctxFor(st, meter({ tok: 8300000 }), null));
+  assert(/deny \(recommended\)/.test(reason), `a fat window argues for clearing: ${reason}`);
+  assert(!/approve \(recommended\)/.test(reason),
+    `the branch that recommends the status quo must be silent, not printed: ${reason}`);
+});
+
 // --- re-arm: repeats get rarer instead of becoming wallpaper --------------------------------
 
 test('each approval doubles the gap to the next check', () => {
@@ -153,8 +206,8 @@ test('no $ figure and no raw 7-figure count survive on the card', () => {
 test('the context figure is the MEASURED window, never total ÷ requests', () => {
   const st = state();
   const { reason } = r20SessionTotalGuard(
-    ctxFor(st, meter({ tok: 6500000, liveContext: 128000, turns: 40 }), null));
-  assert(/~128k of context rides into every further request/.test(reason),
+    ctxFor(st, meter({ tok: 6500000, liveContext: 180000, turns: 40 }), null));
+  assert(/~180k of context rides into every further request/.test(reason),
     `the card must quote m.liveContext: ${reason}`);
   assert(!/163k/.test(reason),
     'total ÷ requests is the 42:1 ratio the threshold work retired — it must not appear');
