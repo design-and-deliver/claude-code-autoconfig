@@ -4,6 +4,14 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.221
+- fix(token-guard): - The session-size card no longer interrupts just to recommend approving — it
+- fix(continue): /continue no longer reports a plan's next step as your last activity if you'd already moved on to something else
+- docs(continue): v13 — last active use case wording
+- feat(continue): /continue no longer opens by asking why you interrupted the previous session — when the stop had no stated reason it reports the state and asks for the go-ahead to resume instead.
+- feat(continue): /continue now warns when its cheap-model pin silently fails, and the recovered tail includes the session's final commits/pushes even when they ran without narration
+- fix(cli): No more permission warnings at the top of new sessions after upgrading
+
 ## v1.0.220
 - feat(continue): /continue now opens with 'Recovering the previous session's active context.' — the old improvised line was vaguer than what recovery actually returns
 - fix(recovery): /continue can now recover a session the moment it ends — it no longer waits out a 3-minute liveness window before a just-closed session becomes visible.
@@ -202,7 +210,4 @@
 
 ## v1.0.172
 - feat: /extract-rules v3 — auto-apply, --keep-sources, changelog with paths
-
-## v1.0.171
-- feat: /extract-rules v3 — automatic flow, --keep-sources, changelog summary
 
