@@ -3,9 +3,9 @@ description: Recover the previous session's last active use case on Sonnet, repo
 argument-hint: [--show]
 model: sonnet
 ---
-<!-- @description Recovers where your previous session in this terminal left off — rebuilds its context on a cheap model, reports the state and the precise next action, then stops for your go-ahead. Plan-aware: if that session was executing a substep of a plan doc, the report comes from the plan's Ledger instead of the transcript. -->
-<!-- @version 13 -->
-<!-- @param --show | flag | optional | Opens the recovered transcript in your default editor (no-op on a clean plan handoff or a fresh checkpoint handoff note — nothing is read). -->
+<!-- @description Recovers where your previous session in this terminal left off — rebuilds its context on a cheap model, reports the state and the precise next action, then stops for your go-ahead. Plan-aware: if that session was executing a substep of a plan doc AND the transcript confirms nothing came after it, the report comes from the plan's Ledger instead of the transcript. -->
+<!-- @version 14 -->
+<!-- @param --show | flag | optional | Opens the recovered transcript in your default editor (no-op on a fresh checkpoint handoff note — nothing is read there). -->
 <!-- @response success | Picking up where we left off — {what we were doing}. State summary + the one next action, then a go-ahead question. -->
 <!-- @response plan | Picking up where we left off — {plan alias}: substep {N.k} done ({hash}); next: {N.next}. Then a go-ahead question. -->
 <!-- @response no-previous | I can't find a previous session for this terminal. -->
@@ -44,7 +44,9 @@ a failed pin is visible instead of silently costing ~4× per /continue.
 
 It is also **plan-aware**: when the previous session was executing a substep of a phased
 plan doc (the plan-authoring pattern — a `docs/*.md` or `.claude/plans/*.md` with a
-`## Ledger` section), the plan doc + Ledger is the handoff, not the transcript.
+`## Ledger` section) and stayed on that plan through to the end of the session, the plan
+doc + Ledger is the handoff, not the transcript. If the session moved on to something else
+afterward, the transcript's tail is the handoff — see Step 3.
 
 **Every probe runs in ONE call (Step 1).** Recovery cost is `round trips × resident
 context`, and this command used to spend eight to fifteen sequential round trips on pure
@@ -128,7 +130,7 @@ a single shared word is not evidence (`/Continue command — Cut recovery over-i
 If `planCandidates` shows a near-miss and the recovered text plainly describes executing
 that plan, treat it as plan-driven and go to Step 3.
 
-## Step 3: Plan gate — clean handoff or mid-flight?
+## Step 3: Plan gate — clean handoff, overtaken, or mid-flight?
 
 Read the plan doc **in slices, never whole** — a mature plan runs 800+ lines, over half of
 it Ledger, and a full read stays resident for every remaining request in the session. The
@@ -144,13 +146,29 @@ Then reconcile three sources — `git.log` and `git.statusShort` are already in 
 - `git.statusShort` (uncommitted work? note `.claude/plans/` is typically gitignored, so a
   plan edit there will NOT appear).
 
-**Clean handoff** (latest substep committed + ledgered, tree clean — or every substep
-already checked): the Ledger covers everything the transcript would say. Skip `tempFile`
-(`--show` has nothing to show — say so in one line if it was passed). Go to Step 5.
+⛔ **Always read `tempFile` too, before deciding — never skip it on a clean handoff.**
+`planDriven` fires the moment the plan doc was opened anywhere in the transcript (Step 1
+has no recency weighting on that signal), so a session that wraps a substep cleanly and
+then pivots to unrelated work still reports `planDriven: true` — and the pivot lives only
+in `tempFile`. (Live case, 2026-08-16: a session closed substep 2.1, the user then asked
+about an unrelated npm-deploy status check, and `/continue` reported "next: substep 3.1"
+instead of the deploy investigation, because this step used to skip the extract on a clean
+Ledger/git match.) The probe deliberately keeps the full walk-back on every plan match for
+exactly this reason — it costs ~700 tokens at p50, cheap insurance against reporting a
+stale thread as current.
+
+**Clean handoff** (Ledger/git reconcile — latest substep committed + ledgered, tree clean,
+or every substep already checked — AND `tempFile`'s last activity is the plan work itself,
+or nothing followed it): the Ledger is the report. Go to Step 5.
+
+**Overtaken** (`tempFile` shows real activity, unrelated to the plan, after the plan's last
+Ledger-relevant commit): the plan is background, not the handoff. Report the tail's actual
+last activity per Step 4's shape (state, what's in flight, one next action) — name the
+plan's next substep as an aside, not the headline. Do not go to Step 5.
 
 **Mid-flight** (uncommitted changes, a Ledger/git mismatch, or work done but its Verify /
-commit / Ledger entry missing): the in-flight sliver lives only in the transcript — read
-`tempFile`, then go to Step 5.
+commit / Ledger entry missing): the in-flight sliver is in `tempFile` (already read above)
+— go to Step 5.
 
 ⛔ **`siblingGate` is not optional.** A plan doc is a shared work queue with no lock, and
 the Ledger cannot protect you: it is written *after* a substep, so a sibling mid-substep is
@@ -228,5 +246,6 @@ and the code disagree, trust git and fix the doc.
 ## `--show`
 
 Open `tempFile` in the default editor — Windows `start "" "<f>"`, macOS `open "<f>"`, Linux
-`xdg-open "<f>"`. Skip it (and say so in one line) whenever `readTempFile` is `false` or the
-plan gate resolved to a clean handoff: nothing from this run was read.
+`xdg-open "<f>"`. Skip it (and say so in one line) only when `readTempFile` is `false`
+(a fresh checkpoint handoff note) — every plan match now reads `tempFile` too (Step 3), so
+there is always something to show on a plan-driven recovery.
