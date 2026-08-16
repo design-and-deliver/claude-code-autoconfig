@@ -65,39 +65,68 @@ Sonnet-class session can execute any of them. Keep 3.1 (git plumbing) off Haiku-
 8. **Full suite before every commit** (`npm test`) — this plan touches `scripts/` and
    `.claude/`, both under the Testing Requirements rule. Hooks and these scripts fail
    silent by design; green-because-it-didn't-crash proves nothing, the suites do.
+9. **⛔5's proof item (a) — native `git worktree remove` — is CONFIRMED UNSAFE, not
+   theoretical.** Proved 2026-08-15 against this repo's own main checkout (its real
+   `node_modules` was emptied by exactly this) and reproduced again against a live worktree
+   mid-session. `git worktree remove --force` (the path `ExitWorktree remove` and manual
+   cleanup both use) recurses through a Windows junction and deletes the target's real
+   contents, not just the link — and nothing in this repo can patch git's own removal code.
+   Junctioning is therefore **opt-in via `CCA_UNSAFE_NODE_MODULES_JUNCTION=1`, default off** —
+   see `.claude/rules/parallel-session-worktrees.md`'s "node_modules junction is opt-in"
+   section. Do NOT flip the default to junction-always until proof item (a) is actually
+   solved, not just documented around.
 
 ## Phase 1 — faster bootstrap
 
-### ☐ 1.1 · M · ~45m — Junction node_modules (lockfile-guarded) in bootstrap
+### ☑ 1.1 · M · ~45m — Junction node_modules (lockfile-guarded, opt-in) in bootstrap
 
-**Read list:** `scripts/bootstrap-worktree.js` (whole, 112 lines);
-`.claude/rules/parallel-session-worktrees.md` "⛔ Bootstrap is not optional" section;
-this doc:25–68 (traps) + this substep.
+**Read list:** `scripts/bootstrap-worktree.js` (whole, ~150 lines);
+`.claude/rules/parallel-session-worktrees.md` "⛔ node_modules junction is opt-in" section;
+this doc:25–77 (traps, incl. ⛔9) + this substep.
 
-- [ ] In `installDeps()` (`bootstrap-worktree.js:71-79`): before falling back to
-      `npm install`, junction when BOTH hold — the main checkout has `node_modules`, and the
-      worktree's `package-lock.json` is byte-identical to the main checkout's. Create via
-      `fs.symlinkSync(target, linkPath, 'junction')` (on non-Windows the type arg is ignored
-      and a dir symlink results — same semantics for our purposes). Mismatch or missing →
-      existing `npm install` path, with a report line saying why.
-- [ ] Guard per ⛔6: if `node_modules` already exists as a junction/symlink, skip install
-      entirely and say so; never let npm run through the link.
-- [ ] Report lines distinguish `✓ junction node_modules → <main path>` / `– fallback npm
-      install (<reason>)`.
-- [ ] Update the rule doc's bootstrap section (canonical copy here — ⛔3): bootstrap is now
-      seconds when lockfiles match; note the no-npm-inside-junction rule.
+**Rescoped 2026-08-15 — read ⛔9 before touching this again.** The original design was
+"junction whenever lockfiles match, no flag." Doing that for real surfaced a confirmed,
+reproducible bug: `git worktree remove --force` — the path `ExitWorktree remove` and manual
+cleanup both use — recurses through a Windows junction and deletes the target's REAL
+contents. It happened twice: once against this repo's actual main checkout `node_modules`,
+once again against this very worktree mid-session. There is no fix from userland for git's
+own removal code, so the substep landed as **opt-in, default off**, not as originally
+scoped. The checklist below reflects what actually shipped, not the original ask.
 
-**Verify:** `git worktree add .claude/worktrees/smoke-junction HEAD` → run bootstrap inside
-it → assert `node_modules` is a link (`node -e "console.log(require('fs').lstatSync('node_modules').isSymbolicLink())"`
-prints true) → `npm test` inside the worktree passes → `git worktree remove --force` the
-smoke tree → **assert the main checkout's `node_modules` still exists and `npm test` passes
-in the main checkout** (⛔5 proof). Then full `npm test` in main.
+- [x] In `installDeps()` (`bootstrap-worktree.js`): junction only when THREE hold — the main
+      checkout has `node_modules`, the worktree's `package-lock.json` is byte-identical to
+      the main checkout's, AND `process.env.CCA_UNSAFE_NODE_MODULES_JUNCTION === '1'`. Any
+      one missing → existing `npm install` path, with a report line saying why (including
+      "junction is opt-in" when the flag is simply unset). Created via
+      `fs.symlinkSync(target, linkPath, 'junction')`.
+- [x] Guard per ⛔6: if `node_modules` already exists as a junction/symlink (checked via
+      `lstatSync`, which catches a broken junction that `existsSync` would miss), skip
+      install entirely and say so; never let npm run through the link.
+- [x] Report lines distinguish `✓ junction node_modules → <main path> (…flag…)` / `– fallback
+      npm install (<reason>)`.
+- [x] Rule doc updated: new "⛔ node_modules junction is opt-in, not automatic" section
+      replaces the old unconditional-junction paragraph; documents the flag, the confirmed
+      hazard, and the unlink-before-remove recovery steps for a worktree caught with an
+      existing junction.
 
-**Commit:** `feat: junction-based node_modules bootstrap for dev worktrees` + `Changelog: none`.
+**Verify (rewritten — the original Verify step is exactly the reproduction steps for ⛔9,
+never run it against real content):** with the flag set, `git worktree add
+.claude/worktrees/smoke-junction HEAD` → run bootstrap inside it → assert `node_modules` is a
+link → `npm test` inside the worktree passes. **Do not `git worktree remove` it** — instead
+assert the removal danger is understood and mitigated at the process level: (a) confirm
+`test/sync-worktrees.test.js`'s canary regression test passes (proves the sync-worktrees.js
+sweep path is safe), (b) confirm the rule doc's opt-in section and this substep's rescope
+note are the operative safety net for paths (a) native git / `ExitWorktree` — cannot be
+proven safe here because it isn't. Manually clean up `smoke-junction`: unlink the junction
+first (`fs.rmdirSync` on Windows), then `git worktree remove` the now-junction-free
+directory. Then full `npm test` in main.
+
+**Commit:** `feat: opt-in junction-based node_modules bootstrap for dev worktrees` +
+`Changelog: none`.
 
 ## Phase 2 — cleanup that survives Windows
 
-### ☐ 2.1 · M · ~45m — Rename-and-purge trash path in /sync-worktrees
+### ☑ 2.1 · M · ~45m — Rename-and-purge trash path in /sync-worktrees
 
 **Read list:** `.claude/scripts/sync-worktrees.js:207-247` (orphan classification — where
 `.trash` must be excluded) and `:260-290` (the `--write` act section — where the trash path
@@ -107,17 +136,23 @@ substep.
 ⚠ Owner-liveness ALREADY EXISTS — the `HELD` verdict (`sync-worktrees.js:222-229`) keys off
 transcript mtime via the slugify trick. Do not add a second liveness mechanism.
 
-- [ ] In the act section (`sync-worktrees.js:263-278`): when `fs.rmSync` throws or leaves
+- [x] In the act section (`sync-worktrees.js:263-278`): when `fs.rmSync` throws or leaves
       survivors (both current `PARTIAL` paths), `fs.renameSync` the directory to
-      `.claude/worktrees/.trash/<name>-<epoch>` (NTFS allows renaming a dir with open
-      handles even when deletion is denied — agy §8) and report a new `TRASHED` verdict;
-      keep `PARTIAL` only when the rename itself also fails.
-- [ ] Exclude `.trash` from the orphan scan (`baseNames`, `sync-worktrees.js:210-214`) —
+      `.claude/worktrees/.trash/<name>-<epoch>` and report a new `TRASHED` verdict; keep
+      `PARTIAL` only when the rename itself also fails. **Correction (2026-08-16):** agy §8's
+      claim ("NTFS allows renaming a dir with open handles even when deletion is denied") is
+      NOT universal — falsified directly with a synthetic `FILE_SHARE_DELETE`-excluding
+      handle (PowerShell, cross-checked with native `Directory.Move`): that lock class fails
+      the rename with the same `EPERM` as the delete. It still holds for the ordinary
+      Node/esbuild-style locks this substep targets (they don't exclude `FILE_SHARE_DELETE`),
+      so `TRASHED` still fires for the common case — a strict superset of the prior `PARTIAL`
+      behavior, never a regression — but it does not rescue every lock class.
+- [x] Exclude `.trash` from the orphan scan (`baseNames`, `sync-worktrees.js:210-214`) —
       otherwise the next run classifies the trash dir itself as an orphan.
-- [ ] Sweep `.trash/` on every run: dry run reports what is waiting; `--write` retries the
+- [x] Sweep `.trash/` on every run: dry run reports what is waiting; `--write` retries the
       delete (same `rmSync` retry options), leaving what still won't die for next time.
       Sweep must honor ⛔5 — remove links, never recurse through them.
-- [ ] Update `sync-worktrees.md`: document `.trash/` + the `TRASHED` verdict, bump
+- [x] Update `sync-worktrees.md`: document `.trash/` + the `TRASHED` verdict, bump
       `@version` (⛔7).
 
 **Verify:** bare dry run on this repo reports sanely. Synthetic lock test in a scratch dir:
@@ -204,3 +239,71 @@ arrived dirty in the worktree and `git status --porcelain` in main is unchanged.
   code, plan confirmed parseable by `/plan-progress`. Plan + source doc committed to main
   (the `docs:` commit that added this file) so worktree sessions inherit them — 1.1's
   commit is now code-only.
+- 2026-08-15 — 1.1 mid-substep, BLOCKED, not committed. Junction/lockfile-guard logic in
+  `bootstrap-worktree.js` is written and works (junctions when lockfiles match, refuses
+  install through an existing junction/symlink per ⛔6). But running this substep's own
+  Verify step for real surfaced a live incident: a prior run of that Verify step (`git
+  worktree add` → bootstrap → `git worktree remove --force`) had already emptied the MAIN
+  checkout's real `node_modules` — restored after (108 packages, full suite green).
+  Isolated with a disposable canary (not the real checkout) and confirmed: this is not
+  Verify-step path confusion, it's a general Windows bug — **`git worktree remove --force`
+  recurses through a directory junction and deletes the target's real contents**; the
+  worktree dir itself survives, empty. Writeups: `ARTICLES/junction-verify-emptied-main-node-modules.html`,
+  `ARTICLES/confirmed-worktree-remove-recurses-through-junction.html`.
+  Added `unlinkNodeModulesLink()` to `.claude/scripts/sync-worktrees.js`'s own `--write` reap
+  loop (unlink the junction before the recursive delete reaches it) — regression test added
+  in `test/sync-worktrees.test.js`, full suite green (10/10). **This only protects
+  sync-worktrees.js's own trash sweep.** It does NOT protect native `git worktree remove`
+  (used by the plan's own Verify step, by hand, and by the harness's `ExitWorktree` tool) —
+  ⛔5 in this doc requires proof for exactly that path, and it currently FAILS, not passes.
+  **1.1 cannot be verified/committed against its own literal Verify step** (which itself
+  calls `git worktree remove --force` on a junctioned smoke tree) without re-running the
+  same destructive incident. Open decision for the next session: harden every removal path
+  (native git + `ExitWorktree`, not just sync-worktrees.js), rewrite 1.1's Verify step to
+  prove path (a) safe some other way, or descope 1.1 to defer junctioning until removal
+  safety is solved repo-wide. Uncommitted diff at handoff: `bootstrap-worktree.js`,
+  `sync-worktrees.js`, `parallel-session-worktrees.md`, `sync-worktrees.test.js`
+  (+107/-7 lines, all four files).
+- 2026-08-15 — 1.1 CLOSED (`3ed42f9`), rescoped to opt-in — decided by the resuming
+  session, given "you decide." Before deciding anything, found the hazard was live, not
+  hypothetical: THIS worktree's own `node_modules` was itself a junction into the main
+  checkout (bootstrap had run it during setup, before the flag existed) — an `ExitWorktree
+  remove` on it later would have emptied the main checkout a third time. Unlinked it
+  (`fs.rmdirSync`, non-recursive) and ran a real `npm install` here first, before deciding
+  anything else, since the checkout can't be modified from within it — see ⛔9 pointer.
+  Verdict: junctioning ships gated behind `CCA_UNSAFE_NODE_MODULES_JUNCTION=1`, default
+  `npm install`, because proof item (a) in ⛔5 (native `git worktree remove`) is confirmed
+  UNSAFE and nothing in this repo can patch git's own removal code — kept rather than
+  reverted, since the code is correct and tested for the creation side and the
+  sync-worktrees.js guard is independent defense-in-depth. Rewrote 1.1's Verify step (it
+  literally was the reproduction recipe for ⛔9) and re-ran it safely: smoke worktree,
+  flag set, junction confirmed, `npm test` green through the junction, then **unlinked
+  before removing** — `git worktree remove --force` only after the junction was gone —
+  main checkout confirmed intact after. Added trap ⛔9 to this doc and a matching "⛔
+  node_modules junction is opt-in" section to `parallel-session-worktrees.md` (includes
+  the unlink-before-remove recovery recipe for a worktree caught with an existing
+  junction). **Open, not solved:** native `git worktree remove` / `ExitWorktree remove`
+  are still unprotected against a hand-set or future-flagged junction — no substep here
+  attempts that; it would need either a fix upstream in git, or every removal call site
+  (including the harness's `ExitWorktree`, which this repo cannot modify) routed through
+  an unlink-first wrapper. Flagging for a future session/plan rather than blocking this
+  one indefinitely. Full suite green pre- and post-commit (341/341).
+- 2026-08-16 — 2.1 CLOSED (`abf637b`). All four microsteps implemented as scoped: rename-to-
+  `.trash/` on delete failure, `.trash` excluded from the orphan scan, sweep-on-every-run,
+  `sync-worktrees.md` updated (`@version` 1 → 2). Mid-substep, testing surfaced that agy §8's
+  claim ("NTFS allows renaming a dir with open handles even when deletion is denied") is not
+  universal: falsified with a synthetic handle opened without `FILE_SHARE_DELETE` (PowerShell,
+  cross-checked with native `Directory.Move`) — that lock class fails the rename with the same
+  `EPERM` as the delete, and falls through to `PARTIAL` as before. It still holds for the
+  ordinary Node/esbuild-style locks this substep targets, so `TRASHED` fires for the common
+  case. Decided to accept the fix as-scoped rather than chase the harder fallbacks (force-
+  closing the other handle, `MOVEFILE_DELAY_UNTIL_REBOOT`) — it's a strict superset of the old
+  delete-only behavior, never a regression, just not a rescue for every lock class. Corrected
+  the false claim in this substep's own checklist and in the matching code comment
+  (`sync-worktrees.js` near `trashOrphan`). Mid-substep also answered a scope-check question
+  (both 1.1 and 2.1 are additive-only — new `trashItems`/`TRASHED` fields and verdict, no
+  existing shape changed; verified against the sole consumer, `sync-worktrees.test.js`, 10/10
+  green before commit). Full suite green pre-commit (341/341; one unrelated flaky failure in
+  `terminal-title-lineage.test.cjs`'s `ancestryChain` process-tree test reproduced clean on
+  immediate re-run, confirmed environment timing, not this diff). Next: substep 3.1
+  (shadow-commit `--carry-dirty`), not started.

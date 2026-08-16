@@ -6,6 +6,15 @@
 // file watcher), the recursive delete aborts partway, and git has already forgotten the entry. The
 // result is a directory that no git command will ever mention again:
 //
+// ⛔ A junctioned node_modules (bootstrap-worktree.js links it to the main checkout's, instead of
+// installing) makes the SAME recursive delete dangerous in the opposite direction: proved
+// 2026-08-15 that `git worktree remove --force` on a worktree whose node_modules is a Windows
+// junction recurses THROUGH it and deletes the real target's contents — the directory itself
+// survives, everything inside it is gone. Nothing here can patch git's own removal, so the reap
+// step below unlinks a junctioned node_modules on its own BEFORE the recursive delete ever reaches
+// it (see unlinkNodeModulesLink). `git worktree remove` / `ExitWorktree remove` get no such
+// protection — see the ⛔ trap section in parallel-session-worktrees.md.
+//
 //   git worktree list      → only the base checkout
 //   .git/worktrees/        → empty
 //   git worktree prune     → nothing to do
@@ -206,11 +215,12 @@ function unrecoverableFiles(root) {
 
 // ---- 4. classify every directory under the worktree base ---------------
 const wtBase = path.join(baseDir, '.claude', 'worktrees');
+const trashDir = path.join(wtBase, '.trash');
 const orphans = [];
 let baseNames = [];
 try {
   baseNames = fs.readdirSync(wtBase, { withFileTypes: true })
-    .filter((e) => e.isDirectory()).map((e) => e.name);
+    .filter((e) => e.isDirectory() && e.name !== '.trash').map((e) => e.name);
 } catch { /* no worktree base yet — fine */ }
 
 for (const name of baseNames) {
@@ -246,6 +256,19 @@ for (const name of baseNames) {
   orphans.push(rec);
 }
 
+// ---- 4.5. .trash sweep — survivors of a failed delete, retried every run ----
+// Excluded from the orphan scan above (baseNames filters '.trash' out) so the trash dir
+// itself is never classified as an orphan on the next run.
+const trashItems = [];
+try {
+  for (const name of fs.readdirSync(trashDir)) {
+    const dir = path.join(trashDir, name);
+    let ageMs = null;
+    try { ageMs = NOW - fs.statSync(dir).mtimeMs; } catch { /* stat race — leave age unknown */ }
+    trashItems.push({ name, dir, ageMs });
+  }
+} catch { /* no .trash yet — fine */ }
+
 // ---- 5. stale registrations + merged branches -------------------------
 const prunable = registered.filter((t) => t.prunable).map((t) => t.dir);
 
@@ -257,23 +280,76 @@ if (!opts.keepBranches) {
     .filter((b) => !PROTECTED.has(b) && b !== baseBranch && !checkedOut.has(b));
 }
 
+// A junction/symlink node_modules must be unlinked on its own BEFORE any recursive delete of the
+// worktree that contains it. Unlinking the link itself never touches the target — rmdir on
+// Windows removes just the reparse point, unlink on POSIX removes just the symlink — but a
+// recursive walk that doesn't special-case reparse points follows it and deletes the real
+// content on the other end (proved 2026-08-15 against the main checkout's real node_modules).
+function unlinkNodeModulesLink(dir) {
+  const nm = path.join(dir, 'node_modules');
+  let st;
+  try {
+    st = fs.lstatSync(nm);
+  } catch {
+    return; // no node_modules here — nothing to protect
+  }
+  if (!st.isSymbolicLink()) return; // a real directory is safe to recurse into normally
+  if (process.platform === 'win32') fs.rmdirSync(nm);
+  else fs.unlinkSync(nm);
+}
+
 // ---- 6. act (only under --write) --------------------------------------
 const actions = [];
+
+// A directory `fs.rmSync` couldn't fully remove is renamed into `.trash/` instead of left in
+// place — NTFS usually allows renaming a dir with open handles even when deleting it is denied
+// (agy §8), which covers the ordinary Node/esbuild-style locks this exists for. It is not
+// universal: a handle opened without FILE_SHARE_DELETE also blocks the rename, in which case
+// this falls through to PARTIAL below — a strict superset of the old delete-only behavior,
+// never a regression.
+function trashOrphan(o, reason) {
+  try {
+    fs.mkdirSync(trashDir, { recursive: true });
+    const dest = path.join(trashDir, `${o.name}-${Date.now()}`);
+    fs.renameSync(o.dir, dest);
+    o.verdict = 'TRASHED';
+    o.trashPath = dest;
+    actions.push(`TRASHED ${o.name} — ${reason}, moved to .trash/ for retry`);
+  } catch (e2) {
+    o.verdict = 'PARTIAL';
+    o.error = String(e2.message || e2);
+    actions.push(`PARTIAL ${o.name} — rename to .trash/ also failed (${o.error})`);
+  }
+}
+
 if (opts.write) {
   for (const o of orphans.filter((x) => x.verdict === 'REAP')) {
     try {
+      unlinkNodeModulesLink(o.dir);
       // maxRetries/retryDelay is the whole point on Windows: EBUSY from a watcher that is on its
       // way out succeeds on the second or third swing.
       fs.rmSync(o.dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
       o.deleted = !fs.existsSync(o.dir);
-      actions.push(o.deleted
-        ? `deleted ${o.name}`
-        : `PARTIAL ${o.name} — some files survived the delete (still locked)`);
-      if (!o.deleted) o.verdict = 'PARTIAL';
+      if (o.deleted) actions.push(`deleted ${o.name}`);
+      else trashOrphan(o, 'some files survived the delete (still locked)');
     } catch (e) {
-      o.verdict = 'PARTIAL';
       o.error = String(e.message || e);
-      actions.push(`FAILED ${o.name} — ${o.error}`);
+      trashOrphan(o, `delete failed (${o.error})`);
+    }
+  }
+  // Same unlink-then-rmSync protection as above (⛔5 — remove a junction link, never recurse
+  // through it) applied to whatever previous runs already parked in .trash/.
+  for (const t of trashItems) {
+    try {
+      unlinkNodeModulesLink(t.dir);
+      fs.rmSync(t.dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
+      t.deleted = !fs.existsSync(t.dir);
+      actions.push(t.deleted
+        ? `swept .trash/${t.name}`
+        : `still locked .trash/${t.name} — left for next sweep`);
+    } catch (e) {
+      t.error = String(e.message || e);
+      actions.push(`still locked .trash/${t.name} — ${t.error}`);
     }
   }
   if (prunable.length) {
@@ -294,7 +370,7 @@ if (opts.json) {
   console.log(JSON.stringify({
     base: { dir: baseDir, branch: baseBranch },
     mode: opts.write ? 'write' : 'dry-run',
-    orphans, prunable, mergedBranches, actions,
+    orphans, prunable, mergedBranches, trashItems, actions,
   }, null, 2));
   process.exit(0);
 }
@@ -310,19 +386,32 @@ function fmtAgo(ms) {
 const L = [];
 const reapN = orphans.filter((o) => o.verdict === 'REAP').length;
 L.push(`SYNC-WORKTREES — ${opts.write ? 'WRITE' : 'dry run'} · ${orphans.length} orphan dir` +
-       `${orphans.length === 1 ? '' : 's'} · ${prunable.length} stale reg · ` +
+       `${orphans.length === 1 ? '' : 's'} · ${trashItems.length} in .trash · ` +
+       `${prunable.length} stale reg · ` +
        `${mergedBranches.length} merged branch${mergedBranches.length === 1 ? '' : 'es'}`);
 L.push(`base: ${baseBranch} at ${baseDir}`);
 L.push('');
 
-const GLYPH = { REAP: '✓ REAP   ', BLOCKED: '⚠ BLOCKED', HELD: '● HELD   ', PARTIAL: '⚠ PARTIAL' };
+const GLYPH = {
+  REAP: '✓ REAP   ', BLOCKED: '⚠ BLOCKED', HELD: '● HELD   ',
+  PARTIAL: '⚠ PARTIAL', TRASHED: '↪ TRASHED',
+};
 if (orphans.length) {
   L.push('ORPHAN DIRECTORIES  (git has forgotten these — prune will never see them)');
   for (const o of orphans) {
     L.push(`  ${GLYPH[o.verdict] || o.verdict}  ${o.name.padEnd(24)} ${o.reason}`);
     if (o.verdict === 'HELD') L.push(`             last session write ${fmtAgo(o.sessionAgeMs)}`);
+    if (o.verdict === 'TRASHED') L.push(`             moved to ${path.relative(baseDir, o.trashPath)}`);
     for (const f of (o.missing || []).slice(0, 5)) L.push(`             only here: ${f}`);
     if ((o.missing || []).length > 5) L.push(`             (+${o.missing.length - 5} more)`);
+  }
+  L.push('');
+}
+
+if (trashItems.length) {
+  L.push('TRASH  (.trash/ — survivors of a failed delete; retried on every --write run)');
+  for (const t of trashItems) {
+    L.push(`  ${(t.deleted ? '✓ swept  ' : '● waiting')}  ${t.name.padEnd(24)} parked ${fmtAgo(t.ageMs)}`);
   }
   L.push('');
 }
@@ -345,11 +434,12 @@ if (actions.length) {
   L.push('');
 }
 
-if (!orphans.length && !prunable.length && !mergedBranches.length) {
+if (!orphans.length && !prunable.length && !mergedBranches.length && !trashItems.length) {
   L.push('Nothing to reap. Worktree base is clean.');
 } else if (!opts.write) {
   const bits = [];
   if (reapN) bits.push(`${reapN} director${reapN === 1 ? 'y' : 'ies'}`);
+  if (trashItems.length) bits.push(`${trashItems.length} .trash retr${trashItems.length === 1 ? 'y' : 'ies'}`);
   if (prunable.length) bits.push(`${prunable.length} registration(s)`);
   if (mergedBranches.length) bits.push(`${mergedBranches.length} branch(es)`);
   L.push(`Dry run — nothing changed. --write would remove ${bits.join(', ') || 'nothing'}.`);

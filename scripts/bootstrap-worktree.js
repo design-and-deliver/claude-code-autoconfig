@@ -68,12 +68,57 @@ function copyMatching(dir, accept, from, to, report) {
   }
 }
 
-function installDeps(cwd, report) {
-  if (fs.existsSync(path.join(cwd, 'node_modules'))) {
-    report.push('  – skipped  npm install (node_modules already present)');
+/** True only if both lockfiles exist and are byte-identical. */
+function lockfilesMatch(root, main_) {
+  const rootLock = path.join(root, 'package-lock.json');
+  const mainLock = path.join(main_, 'package-lock.json');
+  if (!fs.existsSync(rootLock) || !fs.existsSync(mainLock)) return false;
+  return fs.readFileSync(rootLock).equals(fs.readFileSync(mainLock));
+}
+
+function installDeps(cwd, main_, report) {
+  const nodeModulesPath = path.join(cwd, 'node_modules');
+  let existing = null;
+  try {
+    existing = fs.lstatSync(nodeModulesPath);
+  } catch {
+    // doesn't exist — fall through to junction/install decision below
+  }
+
+  if (existing) {
+    // lstat (not existsSync) so a junction is caught even if its target is gone —
+    // existsSync follows the link and would report a broken junction as absent (⛔6).
+    report.push(
+      existing.isSymbolicLink()
+        ? '  – skipped  npm install (node_modules is already a junction — never install through it)'
+        : '  – skipped  npm install (node_modules already present)'
+    );
     return;
   }
-  report.push('  … running  npm install (eslint — the complexity ratchet needs it)');
+
+  // Opt-in only — see "⛔ node_modules junction is opt-in, not automatic" in
+  // parallel-session-worktrees.md. Confirmed 2026-08-15 that `git worktree remove --force`
+  // — the path `ExitWorktree remove` and every manual cleanup uses — recurses through a
+  // Windows junction and deletes the REAL target's contents, not just the link.
+  // sync-worktrees.js's own --write sweep now guards against this, but that protects only
+  // its own removal path, not native git or ExitWorktree. Until that's solved repo-wide,
+  // junctioning is opt-in and off by default so a routine bootstrap can't leave a worktree
+  // that silently destroys the main checkout's node_modules when it's later removed.
+  const mainNodeModules = path.join(main_, 'node_modules');
+  if (process.env.CCA_UNSAFE_NODE_MODULES_JUNCTION === '1') {
+    if (fs.existsSync(mainNodeModules) && lockfilesMatch(cwd, main_)) {
+      fs.symlinkSync(mainNodeModules, nodeModulesPath, 'junction');
+      report.push(`  ✓ junction node_modules → ${mainNodeModules} (CCA_UNSAFE_NODE_MODULES_JUNCTION=1)`);
+      return;
+    }
+  }
+
+  const reason = !fs.existsSync(mainNodeModules)
+    ? 'no node_modules in main checkout'
+    : process.env.CCA_UNSAFE_NODE_MODULES_JUNCTION !== '1'
+      ? 'junction is opt-in — see ⛔9 in parallel-session-worktrees.md'
+      : 'package-lock.json differs from main checkout';
+  report.push(`  – fallback npm install (${reason})`);
   execFileSync(NPM, ['install', '--no-audit', '--no-fund'], { cwd, stdio: 'inherit' });
   report.push('  ✓ done     npm install');
 }
@@ -95,7 +140,7 @@ function main() {
   const report = [];
   for (const rel of COPY_FILES) copyOne(rel, main_, root, report);
   for (const [dir, accept] of COPY_MATCHING) copyMatching(dir, accept, main_, root, report);
-  installDeps(root, report);
+  installDeps(root, main_, report);
 
   console.log(report.join('\n'));
   console.log();
