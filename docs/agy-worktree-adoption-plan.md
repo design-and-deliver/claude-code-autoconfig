@@ -126,7 +126,7 @@ directory. Then full `npm test` in main.
 
 ## Phase 2 — cleanup that survives Windows
 
-### ☐ 2.1 · M · ~45m — Rename-and-purge trash path in /sync-worktrees
+### ☑ 2.1 · M · ~45m — Rename-and-purge trash path in /sync-worktrees
 
 **Read list:** `.claude/scripts/sync-worktrees.js:207-247` (orphan classification — where
 `.trash` must be excluded) and `:260-290` (the `--write` act section — where the trash path
@@ -136,17 +136,23 @@ substep.
 ⚠ Owner-liveness ALREADY EXISTS — the `HELD` verdict (`sync-worktrees.js:222-229`) keys off
 transcript mtime via the slugify trick. Do not add a second liveness mechanism.
 
-- [ ] In the act section (`sync-worktrees.js:263-278`): when `fs.rmSync` throws or leaves
+- [x] In the act section (`sync-worktrees.js:263-278`): when `fs.rmSync` throws or leaves
       survivors (both current `PARTIAL` paths), `fs.renameSync` the directory to
-      `.claude/worktrees/.trash/<name>-<epoch>` (NTFS allows renaming a dir with open
-      handles even when deletion is denied — agy §8) and report a new `TRASHED` verdict;
-      keep `PARTIAL` only when the rename itself also fails.
-- [ ] Exclude `.trash` from the orphan scan (`baseNames`, `sync-worktrees.js:210-214`) —
+      `.claude/worktrees/.trash/<name>-<epoch>` and report a new `TRASHED` verdict; keep
+      `PARTIAL` only when the rename itself also fails. **Correction (2026-08-16):** agy §8's
+      claim ("NTFS allows renaming a dir with open handles even when deletion is denied") is
+      NOT universal — falsified directly with a synthetic `FILE_SHARE_DELETE`-excluding
+      handle (PowerShell, cross-checked with native `Directory.Move`): that lock class fails
+      the rename with the same `EPERM` as the delete. It still holds for the ordinary
+      Node/esbuild-style locks this substep targets (they don't exclude `FILE_SHARE_DELETE`),
+      so `TRASHED` still fires for the common case — a strict superset of the prior `PARTIAL`
+      behavior, never a regression — but it does not rescue every lock class.
+- [x] Exclude `.trash` from the orphan scan (`baseNames`, `sync-worktrees.js:210-214`) —
       otherwise the next run classifies the trash dir itself as an orphan.
-- [ ] Sweep `.trash/` on every run: dry run reports what is waiting; `--write` retries the
+- [x] Sweep `.trash/` on every run: dry run reports what is waiting; `--write` retries the
       delete (same `rmSync` retry options), leaving what still won't die for next time.
       Sweep must honor ⛔5 — remove links, never recurse through them.
-- [ ] Update `sync-worktrees.md`: document `.trash/` + the `TRASHED` verdict, bump
+- [x] Update `sync-worktrees.md`: document `.trash/` + the `TRASHED` verdict, bump
       `@version` (⛔7).
 
 **Verify:** bare dry run on this repo reports sanely. Synthetic lock test in a scratch dir:
@@ -282,3 +288,22 @@ arrived dirty in the worktree and `git status --porcelain` in main is unchanged.
   (including the harness's `ExitWorktree`, which this repo cannot modify) routed through
   an unlink-first wrapper. Flagging for a future session/plan rather than blocking this
   one indefinitely. Full suite green pre- and post-commit (341/341).
+- 2026-08-16 — 2.1 CLOSED (`abf637b`). All four microsteps implemented as scoped: rename-to-
+  `.trash/` on delete failure, `.trash` excluded from the orphan scan, sweep-on-every-run,
+  `sync-worktrees.md` updated (`@version` 1 → 2). Mid-substep, testing surfaced that agy §8's
+  claim ("NTFS allows renaming a dir with open handles even when deletion is denied") is not
+  universal: falsified with a synthetic handle opened without `FILE_SHARE_DELETE` (PowerShell,
+  cross-checked with native `Directory.Move`) — that lock class fails the rename with the same
+  `EPERM` as the delete, and falls through to `PARTIAL` as before. It still holds for the
+  ordinary Node/esbuild-style locks this substep targets, so `TRASHED` fires for the common
+  case. Decided to accept the fix as-scoped rather than chase the harder fallbacks (force-
+  closing the other handle, `MOVEFILE_DELAY_UNTIL_REBOOT`) — it's a strict superset of the old
+  delete-only behavior, never a regression, just not a rescue for every lock class. Corrected
+  the false claim in this substep's own checklist and in the matching code comment
+  (`sync-worktrees.js` near `trashOrphan`). Mid-substep also answered a scope-check question
+  (both 1.1 and 2.1 are additive-only — new `trashItems`/`TRASHED` fields and verdict, no
+  existing shape changed; verified against the sole consumer, `sync-worktrees.test.js`, 10/10
+  green before commit). Full suite green pre-commit (341/341; one unrelated flaky failure in
+  `terminal-title-lineage.test.cjs`'s `ancestryChain` process-tree test reproduced clean on
+  immediate re-run, confirmed environment timing, not this diff). Next: substep 3.1
+  (shadow-commit `--carry-dirty`), not started.
