@@ -355,6 +355,11 @@ const DEFAULTS = {
   analyzeHint: false,            // true restores the per-row "· /analyze-session <sid>" suffix on the
                                  // 5h rollup rows; off (default since 2026-07-24) a single hint line
                                  // above the rows teaches the same move without the per-line noise.
+  verdictService: null,          // remote-verdict shim: service base URL (…/api/cca). null = the shim
+                                 // stays dark and the local guard chain is the whole path.
+  verdictServiceKey: null,       // sent as license.key on every post; the shim only activates when
+                                 // BOTH this and verdictService are set.
+  verdictCacheTtlMinutes: 30,    // cached verdicts older than this render nothing (stale = dark)
 };
 
 // ---------------------------------------------------------------------------
@@ -1350,11 +1355,17 @@ function generateBudgets(projectDir, cfg) {
 
 // ---------------------------------------------------------------------------
 // config + per-session state
-function loadConfig(projectDir) {
+// Raw user overrides, pre-resolve — the shim posts THESE (the service resolves them itself,
+// so DEFAULTS drift between client and service never bakes into a payload).
+function loadUserGuardConfig(projectDir) {
   try {
     const cfg = JSON.parse(fs.readFileSync(path.join(projectDir, '.claude', 'cca.config.json'), 'utf8'));
-    return resolveConfig((cfg && cfg.tokenGuard) || {});
-  } catch (_) { return resolveConfig({}); }
+    return (cfg && cfg.tokenGuard) || {};
+  } catch (_) { return {}; }
+}
+
+function loadConfig(projectDir) {
+  return resolveConfig(loadUserGuardConfig(projectDir));
 }
 
 function stateDir(projectDir) { return path.join(projectDir, '.claude', 'hooks', '.token-guard'); }
@@ -3246,9 +3257,136 @@ function r21RecoveryCostGuard(ctx) {
   return { notes, block: null };
 }
 
+// ---------------------------------------------------------------------------
+// Remote-verdict shim (2026-08-13). With a verdict service configured (verdictService AND
+// verdictServiceKey — dark by default), each prompt reduces client state to counters,
+// fire-and-forgets them to the service, and renders whatever verdicts the PREVIOUS post
+// brought back. The one-turn lag is by design: the hook never waits on a socket. Fail-open
+// everywhere — no config = dark, no cache / stale cache / unreachable service = the basic
+// free-tier note, and a service error is a silent 204 upstream. Counters only ever travel:
+// file bodies, workflow scripts, and conversation text never leave the machine.
+
+const POST_VERDICT_TIMEOUT_MS = 5000;
+
+function shimActive(cfg) { return !!(cfg.verdictService && cfg.verdictServiceKey); }
+
+function verdictCachePath(projectDir, sid) {
+  return path.join(stateDir(projectDir), `verdict-cache-${sid}.json`);
+}
+
+// Counters reducer, request schema v1 (ADDITIVE-ONLY — never rename, retype, or reorder a
+// family). v1 sends the families whose inputs the prompt path already holds reduced; the
+// remaining families join as their reducers move here.
+function collectVerdictCounters(ctx) {
+  const { cfg, m, st, projectDir, sid } = ctx;
+  const tenures = readLedgerTenures(projectDir, sid);
+  return {
+    schemaVersion: 1,
+    license: { key: cfg.verdictServiceKey },
+    config: loadUserGuardConfig(projectDir),
+    drift: { tenures, liveContext: m.liveContext,
+      scope: tenures.length ? tenures[tenures.length - 1].scope : '' },
+    gates: [{ name: 'session', observed: sessionTokens(m),
+      gateAt: st.sessionGateAt, fires: st.sessionGateFires || 0 }],
+    recovery: { store: loadRecoverySpend(projectDir), nowMs: Date.now() },
+  };
+}
+
+// Fire-and-forget: a detached child (--post-verdict) owns the socket so the hook can exit
+// before any response lands; the child writes the cache this guard renders NEXT prompt.
+function postVerdictAsync(ctx) {
+  const { cfg, projectDir, sid } = ctx;
+  fs.mkdirSync(stateDir(projectDir), { recursive: true });
+  const file = path.join(stateDir(projectDir), `verdict-post-${sid}.json`);
+  fs.writeFileSync(file, JSON.stringify({
+    url: `${cfg.verdictService.replace(/\/+$/, '')}/guard-verdict`,
+    body: collectVerdictCounters(ctx),
+    cachePath: verdictCachePath(projectDir, sid),
+    sid,
+  }));
+  require('child_process').spawn(process.execPath, [__filename, '--post-verdict', file],
+    { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+}
+
+function writeVerdictCache(file, entry) {
+  try {
+    const tmp = `${file}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(entry));
+    fs.renameSync(tmp, file);
+  } catch (_) { /* a lost cache write just renders nothing next prompt */ }
+}
+
+// The child's whole job. ANY failure — bad job file, timeout, refused socket, non-200 —
+// still writes an ok:false entry: that marker is what tells a live shim apart from a
+// reachable one (see shimHealth), so the failure record IS the product.
+async function postVerdictMain(file) {
+  let job = null;
+  try { job = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) { return; }
+  try { fs.unlinkSync(file); } catch (_) {}
+  const entry = { v: 1, sid: job.sid, at: new Date().toISOString(),
+    post: { ok: false, status: 0 }, verdicts: [] };
+  try {
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), POST_VERDICT_TIMEOUT_MS);
+    const res = await fetch(job.url, { method: 'POST', signal: ac.signal,
+      headers: { 'content-type': 'application/json' }, body: JSON.stringify(job.body) });
+    clearTimeout(t);
+    entry.post = { ok: res.ok, status: res.status };
+    if (res.status === 200) entry.verdicts = ((await res.json()) || {}).verdicts || [];
+  } catch (_) { /* offline/timeout: the ok:false entry is the record */ }
+  writeVerdictCache(job.cachePath, entry);
+}
+
+function readVerdictCache(projectDir, sid, cfg) {
+  try {
+    const c = JSON.parse(fs.readFileSync(verdictCachePath(projectDir, sid), 'utf8'));
+    const ttlMin = cfg.verdictCacheTtlMinutes != null ? cfg.verdictCacheTtlMinutes : 30;
+    return Date.now() - Date.parse(c.at) <= ttlMin * 60000 ? c : null;
+  } catch (_) { return null; }
+}
+
+// The liveness canary's second axis. The existing canary answers "is the hook running at
+// all" (dead = no state writes); this answers HOW a running shim is doing: 'ok' (fresh
+// cache, service reachable), 'offline' (fresh cache, last post failed), 'stale' (cache
+// exists but aged out), 'off' (never posted / not configured).
+function shimHealth(projectDir, sid, cfg) {
+  const c = readVerdictCache(projectDir, sid, cfg);
+  if (c) return c.post && c.post.ok ? 'ok' : 'offline';
+  try { fs.statSync(verdictCachePath(projectDir, sid)); return 'stale'; } catch (_) { return 'off'; }
+}
+
+// Free-tier fallback: ONE basic local warning on the context axis. Deliberately a floor,
+// not a re-implementation of the guard chain above.
+function freeTierNote(liveContext, cfg) {
+  if (!cfg.contextWarnTokens || !(liveContext >= cfg.contextWarnTokens)) return null;
+  return `context-size note: ~${fmtK(liveContext)} of context rides into every request this ` +
+    `session — when the current task lands, /clear then /continue starts a cheaper session.`;
+}
+
+function renderCachedVerdicts(cached) {
+  if (!cached || !Array.isArray(cached.verdicts)) return [];
+  return cached.verdicts.filter(v => v && typeof v.text === 'string' && v.text).map(v => v.text);
+}
+
+function remoteVerdictGuard(ctx) {
+  const { cfg, projectDir, sid, m } = ctx;
+  if (!shimActive(cfg)) return { notes: [], block: null };
+  try {
+    postVerdictAsync(ctx);
+    const cached = readVerdictCache(projectDir, sid, cfg);
+    const notes = renderCachedVerdicts(cached);
+    if (!cached || !(cached.post && cached.post.ok)) {
+      const basic = freeTierNote(m.liveContext, cfg); // service dark: degrade to the free floor
+      if (basic) notes.push(basic);
+    }
+    return { notes, block: null };
+  } catch (_) { return { notes: [], block: null }; }
+}
+
 const PROMPT_GUARDS = [claimAdvisoryGuard, r2ReceiptGuard, r3ContextBombGuard, r4IdleReturnGuard, fatContextGuard,
   r6ScopeDriftGuard, officialUsagePrep, r12aWindowSpikeGuard, r12bWindowThresholdGuard,
-  spendStepGuard, r17PlanBoundaryGuard, r13aPlanSteerGuard, r21RecoveryCostGuard];
+  spendStepGuard, r17PlanBoundaryGuard, r13aPlanSteerGuard, r21RecoveryCostGuard,
+  remoteVerdictGuard];
 
 async function onUserPromptSubmit(data, projectDir) {
   const cfg = loadConfig(projectDir);
@@ -4690,6 +4828,11 @@ if (require.main === module) {
       process.stdout.write(`${r.rows} scanned + ${r.observed} observed -> ${r.path}\n`);
     } catch (e) { process.stdout.write(`budgets failed: ${e && e.message}\n`); }
     process.exit(0);
+  } else if (process.argv[2] === '--post-verdict') {
+    // Detached child of the remote-verdict shim: owns the socket the hook must never wait on.
+    postVerdictMain(process.argv[3])
+      .catch(() => { /* never throw */ })
+      .finally(() => process.exit(0));
   } else {
     let input = '';
     process.stdin.setEncoding('utf8');
@@ -4732,4 +4875,8 @@ module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, l
   spikeAttribution, spikeCopyMode,
   windowSpikeNote, windowSpikeConfirmNote, windowRunway, windowThresholdNote, windowThresholdGateReason,
   findActivePlan, parsePlanSubsteps, parsePlanLedger, findCurrentSubstep,    // R17 plan-boundary
-  planBoundaryVerdict, planBoundaryNote, planModelMismatchLine };
+  planBoundaryVerdict, planBoundaryNote, planModelMismatchLine,
+  shimActive, collectVerdictCounters, verdictCachePath, readVerdictCache, writeVerdictCache,
+  renderCachedVerdicts, freeTierNote, shimHealth, remoteVerdictGuard,
+                                               // remote-verdict shim — token-guard-shim.test.cjs
+};
