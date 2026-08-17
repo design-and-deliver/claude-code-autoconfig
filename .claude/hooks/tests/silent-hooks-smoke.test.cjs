@@ -144,9 +144,57 @@ test('arcade-beeps exits 0 on malformed stdin', () => {
   assert.ok(!/\bplay /.test(beepsLog(home)), 'malformed input (event="?") must not play');
 });
 
+// A whole fake install — hook + opt-in flag + stand-in wavs — so a Stop event actually reaches
+// playback. Audio-free by construction: the wavs are deliberately NOT wavs, so every player
+// rejects them. (They still have to EXIST, or play() returns at its MISSING branch first.)
+function beepsInstall() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'beeps-inst-'));
+  fs.mkdirSync(path.join(dir, '.claude', 'hooks'), { recursive: true });
+  fs.mkdirSync(path.join(dir, '.claude', 'sounds'), { recursive: true });
+  fs.mkdirSync(path.join(dir, 'home', '.claude', 'hooks', '.titles'), { recursive: true });
+  fs.copyFileSync(BEEPS_HOOK, path.join(dir, '.claude', 'hooks', 'arcade-beeps.js'));
+  fs.writeFileSync(path.join(dir, '.claude', 'sounds', 'status-beeps.enabled'), '');
+  for (const wav of ['pp3-go-F#5.wav', 'pp3-getready-G4.wav']) {
+    fs.writeFileSync(path.join(dir, '.claude', 'sounds', wav), 'NOT-A-WAV');
+  }
+  return dir;
+}
+function runBeepsInstall(dir, env) {
+  return spawnSync(process.execPath, [path.join(dir, '.claude', 'hooks', 'arcade-beeps.js')], {
+    input: JSON.stringify({ hook_event_name: 'Stop', session_id: 'int', transcript_path: '/nope.jsonl' }),
+    env: { ...process.env, HOME: path.join(dir, 'home'), USERPROFILE: path.join(dir, 'home'), ...env },
+    encoding: 'utf8',
+  });
+}
+
+// The end-to-end half of the pair below: proves spawnFailure()'s verdict actually REACHES the
+// log. Every player rejects a non-wav, so this lands on r.status on any platform (and on a box
+// with no player at all, on the shell's 127) — either way a `play-failed` line must appear.
+test('arcade-beeps logs a playback failure the player only RETURNS (never throws)', () => {
+  const dir = beepsInstall();
+  const r = runBeepsInstall(dir, {});
+  assert.strictEqual(r.status, 0, 'a failed beep must never break the turn');
+  const log = beepsLog(path.join(dir, 'home'));
+  assert.match(log, /play pp3-go-F#5\.wav \(complete\)/, 'playback should have been attempted');
+  assert.match(log, /play-failed \S+ (exit=[1-9]\d*|ENOENT)/,
+    'the `play ...` line alone would claim a beep that never sounded');
+});
+
+// Windows-gated: emptying PATH reliably hides powershell there (verified), while POSIX execvp
+// may fall back to a confstr default path and find the player anyway. The ENOENT mapping itself
+// is covered on every platform by the unit test below.
+test('arcade-beeps names a missing player binary as ENOENT', {
+  skip: process.platform === 'win32' ? false : 'PATH-stripping only reliably hides the player on Windows',
+}, () => {
+  const dir = beepsInstall();
+  const r = runBeepsInstall(dir, { PATH: '', Path: '' });
+  assert.strictEqual(r.status, 0, 'no player at all must still be a clean exit');
+  assert.match(beepsLog(path.join(dir, 'home')), /play-failed \S+ ENOENT/);
+});
+
 // spawnSync reports a failed player by RETURNING it, so the `play ...` log line alone can claim
 // a beep that never sounded. spawnFailure() is what turns those two silent outcomes into a
-// `play-failed` line; drive it directly rather than trying to break a real audio player.
+// `play-failed` line; drive it directly to pin the mapping on every platform.
 test('arcade-beeps spawnFailure names both silent playback failures', () => {
   const { spawnFailure } = require(BEEPS_HOOK);
   assert.strictEqual(spawnFailure({ error: { code: 'ENOENT' }, status: null }), 'ENOENT',
