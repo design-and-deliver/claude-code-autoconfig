@@ -611,6 +611,18 @@ test('migrateRetiredPermissionRules strips retired rules, leaves user rules alon
   migrateRetiredPermissionRules({ permissions: {} });
 });
 
+test('migrateRetiredPermissionRules returns the count removed (the local-file rewrite gate)', () => {
+  // The settings.local.json scrub rewrites ONLY on a non-zero return, so a wrong count here
+  // either reformats every user's local file on every install or never fixes any of them.
+  assert(migrateRetiredPermissionRules({}) === 0, 'no permissions block -> 0');
+  assert(migrateRetiredPermissionRules({ permissions: {} }) === 0, 'empty permissions -> 0');
+  assert(migrateRetiredPermissionRules({ permissions: { allow: ['Edit(./**)'] } }) === 0,
+    'nothing retired -> 0 (must not trigger a rewrite)');
+  assert(migrateRetiredPermissionRules({
+    permissions: { allow: ['Write(./**)'], deny: ['Write(./nul)', 'Edit(./nul)'] }
+  }) === 3, 'all three retired literals -> 3');
+});
+
 test('cli.js scrubs retired permission rules on the settings upgrade path', () => {
   const src = fs.readFileSync(CLI_PATH, 'utf8');
   const scrubAt = src.indexOf('migrateRetiredPermissionRules(userSettings);');

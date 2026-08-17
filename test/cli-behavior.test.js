@@ -48,6 +48,11 @@
  *  12. interactive launch    — the real no-flag flow, ENTER piped to stdin: READY TO CONFIGURE
  *                             + /autoconfig on fresh vs READY TO UPDATE + /autoconfig-update on
  *                             upgrade (the launched `claude` is the PATH shim, so it's instant).
+ *  13. settings.local scrub  — retired Write(...) permission rules are stripped from
+ *                             settings.local.json on EVERY install path (it is user-owned, so
+ *                             no shipped copy ever replaces it), the user's own rules/env
+ *                             survive, nothing is merged IN, an unaffected file is left
+ *                             byte-identical, and a corrupt one warns without losing data.
  *
  * The `claude` binary is shimmed onto PATH so isClaudeInstalled() passes without a real install —
  * without the shim, a machine lacking Claude Code (CI) would trigger `npm install -g` mid-test.
@@ -736,6 +741,82 @@ test('the stray `nul` artifact is still removed on Windows', () => {
   fs.writeFileSync(nulPath, 'redirect artifact');
   cleanupNulFile(dir, 'win32');
   assert(!fs.existsSync(nulPath), 'the Windows `nul` artifact must still be cleaned up');
+});
+
+// ── Fixture 13: retired permission rules are scrubbed from settings.local.json ──
+// Claude Code warns at session start for every retired Write(...) rule it finds, in
+// settings.json AND settings.local.json. CCA never ships or merges into the local file, so
+// the scrub there is unconditional (fresh installs too) and must NOT fold shipped hooks in.
+console.log();
+console.log('retired permission rules are scrubbed from settings.local.json:');
+
+const localScrub = makeProject('local-scrub');
+cleanups.push(localScrub);
+writeFile(localScrub, '.claude/settings.local.json', JSON.stringify({
+  permissions: {
+    allow: ['Write(./**)', 'Bash(npm run something)', 'Write(./dist/**)'],
+    deny: ['Write(./nul)', 'Edit(./nul)', 'Read(./.env.local)'],
+  },
+  env: { MY_LOCAL_VAR: '1' },
+}, null, 2));
+
+const localScrubResult = runCli(localScrub, ['--bootstrap'], shimDir);
+
+test('exits 0', () => {
+  assert(localScrubResult.code === 0, `expected exit 0, got ${localScrubResult.code}\n${localScrubResult.out}`);
+});
+
+test('retired rules are scrubbed from settings.local.json on a FRESH install too', () => {
+  const local = readJson(path.join(localScrub, '.claude', 'settings.local.json'));
+  assert(!local.permissions.allow.includes('Write(./**)'), 'retired allow Write(./**) must be scrubbed');
+  assert(!local.permissions.deny.includes('Write(./nul)'), 'retired deny Write(./nul) must be scrubbed');
+  assert(!local.permissions.deny.includes('Edit(./nul)'), 'retired deny Edit(./nul) must be scrubbed');
+});
+
+test("the user's own local rules and env survive the scrub", () => {
+  const local = readJson(path.join(localScrub, '.claude', 'settings.local.json'));
+  assert(local.permissions.allow.includes('Bash(npm run something)'), 'user allow rule must survive');
+  assert(local.permissions.allow.includes('Write(./dist/**)'), 'a user-authored Write rule must survive');
+  assert(local.permissions.deny.includes('Read(./.env.local)'), 'user deny rule must survive');
+  assert(local.env && local.env.MY_LOCAL_VAR === '1', 'unrelated local keys must survive');
+});
+
+test('the scrub does NOT merge shipped settings into settings.local.json', () => {
+  // settings.local.json is user-owned. Folding the shipped fragment in would double every
+  // hook (it is already in settings.json) — the scrub must only ever REMOVE.
+  const local = readJson(path.join(localScrub, '.claude', 'settings.local.json'));
+  assert(!local.hooks, `settings.local.json must gain no hooks, got: ${JSON.stringify(local.hooks)}`);
+  assert(!local.permissions.allow.includes('Edit(./**)'), 'shipped allow rules must not be merged in');
+});
+
+// A local file with nothing retired must be left BYTE-IDENTICAL — the count gate exists so a
+// user's hand-formatted (4-space, comment-free-but-ordered) file is not silently reflowed.
+const localClean = makeProject('local-clean');
+cleanups.push(localClean);
+const CLEAN_LOCAL = '{\n    "permissions": {\n        "allow": ["Bash(git log:*)"]\n    }\n}\n';
+writeFile(localClean, '.claude/settings.local.json', CLEAN_LOCAL);
+const localCleanResult = runCli(localClean, ['--bootstrap'], shimDir);
+
+test('a settings.local.json with nothing retired is left byte-identical', () => {
+  assert(localCleanResult.code === 0, `expected exit 0, got ${localCleanResult.code}\n${localCleanResult.out}`);
+  const after = fs.readFileSync(path.join(localClean, '.claude', 'settings.local.json'), 'utf8');
+  assert(after === CLEAN_LOCAL, 'an unchanged local file must not be rewritten/reformatted');
+});
+
+// Corrupt local file: the install must still succeed, say so, and leave the bytes alone
+// (rewriting an unparseable file is the silent data loss d662360 fixed for settings.json).
+const localCorrupt = makeProject('local-corrupt');
+cleanups.push(localCorrupt);
+const BROKEN_LOCAL = '{ "permissions": { "allow": ["Write(./**)",  <-- broken\n';
+writeFile(localCorrupt, '.claude/settings.local.json', BROKEN_LOCAL);
+const localCorruptResult = runCli(localCorrupt, ['--bootstrap'], shimDir);
+
+test('a corrupt settings.local.json warns but neither breaks the install nor loses data', () => {
+  assert(localCorruptResult.code === 0, `expected exit 0, got ${localCorruptResult.code}\n${localCorruptResult.out}`);
+  assert(localCorruptResult.out.includes('settings.local.json'),
+    `expected a warning naming settings.local.json, got:\n${localCorruptResult.out}`);
+  const after = fs.readFileSync(path.join(localCorrupt, '.claude', 'settings.local.json'), 'utf8');
+  assert(after === BROKEN_LOCAL, 'a corrupt local file must be left exactly as found');
 });
 
 // ── Cleanup ──────────────────────────────────────────────────────────────────

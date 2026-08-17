@@ -611,6 +611,28 @@ function main() {
       }
     }
   }
+
+  // Scrub the same retired rules out of settings.local.json. That file is entirely
+  // user-owned — CCA never ships one and never merges into it — but a project configured by
+  // an older CCA can carry the retired Write(...) rules there too, and Claude Code prints its
+  // startup warning for every one it finds in EITHER file. So unlike the settings.json scrub
+  // above this runs on ALL install paths (fresh and --force included): there is no shipped
+  // counterpart whose replacement would ever fix it, and --force must not wipe a user's local
+  // file. Rewrites only when a rule actually went away, so a hand-formatted local file is left
+  // byte-identical in the common (nothing-to-do) case.
+  const localSettingsDest = path.join(claudeDest, 'settings.local.json');
+  if (fs.existsSync(localSettingsDest)) {
+    try {
+      const localSettings = JSON.parse(fs.readFileSync(localSettingsDest, 'utf8'));
+      if (migrateRetiredPermissionRules(localSettings) > 0) {
+        fs.writeFileSync(localSettingsDest, JSON.stringify(localSettings, null, 2));
+      }
+    } catch (err) {
+      // Same posture as the merge above: never break the install, never hide the failure, and
+      // never rewrite a file we could not parse (that would be the silent data loss d662360 fixed).
+      console.log(paint('yellow', `⚠️  Could not scrub retired permission rules from .claude/settings.local.json (${err.message}) — left it as-is; Claude Code may still warn about them at session start.`));
+    }
+  }
   mark('settings');
 
   console.log(paint('green', '✅ Prepared /autoconfig command'));

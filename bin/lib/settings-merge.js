@@ -9,7 +9,8 @@
 //     ${CLAUDE_PROJECT_DIR:-.}-anchored form (must run BEFORE a merge, or the merge
 //     doubles the hook — see the ordering guard in test/cli-install.test.js).
 //   - migrateRetiredPermissionRules: strip permission rules CCA once shipped and has
-//     withdrawn (the additive merge would otherwise preserve them forever).
+//     withdrawn (the additive merge would otherwise preserve them forever), returning the
+//     count removed so a caller can skip rewriting an unchanged file.
 //   - mergeSettingsInto:  additively fold a fragment in (never overwrite user values);
 //     optionally records the true delta it added into an accumulator (BH-1).
 //   - unmergeSettingsFrom: strip back out only what was recorded as added (falling back to
@@ -70,16 +71,22 @@ const RETIRED_PERMISSION_RULES = {
   deny: ['Write(./nul)', 'Edit(./nul)']
 };
 
-// Strip the retired rules IN PLACE, mutating the given settings object. Runs on the upgrade
-// path alongside migrateLegacyHookCommands (fresh installs copy the package file, which no
-// longer contains them).
+// Strip the retired rules IN PLACE, mutating the given settings object, and RETURN THE COUNT
+// removed. Two callers, both in bin/cli.js: the settings.json upgrade path (alongside
+// migrateLegacyHookCommands — fresh installs copy the package file, which no longer contains
+// them), and the settings.local.json scrub, which uses the count to skip rewriting a file it
+// did not change. Zero is the common case, so it must be cheap and exact.
 function migrateRetiredPermissionRules(userSettings) {
-  if (!userSettings || !userSettings.permissions) return;
+  if (!userSettings || !userSettings.permissions) return 0;
+  let removed = 0;
   for (const key of PERMISSION_KEYS) {
     const rules = userSettings.permissions[key];
     if (!Array.isArray(rules)) continue;
-    userSettings.permissions[key] = rules.filter(r => !RETIRED_PERMISSION_RULES[key].includes(r));
+    const kept = rules.filter(r => !RETIRED_PERMISSION_RULES[key].includes(r));
+    removed += rules.length - kept.length;
+    userSettings.permissions[key] = kept;
   }
+  return removed;
 }
 
 // The BH-1 delta accumulator, as three recording callbacks — or three no-ops when the caller
