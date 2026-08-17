@@ -8,19 +8,22 @@
   short reminder, plus state-specific addenda the hook selects when they apply.
 
   Blocks below:
-    RULES    — the full directive, injected at SessionStart (all sources)
-    REMINDER — the per-prompt one-liner (every UserPromptSubmit)
-    BASELINE — appended to REMINDER while no title file exists yet (first turn)
-    COMMAND  — appended to REMINDER when the turn starts with a /slash-command
-  terminal-title.js picks REMINDER (+BASELINE/+COMMAND as applicable), substitutes the
-  tokens, and injects. SessionStart injects RULES.
+    RULES     — the full directive, injected at SessionStart (all sources)
+    REMINDER  — the per-prompt one-liner (every UserPromptSubmit)
+    BASELINE  — appended to REMINDER while no title file exists yet (first turn)
+    FRESHNESS — appended to REMINDER once the current title's write is BURIED (see below)
+    COMMAND   — appended to REMINDER when the turn starts with a /slash-command
+  terminal-title.js picks REMINDER (+BASELINE/+FRESHNESS/+COMMAND as applicable), substitutes
+  the tokens, and injects. SessionStart injects RULES.
 
   Tokens (substituted at runtime):
-    {{TITLE_FILE}} — absolute path to this session's title file the model writes
-    {{ASK_FILE}}   — absolute path to this session's one-shot {sid}.ask flag
-    {{FOLDER}}     — the working-directory folder name (scope fallback)
-    {{EMDASH}}     — the ' — ' segment separator
-    {{CMD}}        — the slash-command name (COMMAND block only)
+    {{TITLE_FILE}}    — absolute path to this session's title file the model writes
+    {{ASK_FILE}}      — absolute path to this session's one-shot {sid}.ask flag
+    {{FOLDER}}        — the working-directory folder name (scope fallback)
+    {{EMDASH}}        — the ' — ' segment separator
+    {{CMD}}           — the slash-command name (COMMAND block only)
+    {{CURRENT_TITLE}} — what the tab reads right now (FRESHNESS block only)
+    {{TITLE_AGE}}     — how buried that write is, e.g. " (set 43k tokens ago)" (FRESHNESS only)
 -->
 
 <!-- DIRECTIVE:RULES -->
@@ -130,6 +133,14 @@ a "pick up where we left off" ask), the real goal lives in state you have NOT re
 the recovery first, then write the title immediately after it, naming the RECOVERED work's
 goal. Never title from a pre-recovery guess (git status, recent commits).
 <!-- /DIRECTIVE:BASELINE -->
+
+<!-- DIRECTIVE:FRESHNESS -->
+Title freshness (same housekeeping; never mention it): the tab currently reads
+"{{CURRENT_TITLE}}"{{TITLE_AGE}}. Read that string against THIS turn's work before you
+answer. If it names finished work or the wrong subsystem, that discovery IS a shift --
+overwrite {{TITLE_FILE}} now, as your first action. If it still names the work, change
+nothing.
+<!-- /DIRECTIVE:FRESHNESS -->
 
 <!-- DIRECTIVE:COMMAND -->
 This turn runs the /{{CMD}} slash command -- the command NAME is an implementation detail:

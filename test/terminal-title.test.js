@@ -173,6 +173,63 @@ test("reminder keeps both critical actions: title write + this session's {sid}.a
   assert(/AskUserQuestion/.test(r.directive), 'reminder should route closed choices to the picker');
 });
 
+// FRESHNESS: the reminder can only ask "did the scope shift?"; it cannot ask "is the string on
+// the tab still true?" unless it SHOWS that string. These pin the arming rule (buried = shown,
+// fresh = silent) and the two facts the block must carry.
+function seedBurial(cwd, sid, { titleTokens, latest, isoAgeMs }) {
+  const dir = path.join(cwd, '.claude', 'hooks', '.titles');
+  fs.mkdirSync(dir, { recursive: true });
+  const entry = { ts: new Date(Date.now() - isoAgeMs).toISOString(), title: 'Alpha — Beta' };
+  if (titleTokens) entry.tokens = titleTokens;
+  fs.writeFileSync(path.join(dir, `${sid}.history.jsonl`), `${JSON.stringify(entry)}\n`);
+  fs.writeFileSync(path.join(dir, `${sid}.marks.json`), JSON.stringify({ fixed: 60000, latest, n: 10 }));
+}
+
+test('a BURIED title is read back to the model, with how buried it is', () => {
+  const cwd = mkWorkspace();
+  const sid = 'fresh-buried';
+  writeTitle(cwd, sid, 'Alpha — Beta');
+  const ups = () => runHook({ hook_event_name: 'UserPromptSubmit', session_id: sid, cwd, prompt: 'do a thing' });
+  // Budget the BLOCK, not the whole injection: every block re-substitutes the title-file path, and
+  // that path's length is the temp dir's, so a total-chars assertion measures mkdtemp, not wording.
+  const before = ups().directive.length;
+  seedBurial(cwd, sid, { titleTokens: 100000, latest: 150000, isoAgeMs: 60 * 1000 });
+  const r = ups();
+  assert(/Title freshness/.test(r.directive), 'expected the FRESHNESS block once the write is buried');
+  assert(r.directive.includes('"Alpha — Beta"'), 'FRESHNESS must quote the CURRENT title verbatim');
+  assert(/set 50k tokens ago/.test(r.directive), `expected the measured burial, got: ${r.directive}`);
+  assert(/discovery IS a shift/.test(r.directive), 'FRESHNESS must license a mid-task rewrite');
+  const grew = r.directive.length - before - cwd.length;
+  assert(grew < 400, `FRESHNESS must stay compact (token guard), added ${grew} chars beyond the path`);
+});
+
+test('a FRESH title stays silent (no nudge while the write is still in mind)', () => {
+  const cwd = mkWorkspace();
+  const sid = 'fresh-recent';
+  writeTitle(cwd, sid, 'Alpha — Beta');
+  seedBurial(cwd, sid, { titleTokens: 100000, latest: 105000, isoAgeMs: 60 * 1000 });
+  const r = runHook({ hook_event_name: 'UserPromptSubmit', session_id: sid, cwd, prompt: 'do a thing' });
+  assert(!/Title freshness/.test(r.directive), 'a 5k-token-old title must not arm FRESHNESS');
+});
+
+test('wall-clock arms FRESHNESS when the watermarks are unreadable', () => {
+  const cwd = mkWorkspace();
+  const sid = 'fresh-clock';
+  writeTitle(cwd, sid, 'Alpha — Beta');
+  seedBurial(cwd, sid, { titleTokens: 0, latest: 105000, isoAgeMs: 45 * 60 * 1000 });
+  const r = runHook({ hook_event_name: 'UserPromptSubmit', session_id: sid, cwd, prompt: 'do a thing' });
+  assert(/Title freshness/.test(r.directive), 'no usable watermark should fall back to elapsed time');
+  assert(/set 45 minutes ago/.test(r.directive), `expected the wall-clock burial, got: ${r.directive}`);
+});
+
+test('no history trail at all -> no FRESHNESS (never an estimated figure)', () => {
+  const cwd = mkWorkspace();
+  const sid = 'fresh-none';
+  writeTitle(cwd, sid, 'Alpha — Beta');
+  const r = runHook({ hook_event_name: 'UserPromptSubmit', session_id: sid, cwd, prompt: 'do a thing' });
+  assert(!/Title freshness/.test(r.directive), 'an unmeasurable burial must stay silent');
+});
+
 test('UserPromptSubmit clears a stale {sid}.ask flag from an interrupted prior turn', () => {
   const cwd = mkWorkspace();
   const sid = 'ups-ask';

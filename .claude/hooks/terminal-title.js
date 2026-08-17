@@ -195,7 +195,7 @@ function onUserPromptSubmit(data, dir, sid, file, cwd) {
   const out = setTitle(GLYPH.working, title);
   out.hookSpecificOutput = {
     hookEventName: 'UserPromptSubmit',
-    additionalContext: buildDirective(data, file, cwd),
+    additionalContext: buildDirective(data, file, cwd, dir, sid, title),
   };
   if (guard && guard.systemMessage) out.systemMessage = guard.systemMessage;
   // A user interrupt fires NO hook and CC's idle_prompt notification is not delivered after one
@@ -2246,20 +2246,77 @@ function emit(obj) {
   process.exit(0);
 }
 
+// TITLE FRESHNESS (2026-08-17). The rulebook asks the model to re-title "when the scope shifts",
+// but that test is run against a string it wrote turns ago and is never shown again — so once the
+// write is buried, recalling it costs a tool call the model does not think it needs, and the
+// default answer becomes silence. Live failure: a tab sat on "Session model pin — Explain the
+// Sonnet/Opus mismatch" for 5 prompts / 43k tokens after the session had moved back to UI copy;
+// the hook painted faithfully, the reminder fired every prompt, and nothing was stale except the
+// one string neither party could see. Reading the CURRENT title back turns a recollection into a
+// comparison, which is the part the model reliably gets right.
+// Gated on burial rather than injected every prompt: while the write is still nearby the model
+// does notice on its own, and an always-on nudge buys re-titling twitchiness with real tokens.
+const FRESHNESS_TOKENS = 25000; // context grown since the title was written
+const FRESHNESS_MINUTES = 20;   // ...or wall-clock, for sessions whose watermarks are unreadable
+
+// The newest {sid}.history.jsonl entry — i.e. the write that produced the title now on the tab.
+// null when the trail is missing or unreadable (a session that predates it, or a first turn).
+function lastTitleEntry(dir, sid) {
+  let lines = [];
+  try {
+    lines = fs.readFileSync(path.join(dir, `${sid}.history.jsonl`), 'utf8').trim().split('\n');
+  } catch (_) { return null; }
+  for (let i = lines.length - 1; i >= 0; i--) {
+    let e = null;
+    try { e = JSON.parse(lines[i]); } catch (_) { continue; }
+    if (e && e.ts) return e;
+  }
+  return null;
+}
+
+// How buried that write is, as { grew, mins } — either may be null. HONEST-NUMBERS CONTRACT: an
+// unmeasurable figure stays null and simply doesn't arm the block; it is never estimated.
+function titleBurial(dir, sid, now) {
+  const e = lastTitleEntry(dir, sid);
+  if (!e) return null;
+  const marks = readMarks(dir, sid);
+  const measurable = marks && e.tokens > 0 && marks.latest > e.tokens;
+  const t = Date.parse(e.ts);
+  return {
+    grew: measurable ? marks.latest - e.tokens : null,
+    mins: t > 0 && now > t ? Math.round((now - t) / 60000) : null,
+  };
+}
+
+// The parenthetical that trails the quoted title, or '' when the write is still fresh — so this
+// doubles as the arming predicate. Tokens lead because they are the causal quantity (how much
+// context the write is buried under); wall-clock only covers sessions with no usable watermarks.
+function titleAgePhrase(file, dir, sid) {
+  if (!fileExists(file)) return '';
+  const b = titleBurial(dir, sid, Date.now());
+  if (!b) return '';
+  if (b.grew >= FRESHNESS_TOKENS) return ` (set ${Math.round(b.grew / 1000)}k tokens ago)`;
+  if (b.mins >= FRESHNESS_MINUTES) return ` (set ${b.mins} minutes ago)`;
+  return '';
+}
+
 // Build the per-prompt injection: the REMINDER one-liner, plus BASELINE while no title file
-// exists yet (first turn), plus COMMAND on a /slash-command turn. The full rulebook (RULES) is
-// injected by SessionStart, not here. Wording lives in the .md so it tunes without code edits.
-function buildDirective(data, file, cwd) {
+// exists yet (first turn), plus FRESHNESS once the current title's write is buried, plus COMMAND
+// on a /slash-command turn. The full rulebook (RULES) is injected by SessionStart, not here.
+// Wording lives in the .md so it tunes without code edits.
+function buildDirective(data, file, cwd, dir, sid, title) {
   const prompt = typeof data.prompt === 'string' ? data.prompt : '';
   const m = prompt.match(/^\s*\/([A-Za-z0-9][\w:.-]*)/);
   const blocks = ['REMINDER'];
   if (!fileExists(file)) blocks.push('BASELINE');
+  const age = titleAgePhrase(file, dir, sid);
+  if (age) blocks.push('FRESHNESS');
   if (m) blocks.push('COMMAND');
-  return buildBlocks(blocks, file, cwd, m ? m[1] : '');
+  return buildBlocks(blocks, file, cwd, m ? m[1] : '', { title, age });
 }
 
 // Extract the named blocks from terminal-title.directive.md, join them, substitute the tokens.
-function buildBlocks(names, file, cwd, cmd) {
+function buildBlocks(names, file, cwd, cmd, vars = {}) {
   let tpl = '';
   try {
     tpl = fs.readFileSync(path.join(__dirname, 'terminal-title.directive.md'), 'utf8');
@@ -2273,7 +2330,9 @@ function buildBlocks(names, file, cwd, cmd) {
     .split('{{ASK_FILE}}').join(file.replace(/\.txt$/, '.ask'))
     .split('{{FOLDER}}').join(folderName(cwd))
     .split('{{EMDASH}}').join(EMDASH)
-    .split('{{CMD}}').join(cmd || '');
+    .split('{{CMD}}').join(cmd || '')
+    .split('{{CURRENT_TITLE}}').join(vars.title || '')
+    .split('{{TITLE_AGE}}').join(vars.age || '');
 }
 
 // Canonicalize a path for identity comparison — resolve symlinks/junctions AND (on Windows) 8.3
