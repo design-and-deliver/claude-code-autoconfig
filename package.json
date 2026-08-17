@@ -74,6 +74,7 @@
     "!.claude/scripts/restore-after-reboot.js",
     "!.claude/commands/refactor.md",
     "!.claude/commands/cost-compare.md",
+    "!.claude/commands/gimme-one-liner.md",
     "!.claude/rules/parallel-session-worktrees.md",
     "!.claude/plans",
     "!.claude/worktrees",
