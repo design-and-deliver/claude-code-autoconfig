@@ -26,7 +26,8 @@
  * copy at <project>/.claude/sounds — no dependency on a global sounds dir.
  *
  * Playback is cross-platform and best-effort: PowerShell SoundPlayer on Windows, afplay on
- * macOS, paplay||aplay on Linux. If none is present the hook simply stays silent — never errors.
+ * macOS, paplay||aplay on Linux. If none is present the hook stays silent — never errors, but it
+ * DOES log `play-failed`, so a silent tab is distinguishable from a hook that never ran.
  *
  * Playback BLOCKS (spawnSync) so the sound finishes inside the hook's lifetime — a detached
  * fire-and-forget child can be killed by the hook runner's job/process-group cleanup before it
@@ -37,7 +38,8 @@
  * when enabled) so sound and glyph agree. A tiny inline '?' check is the fallback.
  *
  * Diagnostic log (bounded ~64KB) at ~/.claude/hooks/.titles/arcade-beeps.log records every
- * invocation + choice, so we can prove whether the hook fires on a real Stop.
+ * invocation + choice + any playback failure, so we can prove whether the hook fires on a real
+ * Stop AND whether the sound it chose actually reached a player.
  */
 const fs = require('fs');
 const os = require('os');
@@ -72,6 +74,15 @@ function playerFor(wav) {
   return ['sh', ['-c', `paplay "${wav}" 2>/dev/null || aplay "${wav}" 2>/dev/null`]];
 }
 
+// spawnSync REPORTS a failed player instead of throwing it, so neither outcome below reaches
+// play()'s catch: a missing binary (no powershell/afplay/paplay) arrives on r.error as ENOENT,
+// and a player that ran but failed arrives as a non-zero r.status. Unlogged, the `play ...` line
+// alone claims a beep that never sounded — which is exactly what the log exists to disprove.
+function spawnFailure(r) {
+  if (r.error) return r.error.code || r.error.message;
+  return r.status ? `exit=${r.status}` : null;
+}
+
 function play(wavName, why) {
   if (DEBUG) process.stderr.write(`arcade-beeps: chose ${wavName} (${why})\n`);
   logLine(`play ${wavName} (${why})`);
@@ -80,7 +91,8 @@ function play(wavName, why) {
     if (!fs.existsSync(wav)) { logLine(`MISSING ${wav}`); return; }
     // Block until the sound finishes so it can't be reaped with the hook process.
     const [cmd, cmdArgs] = playerFor(wav);
-    spawnSync(cmd, cmdArgs, { stdio: 'ignore', windowsHide: true });
+    const failure = spawnFailure(spawnSync(cmd, cmdArgs, { stdio: 'ignore', windowsHide: true }));
+    if (failure) logLine(`play-failed ${cmd} ${failure}`);
   } catch (e) { logLine(`play-error ${e && e.message}`); }
 }
 
@@ -146,4 +158,4 @@ if (require.main === module) {
   process.stdin.on('end', async () => { try { await main(input); } catch (_) { /* ignore */ } process.exit(0); });
 }
 
-module.exports = { endsOnQuestionInline };
+module.exports = { endsOnQuestionInline, spawnFailure };

@@ -143,3 +143,16 @@ test('arcade-beeps exits 0 on malformed stdin', () => {
   assert.strictEqual(r.status, 0);
   assert.ok(!/\bplay /.test(beepsLog(home)), 'malformed input (event="?") must not play');
 });
+
+// spawnSync reports a failed player by RETURNING it, so the `play ...` log line alone can claim
+// a beep that never sounded. spawnFailure() is what turns those two silent outcomes into a
+// `play-failed` line; drive it directly rather than trying to break a real audio player.
+test('arcade-beeps spawnFailure names both silent playback failures', () => {
+  const { spawnFailure } = require(BEEPS_HOOK);
+  assert.strictEqual(spawnFailure({ error: { code: 'ENOENT' }, status: null }), 'ENOENT',
+    'a missing player binary arrives on r.error, never as a throw');
+  assert.strictEqual(spawnFailure({ error: null, status: 1 }), 'exit=1',
+    'a player that ran and failed arrives as a non-zero r.status');
+  assert.strictEqual(spawnFailure({ error: null, status: 0 }), null,
+    'a clean play must stay silent in the log');
+});

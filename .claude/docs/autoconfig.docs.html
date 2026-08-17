@@ -2284,8 +2284,8 @@ This scans \`.claude/\` for all files, extracts \`@description\` metadata, and u
  * copy at <project>/.claude/sounds — no dependency on a global sounds dir.
  *
  * Playback is cross-platform and best-effort: PowerShell SoundPlayer on Windows, afplay on
- * macOS, paplay||aplay on Linux. If none is present the hook simply stays silent — never errors.
- *`
+ * macOS, paplay||aplay on Linux. If none is present the hook stays silent — never errors, but it
+ * DOES log \`play-failed\`, so a silent tab is distinguishable from a hook that never ran.`
             },
             'auto-guard-hook': {
                 filename: 'auto-guard.js',
