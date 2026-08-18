@@ -96,6 +96,13 @@ test('configured shim posts counters and renders the previous response next prom
     assert.equal(typeof received.gates[0].observed, 'number');
     assert.equal(typeof received.drift.liveContext, 'number');
     assert.ok(Array.isArray(received.drift.tenures));
+    // Every prompt-path family travels, present even when this fixture's meter is dark —
+    // an absent family means "the client cannot decide this", not "nothing happened".
+    assert.deepEqual(Object.keys(received.window).sort(),
+      ['lastTurnUsd', 'now5h', 'prev', 'warnedGlobal', 'warnedSession', 'worst']);
+    assert.deepEqual(Object.keys(received.meterCanary).sort(), ['off', 'warnedAt']);
+    assert.equal(typeof received.spendSteps.billingKind, 'string');
+    assert.equal(typeof received.spendSteps.sessionTokens, 'number');
 
     assert.ok(await waitFor(() => fs.existsSync(cacheFileOf(fix)), 5000), 'the child must write the cache');
     const cached = JSON.parse(fs.readFileSync(cacheFileOf(fix), 'utf8'));
@@ -231,11 +238,78 @@ test('the cache lives in the state dir under a pinned name — statusline may re
     path.join('/p', '.claude', 'hooks', '.token-guard', 'verdict-cache-s.json'));
 });
 
+// ── Prompt-path counter families (2026-08-18) ────────────────────────────────────────────────
+// remoteVerdictGuard runs LAST in PROMPT_GUARDS, so by the time the reducer runs, r12a/r12b/
+// spendStepGuard have already advanced the very state their verdicts are decided FROM. The
+// reducer posts a pre-fold snapshot instead; reading `st` live would tell the service
+// "already warned" about every family at once, and forwarding would answer nothing — silently.
+const counterCtx = (fix, over) => Object.assign({
+  cfg: tg.resolveConfig({}), sid: SID, projectDir: fix.proj,
+  m: tg.meterSession(fix.tp, {}), official: null, officialOff: null, st: {},
+}, over);
+
+const PRIOR_ZERO = { window: null, windowWarns: {}, warnedWindow: null,
+  warnedTok: 0, warnedUSD: 0, meterCanaryAt: null };
+
+test('the counters reducer posts pre-fold state, not the state the guards just advanced', () => {
+  const body = tg.collectVerdictCounters(counterCtx(mkFixture(), {
+    // what the fold LEFT behind: the spike baseline moved to now, both ladders already fired
+    st: { lastWindowPct: 61, lastWindowResetsAt: 'later', warnedTok: 6000000, warnedUSD: 30,
+      warnedWindow: { name: '5h window', rung: 80 } },
+    prior: Object.assign({}, PRIOR_ZERO, { window: { pct: 47, resetsAt: 'earlier' } }),
+  }));
+
+  assert.deepEqual(body.window.prev, { pct: 47, resetsAt: 'earlier' },
+    'the spike baseline must be the one r12a REPLACED — posting the one it wrote is a delta of 0');
+  assert.equal(body.window.warnedSession, null,
+    "r12b's own fire this turn must not suppress the verdict being forwarded");
+  assert.equal(body.spendSteps.warnedTok, 0, 'ditto the spend ladder — the crossing is the news');
+  assert.equal(body.spendSteps.warnedUSD, 0);
+});
+
+test('without a snapshot the reducer falls back to live state — standalone callers still work', () => {
+  const body = tg.collectVerdictCounters(counterCtx(mkFixture(), {
+    st: { warnedTok: 1234, lastWindowPct: 12, lastWindowResetsAt: 'r' },
+  }));
+  assert.equal(body.spendSteps.warnedTok, 1234, 'outside the fold there is nothing to have advanced');
+  assert.deepEqual(body.window.prev, { pct: 12, resetsAt: 'r' });
+});
+
+test('snapshotPriorGuardState reads the state the guards are about to move', () => {
+  const prior = tg.snapshotPriorGuardState(counterCtx(mkFixture(), {
+    st: { lastWindowPct: 5, warnedTok: 7, warnedUSD: 9 },
+  }));
+  assert.deepEqual(prior.window, { pct: 5, resetsAt: '' });
+  assert.equal(prior.warnedTok, 7);
+  assert.equal(prior.warnedUSD, 9);
+  assert.equal(prior.warnedWindow, null, 'an unfired ladder snapshots as null, never undefined');
+});
+
+test('the meter-canary family forwards the fetch envelope, never the usage payload', () => {
+  const body = tg.collectVerdictCounters(counterCtx(mkFixture(), {
+    official: { five_hour: { utilization: 40, resets_at: 'z' } },
+    officialOff: { data: { never: 'travels' }, stale: true, at: 111, ageMs: 222 },
+    prior: Object.assign({}, PRIOR_ZERO, { meterCanaryAt: 111 }),
+  }));
+  assert.deepEqual(body.meterCanary, { off: { stale: true, at: 111, ageMs: 222 }, warnedAt: 111 });
+  assert.deepEqual(body.window.now5h, { pct: 40, resetsAt: 'z' },
+    'the live meter reads straight off ctx — it is not state any guard advances');
+});
+
+// Pins a microstep the plan asked for and 1.5a's finding withdrew: all four spend gates fire
+// from spendGatesGuard in PRETOOL_GUARDS, which returns a blocking ask/deny synchronously and
+// has no notes channel. Widening this family would post counters whose answers nothing renders.
+test('gates stays session-only — the PreToolUse ladder has nowhere to render', () => {
+  const body = tg.collectVerdictCounters(counterCtx(mkFixture(), { prior: PRIOR_ZERO }));
+  assert.deepEqual(body.gates.map(g => g.name), ['session']);
+});
+
 test('the library surface statusline-cost.js requires is intact, plus the shim additions', () => {
   for (const k of ['meterSession', 'coldStartTokens', 'resolveConfig', 'findActivePlan',
     'findCurrentSubstep', 'parsePlanLedger',
     'shimActive', 'collectVerdictCounters', 'readVerdictCache', 'renderCachedVerdicts',
-    'freeTierNote', 'shimHealth', 'remoteVerdictGuard', 'spendStepNote']) {
+    'freeTierNote', 'shimHealth', 'remoteVerdictGuard', 'spendStepNote',
+    'snapshotPriorGuardState']) {
     assert.equal(typeof tg[k], 'function', `token-guard must export ${k}`);
   }
 });

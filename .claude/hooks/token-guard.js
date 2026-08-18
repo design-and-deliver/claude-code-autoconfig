@@ -1825,8 +1825,14 @@ function windowThresholdVerdict(worst, warned, cfg) {
 // same tolerance identity the verdict uses.
 function windowWarnsPath() { return path.join(os.homedir(), '.claude', '.token-guard', 'window-warns.json'); }
 
+// The whole map, not one entry: the shim must snapshot it BEFORE r12b saves into it, and at
+// that point the window whose name would key the lookup has not been fetched yet.
+function loadWindowWarns() {
+  try { return JSON.parse(fs.readFileSync(windowWarnsPath(), 'utf8')); } catch (_) { return {}; }
+}
+
 function loadWindowWarn(name) {
-  try { return JSON.parse(fs.readFileSync(windowWarnsPath(), 'utf8'))[name] || null; } catch (_) { return null; }
+  return loadWindowWarns()[name] || null;
 }
 
 function saveWindowWarn(name, entry) {
@@ -3089,12 +3095,18 @@ async function officialUsagePrep(ctx) {
   const cfg = ctx.cfg;
   ctx.crossed = crossedSpendSteps(cfg, ctx.m, ctx.st);
   ctx.official = null;
+  ctx.officialOff = null;
   const notes = [];
   if (cfg.officialUsageFetch &&
       (cfg.windowSpikeWarn || cfg.windowThresholdWarn || cfg.windowThresholdGate ||
        ctx.crossed.length)) {
     const off = await fetchOfficialUsage(ctx.projectDir);
     if (off && off.data) ctx.official = off.data;
+    // The fetch ENVELOPE (stale/at/ageMs), not the usage data — it is the canary's whole input,
+    // and the shim forwards it so the service can date an outage the same way this prep does.
+    // No `?? null` guard: every fetchOfficialUsage path returns an object or null, and the
+    // extra fallback costs a branch this function has no room for (ratchet bar is CC <= 9).
+    ctx.officialOff = off;
     const cv = meterCanaryVerdict(off, loadMeterCanary(ctx.projectDir), cfg.meterSilentWarnHours);
     if (cv) { saveMeterCanary(ctx.projectDir, cv.at); notes.push(meterCanaryNote(cv)); }
   }
@@ -3398,18 +3410,85 @@ function verdictCachePath(projectDir, sid) {
   return path.join(stateDir(projectDir), `verdict-cache-${sid}.json`);
 }
 
+// ⛔ Every forwarded family is decided from state the PROMPT_GUARDS themselves ADVANCE, and
+// remoteVerdictGuard runs LAST in that fold: r12a moves lastWindowPct/ResetsAt, r12b sets
+// warnedWindow + saves the global rung, spendStepGuard sets warnedTok/warnedUSD, and
+// officialUsagePrep re-arms the meter canary. A reducer reading `st` live therefore posts
+// ALREADY-FIRED state, and the service answers "nothing new" on every family at once — the
+// silent way forwarding fails. So the inputs are snapshotted here, before the fold. (1.5a hit
+// exactly this on R12a's attribution interval; this is its general shape.)
+function snapshotPriorGuardState(ctx) {
+  const { st, projectDir } = ctx;
+  return {
+    window: st.lastWindowPct != null
+      ? { pct: st.lastWindowPct, resetsAt: st.lastWindowResetsAt ?? '' } : null,
+    windowWarns: loadWindowWarns(),
+    warnedWindow: st.warnedWindow ?? null,
+    warnedTok: st.warnedTok ?? 0,
+    warnedUSD: st.warnedUSD ?? 0,
+    meterCanaryAt: loadMeterCanary(projectDir),
+  };
+}
+
+// R12a spike + R12b threshold ladder. now5h/worst are the LIVE meter (not advanced state, so
+// they read straight off ctx); everything the guards re-arm comes from the snapshot. Both are
+// null when officialUsagePrep skipped or failed the fetch — the service then decides nothing
+// here, which is the same blind spot the local guards have.
+function verdictWindowCounters(ctx, prior) {
+  const worst = tightestWindow(ctx.official);
+  return {
+    now5h: fiveHourWindow(ctx.official),
+    prev: prior.window,
+    lastTurnUsd: ctx.st.lastTurnDeltaUsd ?? 0,
+    worst,
+    warnedGlobal: worst ? (prior.windowWarns[worst.name] ?? null) : null,
+    warnedSession: prior.warnedWindow,
+  };
+}
+
+function verdictMeterCanaryCounters(ctx, prior) {
+  const off = ctx.officialOff;
+  return {
+    off: off ? { stale: !!off.stale, at: off.at, ageMs: off.ageMs } : null,
+    warnedAt: prior.meterCanaryAt,
+  };
+}
+
+// The server's crossedSpendSteps reads m and st off ONE object, so the five fields ride flat.
+function verdictSpendStepCounters(ctx, prior) {
+  return {
+    billingKind: billingKind(),
+    sessionTokens: sessionTokens(ctx.m),
+    usd: ctx.m.usd,
+    warnedTok: prior.warnedTok,
+    warnedUSD: prior.warnedUSD,
+  };
+}
+
 // Counters reducer, request schema v1 (ADDITIVE-ONLY — never rename, retype, or reorder a
-// family). v1 sends the families whose inputs the prompt path already holds reduced; the
-// remaining families join as their reducers move here.
+// family). v1 sends every PROMPT-PATH family: the four prompt guards whose verdicts have a
+// renderer (drift, window, meterCanary, spendSteps, recovery) plus the session gate.
+//
+// `gates` stays session-only DELIBERATELY — the plan's "widen it to turn/rent/hardUsd" is
+// withdrawn. All four gates fire from spendGatesGuard in PRETOOL_GUARDS, which must return a
+// blocking ask/deny synchronously and has no notes channel, so a one-turn-lagged verdict has
+// nowhere to land (same call as R8/R10/R18 — see CACHED_VERDICT_RENDERERS). Widening would
+// post three more counter families whose answers nothing can render.
 function collectVerdictCounters(ctx) {
   const { cfg, m, st, projectDir, sid } = ctx;
   const tenures = readLedgerTenures(projectDir, sid);
+  // The fallback keeps the reducer callable standalone (tests, a statusline caller) — outside
+  // the prompt fold there is nothing to have advanced, so live state IS the prior state.
+  const prior = ctx.prior ?? snapshotPriorGuardState(ctx);
   return {
     schemaVersion: 1,
     license: { key: cfg.verdictServiceKey },
     config: loadUserGuardConfig(projectDir),
     drift: { tenures, liveContext: m.liveContext,
       scope: tenures.length ? tenures[tenures.length - 1].scope : '' },
+    window: verdictWindowCounters(ctx, prior),
+    meterCanary: verdictMeterCanaryCounters(ctx, prior),
+    spendSteps: verdictSpendStepCounters(ctx, prior),
     gates: [{ name: 'session', observed: sessionTokens(m),
       gateAt: st.sessionGateAt, fires: st.sessionGateFires || 0 }],
     recovery: { store: loadRecoverySpend(projectDir), nowMs: Date.now() },
@@ -3590,6 +3669,9 @@ async function onUserPromptSubmit(data, projectDir) {
   // R12a's attribution baseline, captured BEFORE r12aWindowSpikeGuard advances it — the shim
   // renders cached verdicts from the LAST guard in this fold, long after that advance.
   ctx.priorWindowAtIso = st.lastWindowAtIso || null;
+  // Same reason, wider: every family the shim FORWARDS is decided from state this fold
+  // advances (see snapshotPriorGuardState). Only paid when a service is configured.
+  if (shimActive(cfg)) ctx.prior = snapshotPriorGuardState(ctx);
 
   const notes = [];
   for (const guard of PROMPT_GUARDS) {
@@ -5054,5 +5136,6 @@ module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, l
   planBoundaryVerdict, planBoundaryNote, planModelMismatchLine,
   shimActive, collectVerdictCounters, verdictCachePath, readVerdictCache, writeVerdictCache,
   renderCachedVerdicts, freeTierNote, shimHealth, remoteVerdictGuard, spendStepNote,
+  snapshotPriorGuardState,                     // …the pre-fold snapshot forwarding depends on
                                                // remote-verdict shim — token-guard-shim.test.cjs
 };
