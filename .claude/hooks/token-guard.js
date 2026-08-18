@@ -281,6 +281,8 @@ const COLD_START_BACKFILL_BYTES = 128 * 1024;// bounded head-read per transcript
 // fat line now does, and could only bind above a ~113k floor, so it was dead at this machine's ~62k.
 const RECOVERY_KEEP_MAX = 200;               // R21: recovery-spend.json sample cap (weeks of clears)
 const DAY_MS = 86400000;                     // R21: the reporting window, and the report's own one-shot
+const CLEAR_ADVICE_TTL_MS = 1800000;         // R21: how long a "clear now" recommendation stays claimable
+const CLEAR_ADVICE_THROTTLE_MS = 30000;      // R21: statusline repaints — refresh the stamp at most this often
 const TASK_NORM_TOK = 100000;                // R13: a normal task finishes under this — the spiral yardstick
 const PLAN_STEER_TOK = TASK_NORM_TOK;        // R13a: beyond-small bar quoted in the plan-first steer — any task
                                              // beyond one normal session is PLAN-BASED (agreed 2026-08-05)
@@ -2451,6 +2453,52 @@ function coldStartTokens(projectDir, sid, m, transcriptPath) {
 // next prompt rewrites it). Reporting is recoveryWasteVerdict: the trailing 24h total against
 // the recoveryWasteTokens line, at most one note per 24h, stamped in the STORE rather than
 // session state because the habit being measured spans sessions by definition.
+// ── R21 provenance: did WE ask for this /clear? (2026-08-17) ─────────────────────────────────
+// Until now R21 counted every recovery turn identically, so a day of clears this guard itself
+// demanded read back to the user as their own wasteful habit — a note that contradicts the advice
+// which produced it, and quietly casts doubt on every earlier recommendation (Andrew 2026-08-17).
+// Four surfaces recommend clearing: R13b/R14/R20's restart bullet (restartVerdict -> clear:true),
+// R17's plan-boundary note, and statusline-cost.js's nudge. Each now stamps clear-advice.json
+// here, and the Stop path claims that stamp to mark the sample it bills.
+//
+// The join CANNOT be by sid: a /clear mints a fresh session, so the advised session and the
+// recovering one are different by construction. So it is a one-shot claim on the most recent
+// unconsumed stamp within CLEAR_ADVICE_TTL_MS — project-scoped, the same grain the spend store
+// already uses, and the same grain the habit itself has.
+function clearAdvicePath(projectDir) { return path.join(stateDir(projectDir), 'clear-advice.json'); }
+
+function loadClearAdvice(projectDir) {
+  try { return JSON.parse(fs.readFileSync(clearAdvicePath(projectDir), 'utf8')) || {}; }
+  catch (_) { return {}; }
+}
+
+// Called from every surface that recommends clearing. Throttled because the statusline repaints
+// constantly while its nudge is up, and an unthrottled stamp would be one disk write per paint.
+// A CONSUMED stamp always re-arms: the throttle exists to collapse repaints of one standing
+// recommendation, never to swallow the next genuine one.
+function noteClearAdvice(projectDir, source, nowMs) {
+  const prev = loadClearAdvice(projectDir);
+  if (prev.at && !prev.consumed && nowMs - prev.at < CLEAR_ADVICE_THROTTLE_MS) return;
+  try {
+    fs.mkdirSync(stateDir(projectDir), { recursive: true });
+    fs.writeFileSync(clearAdvicePath(projectDir),
+      JSON.stringify({ at: nowMs, source, consumed: false }));
+  } catch (_) { /* a lost stamp only mis-attributes one sample — never break the hook */ }
+}
+
+// One stamp -> one prompted recovery. Returns the source string when this recovery may claim it,
+// null otherwise (no stamp, already claimed, or older than the TTL). The TTL is what keeps a
+// recommendation from yesterday excusing a reflexive clear today.
+function claimClearAdvice(projectDir, nowMs) {
+  const a = loadClearAdvice(projectDir);
+  if (!a.at || a.consumed || nowMs - a.at > CLEAR_ADVICE_TTL_MS) return null;
+  try {
+    fs.writeFileSync(clearAdvicePath(projectDir),
+      JSON.stringify(Object.assign({}, a, { consumed: true, consumedAt: nowMs })));
+  } catch (_) { /* an unclaimable stamp just means the next recovery may claim it too */ }
+  return a.source || 'unknown';
+}
+
 function recoverySpendPath(projectDir) { return path.join(stateDir(projectDir), 'recovery-spend.json'); }
 
 function loadRecoverySpend(projectDir) {
@@ -2471,35 +2519,56 @@ function saveRecoverySpend(projectDir, store) {
 
 // One recovery turn -> one sample. tok is work-weighted (R13b's unit, so the two readings share
 // a yardstick); usd is the turn's weighted delta — both computed by the Stop path that calls this.
+// `prompted`/`source` ride only when a stamp was claimed: an absent field reads as self-initiated,
+// which is what every sample written before 2026-08-17 is, so old stores need no migration.
 function recordRecoverySpend(projectDir, sid, tok, usd, nowMs) {
   const store = loadRecoverySpend(projectDir);
-  store.samples.push({ at: nowMs, sid,
-    tok: Math.round(tok), usd: Math.round(usd * 100) / 100 });
+  const source = claimClearAdvice(projectDir, nowMs);
+  const sample = { at: nowMs, sid,
+    tok: Math.round(tok), usd: Math.round(usd * 100) / 100 };
+  if (source) { sample.prompted = true; sample.source = source; }
+  store.samples.push(sample);
   saveRecoverySpend(projectDir, store);
 }
 
 // The daily reading. Null while healthy: an empty day, a total under the line, or a report
 // already shipped within 24h. The caller stamps lastReportAt only when the note actually ships,
 // so a quiet check today never eats tomorrow's report.
+//
+// Only SELF-INITIATED recoveries are weighed against the line (2026-08-17). A recovery this guard
+// asked for is spend we caused, and billing it back as the user's habit is the one reading that
+// makes our own earlier advice look like a mistake. Prompted samples stay in the store — the
+// analyze digest and /cost-compare still see total recovery spend — and ride out on the verdict
+// so the note can name them; a day that is mostly prompted is a defect report about the fat line
+// and the plan-boundary nudge, not about the user.
 function recoveryWasteVerdict(store, wasteTokens, nowMs) {
   const dayAgo = nowMs - DAY_MS;
   if ((store.lastReportAt || 0) > dayAgo) return null;
   const day = store.samples.filter(s => (s.at || 0) > dayAgo);
-  const tok = day.reduce((a, s) => a + (s.tok || 0), 0);
-  if (!day.length || tok < wasteTokens) return null;
-  return { n: day.length, tok, usd: day.reduce((a, s) => a + (s.usd || 0), 0) };
+  const own = day.filter(s => !s.prompted);
+  const tok = own.reduce((a, s) => a + (s.tok || 0), 0);
+  if (!own.length || tok < wasteTokens) return null;
+  return { n: own.length, tok, usd: own.reduce((a, s) => a + (s.usd || 0), 0),
+    prompted: day.length - own.length,
+    promptedTok: day.reduce((a, s) => a + (s.prompted ? s.tok || 0 : 0), 0) };
 }
 
 // Relay copy: ONE line to the user, factual, with the crossed line named (a number the user
 // sees carries its threshold). $ rides only under wantDollars, like every other card here.
+// The prompted tail rides only when there were prompted recoveries. Without it the figure looks
+// wrong beside /cost-compare's total (which counts every recovery), and naming the guard's own
+// share is what keeps the note from reading as a one-sided accusation.
 function recoveryCostNote(v, wasteTokens, usd$) {
   const amount = `~${fmtK(v.tok)} tokens` + (usd$ ? ` (≈${fmtUSD(v.usd)})` : '');
   const word = v.n === 1 ? 'recovery' : 'recoveries';
-  return `recovery-cost: ${v.n} ${word} (/continue-style turns) in the last 24h cost ` +
-    `${amount}, over the ${fmtK(wasteTokens)}/day reporting line. Relay this to the user as ` +
-    `ONE standalone line before your answer — "♻️ FYI — ${v.n} session ${word} in the last ` +
-    `24h cost ${amount}; if any of those /clears were reflexive, letting sessions run longer ` +
-    `is cheaper." — then a horizontal rule, then the answer. Never expand it into a section.`;
+  const tail = v.prompted
+    ? ` (${v.prompted} more followed my own /clear suggestion and are not counted.)` : '';
+  return `recovery-cost: ${v.n} self-initiated ${word} (/continue-style turns) in the last 24h ` +
+    `cost ${amount}, over the ${fmtK(wasteTokens)}/day reporting line — recoveries this guard ` +
+    `itself recommended are excluded. Relay this to the user as ONE standalone line before your ` +
+    `answer — "♻️ FYI — ${v.n} session ${word} you started on your own cost ${amount} in the ` +
+    `last 24h; if any of those /clears were reflexive, letting sessions run longer is ` +
+    `cheaper.${tail}" — then a horizontal rule, then the answer. Never expand it into a section.`;
 }
 
 // ── restartVerdict / restartBullet: price the option the Choice bullet leaves unpriced (R15) ──
@@ -3180,6 +3249,10 @@ function r17PlanBoundaryGuard(ctx) {
     const v = planBoundaryVerdict(ctx.projectDir);
     if (!v || v.isComplete) return { notes: [], block: null };
     const sessionModel = (ctx.m && ctx.m.main && ctx.m.main.lastModel) || '';
+    // R21 provenance — this note's whole content is "a wrapped substep is the natural moment to
+    // recommend /clear". A clear that follows it came from us, however indirectly (the model
+    // relays it), so R21 must not bill it back to the user. See noteClearAdvice.
+    noteClearAdvice(ctx.projectDir, 'R17-plan-boundary', Date.now());
     return { notes: [planBoundaryNote(v, sessionModel)], block: null };
   } catch (_) { return { notes: [], block: null }; }
 }
@@ -3741,6 +3814,10 @@ function turnSpendAsk(ctx, turnTok) {
   const rv = restartVerdict(m.liveContext, st.turnGateAt - turnTok, cfg.contextWarnTokens,
     coldStartTokens(ctx.projectDir, ctx.sid, m, ctx.data && ctx.data.transcript_path),
     cfg.contextExcessTokens);
+  // R21 provenance — this card is about to recommend clearing, so a recovery that follows it is
+  // ours and must not come back as the user's habit. Stamped at the verdict, not inside the copy
+  // helpers, so restartBullet/choiceBullet stay pure for the copy-contract test.
+  if (rv && rv.clear) noteClearAdvice(ctx.projectDir, 'R13b', Date.now());
   // Headline reading, then cost / lever / restart / choice, one per line. R14 below runs a
   // tighter two-bullet cut; R13b keeps the lever because "a plan with session-sized substeps"
   // is a different instruction from its headline, not a restatement of it.
@@ -3914,6 +3991,9 @@ function r14TurnRentGuard(ctx) {
   // speaks on the first call AFTER the window crosses the fat line, instead of sitting out a
   // doubled width that a silent fire would have bought.
   if (!(verdict && verdict.kind === 'deny') && rv && !rv.clear) return null;
+  // R21 provenance — past the silence clause the card definitely speaks, and on this branch its
+  // recommendation is /clear + /continue. See noteClearAdvice.
+  if (rv && rv.clear) noteClearAdvice(ctx.projectDir, 'R14', Date.now());
   st.rentGateFires = fires;
   st.rentGateAt = nextAt;
   return gateAsk(ctx, rentAskCopy(ctx, rent, rv));
@@ -4034,6 +4114,9 @@ function sessionTotalAsk(ctx, tok) {
   // a doubled width that a silent fire would have bought. That matters more here than on R14: a
   // session total never comes back down, so a width skipped now is skipped for good.
   if (!(verdict && verdict.kind === 'deny') && rv && !rv.clear) return null;
+  // R21 provenance — same reasoning as R14 above: past the silence clause this card speaks, and
+  // the only lever it offers is /clear + /continue.
+  if (rv && rv.clear) noteClearAdvice(ctx.projectDir, 'R20', Date.now());
   st.sessionGateFires = fires;
   st.sessionGateAt = nextAt;
   // ONE cost bullet, and it deliberately does not re-price the rent: R14 owns trips × context and
@@ -4865,6 +4948,7 @@ module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, l
   r13bTurnSpendGuard, r14TurnRentGuard,        // …and the two guards it drives through the exemption
   recordRecoverySpend, loadRecoverySpend, recoveryWasteVerdict, recoveryCostNote,
   r21RecoveryCostGuard,                        // …R21 recovery-cost meter, same suite
+  noteClearAdvice, claimClearAdvice, loadClearAdvice,  // …R21 provenance join, same suite
   r20SessionTotalGuard,                        // test/token-guard-session-gate.test.js — R20
   bashVerdict,                                 // test/token-guard-bomb-gate.test.js — the Bash bomb rows
   crossedSpendSteps,                           // test/token-guard-ladder.test.js — session-total ladder

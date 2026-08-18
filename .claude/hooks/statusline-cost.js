@@ -137,6 +137,11 @@ function render(tg, data, projectDir) {
   const be = breakEven(ctx, cold);
   if (!be.clear) return '';
   if (midPlanSubstep(tg, projectDir)) return '';
+  // R21 provenance — past both gates this line is on screen telling the user to clear, so a
+  // recovery that follows is ours and must not come back as their habit (token-guard's
+  // noteClearAdvice). Throttled inside that helper: the statusline repaints constantly while
+  // the nudge stands, and one standing recommendation must not become a disk write per paint.
+  if (tg.noteClearAdvice) tg.noteClearAdvice(projectDir, 'statusline', Date.now());
   const DIM = '\x1b[2m', YEL = '\x1b[33m', OFF = '\x1b[0m';
   const remedy = be.upfront <= 0
     ? `/clear then /continue to save ${be.save1} tokens per turn, starting on the first turn`
