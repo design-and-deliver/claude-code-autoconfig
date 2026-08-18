@@ -3134,11 +3134,14 @@ function r12aWindowSpikeGuard(ctx) {
 // account-level, so "that last turn" is only sayable when the ledger shows we were alone.
 // The confirm card returns null when the window resets before projected exhaustion —
 // provably no throttle risk, so nothing is relayed at all (threshold ladder still runs).
-function spikeNoteFor(ctx, sv, now5h) {
-  const st = ctx.st;
-  const attr = spikeAttribution(readSpendLedger(st.lastWindowAtIso), ctx.sid);
-  const mins = st.lastWindowAtIso && Number.isFinite(Date.parse(st.lastWindowAtIso))
-    ? Math.max(1, Math.round((Date.now() - Date.parse(st.lastWindowAtIso)) / 60000)) : null;
+// `sinceIso` overrides the interval's start. The shim's cached-verdict renderer needs it: it
+// runs LAST in the prompt fold, by which point r12aWindowSpikeGuard has already advanced
+// st.lastWindowAtIso to now — attributing the spike to an interval that started this turn.
+function spikeNoteFor(ctx, sv, now5h, sinceIso) {
+  const since = sinceIso !== undefined ? sinceIso : ctx.st.lastWindowAtIso;
+  const attr = spikeAttribution(readSpendLedger(since), ctx.sid);
+  const mins = since && Number.isFinite(Date.parse(since))
+    ? Math.max(1, Math.round((Date.now() - Date.parse(since)) / 60000)) : null;
   return ctx.cfg.windowSpikeConfirm
     ? windowSpikeConfirmNote(sv, now5h, ctx.sid, attr, mins)
     : windowSpikeNote(sv, now5h, attr, mins);
@@ -3170,6 +3173,13 @@ function spendStepGuard(ctx) {
   if (!ctx.crossed.length) return { notes: [], block: null };
   if (billingKind() === 'subscription') ctx.st.warnedTok = Math.max(...ctx.crossed);
   else ctx.st.warnedUSD = Math.max(...ctx.crossed);
+  return { notes: [spendStepNote(ctx)], block: null };
+}
+
+// The check-in copy, split out from the guard so the shim's cached-verdict path can word a
+// server-decided `spend-steps` crossing with the same block. Pure over ctx — the one-shot
+// bookkeeping (warnedTok/warnedUSD) stays in the guard, where the crossing is actually owned.
+function spendStepNote(ctx) {
   // Anthropic's own percentages lead when reachable — the definitive measures; everything
   // after is supporting detail (Andrew 2026-07-12).
   const ol = ctx.official ? officialLines(ctx.official) : [];
@@ -3178,11 +3188,9 @@ function spendStepGuard(ctx) {
     const pl = planLine(planInfo());
     if (pl) statLines.push(pl);
   }
-  return { notes: [
-    `token check-in: relay to the user in your next reply as a STANDALONE stat block — ` +
+  return `token check-in: relay to the user in your next reply as a STANDALONE stat block — ` +
     `one metric per line exactly as given (labels, numbers, and indentation verbatim), ` +
-    `no drama, no commentary between the lines:\n${statLines.join('\n')}`
-  ], block: null };
+    `no drama, no commentary between the lines:\n${statLines.join('\n')}`;
 }
 
 // The check-in's session lines: total (main + fleets), then qualifiers only when they change
@@ -3479,9 +3487,38 @@ function freeTierNote(liveContext, cfg) {
     `session — when the current task lands, /clear then /continue starts a cheaper session.`;
 }
 
-function renderCachedVerdicts(cached) {
+// Rule → client-side renderer, for the verdicts the endpoint returns as FIELDS ONLY. Those
+// rules need data the server never sees (the local spend ledger, the live 5h window, the sid,
+// the session meter), so the server decides and the surviving client copy words it. A rule
+// that ships `text` is server-worded and never reaches this table.
+//
+// `gate` is deliberately ABSENT, and so are R8 / R10 / R18 / restart: those fire from
+// PRETOOL_GUARDS, which must return a blocking ask/deny synchronously and has no notes
+// channel — a cached verdict has nowhere to render there. They stay client-side permanently.
+//
+// Each renderer re-checks the CLIENT's own config toggle. A family the user turned off locally
+// stays silent even when the service fires it — the local switch is the one the user can see.
+const CACHED_VERDICT_RENDERERS = {
+  R12a: (v, ctx) => (ctx.cfg.windowSpikeWarn
+    ? spikeNoteFor(ctx, v, fiveHourWindow(ctx.official), ctx.priorWindowAtIso) : null),
+  R12b: (v, ctx) => (ctx.cfg.windowThresholdWarn ? windowThresholdNote(v, ctx.cfg) : null),
+  'spend-steps': (_v, ctx) => spendStepNote(ctx),
+  R21: (v, ctx) => (ctx.cfg.recoveryWasteTokens != null
+    ? recoveryCostNote(v, ctx.cfg.recoveryWasteTokens, ctx.usd$) : null),
+};
+
+function renderOneVerdict(v, ctx) {
+  if (typeof v.text === 'string' && v.text) return v.text; // server-worded copy always wins
+  const render = ctx ? CACHED_VERDICT_RENDERERS[v.rule] : null;
+  if (!render) return null; // unknown rule (a newer service than this client) renders nothing
+  try { return render(v, ctx); } catch (_) { return null; }
+}
+
+// `ctx` is optional: without it only server-worded verdicts render, which is what a caller
+// holding just a cache file (statusline) can honestly do.
+function renderCachedVerdicts(cached, ctx) {
   if (!cached || !Array.isArray(cached.verdicts)) return [];
-  return cached.verdicts.filter(v => v && typeof v.text === 'string' && v.text).map(v => v.text);
+  return cached.verdicts.filter(Boolean).map(v => renderOneVerdict(v, ctx)).filter(Boolean);
 }
 
 function remoteVerdictGuard(ctx) {
@@ -3490,7 +3527,7 @@ function remoteVerdictGuard(ctx) {
   try {
     postVerdictAsync(ctx);
     const cached = readVerdictCache(projectDir, sid, cfg);
-    const notes = renderCachedVerdicts(cached);
+    const notes = renderCachedVerdicts(cached, ctx);
     if (!cached || !(cached.post && cached.post.ok)) {
       const basic = freeTierNote(m.liveContext, cfg); // service dark: degrade to the free floor
       if (basic) notes.push(basic);
@@ -3549,6 +3586,10 @@ async function onUserPromptSubmit(data, projectDir) {
   // SESSION, and resetting them here would recreate the exact blind spot R20 exists to close.
   ctx.m = m;
   ctx.usd$ = wantDollars(cfg); // false => tokens-only copy (subscription users)
+
+  // R12a's attribution baseline, captured BEFORE r12aWindowSpikeGuard advances it — the shim
+  // renders cached verdicts from the LAST guard in this fold, long after that advance.
+  ctx.priorWindowAtIso = st.lastWindowAtIso || null;
 
   const notes = [];
   for (const guard of PROMPT_GUARDS) {
@@ -5012,6 +5053,6 @@ module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, l
   findActivePlan, parsePlanSubsteps, parsePlanLedger, findCurrentSubstep,    // R17 plan-boundary
   planBoundaryVerdict, planBoundaryNote, planModelMismatchLine,
   shimActive, collectVerdictCounters, verdictCachePath, readVerdictCache, writeVerdictCache,
-  renderCachedVerdicts, freeTierNote, shimHealth, remoteVerdictGuard,
+  renderCachedVerdicts, freeTierNote, shimHealth, remoteVerdictGuard, spendStepNote,
                                                // remote-verdict shim — token-guard-shim.test.cjs
 };

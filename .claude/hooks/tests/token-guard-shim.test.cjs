@@ -149,6 +149,83 @@ test('renderCachedVerdicts renders text-bearing verdicts only', () => {
   assert.deepEqual(tg.renderCachedVerdicts(null), []);
 });
 
+// ── Field-only verdicts (2026-08-18) ────────────────────────────────────────────────────────
+// The endpoint attaches `text` for only 3 of its rules; the rest return verdict FIELDS,
+// deliberately, because their copy needs client-side data the server never sees (the local
+// spend ledger, the live 5h window, the sid, the session meter). Those verdicts used to be
+// dropped on the floor. The dispatch table words them through the surviving client renderers.
+const renderCtx = (fix, cfgOver) => ({
+  cfg: tg.resolveConfig(Object.assign({ planDetect: false }, cfgOver)),
+  sid: SID, projectDir: fix.proj, usd$: false, st: {},
+  m: tg.meterSession(fix.tp, {}), official: null, priorWindowAtIso: null,
+});
+
+test('field-only verdicts render through the client copy — one case per dispatched rule', () => {
+  const ctx = renderCtx(mkFixture());
+  const one = (v) => {
+    const out = tg.renderCachedVerdicts({ verdicts: [v] }, ctx);
+    assert.equal(out.length, 1, `${v.rule} must render exactly one note`);
+    return out[0];
+  };
+
+  assert.match(one({ rule: 'R21', n: 3, tok: 120000, usd: 1.2, prompted: 0, promptedTok: 0 }),
+    /recovery-cost: 3 self-initiated recoveries/,
+    'R21 is the regression case — a cached recovery verdict produced NOTHING before the dispatch');
+  assert.match(one({ rule: 'R12b', name: '5-hour window', pct: 82, rung: 80, topRung: 90, resetsAt: null }),
+    /window-threshold: .*~82% used/);
+  assert.match(one({ rule: 'R12a', fire: true, spikePct: 14, fromPct: 40, toPct: 54, estimated: false }),
+    /^window-spike/);
+  assert.match(one({ rule: 'spend-steps', crossed: [10], billingKind: 'api' }), /^token check-in:/);
+});
+
+// The point of the dispatch: the server decides, the CLIENT words it — using state the server
+// never receives. windowSpikeConfirm is exactly that, and it picks between two different copies.
+test('R12a is worded from client-side state, not from the cached verdict alone', () => {
+  const fix = mkFixture();
+  const spike = { rule: 'R12a', fire: true, spikePct: 14, fromPct: 40, toPct: 54, estimated: false };
+  const render = cfgOver => tg.renderCachedVerdicts({ verdicts: [spike] }, renderCtx(fix, cfgOver))[0];
+
+  const card = render({ windowSpikeConfirm: true });
+  assert.match(card, /^window-spike\(confirm\):/, 'the confirm toggle is client-side — the service cannot know it');
+  assert.match(card, new RegExp(`/analyze-session ${SID}`), 'the sid is threaded in at render time');
+
+  assert.match(render({ windowSpikeConfirm: false }), /^window-spike: /,
+    'toggle off renders the passive note instead — same verdict, different client copy');
+});
+
+test('PreToolUse rules and unknown rules render nothing, and a bad verdict never throws', () => {
+  const ctx = renderCtx(mkFixture());
+  // Two guard folds, and only PROMPT_GUARDS has a notes channel. The spend gates, R8, R10,
+  // R18 and restart all return a blocking ask/deny from PreToolUse — a cached verdict has
+  // nowhere to render there, so they are deliberately absent from the dispatch table.
+  for (const rule of ['gate', 'R8', 'R10', 'R18', 'restart']) {
+    assert.deepEqual(tg.renderCachedVerdicts({ verdicts: [{ rule, name: 'session' }] }, ctx), [],
+      `${rule} fires from PreToolUse and must not surface as a prompt note`);
+  }
+  assert.deepEqual(tg.renderCachedVerdicts({ verdicts: [{ rule: 'R99-from-the-future' }] }, ctx), [],
+    'a newer service than this client renders nothing — additive-only cuts both ways');
+  assert.doesNotThrow(() => tg.renderCachedVerdicts({ verdicts: [{ rule: 'R21' }] }, ctx),
+    'a renderer handed junk fails open to silence, never to a dead hook');
+});
+
+test('server-worded text wins, and the client\'s own switch still governs', () => {
+  const fix = mkFixture();
+  assert.deepEqual(tg.renderCachedVerdicts(
+    { verdicts: [{ rule: 'R21', text: 'SERVER-WORDED', n: 1, tok: 1 }] }, renderCtx(fix)),
+  ['SERVER-WORDED'], 'a rule that ships text must never be re-worded by the client');
+
+  assert.deepEqual(tg.renderCachedVerdicts(
+    { verdicts: [{ rule: 'R21', n: 3, tok: 120000, usd: 1.2, prompted: 0 }] },
+    renderCtx(fix, { recoveryWasteTokens: null })),
+  [], 'a family the user turned off locally stays off, whatever the service decided');
+});
+
+test('without ctx only server-worded verdicts render — the statusline\'s honest subset', () => {
+  assert.deepEqual(tg.renderCachedVerdicts({ verdicts: [
+    { rule: 'R6', text: 'one' }, { rule: 'R21', n: 3, tok: 120000, usd: 1.2, prompted: 0 },
+  ] }), ['one']);
+});
+
 test('the cache lives in the state dir under a pinned name — statusline may read it', () => {
   assert.equal(tg.verdictCachePath('/p', 's'),
     path.join('/p', '.claude', 'hooks', '.token-guard', 'verdict-cache-s.json'));
@@ -158,7 +235,7 @@ test('the library surface statusline-cost.js requires is intact, plus the shim a
   for (const k of ['meterSession', 'coldStartTokens', 'resolveConfig', 'findActivePlan',
     'findCurrentSubstep', 'parsePlanLedger',
     'shimActive', 'collectVerdictCounters', 'readVerdictCache', 'renderCachedVerdicts',
-    'freeTierNote', 'shimHealth', 'remoteVerdictGuard']) {
+    'freeTierNote', 'shimHealth', 'remoteVerdictGuard', 'spendStepNote']) {
     assert.equal(typeof tg[k], 'function', `token-guard must export ${k}`);
   }
 });
