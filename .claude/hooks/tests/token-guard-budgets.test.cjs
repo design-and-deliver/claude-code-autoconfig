@@ -198,6 +198,58 @@ test('E2E: R3 bomb note prices re-reads at cache weight, not ×50 full price (20
   assert.doesNotMatch(out, /chars\)/, 'culprit char-count cut 2026-07-23 (chars are noise; tokens are the currency)');
 });
 
+// R3's OUT is priced, not fixed (2026-08-18). Until this branch every landing ended in
+// "/clear, then /continue" regardless of whether a restart could ever repay its own startup —
+// caught live on a 72k bomb at 101k live context, where breaking even needed ~19 more round
+// trips and the session had one left. The out now asks restartVerdict, the same reading the
+// four spend-gate surfaces already use.
+function bombOut(dir, sid, first, after, coldStarts) {
+  const tp = path.join(dir, 'main.jsonl');
+  fs.writeFileSync(tp, usageLine('m1', first));
+  const prompt = { hook_event_name: 'UserPromptSubmit', prompt: 'hello',
+    session_id: sid, transcript_path: tp };
+  runHook(dir, prompt); // seeds lastLiveContext
+  if (coldStarts) {
+    const sd = path.join(dir, '.claude', 'hooks', '.token-guard');
+    fs.mkdirSync(sd, { recursive: true });
+    fs.writeFileSync(path.join(sd, 'cold-start.json'), JSON.stringify({ samples: coldStarts }));
+  }
+  fs.appendFileSync(tp, usageLine('m2', after));
+  return runHook(dir, prompt);
+}
+
+test('E2E: R3 under the fat line recommends STAYING, never /clear', () => {
+  // 61k of live context against the flat 150k line — clearing sheds little, so the out must not
+  // be the restart. Same numbers as the cache-weight test above, which predates the branch.
+  const out = bombOut(mkProject(), 'sid-stay', 1000, 61000);
+  assert.match(out, /context-bomb/);
+  assert.match(out, /clearing is NOT the move here/);
+  assert.match(out, /Recommend STAYING/);
+  assert.doesNotMatch(out, /\/clear, then \/continue/,
+    'advice that costs more than it saves was the whole bug (2026-08-18)');
+});
+
+test('E2E: R3 past the fat line still recommends /clear, then /continue', () => {
+  const out = bombOut(mkProject(), 'sid-clear', 1000, 200000);
+  assert.match(out, /context-bomb/);
+  assert.match(out, /\/clear, then \/continue to drop this weight/);
+  assert.doesNotMatch(out, /Recommend STAYING/);
+});
+
+test('E2E: R3 quotes the payback trips only once a floor is actually measured', () => {
+  // Three seeded samples clear COLD_START_MIN_N, so the floor is real: 65k floor + 88k excess
+  // puts the line at ~153k, and 120k of context sits under it — shed ~5.5k a trip against a 65k
+  // startup. The trip count is the part that needs the measurement; the verdict is not.
+  const samples = [{ sid: 'a', tok: 65000 }, { sid: 'b', tok: 65000 }, { sid: 'c', tok: 65000 }];
+  const measured = bombOut(mkProject(), 'sid-trips', 1000, 120000, samples);
+  assert.match(measured, /Recommend STAYING/);
+  assert.match(measured, /~\d+ more round trips just to repay its own startup/);
+  // …and with no floor on disk the same verdict lands without inventing a number.
+  const unmeasured = bombOut(mkProject(), 'sid-notrips', 1000, 61000);
+  assert.match(unmeasured, /Recommend STAYING/);
+  assert.doesNotMatch(unmeasured, /more round trips/);
+});
+
 test('E2E: R3 attribution Skill(name) records an observed row alongside the warn', () => {
   const dir = mkProject();
   const tp = path.join(dir, 'main.jsonl');

@@ -2872,6 +2872,52 @@ function r3ContextBombGuard(ctx) {
   return { notes, block: null };
 }
 
+// Whether a bomb is worth a RESTART is a different question from whether it landed, and until
+// 2026-08-18 this rule never asked it — every landing ended in "/clear, then /continue". The four
+// spend-gate surfaces already price the restart (restartVerdict): UNDER the fat line a fresh
+// session re-pays a startup floor bigger than the bomb costs in rent, so that advice loses money.
+// Measured the day this branch was added: a 72k bomb at 101k live context against this machine's
+// ~65k floor sheds ~3.5k a trip and needs ~19 more round trips to break even — on a session with
+// one left. The user caught it, correctly, as advice that should have been arithmetic.
+//
+// R3 has no spend gate, so it has no `gap`: that argument is restartVerdict's VALIDITY guard (does
+// the gate still have headroom), never an input to the arithmetic — the jump satisfies it honestly,
+// being over bombJumpTokens by construction. If gap ever becomes load-bearing, revisit this call.
+function bombRestartVerdict(ctx, jump) {
+  const { cfg, m } = ctx;
+  return restartVerdict(m.liveContext, jump, cfg.contextWarnTokens,
+    coldStartTokens(ctx.projectDir, ctx.sid, m, ctx.data && ctx.data.transcript_path),
+    cfg.contextExcessTokens);
+}
+
+// The out, priced. Clearing pays -> the standing advice. It demonstrably does not -> say so,
+// because a warning that ALWAYS ends in "/clear" teaches the reader to skip the ending, and the
+// one time it mattered they skip that too.
+//
+// `rv` is null ONLY when there is nothing to price at all (no live context reading) — an
+// UNMEASURED cold-start floor still yields a verdict, judged against the flat fat line, exactly
+// as the four spend-gate surfaces judge it. The trip count is the part that needs a measured
+// floor, so it is quoted only when restartVerdict actually computed one.
+function bombOutClause(rv) {
+  if (!rv || rv.clear) {
+    return (
+      `then the out ACTION-FIRST (ux copy/action-lines-lead-with-the-action): ` +
+      `"/clear, then /continue to drop this weight and keep the thread" (a one-time reference ` +
+      `belongs in a disposable subagent; once its useful part is extracted, /continue picks the ` +
+      `thread back up in the fresh session, nothing to prep).`
+    );
+  }
+  const trips = rv.payback
+    ? ` — a fresh session would have to run ~${rv.payback} more round trips just to repay its ` +
+      `own startup`
+    : '';
+  return (
+    `then say plainly that clearing is NOT the move here: ${rv.why}${trips}. Recommend STAYING ` +
+    `in this session and finishing the work. Do NOT suggest /clear or /continue — the cheap ` +
+    `trim is to send one-shot references to a disposable subagent from here on, not to restart.`
+  );
+}
+
 // A bomb landed: attribute it, record a skill landing for R8 door 1, arm the fat-context
 // escalation, and word the warning.
 function bombLandingNote(ctx, jump) {
@@ -2893,11 +2939,8 @@ function bombLandingNote(ctx, jump) {
     `${culprit} — every future turn re-reads it: ${bombCost}. Relay as ` +
     `a STANDALONE warning block, never woven into your answer: open with "⚠️ Hey —" and ` +
     `keep a warm conversational voice (helpful friend, not system log), 2-3 plain sentences ` +
-    `naming what landed, then the out ACTION-FIRST (ux copy/action-lines-lead-with-the-action): ` +
-    `"/clear, then /continue to drop this weight and keep the thread" (a one-time reference ` +
-    `belongs in a disposable subagent; once its useful part is extracted, /continue picks the ` +
-    `thread back up in the fresh session, nothing to prep). Then a horizontal rule before ` +
-    `the answer itself.`
+    `naming what landed, ${bombOutClause(bombRestartVerdict(ctx, jump))} Then a horizontal ` +
+    `rule before the answer itself.`
   );
 }
 
