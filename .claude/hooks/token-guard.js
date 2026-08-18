@@ -4083,6 +4083,14 @@ function r20SessionTotalGuard(ctx) {
   return sessionTotalAsk(ctx, tok);
 }
 
+// The silence clause as its own predicate. It is four boolean forks standing alone, and inlined it
+// put sessionTotalAsk one over the complexity bar; the reasoning it encodes is at the call site.
+// Speaks when: the pending call is a bomb, OR nothing was measured, OR clearing actually pays.
+function totalAskSpeaks(verdict, rv) {
+  if (verdict && verdict.kind === 'deny') return true;
+  return !rv || rv.clear;
+}
+
 // The R20 fire path — read the restart verdict, silence the status-quo branch, then re-arm and
 // render. Split from the guard for the reason turnSpendAsk is: "should this fire?" and "what does
 // firing say" each clear the complexity bar on their own. (The threshold half of "should this
@@ -4113,7 +4121,7 @@ function sessionTotalAsk(ctx, tok) {
   // gate speaks on the first call AFTER the window crosses the fat line — instead of sitting out
   // a doubled width that a silent fire would have bought. That matters more here than on R14: a
   // session total never comes back down, so a width skipped now is skipped for good.
-  if (!(verdict && verdict.kind === 'deny') && rv && !rv.clear) return null;
+  if (!totalAskSpeaks(verdict, rv)) return null;
   // R21 provenance — same reasoning as R14 above: past the silence clause this card speaks, and
   // the only lever it offers is /clear + /continue.
   if (rv && rv.clear) noteClearAdvice(ctx.projectDir, 'R20', Date.now());
