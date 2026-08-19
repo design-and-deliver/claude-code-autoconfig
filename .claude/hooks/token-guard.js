@@ -1384,6 +1384,7 @@ function loadState(projectDir, sid) {
     lastTurnDeltaUsd: 0, turnStartWorkTok: null, turnGateAt: null, turnGateFires: 0,
     turnStartCr: null, turnStartReqs: null, rentGateAt: null, rentGateFires: 0,
     sessionGateAt: null, sessionGateFires: 0,   // R20 — session-scoped, never reset per turn
+    lastVerdictAt: null,                        // the cache entry the shim has already spent
     recoveryTurn: false };
   try {
     return Object.assign(blank,
@@ -3594,10 +3595,96 @@ function renderOneVerdict(v, ctx) {
 }
 
 // `ctx` is optional: without it only server-worded verdicts render, which is what a caller
-// holding just a cache file (statusline) can honestly do.
+// holding just a cache file (statusline) can honestly do. This path is READ-ONLY — the
+// one-shot commit below belongs to the shim's own path, never to a statusline repaint.
 function renderCachedVerdicts(cached, ctx) {
   if (!cached || !Array.isArray(cached.verdicts)) return [];
   return cached.verdicts.filter(Boolean).map(v => renderOneVerdict(v, ctx)).filter(Boolean);
+}
+
+// ── One-shot commit ─────────────────────────────────────────────────────────────────────────
+// Rule → the client-side write that ARMS the one-shot a served fire just spent. The service
+// holds nothing between calls: it re-decides from the counters this client posts, so a fire
+// nobody writes down is decided again next prompt, and the rule speaks forever. Each committer
+// mirrors its own local guard's re-arm rule and returns false when the one-shot was ALREADY
+// armed with this state — that false is what makes the same verdict, served twice, fire once.
+// (The second serving is structural: this prompt's post is spawned BEFORE the commit below, so
+// it still asks the question the cache is currently answering.)
+function commitDriftScope(s, ctx) {
+  if (ctx.st.nudgedScope === s.nudgedScope) return false;
+  ctx.st.nudgedScope = s.nudgedScope;
+  ctx.st.driftSnooze = null;   // a fresh nudge ends any snooze — same clear fireDriftNudge does
+  return true;
+}
+
+const warnKey = w => (w ? `${w.name}|${w.resetsAt}|${w.rung}` : '');
+
+function commitWindowWarn(s, ctx) {
+  const w = s.warnedWindow;
+  if (!w || warnKey(w) === warnKey(ctx.st.warnedWindow)) return false;
+  ctx.st.warnedWindow = w;
+  saveWindowWarn(w.name, w);   // the rung is account-wide, not per session (loadWindowWarns)
+  return true;
+}
+
+// The canary's one-shot key IS the last-success stamp it dated the outage from, so a recovered-
+// then-stalled meter re-arms by carrying a new `at` — no separate cadence needed.
+function commitMeterCanary(s, ctx) {
+  if (s.meterCanaryAt == null || loadMeterCanary(ctx.projectDir) === s.meterCanaryAt) return false;
+  saveMeterCanary(ctx.projectDir, s.meterCanaryAt);
+  return true;
+}
+
+// The ladder is monotone per billing: a step at or below the armed one is the same crossing
+// served twice — exactly what crossedSpendSteps' `< s` filter means locally.
+function commitSpendStep(s, ctx) {
+  const key = s.warnedTok != null ? 'warnedTok' : 'warnedUSD';
+  const step = s[key];
+  if (step == null || (ctx.st[key] || 0) >= step) return false;
+  ctx.st[key] = step;
+  return true;
+}
+
+// R21's one-shot is a 24h cadence rather than a value — recoveryWasteVerdict stays null while
+// lastReportAt sits inside the day it reported on. So a second serving of the same report
+// (fresh nowMs, same day) must not re-report, and tomorrow's still can.
+function commitRecoveryReport(s, ctx) {
+  if (s.lastReportAt == null) return false;
+  const store = loadRecoverySpend(ctx.projectDir);
+  if ((store.lastReportAt || 0) > s.lastReportAt - DAY_MS) return false;
+  store.lastReportAt = s.lastReportAt;
+  saveRecoverySpend(ctx.projectDir, store);
+  return true;
+}
+
+const CACHED_VERDICT_COMMITS = {
+  R6: commitDriftScope,
+  R12b: commitWindowWarn,
+  'meter-canary': commitMeterCanary,
+  'spend-steps': commitSpendStep,
+  R21: commitRecoveryReport,
+};
+
+// Fresh = the one-shot was not already armed. A verdict with no `state` is always fresh —
+// R12a is the deliberate case: its client baseline advances whether or not the rule fires,
+// so nothing about it is fire-only and there is nothing to spend.
+function commitVerdictState(v, ctx) {
+  const commit = v.state ? CACHED_VERDICT_COMMITS[v.rule] : null;
+  if (!commit) return true;
+  try { return commit(v.state, ctx); } catch (_) { return true; }
+}
+
+// The shim's own path: commit FIRST, render second. The commit runs for every served verdict
+// — including one whose family the user turned off locally, whose renderer returns null. A
+// commit skipped there would leave the service re-deciding a fire nobody will ever see.
+// `lastVerdictAt` spends a cache entry once: the child that overwrites it may still be in
+// flight a prompt later, and re-rendering the same entry is a duplicate note, not news.
+function consumeCachedVerdicts(cached, ctx) {
+  if (!cached || !Array.isArray(cached.verdicts)) return [];
+  if (cached.at && cached.at === ctx.st.lastVerdictAt) return [];
+  ctx.st.lastVerdictAt = cached.at || null;
+  const fresh = cached.verdicts.filter(Boolean).filter(v => commitVerdictState(v, ctx));
+  return fresh.map(v => renderOneVerdict(v, ctx)).filter(Boolean);
 }
 
 function remoteVerdictGuard(ctx) {
@@ -3606,7 +3693,7 @@ function remoteVerdictGuard(ctx) {
   try {
     postVerdictAsync(ctx);
     const cached = readVerdictCache(projectDir, sid, cfg);
-    const notes = renderCachedVerdicts(cached, ctx);
+    const notes = consumeCachedVerdicts(cached, ctx);
     if (!cached || !(cached.post && cached.post.ok)) {
       const basic = freeTierNote(m.liveContext, cfg); // service dark: degrade to the free floor
       if (basic) notes.push(basic);
@@ -5137,5 +5224,6 @@ module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, l
   shimActive, collectVerdictCounters, verdictCachePath, readVerdictCache, writeVerdictCache,
   renderCachedVerdicts, freeTierNote, shimHealth, remoteVerdictGuard, spendStepNote,
   snapshotPriorGuardState,                     // …the pre-fold snapshot forwarding depends on
+  consumeCachedVerdicts, commitVerdictState,   // …and the one-shot commit that spends a fire
                                                // remote-verdict shim — token-guard-shim.test.cjs
 };

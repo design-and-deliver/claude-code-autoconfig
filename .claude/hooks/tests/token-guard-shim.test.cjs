@@ -304,12 +304,115 @@ test('gates stays session-only — the PreToolUse ladder has nowhere to render',
   assert.deepEqual(body.gates.map(g => g.name), ['session']);
 });
 
+// ── One-shot commit (2026-08-19) ─────────────────────────────────────────────────────────────
+// The service holds nothing between calls: it re-decides every family from the counters this
+// client posts. So a fire-only rule (its one-shot IS the fire) speaks forever unless the client
+// writes the arming state down — the `state` field each fired verdict carries. Commit runs
+// BEFORE rendering and regardless of the local toggle; the render is what the toggle governs.
+const HOME_KEYS = ['HOME', 'USERPROFILE'];
+
+function withHome(fix, fn) {
+  const prev = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
+  for (const k of HOME_KEYS) process.env[k] = fix.home;
+  try { return fn(); } finally {
+    for (const k of HOME_KEYS) {
+      if (prev[k] === undefined) delete process.env[k]; else process.env[k] = prev[k];
+    }
+  }
+}
+
+const homeJson = (fix, name) =>
+  JSON.parse(fs.readFileSync(path.join(fix.home, '.claude', '.token-guard', name), 'utf8'));
+const projJson = (fix, name) => JSON.parse(fs.readFileSync(path.join(stateDirOf(fix), name), 'utf8'));
+
+const WARN = { name: '5-hour window', resetsAt: 'R', rung: 80 };
+const firedVerdicts = now => [
+  { rule: 'R6', text: 'drift', state: { nudgedScope: 'Modal' } },
+  { rule: 'R12b', name: WARN.name, pct: 82, rung: 80, topRung: 90, resetsAt: WARN.resetsAt,
+    state: { warnedWindow: WARN } },
+  { rule: 'meter-canary', text: 'canary', state: { meterCanaryAt: 4242 } },
+  { rule: 'spend-steps', crossed: [10], billingKind: 'api', state: { warnedUSD: 10 } },
+  { rule: 'R21', n: 3, tok: 120000, usd: 1.2, prompted: 0, promptedTok: 0,
+    state: { lastReportAt: now } },
+];
+
+test('a cached fire persists its one-shot — one case per fire-only family', () => {
+  const fix = mkFixture();
+  const ctx = renderCtx(fix);
+  const now = Date.now();
+  const notes = withHome(fix, () =>
+    tg.consumeCachedVerdicts({ at: 'e1', verdicts: firedVerdicts(now) }, ctx));
+
+  assert.equal(notes.length, 5, 'every served verdict still renders — the commit is silent');
+  assert.equal(ctx.st.nudgedScope, 'Modal', 'R6 arms the scope the nudge just spoke about');
+  assert.equal(ctx.st.driftSnooze, null, 'a fresh nudge ends any snooze, as fireDriftNudge does');
+  assert.deepEqual(ctx.st.warnedWindow, WARN, 'R12b arms the rung this cycle announced');
+  assert.deepEqual(homeJson(fix, 'window-warns.json')[WARN.name], WARN,
+    "the rung is account-wide — the session copy alone would let another session re-announce it");
+  assert.equal(homeJson(fix, 'meter-canary.json')[fix.proj], 4242,
+    'the canary dates the outage from the last-success stamp, which IS its one-shot key');
+  assert.equal(ctx.st.warnedUSD, 10, 'the spend ladder arms the top step crossed');
+  assert.equal(projJson(fix, 'recovery-spend.json').lastReportAt, now, 'R21 stamps the report');
+});
+
+test('the same verdict served twice fires once — the second serving is already armed', () => {
+  const fix = mkFixture();
+  const ctx = renderCtx(fix);
+  const now = Date.now();
+  withHome(fix, () => tg.consumeCachedVerdicts({ at: 'e1', verdicts: firedVerdicts(now) }, ctx));
+
+  // The re-serve is structural, not a bug: this prompt's post is spawned BEFORE the commit, so
+  // the service answers the same question one more time — with a fresh nowMs on R21's stamp.
+  const again = firedVerdicts(now + 60000);
+  assert.deepEqual(withHome(fix, () => tg.consumeCachedVerdicts({ at: 'e2', verdicts: again }, ctx)),
+    [], 'a re-decided fire whose one-shot is already armed must stay silent');
+
+  const newRung = [{ rule: 'R12b', name: WARN.name, pct: 92, rung: 90, topRung: 90,
+    resetsAt: WARN.resetsAt, state: { warnedWindow: { ...WARN, rung: 90 } } }];
+  assert.equal(withHome(fix, () => tg.consumeCachedVerdicts({ at: 'e3', verdicts: newRung }, ctx)).length,
+    1, 'a NEW rung is news — the one-shot suppresses repeats, not the ladder');
+});
+
+test('a family the user turned off locally still arms its one-shot', () => {
+  const fix = mkFixture();
+  const ctx = renderCtx(fix, { recoveryWasteTokens: null, driftNudge: false });
+  const now = Date.now();
+  const notes = withHome(fix, () => tg.consumeCachedVerdicts({ at: 'e1', verdicts: [
+    { rule: 'R21', n: 3, tok: 120000, usd: 1.2, prompted: 0, state: { lastReportAt: now } },
+  ] }, ctx));
+
+  assert.deepEqual(notes, [], 'the local switch still governs what the user sees');
+  assert.equal(projJson(fix, 'recovery-spend.json').lastReportAt, now,
+    'the commit runs anyway — skipping it leaves the service re-deciding a fire nobody sees');
+});
+
+test('a cache entry is spent once — a slow child must not replay it', () => {
+  const fix = mkFixture();
+  const ctx = renderCtx(fix);
+  // R12a carries no state (its client baseline advances whether or not the rule fires), so the
+  // entry stamp is the only thing standing between a re-read cache and a duplicate note.
+  const entry = { at: 'e1', verdicts: [
+    { rule: 'R12a', fire: true, spikePct: 14, fromPct: 40, toPct: 54, estimated: false }] };
+  assert.equal(tg.consumeCachedVerdicts(entry, ctx).length, 1);
+  assert.deepEqual(tg.consumeCachedVerdicts(entry, ctx), [],
+    'the same entry re-read is a duplicate note, not news');
+  assert.equal(ctx.st.lastVerdictAt, 'e1');
+});
+
+test('the statusline path renders without committing — only the shim spends a fire', () => {
+  const fix = mkFixture();
+  const ctx = renderCtx(fix);
+  tg.renderCachedVerdicts({ at: 'e1', verdicts: [
+    { rule: 'R6', text: 'drift', state: { nudgedScope: 'Modal' } }] }, ctx);
+  assert.equal(ctx.st.nudgedScope, undefined, 'a repaint must never arm a one-shot');
+});
+
 test('the library surface statusline-cost.js requires is intact, plus the shim additions', () => {
   for (const k of ['meterSession', 'coldStartTokens', 'resolveConfig', 'findActivePlan',
     'findCurrentSubstep', 'parsePlanLedger',
     'shimActive', 'collectVerdictCounters', 'readVerdictCache', 'renderCachedVerdicts',
     'freeTierNote', 'shimHealth', 'remoteVerdictGuard', 'spendStepNote',
-    'snapshotPriorGuardState']) {
+    'snapshotPriorGuardState', 'consumeCachedVerdicts', 'commitVerdictState']) {
     assert.equal(typeof tg[k], 'function', `token-guard must export ${k}`);
   }
 });
