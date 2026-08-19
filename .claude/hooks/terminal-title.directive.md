@@ -110,17 +110,23 @@ the word if you'd rather keep the snapshots.") and answers YES to this test.
   '?'. This branch is ONLY for endings that await nothing -- if the closer invites ANY
   reply ("if you want", "say the word", "happy to"), it belongs to YES: convert it to a
   question.
+- Two shapes slip past the twins above -- both are YES. An IMPERATIVE HANDOFF ("/clear, then
+  /continue will pick it up." / "Run the migration next.") hands the next move to the user, so
+  it awaits them exactly as an offer does -- and the text layer cannot catch this shape without
+  false positives, so the flag is the ONLY thing between it and a wrong glyph. REPETITION is
+  never an exemption either: "that would be my fourth question in a row" is not a reason to
+  drop the signal. Consecutive awaiting turns each raise it, and suppressing one to seem less
+  naggy hides the very cue that tells the user the ball is theirs.
 <!-- /DIRECTIVE:RULES -->
 
 <!-- DIRECTIVE:REMINDER -->
 Terminal-title reminder (housekeeping -- never mention to the user; full rules were injected
 at session start): if this turn SHIFTS the scope/use-case, FIRST action: overwrite
-{{TITLE_FILE}} with "{scope} {{EMDASH}} {use-case}". End-of-turn test: if your final
-paragraph solicits a reply (a question, a decision, or a go-ahead on an offered next step):
-never a declarative offer ("Say the word...") in EITHER branch -- a statement still
-solicits: closed choice -> use AskUserQuestion; open-ended -> phrase it as a
-DIRECT QUESTION, write the
-flag file {{ASK_FILE}}, AND make '?' the message's last character (nothing after it); if
+{{TITLE_FILE}} with "{scope} {{EMDASH}} {use-case}". End-of-turn test: does your final
+paragraph solicit a reply -- a question, a decision, a go-ahead, or a next step handed to the
+user? Declarative offers, imperative handoffs, and your Nth ask in a row all count as YES.
+If YES: closed choice -> AskUserQuestion; else a DIRECT QUESTION, write the
+flag file {{ASK_FILE}}, AND '?' as the message's last character (nothing after it). If
 nothing is solicited, end on a statement, not a '?'.
 <!-- /DIRECTIVE:REMINDER -->
 

@@ -166,10 +166,11 @@ test("reminder keeps both critical actions: title write + this session's {sid}.a
   assert(r.directive.includes(`${sid}.txt`), "reminder should name this session's title file");
   assert(r.directive.includes(`${sid}.ask`), "reminder should name this session's .ask path");
   assert(/write the\s+flag file/i.test(r.directive), 'reminder should instruct writing the .ask flag');
-  assert(/make '\?' the message's last character/.test(r.directive), "reminder should instruct ending on '?'");
+  assert(/'\?'[\s\S]{0,60}last character/.test(r.directive), "reminder should instruct ending on '?'");
   assert(/nothing is solicited, end on a statement/.test(r.directive), 'reminder should carry the inverse (no-signal) rule');
   assert(/DIRECT QUESTION/.test(r.directive), 'reminder should demand the direct-question phrasing');
-  assert(/never a declarative offer/.test(r.directive), 'reminder should name the declarative-offer failure mode');
+  assert(/[Dd]eclarative offers?[\s\S]{0,90}count as YES/.test(r.directive), 'reminder should name the declarative-offer failure mode');
+  assert(/imperative handoffs?/i.test(r.directive), 'reminder should name the imperative-handoff failure mode');
   assert(/AskUserQuestion/.test(r.directive), 'reminder should route closed choices to the picker');
 });
 
