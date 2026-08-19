@@ -68,8 +68,10 @@ function extractDescription(content, ext) {
     return match ? match[1] : null;
   }
   if (ext === '.js') {
-    // Look for @description in JSDoc or comment block
-    const match = content.match(/@description\s+(.+?)(?:\n|\*\/)/);
+    // Look for @description in JSDoc or comment block.
+    // \r? is load-bearing: `.` never matches \r (a line terminator in JS), so on a
+    // CRLF checkout the lazy group stalls before it and the \n is unreachable.
+    const match = content.match(/@description\s+(.+?)(?:\r?\n|\*\/)/);
     return match ? match[1].replace(/\s*\*\s*$/, '').trim() : null;
   }
   return null;
@@ -179,7 +181,7 @@ function buildSwaggerHtml(meta) {
  * Extract @trigger from a JS file's JSDoc.
  */
 function extractTrigger(content) {
-  const match = content.match(/@trigger\s+(.+?)(?:\n|\*\/)/);
+  const match = content.match(/@trigger\s+(.+?)(?:\r?\n|\*\/)/);
   return match ? match[1].replace(/\s*\*\s*$/, '').trim() : null;
 }
 
