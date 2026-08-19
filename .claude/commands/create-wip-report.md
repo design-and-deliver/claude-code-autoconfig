@@ -1,5 +1,5 @@
-<!-- @description Snapshot every open Claude session on this repo into one WIP note each — description, work complete, work remaining, merge issues. -->
-<!-- @version 3 -->
+<!-- @description Snapshot every open Claude session on this repo into one WIP note each — description, work complete, work remaining, and any real git conflict. -->
+<!-- @version 4 -->
 <!-- @param all | flag | optional | Include idle sessions, not just active ones. -->
 <!-- @param mine | flag | optional | Write only this session's note (refresh before a /clear). -->
 <!-- @response report | One line per note written, then the single sharpest cross-session finding. -->
@@ -121,9 +121,9 @@ fragment — redo it from the template.
 | `.title` | **the goal as an imperative** — the session's use case, not its last task |
 | `.dek` | the metadata line: session id · working tree · plan · also-writes (see below) |
 | `.lead-in` | **ONE paragraph, 45 words hard cap** — see below |
-| `<details>` ×4 | `Background` · `Work complete` · `Work remaining` · `Merge issues` |
+| `<details>` ×3 (+1) | `Background` · `Work complete` · `Work remaining` — plus `Merge issues` **only when git is actually conflicted** |
 
-This is the **live** note. An archived one uses the same slots with different content and three
+This is the **live** note. An archived one uses the same slots with different content and two
 sections — Step 5 has the mapping.
 
 ### ⛔ The lead-in is a status reply, in one short paragraph
@@ -225,7 +225,7 @@ The `.dek` is one line, ` · `-separated, `<code>` around identifiers:
 Drop the plan clause when the session is not plan-driven; drop the also-writes clause when it stays
 inside this repo. Never leave an empty clause or a trailing ` · `.
 
-### The four sections
+### The three sections (plus a rare fourth)
 
 Each is a `<details>` (closed — never add `open`) with its content inside `<div class="s-body">`.
 
@@ -238,14 +238,41 @@ Each is a `<details>` (closed — never add `open`) with its content inside `<di
 - **Work remaining** — Step 4's format. The load-bearing section. Blockers are `<p>` elements
   above the list, each opening `⛔ <strong>…</strong>`, with the concrete next command in a
   `<pre><code>` block when it is longer than a few words.
-- **Merge issues** — a `<ul>`:
-  - Where the commits live, whether they are landed on `main`, and whether `main` is pushed.
-  - Whose the dirty files in the shared base checkout are — never assume they are this session's.
-  - Ordering hazards: the things worktrees do **not** isolate — `~/.claude` and the hook fleet, the
-    live twin (`test/live-twin-parity.test.js`), `.claude/updates/` numbers, publishing.
-  - "None in git" is a fine answer, but say *why* — "works in the base checkout, no worktree".
+- **Merge issues** — ⛔ **git conflicts ONLY, and usually absent.** See the rule below.
 
 Never keep an empty section: delete the whole `<details>` rather than shipping a hollow one.
+
+### ⛔ `Merge issues` means "git said no" — nothing else
+
+**A merge issue is a conflict a human has to arbitrate.** Two branches touched the same lines,
+a rebase stopped, a cherry-pick refused, `main` and a worktree branch diverged in a way that
+cannot fast-forward. That is the whole definition. If the reader cannot act on it by choosing a
+side, it is not a merge issue.
+
+**So the section is absent from most notes.** That is the normal, healthy outcome — omit the
+`<details>` entirely rather than reassuring anyone that nothing is wrong. A section reading
+"tree is clean, N commits unpushed, no conflicts" is pure noise: it costs a reader the click and
+tells them what `git status` would have. Worse, it trains them to skim the section, so the one
+note that *does* carry a real conflict gets skimmed too.
+
+⛔ **Never put these there.** Each was a real bullet in a shipped note, and each is wrong:
+
+| Rejected bullet | Why it is not a merge issue |
+|---|---|
+| "Base checkout is clean; `git status --short` is empty." | State, not a conflict. Ask git. |
+| "14 commits are unpushed on `main` since 1.0.221." | State. And it changes between writing and reading. |
+| "`npm view` still reports 1.0.221 — nothing was published." | Release status. Belongs in the lead-in. |
+| "No plan doc — nothing to check against a Ledger." | The absence of a thing is not a problem. |
+| "`main` sits one commit ahead of what this session last saw." | Normal. Say it only if it conflicts. |
+
+**Anything you could resolve yourself, without risk, never reaches the note at all.** Not moved
+to another section — dropped. The report is for what needs a human; routine sequencing you can
+just do is your job, not the reader's.
+
+**A risk that is not a conflict is a ⛔ blocker in `Work remaining`.** Another session mid-release,
+a fleet sync that must run from the base checkout, an `.claude/updates/` number two sessions both
+claimed — real hazards, and they already have a home. Put them there, where the reader is already
+looking for what to do next, rather than inventing a second decision channel.
 
 ### ⛔ Two of the summaries carry a time, and the labels are not decoration
 
@@ -256,7 +283,8 @@ The point of the folder is seeing, at a glance, what is invested and what is lef
 <summary>Work remaining (~45m est.)</summary>
 ```
 
-`Background` and `Merge issues` get no time — they describe, they do not cost.
+`Background` and `Merge issues` get no time — they describe, they do not cost. (`Merge issues`
+is usually not there at all.)
 
 **`Work complete` is MEASURED, never guessed.** Take it from the session's own transcript
 timestamps, and report **active** time, not wall-clock: sum the gaps between consecutive messages
@@ -406,12 +434,13 @@ Same template, different content. Four changes and one addition:
 | `Background` | kept, and now the point of the file |
 | `Work complete` | kept, hashes and measured time intact |
 | `Work remaining` | **dropped** — `(none)` by definition |
-| `Merge issues` | **dropped** — resolved by definition |
+| `Merge issues` | **dropped** — resolved by definition (usually absent already) |
 
-Drop, never keep-and-mark-resolved. A `Merge issues` section reading "landed on main, tree clean"
-is 242 words telling a future reader that the ordinary thing happened, and it pushes the one
-section they came for below the fold. The session id and working tree go for the same reason: both
-are dead references within days — transcripts get cleaned up and worktrees get reaped.
+Drop, never keep-and-mark-resolved — the same rule the live note follows, for the same reason. A
+`Merge issues` section reading "landed on main, tree clean" tells a future reader that the ordinary
+thing happened, and it pushes the one section they came for below the fold. The session id and
+working tree go the same way: both are dead references within days — transcripts get cleaned up
+and worktrees get reaped.
 
 **The lead-in states the outcome, not the status.** Still one paragraph, still 45 words, still the
 senior-manager test. `Done and committed.` is not an outcome — it is a checkbox. What changed, and
@@ -513,8 +542,8 @@ Close on the two lifecycles, since one folder is disposable and the other is not
 ## Fallback — no template
 
 Only when `~/.claude/skills/create-web-page/template.html` does not exist. Write the same content
-as `<goal-slug>.md`, `#` for the goal, a bullet list for the `.dek` fields, `##` for each of the
-four sections — three, for an archived note — and skip the index. Say in the report that notes are
+as `<goal-slug>.md`, `#` for the goal, a bullet list for the `.dek` fields, `##` for each section
+the note actually has — and skip the index. Say in the report that notes are
 markdown and why. Step 5 still applies: a finished session is still archived, still to
 `WIP/DONE/<date>/<slug>.md`, still tracked.
 
