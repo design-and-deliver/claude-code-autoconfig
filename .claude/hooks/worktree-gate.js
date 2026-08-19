@@ -2,7 +2,8 @@
 'use strict';
 
 /**
- * worktree-gate.js — ask before a session's FIRST edit lands in a SHARED main checkout.
+ * worktree-gate.js — ask before a session's FIRST edit lands somewhere it cannot be taken back
+ * from: a SHARED main checkout, or the default branch while this session is executing a plan.
  *
  * WHY THIS EXISTS
  * `.claude/rules/parallel-session-worktrees.md` has said "call EnterWorktree first" since
@@ -30,7 +31,23 @@
  * gate gets exactly one shot, at the first repo edit, and marks itself spent whatever the
  * verdict ({sid}.wtgate, beside the session's other title state). It never nags mid-task.
  *
- * FIRES only when ALL of these hold (cheapest test first):
+ * THE SECOND CONCERN: PLAN WORK ON THE DEFAULT BRANCH
+ * `plan-authoring.md` says a plan merges to the default branch ONCE, when the whole plan is
+ * done — a plan is an all-or-nothing transaction, and half a plan on `main` is junk nobody can
+ * later tell apart from live code. On 2026-08-19 three substeps of a live plan sat on `main`
+ * for 17 hours before being pulled onto a branch by hand; v1.0.222 shipped off `main` inside
+ * that window and would have carried half a migration out to users. That rule has the SAME
+ * trigger problem as the worktree one: it asks for a branch at minute zero, and a session that
+ * opens by reading a plan doc has not thought about git yet.
+ *
+ * The one plan signal a PreToolUse hook can read is the session's own TITLE. The terminal-title
+ * directive has plan-driven sessions put a short alias of the plan in the title's first
+ * segment, and /continue's plan probe already resolves plans by that same title-alias match, so
+ * this reuses an established signal instead of inventing one. It is still a heuristic — which
+ * is exactly why the verdict is `ask` and the reason NAMES the plan it matched: a false
+ * positive costs one keystroke, and the human can see at a glance that it guessed wrong.
+ *
+ * FIRES on EITHER concern, sharing the one ask (cheapest test first):
  *   1. the tool is a mutating one with a resolvable target path
  *   2. that path sits in a repo whose `.git` is a DIRECTORY — a worktree's `.git` is a FILE,
  *      so a session that already did the right thing is never gated. Keyed on the file being
@@ -38,9 +55,14 @@
  *      worktree, and what matters is which checkout receives the write.
  *   3. the target is not this repo's own hook state (see below)
  *   4. this session has not been gated yet
- *   5. >=1 OTHER session painted a `{sid}.glyph` inside the liveness window — the same 3-min
- *      bar terminal-title.js's dupe guard uses. Own lineage ancestors (pre-/clear ghosts) are
- *      not siblings; they lived in this terminal by construction.
+ *   5. THEN either:
+ *      a. PLAN — the repo's HEAD is a default branch AND this session's title scope matches a
+ *         plan doc (docs/*.md or .claude/plans/*.md carrying a `## Ledger`), or
+ *      b. SIBLINGS — >=1 OTHER session painted a `{sid}.glyph` inside the liveness window, the
+ *         same 3-min bar terminal-title.js's dupe guard uses. Own lineage ancestors (pre-/clear
+ *         ghosts) are not siblings; they lived in this terminal by construction.
+ *      (a) outranks (b): both end in "isolate this write", but plan work on the default branch
+ *      is wrong even when this session is alone in the tree.
  *
  * WHAT IT DELIBERATELY IGNORES
  * Paths outside the target repo (another repo's files are that repo's problem), and the repo's
@@ -175,6 +197,69 @@ function isInside(child, parent) {
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 }
 
+// ── plan-branch concern ─────────────────────────────────────────────────────────────────────
+// Landing plan substeps HERE is what plan-authoring.md forbids; any other branch is fine, which
+// is why the test is "is HEAD a default branch", not "is HEAD the plan's branch" — the latter
+// would need the plan doc's header parsed, for no extra protection.
+const DEFAULT_BRANCHES = new Set(['main', 'master']);
+
+// Words that every plan doc and most plan-session titles share. Counting them would fire the
+// gate in every session of any repo that merely HOLDS a plan.
+const GENERIC = new Set(['plan', 'plans', 'doc', 'docs', 'the', 'and', 'for', 'with']);
+
+const keyWords = (s) =>
+  new Set((String(s).toLowerCase().match(/[a-z0-9]{3,}/g) || []).filter((w) => !GENERIC.has(w)));
+
+// The checked-out branch, straight from .git/HEAD — no git spawn on a PreToolUse path. Returns
+// '' for a detached HEAD: there is no branch to be on the wrong one of. Only ever called for a
+// non-worktree repo, where `.git` is a directory and `.git/HEAD` is therefore the real one.
+function headBranch(repoRoot) {
+  try {
+    const head = fs.readFileSync(path.join(repoRoot, '.git', 'HEAD'), 'utf8').trim();
+    const m = /^ref: refs\/heads\/(.+)$/.exec(head);
+    return m ? m[1].trim() : '';
+  } catch { return ''; }
+}
+
+// Plan docs = docs/*.md or .claude/plans/*.md carrying a `## Ledger` section — the shape
+// plan-authoring.md requires, and the same one token-guard's plan-boundary advisory ranks.
+// Returns basenames. Capped because a docs/ dir is unbounded input on a hook path, even one
+// that runs at most once per session.
+function planDocs(repoRoot) {
+  const out = [];
+  for (const dir of [path.join(repoRoot, 'docs'), path.join(repoRoot, '.claude', 'plans')]) {
+    let files = [];
+    try { files = fs.readdirSync(dir); } catch { continue; }
+    for (const name of files.filter((n) => n.endsWith('.md')).slice(0, 80)) {
+      let text = '';
+      try { text = fs.readFileSync(path.join(dir, name), 'utf8'); } catch { continue; }
+      if (/^## Ledger\b/m.test(text)) out.push(name.replace(/\.md$/, ''));
+    }
+  }
+  return out;
+}
+
+// The title's FIRST segment — the design scope, and on a plan-driven session the plan's alias.
+function titleScope(dirs, sid) {
+  for (const d of dirs) {
+    const t = readTitle(path.join(d, `${sid}.txt`));
+    if (t) return t.split('—')[0].trim();
+  }
+  return '';
+}
+
+// The plan this session's title says it is executing, or ''. ONE shared non-generic word is the
+// bar, because single-word aliases are the convention ("Maintainability" for
+// weak-model-maintainability-plan.md); demanding two would miss the commonest case outright.
+function planOfTitle(repoRoot, scope) {
+  const want = keyWords(scope);
+  if (!want.size) return '';
+  for (const doc of planDocs(repoRoot)) {
+    for (const w of keyWords(doc)) if (want.has(w)) return doc;
+  }
+  return '';
+}
+
 function reasonFor(target, repoRoot, siblings, now) {
   const rel = path.relative(repoRoot, target).replace(/\\/g, '/');
   const list = siblings
@@ -194,6 +279,33 @@ function reasonFor(target, repoRoot, siblings, now) {
     'no one else is touching (check `git status --short` first).',
     '\n\nAsked once per session; silence it with CLAUDE_WORKTREE_GATE=off.',
   ].join('');
+}
+
+function planReasonFor(target, repoRoot, doc, branch) {
+  const rel = path.relative(repoRoot, target).replace(/\\/g, '/');
+  return [
+    `worktree-gate: this is your first edit of the session, it writes ${rel}, and HEAD is `,
+    `\`${branch}\` — while your title says this session is executing the plan \`${doc}\`.`,
+    '\n\nA plan is an all-or-nothing transaction: it merges to the default branch ONCE, when the ',
+    'WHOLE plan is done. Landing substeps as you go leaves half a feature on ',
+    `\`${branch}\` — a module nothing calls yet, a migration for a table nothing reads — which no `,
+    'one can later tell apart from live code, and which any release cut meanwhile ships to users. ',
+    'It also leaves nothing to revert as a unit if the plan is abandoned.',
+    '\n\nTo isolate: `git switch -c plan/<alias>` — uncommitted work DOES follow a branch switch, ',
+    'so unlike the worktree offer this one still works mid-substep. If the plan already has a ',
+    'branch, its doc’s header names it; re-enter that one rather than starting a second.',
+    '\n\nApprove instead if this write is not plan work, if the plan matched above is the wrong ',
+    `one, or if this IS the plan's final merge into \`${branch}\`.`,
+    '\n\nAsked once per session; silence it with CLAUDE_WORKTREE_GATE=off.',
+  ].join('');
+}
+
+// The plan-branch ask, or '' when this write is not plan work sitting on a default branch.
+function planBranchReason(hit, dirs, sid) {
+  const branch = headBranch(hit.root);
+  if (!DEFAULT_BRANCHES.has(branch)) return '';
+  const doc = planOfTitle(hit.root, titleScope(dirs, sid));
+  return doc ? planReasonFor(hit.target, hit.root, doc, branch) : '';
 }
 
 // The main-checkout write this payload represents, or null when the gate has nothing to say:
@@ -233,6 +345,12 @@ function gateReason(data) {
   // No session registry → no liveness signal to read.
   const dirs = titleDirs(hit.root);
   if (!dirs.length || !spendOneShot(dirs[0], sid)) return '';
+
+  // Plan work on a default branch outranks the sibling collision. Both end in "isolate this
+  // write", but this one is wrong even when the session is alone in the tree, so the sibling
+  // check can never speak for it.
+  const plan = planBranchReason(hit, dirs, sid);
+  if (plan) return plan;
 
   const now = Date.now();
   const siblings = liveSiblings(dirs, sid, now);

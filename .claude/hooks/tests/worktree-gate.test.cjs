@@ -271,3 +271,112 @@ test('outside a git repo it is a no-op', () => {
   addLiveSession(home, 'other-sid');
   assert.strictEqual(run({ home, cwd: plain, target: path.join(plain, 'a.ts') }), null);
 });
+
+// ── the plan-branch concern ─────────────────────────────────────────────────────────────────
+// These cases plant NO sibling: the whole point is that plan work on the default branch is
+// wrong even in an empty tree, so a test that also had a sibling live would pass on a hook
+// where the plan check did nothing.
+
+// The session's OWN title. Distinct from addLiveSession's `title`, which belongs to a sibling —
+// the plan alias the gate matches on lives in the first segment of THIS session's title.
+function setSelfTitle(baseDir, sid, title) {
+  const dir = titlesIn(baseDir);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${sid}.txt`), `${title}\n`);
+}
+
+function addPlanDoc(repo, relPath, { ledger = true } = {}) {
+  const file = path.join(repo, relPath);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tail = ledger
+    ? '## Ledger (append after each substep — newest last)\n\n- 2026-08-19 — 1.1 — done (abc1234)\n'
+    : '## Notes\n\nA doc with substeps but no Ledger is a spec, not a plan.\n';
+  fs.writeFileSync(file, `# A plan\n\n### ☐ 1.1 · S · ~20m — do it\n\n${tail}`);
+  return file;
+}
+
+const switchTo = (repo, branch) =>
+  execFileSync('git', ['switch', '-c', branch], { cwd: repo, stdio: 'ignore' });
+
+const PLAN_TITLE = 'Shim migration — Land substep 1.5c';
+
+test('asks when a plan-titled session writes on the default branch, alone in the tree', () => {
+  const { repo, home } = makeRepo();
+  addPlanDoc(repo, 'docs/shim-migration-plan.md');
+  setSelfTitle(repo, 'self-sid', PLAN_TITLE);
+  const r = run({ home, cwd: repo, target: path.join(repo, 'src', 'a.ts') });
+  assert.strictEqual(decisionOf(r), 'ask');
+  // Naming the matched plan is what makes a wrong match one keystroke instead of a mystery.
+  assert.match(reasonOf(r), /shim-migration-plan/);
+  assert.match(reasonOf(r), /git switch -c plan\//);
+  assert.match(reasonOf(r), /\bmain\b/);
+});
+
+test('a session already on a plan branch is not asked', () => {
+  const { repo, home } = makeRepo();
+  addPlanDoc(repo, 'docs/shim-migration-plan.md');
+  setSelfTitle(repo, 'self-sid', PLAN_TITLE);
+  switchTo(repo, 'plan/shim-migration');
+  assert.strictEqual(run({ home, cwd: repo, target: path.join(repo, 'src', 'a.ts') }), null);
+});
+
+test('a title naming no plan is not plan work', () => {
+  const { repo, home } = makeRepo();
+  addPlanDoc(repo, 'docs/shim-migration-plan.md');
+  setSelfTitle(repo, 'self-sid', 'Journal modal — Fix the empty state');
+  assert.strictEqual(run({ home, cwd: repo, target: path.join(repo, 'src', 'a.ts') }), null);
+});
+
+test('the word "plan" alone never fires it', () => {
+  const { repo, home } = makeRepo();
+  addPlanDoc(repo, 'docs/shim-migration-plan.md');
+  // Every plan doc ends in "-plan" and plenty of ordinary titles contain the word. Counting it
+  // would gate every session in any repo that merely HOLDS a plan — i.e. all of them.
+  setSelfTitle(repo, 'self-sid', 'Plan branch guardrails — Add the rule');
+  assert.strictEqual(run({ home, cwd: repo, target: path.join(repo, 'src', 'a.ts') }), null);
+});
+
+test('a docs md with no Ledger section is not a plan doc', () => {
+  const { repo, home } = makeRepo();
+  addPlanDoc(repo, 'docs/shim-migration-plan.md', { ledger: false });
+  setSelfTitle(repo, 'self-sid', PLAN_TITLE);
+  assert.strictEqual(run({ home, cwd: repo, target: path.join(repo, 'src', 'a.ts') }), null);
+});
+
+test('.claude/plans is scanned too, not just docs', () => {
+  const { repo, home } = makeRepo();
+  addPlanDoc(repo, '.claude/plans/shim-migration-plan.md');
+  setSelfTitle(repo, 'self-sid', PLAN_TITLE);
+  const r = run({ home, cwd: repo, target: path.join(repo, 'src', 'a.ts') });
+  assert.strictEqual(decisionOf(r), 'ask');
+});
+
+test('the plan reason outranks the sibling reason when both apply', () => {
+  const { repo, home } = makeRepo();
+  addPlanDoc(repo, 'docs/shim-migration-plan.md');
+  setSelfTitle(repo, 'self-sid', PLAN_TITLE);
+  addLiveSession(repo, 'other-sid', { title: 'Journal modal — Fix the empty state' });
+  const r = run({ home, cwd: repo, target: path.join(repo, 'src', 'a.ts') });
+  assert.strictEqual(decisionOf(r), 'ask');
+  assert.match(reasonOf(r), /shim-migration-plan/);
+  // Being alone in the tree does not make plan work on `main` correct, so the branch message is
+  // the one worth spending the single ask on.
+  assert.doesNotMatch(reasonOf(r), /live sibling/);
+});
+
+test('the plan ask spends the same one shot as the sibling ask', () => {
+  const { repo, home } = makeRepo();
+  addPlanDoc(repo, 'docs/shim-migration-plan.md');
+  setSelfTitle(repo, 'self-sid', PLAN_TITLE);
+  assert.strictEqual(decisionOf(run({ home, cwd: repo, target: path.join(repo, 'a.ts') })), 'ask');
+  assert.strictEqual(run({ home, cwd: repo, target: path.join(repo, 'b.ts') }), null);
+});
+
+test('CLAUDE_WORKTREE_GATE=off silences the plan ask too', () => {
+  const { repo, home } = makeRepo();
+  addPlanDoc(repo, 'docs/shim-migration-plan.md');
+  setSelfTitle(repo, 'self-sid', PLAN_TITLE);
+  const off = { CLAUDE_WORKTREE_GATE: 'off' };
+  assert.strictEqual(run({ home, cwd: repo, target: path.join(repo, 'a.ts'), env: off }), null);
+  assert.strictEqual(decisionOf(run({ home, cwd: repo, target: path.join(repo, 'b.ts') })), 'ask');
+});
