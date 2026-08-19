@@ -69,6 +69,12 @@ const OVERRIDES = {
   '21fc336': "fix(terminal-title): The 'awaiting your reply' tab signal now also catches statement-shaped closers on yes/no questions",
   // Subject names the review process, not the fix — reword to the visible outcome:
   '5e7cd63': 'fix(continue): /continue and /recover-context no longer mistake a leftover file from an earlier recovery for this session\'s context',
+  // The one row here for an UNPUSHED commit (2026-08-19), against the "author the trailer"
+  // rule above. b514201 carries a fully user-facing trailer for the daily recovery-cost
+  // note — but that note is token-guard, dev-gated, so users never receive it. Rewording
+  // the commit was the by-the-book fix and would have rebased eight hashes on a shared
+  // main for one line of wording; the null lands the same bullet-level outcome for free.
+  'b514201': null, // token-guard recovery-cost note — dev-gated
 };
 
 // The changelog line for one commit, or null to omit it. Precedence:

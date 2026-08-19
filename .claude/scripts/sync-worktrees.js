@@ -35,6 +35,9 @@
 //   1. orphan dirs        — git has forgotten them; we prove-then-delete
 //   2. stale registrations — git knows, dir is gone; `git worktree prune`
 //   3. merged branches    — fully contained in base; `git branch -d` (refuses if we're wrong)
+// And a fourth is REPORTED, never reaped:
+//   4. unlanded branches  — not in base AND no worktree; see §5. Deleting one can destroy the
+//                           only copy of another session's work, so it stays a human's call.
 //
 // Usage:
 //   node sync-worktrees.js [--project-dir DIR] [--write] [--json] [--keep-branches]
@@ -280,6 +283,31 @@ if (!opts.keepBranches) {
     .filter((b) => !PROTECTED.has(b) && b !== baseBranch && !checkedOut.has(b));
 }
 
+// The exact complement of the set above: branches NOT contained in base that also have no
+// worktree. Nothing on this box can currently see them — `--merged` excludes them by definition,
+// and fleet.js enumerates worktrees, so a branch nobody is standing in appears on no board at all.
+// That blind spot is how `feat/cost-control-shim` sat 11 commits behind within 14 hours of being
+// created, and a snapshot branch sat unexamined for nineteen days (both found by hand 2026-08-19).
+//
+// ⛔ REPORT ONLY — never deleted, not even under --write, and deliberately not gated behind
+// --keep-branches (that flag means "don't reap refs"; this never reaps any). An unlanded branch
+// can be the sole copy of another session's work. Landing one stays a human verb, same as the
+// LAND marker at the bottom.
+function describeUnlanded(branch) {
+  // Three-dot left-right: left = commits on base the branch lacks (behind), right = commits on the
+  // branch base lacks (unlanded). Measured against the merge base, so a base that moved ahead does
+  // not inflate the branch's own footprint.
+  const counts = gitTry(['rev-list', '--left-right', '--count', `${baseBranch}...${branch}`]) || '';
+  const [behind, ahead] = counts.split(/\s+/).map((n) => Number.parseInt(n, 10) || 0);
+  const tipSec = Number.parseInt(gitTry(['log', '-1', '--format=%ct', branch]) || '', 10);
+  return { branch, behind, ahead, ageMs: Number.isFinite(tipSec) ? NOW - tipSec * 1000 : null };
+}
+
+const unlandedBranches = (gitTry(['branch', '--no-merged', baseBranch, '--format=%(refname:short)']) || '')
+  .split('\n').map((s) => s.trim()).filter(Boolean)
+  .filter((b) => !PROTECTED.has(b) && b !== baseBranch && !checkedOut.has(b))
+  .map(describeUnlanded);
+
 // A junction/symlink node_modules must be unlinked on its own BEFORE any recursive delete of the
 // worktree that contains it. Unlinking the link itself never touches the target — rmdir on
 // Windows removes just the reparse point, unlink on POSIX removes just the symlink — but a
@@ -370,7 +398,7 @@ if (opts.json) {
   console.log(JSON.stringify({
     base: { dir: baseDir, branch: baseBranch },
     mode: opts.write ? 'write' : 'dry-run',
-    orphans, prunable, mergedBranches, trashItems, actions,
+    orphans, prunable, mergedBranches, unlandedBranches, trashItems, actions,
   }, null, 2));
   process.exit(0);
 }
@@ -388,7 +416,8 @@ const reapN = orphans.filter((o) => o.verdict === 'REAP').length;
 L.push(`SYNC-WORKTREES — ${opts.write ? 'WRITE' : 'dry run'} · ${orphans.length} orphan dir` +
        `${orphans.length === 1 ? '' : 's'} · ${trashItems.length} in .trash · ` +
        `${prunable.length} stale reg · ` +
-       `${mergedBranches.length} merged branch${mergedBranches.length === 1 ? '' : 'es'}`);
+       `${mergedBranches.length} merged branch${mergedBranches.length === 1 ? '' : 'es'} · ` +
+       `${unlandedBranches.length} unlanded`);
 L.push(`base: ${baseBranch} at ${baseDir}`);
 L.push('');
 
@@ -428,6 +457,15 @@ if (mergedBranches.length) {
   L.push('');
 }
 
+if (unlandedBranches.length) {
+  L.push(`UNLANDED BRANCHES  (not in ${baseBranch}, nobody standing in them — never deleted here)`);
+  for (const u of unlandedBranches) {
+    L.push(`  ${u.branch.padEnd(30)} ${u.ahead} unlanded · ${u.behind} behind · tip ${fmtAgo(u.ageMs)}`);
+  }
+  L.push('  → land them, or reverse-merge before the behind-count makes the merge a conflict.');
+  L.push('');
+}
+
 if (actions.length) {
   L.push('ACTIONS TAKEN');
   for (const a of actions) L.push(`  ${a}`);
@@ -435,7 +473,11 @@ if (actions.length) {
 }
 
 if (!orphans.length && !prunable.length && !mergedBranches.length && !trashItems.length) {
-  L.push('Nothing to reap. Worktree base is clean.');
+  // Unlanded branches deliberately do NOT make the tree "unclean" — nothing here will ever act on
+  // them, so claiming work is pending would be a lie. They are named, and that is the whole job.
+  L.push(unlandedBranches.length
+    ? `Nothing to reap. ${unlandedBranches.length} unlanded branch(es) above — reported only, never deleted.`
+    : 'Nothing to reap. Worktree base is clean.');
 } else if (!opts.write) {
   const bits = [];
   if (reapN) bits.push(`${reapN} director${reapN === 1 ? 'y' : 'ies'}`);

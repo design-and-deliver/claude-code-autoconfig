@@ -110,6 +110,14 @@ const MANIFEST = [
   { file: 'recover-context.md', global: false, subdir: 'commands' },
   { file: 'recover-session.py', global: false, subdir: 'scripts',
     pairsWith: 'continue.md', pairsSubdir: 'commands' },
+  // The plan lifecycle's terminal state, and the other half of continue.md's abort gate. It is
+  // dev-only (DEV_ONLY_FILES in bin/cli.js) because it leans on four things a user install does
+  // not have — /table, /fleet, /sync-worktrees, and the parallel-session-worktrees rule — so
+  // shipping it would hand users a command with dangling references. Manifested for the usual
+  // reason: it was born in job-agent-extension on 2026-08-19 and back-ported the same day, and
+  // an unmanifested hand-copy is exactly how continue.md reached v16 here while a CCA install
+  // silently reverted that repo to v15.
+  { file: 'abort-plan.md', global: false, subdir: 'commands' },
 ];
 
 const PAD = 46;                                               // report column for the target label

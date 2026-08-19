@@ -36,6 +36,16 @@ coverage/
 # Session-rendered article archive (/create-web-page output, local-only)
 ARTICLES/
 
+# Per-session WIP snapshots (/create-wip-report output). Stale within hours and would
+# churn on every merge — regenerated, never committed.
+#
+# WIP/DONE/ is the exception and IS tracked: those notes describe finished work, so they
+# never regenerate and never churn. They are the archive the lessons are read out of.
+# Note the glob — `WIP/` (trailing slash) would exclude the directory itself and git would
+# never descend far enough to see the negation. `WIP/*` excludes the contents instead.
+WIP/*
+!WIP/DONE/
+
 # Local feature pilots / experiments (not distributed)
 pilots/
 

@@ -28,10 +28,62 @@ worktree for a second use case is isolation against nobody — at the cost of an
 independently of another, commit at the boundary, or `git switch -c` inside the worktree you
 already have.
 
+## ⛔ Plan-driven work gets ONE long-lived branch, not one per substep
+
+A plan doc's substeps run one per fresh session, but they are all **one feature**. So the unit of
+isolation is the plan, not the substep: one plan → one branch → one worktree, reused across every
+session that executes it.
+
+1. Name both after the plan's alias — worktree `agy-adoption`, branch `plan/agy-adoption`.
+   Record that branch name in the plan doc's header, so a fresh session and `/continue` find it
+   without guessing. A worktree dir whose name doesn't match its branch makes every audit lie.
+2. The first substep's session creates it. Every later session re-enters **the same** worktree.
+   Step 5 below asks the user `remove` vs `keep` — on a live plan the answer is always **keep**,
+   so frame the offer that way (`remove` only after the final substep merges) rather than
+   presenting it as an even choice.
+3. **Never run a plan substep in the base checkout on `main`.** A plan that lands substep by
+   substep straight into `main` has no isolation and nothing to revert as a unit.
+4. **Refresh from `main` at every substep boundary** — `git merge main` inside the worktree before
+   starting the next substep. This is the whole safety mechanism. Plans here are domain-scoped, so
+   *textual* conflicts are rare; what a stale branch actually defers is the **semantic** break, and
+   refreshing per substep surfaces it the same day instead of at one big merge.
+5. ⛔ **Merge to `main` ONCE, when the whole plan is done — never a phase, never a substep.** A plan
+   is an all-or-nothing transaction. Merging phase 1 of 3 puts half a feature in `main`: an
+   extracted pure module nothing calls yet, a migration for a table nothing reads, a flag no UI
+   sets. If the plan then dies, that junk is indistinguishable from live code and stays forever.
+   Merge per step 4 of the loop below — automatically when it's clean, but only at the end.
+
+   **If a phase is worth merging on its own, it was never a phase — it was a separate plan.** That
+   is the escape valve, and it belongs at *authoring* time: split it into its own plan doc with its
+   own branch. The only mid-plan exception is a genuine hotfix that happens to live on the branch —
+   `git cherry-pick` that one commit onto `main`, never `git merge` the phase.
+
+   This makes step 4 above **mandatory, not advisory**: one merge at the end is only cheap because
+   the branch absorbed `main` continuously on the way there. Skip the per-substep refresh and you
+   have rebuilt the big-bang merge this rule exists to avoid.
+
+Consequences worth knowing:
+
+- Abandoning a plan is exactly one `git branch -D` — nothing to unwind out of `main`, at any point
+  in the plan's life. This is the whole reason the merge is deferred to the end.
+- `git log main..plan/<alias>` is the plan's whole reviewable delta.
+- `/sync-worktrees` will list a live plan branch as unlanded work, and will not reap it (its reap
+  loop requires a branch already merged to `main`). That is expected for a live plan, not a finding.
+- **One live session per plan branch.** Two sessions sharing one plan's worktree is the collision
+  this whole rule exists to prevent — check `/fleet` before entering.
+- ⚠ **Never set `CCA_UNSAFE_NODE_MODULES_JUNCTION=1` for a plan worktree.** It lives for days
+  across many sessions, which is exactly the window in which someone runs a cleanup — and
+  `git worktree remove` recursing through a junction empties the main checkout's real
+  `node_modules` (see the junction section below). Pay the `npm install` once.
+
+The plan docs this governs are CCA's own (`docs/*.md` and `.claude/plans/*.md` with a `## Ledger`
+section — e.g. `docs/agy-worktree-adoption-plan.md`), per `.claude/rules/plan-authoring.md`.
+
 ## The loop
 
 1. `EnterWorktree` with a name describing the work (`token-guard-r16`, `box-widths`) — not a
    random one. It lands in `.claude/worktrees/<name>/`, already excluded via `.git/info/exclude`.
+   Plan-driven work uses the plan alias and re-enters the existing worktree instead (see above).
 2. `node scripts/bootstrap-worktree.js` — **mandatory, see below.**
 3. Work, test, commit inside the worktree. Commit normally; the branch is yours alone.
 4. Merge back from the main checkout (`C:\CODE\claude-code-autoconfig`), never from inside the
@@ -45,7 +97,8 @@ already have.
    worktree nobody remembers is exactly the state that's hard to track. The `ExitWorktree`
    tool itself won't fire without the user asking (its own instructions refuse proactive
    calls), so surface the offer instead of silently deciding either way: name the worktree,
-   say it merged clean, and ask `remove` vs `keep`. Use `/fleet` to see what every
+   say it merged clean, and ask `remove` vs `keep` — except on a plan branch, where `keep` is
+   the answer until the final substep lands (see the ⛔ above). Use `/fleet` to see what every
    worktree/session on this repo is doing before assuming one is safe to touch or abandon,
    and `/sync-worktrees` to reap anything left orphaned anyway.
 

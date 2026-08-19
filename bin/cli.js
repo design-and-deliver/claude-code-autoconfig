@@ -92,7 +92,10 @@ function main() {
 
     const entries = fs.readdirSync(claudeDir);
     for (const entry of entries) {
-      if (!AUTOCONFIG_FILES.includes(entry)) {
+      // SKIP_BACKUP entries are user content the backup deliberately never copies
+      // (worktrees, node_modules). Counting them here would open — and then immediately
+      // delete — an empty dated folder on every run.
+      if (!AUTOCONFIG_FILES.includes(entry) && !SKIP_BACKUP.includes(entry)) {
         // Found something that's not from autoconfig
         return true;
       }
@@ -267,7 +270,11 @@ function main() {
 
   // Step 2: Backup existing .claude/ if it has user content
   const claudeDest = path.join(cwd, '.claude');
-  const SKIP_BACKUP = ['migration']; // Don't backup the migration folder itself
+  // Never backed up, at EVERY depth (copyTree's filter re-applies per level):
+  // 'migration' would nest the backup inside itself; the rest are regenerable artifacts
+  // whose trees are enormous and, under pnpm, largely symlinks. A .claude/worktrees/ full
+  // of git worktrees put 812 MB of node_modules through this copier on one real project.
+  const SKIP_BACKUP = ['migration', 'worktrees', 'node_modules', '.git'];
   let migrationPath = null;
 
   // Diagnostic: log pre-install state
@@ -307,6 +314,10 @@ function main() {
       if (!filter(entry.name)) continue;
       const srcPath = path.join(src, entry.name);
       const destPath = path.join(dest, entry.name);
+      // A Dirent reflects lstat, so a symlink TO a directory answers isDirectory() false
+      // and would fall through to copyFileSync — which is EPERM on Windows, killing the
+      // whole install. Nothing the installer copies is meant to be a link, so skip them.
+      if (entry.isSymbolicLink()) continue;
       if (entry.isDirectory()) {
         copyTree(srcPath, destPath, { filter, overwrite });
       } else if (overwrite || !fs.existsSync(destPath)) {
@@ -329,35 +340,38 @@ function main() {
     return files;
   }
 
-  if (fs.existsSync(claudeDest) && hasUserContent(claudeDest)) {
+  // Copies user files into the dated backup folder and writes its metadata. Returns the
+  // backup path, or null when nothing outside AUTOCONFIG_FILES/SKIP_BACKUP was worth keeping.
+  function backupUserContent(timestamp, backupPath) {
     const userEntries = fs.readdirSync(claudeDest).filter(e =>
-      e !== 'migration' && !AUTOCONFIG_FILES.includes(e)
+      !SKIP_BACKUP.includes(e) && !AUTOCONFIG_FILES.includes(e)
     );
     console.log(paint('gray', `   Backup triggered by user content: ${userEntries.join(', ')}`));
 
-    const timestamp = formatTimestamp();
     const migrationDir = path.join(claudeDest, 'migration');
-    migrationPath = path.join(migrationDir, timestamp);
 
-    // Copy user files to backup (excluding autoconfig-installed files). The filter
-    // applies at every depth, and skipping 'migration' keeps the backup from nesting
-    // into itself (migrationPath lives inside claudeDest).
-    copyTree(claudeDest, migrationPath, {
+    // The filter applies at every depth, and skipping 'migration' keeps the backup from
+    // nesting into itself (backupPath lives inside claudeDest).
+    copyTree(claudeDest, backupPath, {
       filter: (name) => !SKIP_BACKUP.includes(name) && !AUTOCONFIG_FILES.includes(name)
     });
 
     // Collect backed up files for metadata
-    const backedUpFiles = collectFiles(migrationPath);
+    const backedUpFiles = collectFiles(backupPath);
+    if (backedUpFiles.length === 0) {
+      // Nothing to keep — drop the empty folder rather than littering migration/.
+      fs.rmSync(backupPath, { recursive: true, force: true });
+      return null;
+    }
 
-    if (backedUpFiles.length > 0) {
-      // Write latest.json for the guide
-      fs.writeFileSync(path.join(migrationDir, 'latest.json'), JSON.stringify({
-        timestamp: timestamp,
-        backedUpFiles: backedUpFiles
-      }, null, 2));
+    // Write latest.json for the guide
+    fs.writeFileSync(path.join(migrationDir, 'latest.json'), JSON.stringify({
+      timestamp: timestamp,
+      backedUpFiles: backedUpFiles
+    }, null, 2));
 
-      // Create README inside the dated backup folder
-      const backupReadme = `# Migration Backup: ${timestamp}
+    // Create README inside the dated backup folder
+    const backupReadme = `# Migration Backup: ${timestamp}
 
   This folder contains a backup of your previous .claude/ configuration.
 
@@ -379,13 +393,31 @@ function main() {
   cp .claude/migration/${timestamp}/settings.json .claude/settings.json
   \`\`\`
   `;
-      fs.writeFileSync(path.join(migrationPath, 'README.md'), backupReadme);
+    fs.writeFileSync(path.join(backupPath, 'README.md'), backupReadme);
 
-      console.log(paint('yellow', `⚠️  Backed up existing config to .claude/migration/${timestamp}/`));
-    } else {
-      // No user files to backup, remove the empty migration folder
-      fs.rmdirSync(migrationPath, { recursive: true });
+    console.log(paint('yellow', `⚠️  Backed up existing config to .claude/migration/${timestamp}/`));
+    return backupPath;
+  }
+
+  // Best-effort by design. A backup that cannot be taken must not abort the install — the
+  // config we are about to write is what matters — and a half-copied migration folder is
+  // pure litter (812 MB of it, in the case that motivated this), so drop the partial.
+  function safeBackup(timestamp, backupPath) {
+    try {
+      return backupUserContent(timestamp, backupPath);
+    } catch (err) {
+      try {
+        fs.rmSync(backupPath, { recursive: true, force: true });
+      } catch { /* litter beats a crash */ }
+      console.log(paint('yellow',
+        `⚠️  Could not back up existing config (${err.code || err.message}) — continuing without a backup.`));
+      return null;
     }
+  }
+
+  if (fs.existsSync(claudeDest) && hasUserContent(claudeDest)) {
+    const timestamp = formatTimestamp();
+    migrationPath = safeBackup(timestamp, path.join(claudeDest, 'migration', timestamp));
   }
   mark('backup');
 
@@ -431,7 +463,7 @@ function main() {
   // THIS list (not package.json "files") is what gates installs — new dev-only commands/hooks
   // must be added here. Keep the literal on one line: tests parse it by regex.
   const DEV_ONLY_FILES = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-session.md', 'migrate-new-session.md', 'token-guard.js', 'plan-progress.md', 'plan-progress.js', 'whats-happening.md', 'whats-happening.js', 'refactor.md', 'parallel-session-worktrees.md',
-    'fleet.md', 'fleet.js', 'sync-worktrees.md', 'sync-worktrees.js', 'session-close.js', 'restore-after-reboot.md', 'restore-after-reboot.js', 'worktree-gate.js', 'claim-registry.js', 'token-guard-liveness.js', 'statusline-cost.js', 'cost-compare.md', 'gimme-one-liner.md'];
+    'fleet.md', 'fleet.js', 'sync-worktrees.md', 'sync-worktrees.js', 'session-close.js', 'restore-after-reboot.md', 'restore-after-reboot.js', 'worktree-gate.js', 'claim-registry.js', 'token-guard-liveness.js', 'statusline-cost.js', 'cost-compare.md', 'gimme-one-liner.md', 'create-wip-report.md', 'abort-plan.md'];
 
   // Everything the installer ships to user projects passes this gate, at every depth.
   const shipsToUsers = (name) => !DEV_ONLY_FILES.includes(name);
