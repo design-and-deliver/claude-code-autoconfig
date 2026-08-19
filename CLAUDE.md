@@ -167,6 +167,14 @@ and pins its semantics — adopt-only, the `~/.claude` token-guard carve-out, ch
 exit codes this hook depends on. It does **not** replace the guard: it proves the actuator is
 correct, never that this machine's fleet is actually in sync. Only the check-mode run does that.
 
+**A third check warns, never blocks** (2026-08-19): after both blocking checks, the hook prints
+`unlandedBranches` from `.claude/scripts/sync-worktrees.js --json` — branches merged nowhere that
+have no worktree left. A push is the wrong moment to *refuse* over a branch that isn't the one
+you're pushing, and a guard that blocks on advisory information is a guard somebody deletes; but
+nothing else surfaces this without a human remembering to run `/sync-worktrees`, which is the same
+passivity that let a branch sit a day behind. Its `|| true` is load-bearing — `set -e` is on, so a
+non-zero exit there would abort the push.
+
 On a fresh checkout, recreate `.git/hooks/pre-push` (then `chmod +x` it):
 
 ```sh
@@ -179,6 +187,23 @@ echo "[pre-push] running full test suite (npm test)..."
 npm test
 echo "[pre-push] checking hook fleet sync..."
 node scripts/sync-hook-fleet.js
+
+# Unlanded-branch notice — WARN ONLY, last on screen, and `|| true` because `set -e` is on.
+echo "[pre-push] unlanded branches (warn only)..."
+node .claude/scripts/sync-worktrees.js --json 2>/dev/null | node -e '
+  let s = "";
+  process.stdin.on("data", (d) => (s += d)).on("end", () => {
+    let u = [];
+    try { u = JSON.parse(s).unlandedBranches || []; } catch { return; }
+    if (!u.length) { console.log("[pre-push]   none."); return; }
+    console.log("[pre-push]   WARNING: " + u.length + " unlanded branch(es) with no worktree:");
+    for (const b of u) {
+      console.log("[pre-push]     " + b.branch + " - " + b.ahead + " unlanded, " + b.behind + " behind");
+    }
+    console.log("[pre-push]   Not blocking. Land them, or reverse-merge before they drift further.");
+  });
+' || true
+
 echo "[pre-push] OK - tests green, fleet in sync."
 ```
 
