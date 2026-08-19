@@ -29,6 +29,39 @@ plans, gitignored in some repos). Tooling that discovers plans (/continue's plan
 /plan-progress) must scan BOTH directories. A gitignored plan's Ledger-only "commit" steps
 are no-ops — there the Ledger entry itself is the durable record, so skip those commits.
 
+## ⛔ Branch discipline — one branch per plan, merged once
+
+A plan is an all-or-nothing transaction, so it needs somewhere to be incomplete safely. That
+place is a branch, never the default branch.
+
+- **One branch per plan**, named after the plan's alias (`plan/<alias>`), created by the first
+  substep's session and re-entered by every later one. **Record that branch name in the plan
+  doc's header**, so a fresh session finds it without guessing. The unit of isolation is the
+  plan, not the substep — a branch per substep is the same big-bang merge in more pieces.
+- **Never execute a substep on the default branch.** A plan that lands substep by substep
+  straight into `main` has no isolation and nothing to revert as a unit, and any release cut
+  from `main` mid-plan ships half a feature to users.
+- **Refresh from the default branch at every substep boundary** (`git merge main` on the plan
+  branch, before starting the next substep). This is the whole safety mechanism. Textual
+  conflicts are rare; what a stale branch actually defers is the *semantic* break, and
+  refreshing per substep surfaces it the same day instead of at one big merge at the end.
+- ⛔ **Merge to the default branch ONCE, when the whole plan is done — never a phase, never a
+  substep.** Merging phase 1 of 3 puts half a feature in `main`: an extracted module nothing
+  calls yet, a migration for a table nothing reads, a flag no UI sets. If the plan then dies,
+  that junk is indistinguishable from live code and stays forever.
+- **If a phase is worth merging on its own, it was never a phase — it was a separate plan.**
+  That is the escape valve, and it belongs at *authoring* time: split it into its own plan doc
+  with its own branch. The only mid-plan exception is a genuine hotfix that happens to live on
+  the branch — cherry-pick that one commit onto the default branch, never merge the phase.
+
+That last rule is what makes the per-substep refresh **mandatory rather than advisory**: one
+merge at the end is only cheap because the branch absorbed the default branch continuously on
+the way there. Skip the refresh and you have rebuilt the big-bang merge this section avoids.
+
+Two consequences worth stating in the plan's header, because they are why executors comply:
+abandoning a plan is exactly one `git branch -D`, at any point in its life; and
+`git log main..plan/<alias>` is the plan's whole reviewable delta.
+
 ## Structure
 
 1. **Header**: goal, links to source audits/evidence, and "how to execute" (one substep per
@@ -39,7 +72,9 @@ are no-ops — there the Ledger entry itself is the durable record, so skip thos
    Fallback where /continue is absent: start a fresh session pointed at the plan doc).
    The header also carries the **read-this-doc-in-slices instruction**: name the ⛔ trap
    section's line range and tell the session to read that range + its own substep + the Ledger
-   tail, never the whole plan (see Read budget).
+   tail, never the whole plan (see Read budget). It also names the plan's **branch**
+   (`plan/<alias>`) — see Branch discipline; a header that omits it makes every executing
+   session guess, and the cheapest wrong guess is `main`.
 2. **⛔ Standing trap warnings** section at the top: the "never do X" list a fresh session must
    read before ANY item — load-bearing conventions where an innocent refactor runs clean and
    breaks at runtime. Name this repo's god files here too (see Read budget below).
