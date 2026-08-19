@@ -4,7 +4,7 @@ argument-hint: [--show]
 model: sonnet
 ---
 <!-- @description Recovers where your previous session in this terminal left off — rebuilds its context on a cheap model, reports the state and the precise next action, then stops for your go-ahead. Plan-aware: if that session was executing a substep of a plan doc AND the transcript confirms nothing came after it, the report comes from the plan's Ledger instead of the transcript. -->
-<!-- @version 15 -->
+<!-- @version 16 -->
 <!-- @param --show | flag | optional | Opens the recovered transcript in your default editor (no-op on a fresh checkpoint handoff note — nothing is read there). -->
 <!-- @response success | Picking up where we left off — {what we were doing}. State summary + the one next action, then a go-ahead question. -->
 <!-- @response plan | Picking up where we left off — {plan alias}: substep {N.k} done ({hash}); next: {N.next}. Then a go-ahead question. -->
@@ -158,6 +158,22 @@ instead of the deploy investigation, because this step used to skip the extract 
 Ledger/git match.) The probe deliberately keeps the full walk-back on every plan match for
 exactly this reason — it costs ~700 tokens at p50, cheap insurance against reporting a
 stale thread as current.
+
+⛔ **Aborted** — check this FIRST, before the three verdicts below. A killed plan looks
+exactly like a stalled one: unchecked boxes, a Ledger, a branch. The only difference is a
+terminal stamp, written by `/abort-plan`, in one of two places:
+
+- the doc's **first ~10 lines** (a `> ⛔ **Status: ABORTED YYYY-MM-DD**` blockquote under the
+  H1) — so read that head slice too; `trapSection` / `nextSubstep` / `ledgerTail` do NOT
+  cover it, which is exactly why the stamp is also written to the Ledger,
+- the **last Ledger entry**, opening `⛔ PLAN ABORTED`.
+
+Either one is terminal and both are authoritative — a doc with unchecked substeps is still
+aborted. **Do not name a next substep, do not resume, do not treat the unfinished boxes as
+work in flight.** Report one line — *"{alias} was aborted {date}: {reason}; recoverable at
+tag `aborted/{alias}`"* — then fall through to Step 4 and report whatever `tempFile`
+actually shows as the session's last real activity. If `tempFile` shows nothing after the
+abort, say the session ended there and stop; do not go to Step 5.
 
 **Clean handoff** (Ledger/git reconcile — latest substep committed + ledgered, tree clean,
 or every substep already checked — AND `tempFile`'s last activity is the plan work itself,
