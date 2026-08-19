@@ -36,6 +36,10 @@ coverage/
 # Session-rendered article archive (/create-web-page output, local-only)
 ARTICLES/
 
+# Per-session WIP snapshots (/create-wip-report output). Stale within hours and would
+# churn on every merge — regenerated, never committed.
+WIP/
+
 # Local feature pilots / experiments (not distributed)
 pilots/
 
