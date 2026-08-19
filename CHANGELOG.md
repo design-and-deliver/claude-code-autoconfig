@@ -4,6 +4,14 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.222
+- fix(cli): Installing over a project that keeps git worktrees no longer crashes partway through, and the backup folder no longer fills up with copied dependency trees
+- fix(terminal-title): The "awaiting your reply" tab indicator now catches turns that hand you the next move
+- docs(continue): /continue now opens by stating it is recovering context for your last active use case
+- fix(terminal-title): Terminal tab titles no longer drift stale mid-session — once the current title was set a long way back, the hook reads it back to Claude so a title naming finished work or the wrong subsystem gets noticed and rewritten
+- fix(cli): The startup permission warnings are now cleared from .claude/settings.local.json as well, not just .claude/settings.json
+- fix(status-beeps): When status beeps stay silent, the reason is now recorded so it can be diagnosed
+
 ## v1.0.221
 - fix(token-guard): - The session-size card no longer interrupts just to recommend approving — it
 - fix(continue): /continue no longer reports a plan's next step as your last activity if you'd already moved on to something else
@@ -207,7 +215,4 @@
 
 ## v1.0.173
 - feat: ship /extract-rules to users
-
-## v1.0.172
-- feat: /extract-rules v3 — auto-apply, --keep-sources, changelog with paths
 
