@@ -1,9 +1,10 @@
 <!-- @description Snapshot every open Claude session on this repo into one WIP note each — description, work complete, work remaining, merge issues. -->
-<!-- @version 2 -->
+<!-- @version 3 -->
 <!-- @param all | flag | optional | Include idle sessions, not just active ones. -->
 <!-- @param mine | flag | optional | Write only this session's note (refresh before a /clear). -->
 <!-- @response report | One line per note written, then the single sharpest cross-session finding. -->
-<!-- @sideeffect Writes WIP/<YYYY-DD-MON>/<goal-slug>.html + index.html in the BASE checkout. Deliberately untracked. -->
+<!-- @sideeffect Writes WIP/<YYYY-DD-MON>/<goal-slug>.html + index.html in the BASE checkout — untracked, regenerated every run. -->
+<!-- @sideeffect Writes WIP/DONE/<YYYY-DD-MON>/<goal-slug>.html for finished sessions. That folder IS tracked and is never regenerated. -->
 <!-- @example /create-wip-report | Snapshot every active session -->
 <!-- @example /create-wip-report mine | Refresh just this session's note -->
 <!-- @example /create-wip-report all | Include idle sessions too -->
@@ -18,8 +19,15 @@ accomplish, how far it got, and what would break if it died right now.** That is
 Write them at a natural pause — before a batch of `/clear`s, before stepping away, before a merge
 train. They are a snapshot, not a log: cheap to regenerate, never edited in place.
 
-**READ-ONLY toward the repo.** It never merges, commits, reaps a worktree, runs the hook-fleet
-actuator, or touches another session's files. It reports.
+**A finished session's note is different, and Step 5 treats it differently.** A live note answers
+"where is this now?" — a question that expires the moment the work lands. What survives is why the
+work happened and what it taught, so a done session is re-rendered into the tracked `WIP/DONE/`
+archive with the expiring parts dropped and a `Lesson` added.
+
+**It writes only inside `WIP/`, and never commits.** It does not merge, commit, reap a worktree,
+run the hook-fleet actuator, edit `CLAUDE.md`, or touch another session's files. Where it has a
+finding — including a lesson worth promoting into `CLAUDE.md`'s `## Discoveries` — it proposes it
+in the report and leaves the decision to the user.
 
 ## Step 1 — the roster
 
@@ -50,8 +58,10 @@ Give each agent: the session id, its transcript path
 (`~/.claude/projects/<project-slug>/<sid>.jsonl` — check every project-slug directory, a worktree
 session lives under its own slug), its working tree, its title, Step 3's slot mapping and its
 ⛔ template rule (**each agent Reads `~/.claude/skills/create-web-page/template.html` itself** —
-5KB, and the alternative is five agents each drifting the format from memory), and the
-work-remaining format in Step 4.
+5KB, and the alternative is five agents each drifting the format from memory), the
+work-remaining format in Step 4, and **Step 5's finished-test and archive shape** — the agent that
+established what landed is the one holding the evidence for that call, so it decides live vs.
+archived and writes to the matching path. It reports which it wrote, so Step 6 and Step 7 know.
 
 Tell each agent to establish, from evidence and not from the transcript's own claims:
 
@@ -77,6 +87,10 @@ the **base checkout** (`C:\CODE\claude-code-autoconfig`), never inside `.claude/
 every session's note lands in one folder. The slug is the goal in kebab-case, verb first,
 parentheticals dropped, ~5 words: "Gate the WIP report command out of user installs" →
 `gate-the-wip-report-command.html`.
+
+A session that Step 5 judges **finished** skips this folder entirely and is written to
+`WIP/DONE/<YYYY-DD-MON>/<goal-slug>.html` instead, in the archive shape. It is never written to
+both — one note per session per run, in exactly one place.
 
 Notes render as HTML in the `create-web-page` house style — collapsed sections, so a folder of
 six notes is skimmable at headline level and expands only where the reader cares. They are **not**
@@ -108,6 +122,9 @@ fragment — redo it from the template.
 | `.dek` | the metadata line: session id · working tree · plan · also-writes (see below) |
 | `.lead-in` | **ONE paragraph, 45 words hard cap** — see below |
 | `<details>` ×4 | `Background` · `Work complete` · `Work remaining` · `Merge issues` |
+
+This is the **live** note. An archived one uses the same slots with different content and three
+sections — Step 5 has the mapping.
 
 ### ⛔ The lead-in is a status reply, in one short paragraph
 
@@ -352,7 +369,102 @@ and where it must run — not a topic. "Reap the orphan `.claude/worktrees/token
 *fresh* session in the base checkout: `node .claude/scripts/sync-worktrees.js --write
 --keep-branches`" is an item. "Clean up worktrees" is not.
 
-## Step 5 — the index
+## Step 5 — archive the finished ones
+
+A live note is a status reply, and a status reply expires on completion. `Done and committed.` /
+`Nothing.` / `git status is clean` is the whole of a finished note's front page, and none of it will
+mean anything in a month. What outlives the work is **why it happened and what it taught** — so a
+finished session is re-rendered into `WIP/DONE/`, which unlike the rest of `WIP/` **is tracked**.
+
+### The test for finished — both halves, or it stays live
+
+1. **`Work remaining` is `(none)`.** Nothing left — not "nothing blocking", not "just the push".
+2. **Every commit is landed on `main`** in the base checkout, verified, not claimed:
+
+```bash
+# exit 0 = the commit is an ancestor of main, i.e. landed. No output to parse.
+git -C "<base>" merge-base --is-ancestor <hash> main
+```
+
+Two things that look disqualifying and are not: **`main` being unpushed** (this repo lands locally
+and pushes in batches) and **a worktree still on disk** (that is cleanup, not work). Two that are:
+a commit sitting on an unmerged worktree branch, and a plan with unchecked substeps — a session that
+finished *its substep* did not finish *the work*, and archiving it buries the rest.
+
+When in doubt it stays live. A note wrongly left live costs one regeneration; a note wrongly
+archived is committed, then read later as a finished story that isn't.
+
+### The archive shape
+
+Same template, different content. Four changes and one addition:
+
+| live note | archived note |
+|---|---|
+| `.lead-in` — status reply | **the outcome**, and the headline lesson if there is one |
+| `.dek` — session id · tree · plan | `<date> · <N> commits · <T> active` |
+| `Lesson` | **new — comes first** |
+| `Background` | kept, and now the point of the file |
+| `Work complete` | kept, hashes and measured time intact |
+| `Work remaining` | **dropped** — `(none)` by definition |
+| `Merge issues` | **dropped** — resolved by definition |
+
+Drop, never keep-and-mark-resolved. A `Merge issues` section reading "landed on main, tree clean"
+is 242 words telling a future reader that the ordinary thing happened, and it pushes the one
+section they came for below the fold. The session id and working tree go for the same reason: both
+are dead references within days — transcripts get cleaned up and worktrees get reaped.
+
+**The lead-in states the outcome, not the status.** Still one paragraph, still 45 words, still the
+senior-manager test. `Done and committed.` is not an outcome — it is a checkbox. What changed, and
+what is now true that was not before?
+
+```html
+<!-- ✗ status reply, expired -->
+<p class="lead-in">Done and committed. Sessions that resume earlier work now announce it in one
+agreed wording instead of two competing versions.</p>
+
+<!-- ✓ outcome — 41 words -->
+<p class="lead-in">Recovery sessions now announce themselves in one fixed wording. Two versions had
+been drifting because the rule described the sentence instead of quoting it. Prescribing the exact
+text, verbatim, was what actually stopped the drift — describing it never did.</p>
+```
+
+### ⛔ The `Lesson` section, and the one way it goes wrong
+
+First `<details>`, prose like `Background`, uncapped. One or two findings — not a summary of the
+work, which `Work complete` already holds. A finding earns its place only if it is **transferable**:
+true beyond this session, for a reader who will never touch this branch.
+
+Each one states three things: **what was believed, what turned out to be true, and the evidence** —
+a hash, a `file:line`, or a measurement. A lesson without evidence is an opinion, and it will be
+re-litigated by the next session that disagrees.
+
+**⛔ Never invent one.** Most sessions do not produce a transferable lesson, and that is the normal
+case, not a failure — plenty of work is simply the work. Where there is none, drop the section
+entirely (`Never keep an empty section` still applies) and let `Background` carry the context. A
+manufactured lesson is worse than no lesson: it reads with the same authority as a real one, and an
+archive that mixes them teaches the reader to skim past both.
+
+The test: **would this change what a session six months from now does?** "We renamed the flag to
+`--all`" would not. "Describing a prescribed sentence instead of quoting it let two versions drift
+for three weeks" would.
+
+### Promotion — the archive is raw material, not the destination
+
+An archive nobody reads is a graveyard, and `WIP/DONE/` is read only by someone who already went
+looking. `CLAUDE.md`'s `## Discoveries` and `.claude/rules/` are read by **every** session, which is
+the only reason a lesson ever changes anything.
+
+So when a lesson generalizes past its own incident, say so in Step 7's report — name the lesson, the
+archived note, and where it belongs. **Propose; never write it.** Editing `CLAUDE.md` is a decision
+about what every future session is told, and it is the user's.
+
+### Never rewrite an existing archive
+
+If `WIP/DONE/<date>/<slug>.html` already exists, leave it and say so in the report. Archived notes
+are immutable — that immutability is the entire reason the folder can be tracked without churning.
+A superseded live note in an older dated folder is untracked and harmless; leave it too.
+
+## Step 6 — the index
 
 Once every note is written, write `WIP/<YYYY-DD-MON>/index.html` from the same template, so the
 folder opens as one page instead of a directory listing. It is the only file that reads the others.
@@ -360,7 +472,7 @@ folder opens as one page instead of a directory listing. It is the only file tha
 - `.title` — `WIP — <date>`; `.stamp` — the snapshot time; `.dek` — `<N> sessions · <T> invested ·
   ~<R> remaining · base <branch>, <K> commits ahead of origin`, where `T` and `R` are the sums of
   the per-note active and estimated times. That one line is the whole folder's bottom line.
-- `.lead-in` — the **cross-session finding** from Step 6, under the same 45-word cap as a note's.
+- `.lead-in` — the **cross-session finding** from Step 7, under the same 45-word cap as a note's.
   It is the one thing the folder knows that no single note does, so it goes above the fold. State
   the finding and the evidence; everything else waits.
 - A first `<details>` naming the finding, holding what the lead-in could not: why it happened, the
@@ -368,11 +480,15 @@ folder opens as one page instead of a directory listing. It is the only file tha
   the note's goal followed by its two times — `Ship the release (3m active · ~15m est.)` — body =
   a one-sentence status plus `<a href="<slug>.html">open</a>`. Order most-blocked first, not
   alphabetically.
+- **Archived this run** — a final `<details>`, only when Step 5 archived something: one `<li>` per
+  note, `<a href="../DONE/<date>/<slug>.html">`, each with its one-line lesson or `no lesson`. It
+  sits last because it is the only part of the page that is not about what still needs doing.
 - Skip the index on `mine` — a single refreshed note does not restate the fleet.
 
-## Step 6 — report
+## Step 7 — report
 
-List the files written, one line each, with the session id. Then **one** cross-session finding —
+List the files written, one line each, with the session id, and mark the archived ones — they are
+the only files of the run that persist. Then **one** cross-session finding —
 the sharpest thing the notes revealed that no single session could see (two sessions sharing a
 working tree, two queued on the same file, an unpushed release nobody owns, two worktrees both
 claiming the next `.claude/updates/` number). One. Not a digest of the notes you just wrote; the
@@ -381,19 +497,35 @@ user can open them.
 Give the index's path last, as the one thing worth opening. Do **not** open a browser — unlike
 `/create-web-page`, this writes an archive the user visits when they choose to.
 
-Close by saying the folder is untracked and why: WIP notes go stale within hours and would churn
-on every merge. They are never committed and never merged — the next `/create-wip-report` replaces
-them.
+**Then any promotion proposals from Step 5** — a lesson that generalizes past its own incident,
+with the destination named (`CLAUDE.md`'s `## Discoveries`, a `.claude/rules/` file, or
+`.claude/feedback/`). At most two, or it is a digest again. Say what the entry would assert, in one
+sentence, so the user can accept or reject without opening the note. Nothing is written either way.
+
+Close on the two lifecycles, since one folder is disposable and the other is not:
+
+- `WIP/<date>/` is **untracked and regenerated** — notes go stale within hours and would churn on
+  every merge. The next `/create-wip-report` replaces them.
+- `WIP/DONE/` is **tracked and permanent**. When this run archived anything, say so plainly and
+  name the commit as the user's next step — **do not commit it yourself**; a command that writes
+  tracked files and commits them is a command that lands work nobody reviewed.
 
 ## Fallback — no template
 
 Only when `~/.claude/skills/create-web-page/template.html` does not exist. Write the same content
 as `<goal-slug>.md`, `#` for the goal, a bullet list for the `.dek` fields, `##` for each of the
-three sections, and skip the index. Say in the report that notes are markdown and why.
+four sections — three, for an archived note — and skip the index. Say in the report that notes are
+markdown and why. Step 5 still applies: a finished session is still archived, still to
+`WIP/DONE/<date>/<slug>.md`, still tracked.
 
 ## What it will never do
 
 - **Act on a finding.** It surfaces a collision; standing a session down is the user's call.
+- **Invent a lesson.** No transferable finding is the normal case. Drop the section and move on.
+- **Commit the archive, or edit `CLAUDE.md`.** It writes `WIP/DONE/` and proposes the promotion.
+  Landing either is the user's call — see Step 5's promotion rule.
+- **Rewrite an archived note.** They are immutable; that is what lets the folder be tracked.
+- **Archive a session that is merely unblocked.** Both halves of Step 5's test, or it stays live.
 - **Touch another session's tree.** Read `git log` and `git status` there; write nothing.
 - **Read a whole plan doc or a whole transcript.** Ledger tail, substep list, transcript tail.
 - **Trust a transcript over git.** A session that says it committed and has no hash did not.
