@@ -47,12 +47,25 @@ session that executes it.
    starting the next substep. This is the whole safety mechanism. Plans here are domain-scoped, so
    *textual* conflicts are rare; what a stale branch actually defers is the **semantic** break, and
    refreshing per substep surfaces it the same day instead of at one big merge.
-5. **Merge to `main` at phase boundaries, not per substep.** A phase is the smallest delta that is
-   coherent on its own. Merge per step 4 of the loop below — automatically when it's clean.
+5. ⛔ **Merge to `main` ONCE, when the whole plan is done — never a phase, never a substep.** A plan
+   is an all-or-nothing transaction. Merging phase 1 of 3 puts half a feature in `main`: an
+   extracted pure module nothing calls yet, a migration for a table nothing reads, a flag no UI
+   sets. If the plan then dies, that junk is indistinguishable from live code and stays forever.
+   Merge per step 4 of the loop below — automatically when it's clean, but only at the end.
+
+   **If a phase is worth merging on its own, it was never a phase — it was a separate plan.** That
+   is the escape valve, and it belongs at *authoring* time: split it into its own plan doc with its
+   own branch. The only mid-plan exception is a genuine hotfix that happens to live on the branch —
+   `git cherry-pick` that one commit onto `main`, never `git merge` the phase.
+
+   This makes step 4 above **mandatory, not advisory**: one merge at the end is only cheap because
+   the branch absorbed `main` continuously on the way there. Skip the per-substep refresh and you
+   have rebuilt the big-bang merge this rule exists to avoid.
 
 Consequences worth knowing:
 
-- Abandoning a plan becomes one `git branch -D` instead of unwinding N merged substeps out of `main`.
+- Abandoning a plan is exactly one `git branch -D` — nothing to unwind out of `main`, at any point
+  in the plan's life. This is the whole reason the merge is deferred to the end.
 - `git log main..plan/<alias>` is the plan's whole reviewable delta.
 - `/sync-worktrees` will list a live plan branch as unlanded work, and will not reap it (its reap
   loop requires a branch already merged to `main`). That is expected for a live plan, not a finding.
