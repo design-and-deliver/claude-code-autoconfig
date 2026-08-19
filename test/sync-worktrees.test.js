@@ -174,6 +174,50 @@ test('--write actually removes the directory and the merged branch', () => {
   assert(branches.includes('main'), 'main must never be deleted');
 });
 
+// The complement of the merged-branch check above, and the blind spot that motivated it: a branch
+// that is NOT in main and has NO worktree is invisible to `--merged` (excluded by definition) and
+// to fleet.js (which enumerates worktrees). Found by hand 2026-08-19 holding 11 commits of drift.
+// The --write half of this test pins the contract that matters — reported, never reaped.
+test('an unlanded branch with no worktree is reported with ahead/behind, and --write never deletes it', () => {
+  git('checkout', '-q', '-b', 'stranded-work');
+  fs.writeFileSync(path.join(repo, 'src', 'd.ts'), 'export const d = 4;\n');
+  git('add', '-A');
+  git('commit', '-m', 'work nobody landed');
+  git('checkout', '-q', 'main');
+  // main moves on without it — this is the drift the report exists to surface.
+  fs.writeFileSync(path.join(repo, 'src', 'e.ts'), 'export const e = 5;\n');
+  git('add', '-A');
+  git('commit', '-m', 'main moves on');
+  try {
+    const u = run().unlandedBranches.find((b) => b.branch === 'stranded-work');
+    assert(u, 'an unmerged branch with no worktree must be reported');
+    assert(u.ahead === 1, `expected 1 unlanded commit, got ${u.ahead}`);
+    assert(u.behind === 1, `expected 1 commit behind main, got ${u.behind}`);
+
+    run('--write');
+    const branches = git('branch', '--format=%(refname:short)').split('\n').map((s) => s.trim());
+    assert(branches.includes('stranded-work'),
+      '--write must never delete an unlanded branch — it can be the only copy of that work');
+  } finally {
+    git('branch', '-D', 'stranded-work');
+  }
+});
+
+// A branch that HAS a worktree is somebody's current desk, not a leftover — it belongs to /fleet's
+// UNLANDED block, not to this one, or every active session gets nagged about its own branch.
+test('a branch with a live worktree is not reported as unlanded', () => {
+  const LIVE = path.join(WT, 'live-unlanded');
+  git('worktree', 'add', '-q', '-b', 'busy-branch', LIVE);
+  try {
+    const names = run().unlandedBranches.map((b) => b.branch);
+    assert(!names.includes('busy-branch'),
+      `a checked-out branch must not be reported as unlanded; got ${JSON.stringify(names)}`);
+  } finally {
+    git('worktree', 'remove', '--force', LIVE);
+    git('branch', '-D', 'busy-branch');
+  }
+});
+
 // Regression for the 2026-08-15 incident: a junctioned node_modules must be unlinked on its own
 // before the orphan's recursive delete, or the delete follows the junction and destroys whatever
 // real directory it points at (proved by hand against the main checkout's actual node_modules).
