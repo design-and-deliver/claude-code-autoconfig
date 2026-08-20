@@ -1,5 +1,5 @@
 <!-- @description Snapshot every open Claude session on this repo into one WIP note each — description, work complete, work remaining, and any real git conflict. -->
-<!-- @version 4 -->
+<!-- @version 5 -->
 <!-- @param all | flag | optional | Include idle sessions, not just active ones. -->
 <!-- @param mine | flag | optional | Write only this session's note (refresh before a /clear). -->
 <!-- @response report | One line per note written, then the single sharpest cross-session finding. -->
@@ -73,9 +73,9 @@ Tell each agent to establish, from evidence and not from the transcript's own cl
 - **the plan, if any** — a `docs/*.md` or `.claude/plans/*.md` the session opened that has a
   `## Ledger`. Read the Ledger tail and the substep list, never the whole doc. `.claude/plans/` is
   gitignored here, so a plan edit there will not show in `git status` — the Ledger is the record.
-- **writes outside this repo** — a session that also commits to the private `cca-cost-control` repo,
-  or that publishes hooks into `~/.claude` and the fleet repos via `scripts/sync-hook-fleet.js`,
-  has hazards git-in-this-repo cannot see. Name the other repo and its branch.
+- **writes outside this repo** — a session that also commits to a sibling repo, or that publishes
+  hooks into `~/.claude` and the fleet repos via `scripts/sync-hook-fleet.js`, has hazards
+  git-in-this-repo cannot see. Name the other repo and its branch.
 
 Your own session writes its own note directly — you already have that context; a subagent would
 only re-derive it worse.
