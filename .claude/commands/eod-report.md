@@ -1,5 +1,5 @@
 <!-- @description End-of-day wrap-up: what got done and what's next, as two collapsible sections on an HTML page. -->
-<!-- @version 5 -->
+<!-- @version 6 -->
 <!-- @param days | number | optional | How many days back to scan. Default 1 (today). -->
 <!-- @response success | The report path, the "Start here" item, and the sharpest finding of the day. -->
 <!-- @sideeffect Writes reports/eod/<YYYY-DD-MON>.html in the BASE checkout. That folder IS tracked; the command never commits it. -->
@@ -21,15 +21,25 @@ notes. **The console gets three lines, not the report** — see Step 4.
 
 ## Step 1 — gather (batch these into as few calls as possible)
 
-Scan back `$ARGUMENTS` days (default **1**, i.e. today). In **every** repo touched this session,
-not just the CWD — a session that committed to three repos and reports one is worse than useless.
-Find them by scanning sibling checkouts for same-day commits, then, per repo:
+Scan back `$ARGUMENTS` days (default **1**, i.e. today), in **this repo only** — the checkout the
+command was run from, plus its worktrees. Do not go hunting through sibling checkouts.
 
 ```bash
 git log --oneline --since="<N> days ago" --author="$(git config user.name)"
 git status --short
 git log --oneline @{u}.. 2>/dev/null    # committed but unpushed
 ```
+
+**The project is the report's boundary.** A wrap-up covering four repos is four wrap-ups stapled
+together: nothing in it can be ranked, because a commit here and a commit in an unrelated service
+are not competing for the same second slot. The two-item cap only means something inside one
+project.
+
+**A related repo enters through an item, never through the scan.** When today's work here depended
+on a change elsewhere — `cca-cost-control`, `proswitch-api` — that fact belongs in the sentence
+describing the work: *"the usage check it calls now lives in `cca-cost-control@bc4e303`"*. Read
+that repo's `git log` when an item already points at it; never sweep it for its own day's commits,
+and never let it appear in the `.dek`.
 
 Also pull in, when they exist and are cheap to read:
 
@@ -77,7 +87,7 @@ whose `href` matches no id is a dead link: the modal silently declines to open.
 | `<title>` | `End of day — <Month D, YYYY>` |
 | `.stamp` | the generation time, local (`date "+%B %-d, %Y %-I:%M%p"`) |
 | `.title` | two lines — `End of day report`, then the date in a `<span class="when">` |
-| `.dek` | `<N> repos · <K> commits · <U> unpushed · <R> open` — `<code>` around repo names |
+| `.dek` | the project name, bare — `claude-code-autoconfig` |
 | `<details>` ×2 | `Done Today` · `Next Steps` — **exactly these two, in this order** |
 
 ### ⛔ Nothing lives outside the two sections
@@ -91,9 +101,15 @@ Two things are not exceptions to this, because neither renders: the `.detail` bl
 adjacent to their items, inside the sections) and the modal shell (a sibling *after* `.article`
 closes). Nothing visible joins the two sections.
 
-The `.dek` is the one exception, and it earns it by being counts rather than prose. It is also the
-**only** place the day's totals appear, since the summaries carry no numbers (below) — so get them
-right: `4 repos · 15 commits · 2 unpushed · 8 open`.
+The `.dek` is the one exception, and it holds **the project name and nothing else** —
+`claude-code-autoconfig`. It is an **anchor, not a summary**: it says which project the two
+sections are about, which the sections themselves never say, and then stops. Anything that asks to
+be read rather than glanced at belongs in an item.
+
+⛔ **No counts in the `.dek`.** `4 repos · 15 commits · 2 unpushed · 8 open` looks like a summary
+and is not one: fifteen commits is not a better day than four, so the numbers give the reader
+nothing to conclude, and the repo list is a boundary the report already has. The day's shape is in
+the two items — that is what the two-item cap is for.
 
 ### The title is two lines — name, then date
 
@@ -117,7 +133,7 @@ Each is a `<details>` (closed — never add `open`) with its content in `<div cl
 ```
 
 **The summary is the label alone.** No counts, no `(9)`, no `— top 2 of 9`. A header that carries a
-number invites reading the number instead of the item, and the `.dek` already has the totals.
+number invites reading the number instead of the item.
 
 Everything that is finished goes in `Done Today`. Everything that is not — blocked, undecided, or merely
 unstarted — goes in `Next Steps`. There is no third bucket; the distinction between "blocked" and
@@ -258,8 +274,9 @@ ended. It is a changelog wearing a receipt's clothes.
   where an engineer scanning the day's commits is already looking.
 - **A pointer is not a hash.** `.claude/retro/deploy-workflow-stale-ip.md` is a destination someone
   may actually open, so it earns its place; keep those.
-- The `repo@hash` form still applies wherever hashes *do* appear (drawers), whenever more than one
-  repo is in play — a bare hash is unverifiable from another checkout.
+- The `repo@hash` form still applies wherever hashes *do* appear (drawers) whenever the commit is
+  not this repo's — a bare hash is read as local, so an unprefixed one from a related repo is worse
+  than no hash.
 
 - **No unexplained internals.** An env var, a function, a table, a flag — gloss it in plain words on
   first mention, or cut it. `CCA_LICENSE_KEYS` becomes "the license key on the server".
@@ -354,8 +371,9 @@ which branch its checkout is on</span> — that answer decides whether anything 
 - **`Next Steps` items are imperatives.** "Repoint the deploy pipeline at the live box" — not "the
   deploy pipeline points at a dead box". The condition belongs in the drawer; the headline names
   the action, because that is what makes it a *step*.
-- **Every hash is `repo@hash`** when more than one repo is in play — a bare hash is unverifiable
-  from another checkout.
+- **A bare hash means this repo; anything else is `repo@hash`.** The report has one project, so the
+  prefix is what marks the exception — a hash from `cca-cost-control` without it is unverifiable
+  from this checkout, and reads as if the work happened here.
 - **Surface the unwelcome findings.** A broken pipeline, a deploy that did not take, a suite
   skipped rather than passed — those outrank wins for the two `Next Steps` slots. A wrap-up that
   only lists wins is a wrap-up that gets read once.
@@ -497,7 +515,8 @@ files and commits them is a command that lands work nobody reviewed.
 ## Fallback — no template
 
 Only when `~/.claude/skills/create-web-page/template.html` does not exist. Write the same content
-as `reports/eod/<YYYY-DD-MON>.md` — `#` for the title, a bullet list for the `.dek` fields,
+as `reports/eod/<YYYY-DD-MON>.md` — `#` for the title, the project name on the line under it for
+the `.dek`,
 `## Done Today` and `## Next Steps`, the same two-items-plus-overflow shape with the overflow as a nested list — and
 skip the browser open. There is no modal in markdown: each item's detail becomes an indented
 paragraph under it, and no `Details` link is written. Say in the report that the page is markdown
