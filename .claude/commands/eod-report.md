@@ -1,5 +1,5 @@
 <!-- @description End-of-day wrap-up: what got done and what's next, as two collapsible sections on an HTML page. -->
-<!-- @version 6 -->
+<!-- @version 7 -->
 <!-- @param days | number | optional | How many days back to scan. Default 1 (today). -->
 <!-- @response success | The report path, the "Start here" item, and the sharpest finding of the day. -->
 <!-- @sideeffect Writes reports/eod/<YYYY-DD-MON>.html in the BASE checkout. That folder IS tracked; the command never commits it. -->
@@ -39,7 +39,7 @@ project.
 on a change elsewhere — `cca-cost-control`, `proswitch-api` — that fact belongs in the sentence
 describing the work: *"the usage check it calls now lives in `cca-cost-control@bc4e303`"*. Read
 that repo's `git log` when an item already points at it; never sweep it for its own day's commits,
-and never let it appear in the `.dek`.
+and never let it appear in the `.stamp`.
 
 Also pull in, when they exist and are cheap to read:
 
@@ -85,9 +85,9 @@ whose `href` matches no id is a dead link: the modal silently declines to open.
 | Template slot | End-of-day content |
 |---|---|
 | `<title>` | `End of day — <Month D, YYYY>` |
-| `.stamp` | the generation time, local (`date "+%B %-d, %Y %-I:%M%p"`) |
+| `.stamp` | the project name, bare — `claude-code-autoconfig`. **Not the generation time.** |
 | `.title` | two lines — `End of day report`, then the date in a `<span class="when">` |
-| `.dek` | the project name, bare — `claude-code-autoconfig` |
+| `.dek` | **omitted entirely** — no element, not an empty one |
 | `<details>` ×2 | `Done Today` · `Next Steps` — **exactly these two, in this order** |
 
 ### ⛔ Nothing lives outside the two sections
@@ -101,15 +101,25 @@ Two things are not exceptions to this, because neither renders: the `.detail` bl
 adjacent to their items, inside the sections) and the modal shell (a sibling *after* `.article`
 closes). Nothing visible joins the two sections.
 
-The `.dek` is the one exception, and it holds **the project name and nothing else** —
-`claude-code-autoconfig`. It is an **anchor, not a summary**: it says which project the two
-sections are about, which the sections themselves never say, and then stops. Anything that asks to
-be read rather than glanced at belongs in an item.
+The `.stamp` is the one exception, and it holds **the project name and nothing else** —
+`claude-code-autoconfig`, in the template's small muted line above the title. It is an **anchor,
+not a summary**: it says which project the two sections are about, which the sections themselves
+never say, and then stops. Anything that asks to be read rather than glanced at belongs in an item.
 
-⛔ **No counts in the `.dek`.** `4 repos · 15 commits · 2 unpushed · 8 open` looks like a summary
-and is not one: fifteen commits is not a better day than four, so the numbers give the reader
-nothing to conclude, and the repo list is a boundary the report already has. The day's shape is in
-the two items — that is what the two-item cap is for.
+**The `.dek` is omitted** — there is no third line above the toolbar. The project name is the only
+thing that belongs there, `.stamp` already carries it, and two lines saying one thing is the
+padding this format exists to refuse.
+
+⛔ **No counts, anywhere above the toolbar.** `4 repos · 15 commits · 2 unpushed · 8 open` looks
+like a summary and is not one: fifteen commits is not a better day than four, so the numbers give
+the reader nothing to conclude, and a repo list is a boundary the report already has. The day's
+shape is in the two items — that is what the two-item cap is for.
+
+⛔ **The generation time does not appear on the page.** `.stamp` is the template's datetime slot
+everywhere else, so writing the project name there is a deliberate override, not an oversight —
+the date is already on the title's second line, and a wrap-up read the evening it was written has
+no use for the minute. Re-running the same day overwrites the file, so nothing depends on telling
+two runs apart.
 
 ### The title is two lines — name, then date
 
@@ -515,8 +525,7 @@ files and commits them is a command that lands work nobody reviewed.
 ## Fallback — no template
 
 Only when `~/.claude/skills/create-web-page/template.html` does not exist. Write the same content
-as `reports/eod/<YYYY-DD-MON>.md` — `#` for the title, the project name on the line under it for
-the `.dek`,
+as `reports/eod/<YYYY-DD-MON>.md` — the project name as the first line, `#` for the title,
 `## Done Today` and `## Next Steps`, the same two-items-plus-overflow shape with the overflow as a nested list — and
 skip the browser open. There is no modal in markdown: each item's detail becomes an indented
 paragraph under it, and no `Details` link is written. Say in the report that the page is markdown
