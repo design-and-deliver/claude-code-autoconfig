@@ -20,6 +20,15 @@
  * matching HEAD. WRITE asks "make every copy match canonical as it is right now" and always uses
  * the working tree. See tolerateAtHead().
  *
+ * A manifest entry may also be sourced OUT OF TREE (`sourceKey`) — this checkout holds a copy of
+ * the file, but is not the authority for it. Such an entry reads its canonical from a root
+ * recorded per machine in the local fleet file's `sources` map, and with no root recorded it is
+ * skipped everywhere ([src]) rather than falling back to this tree. Falling back is the dangerous
+ * default: propagating a copy this repo does not own can REMOVE working behaviour from an
+ * adopting repo, and every hook here fails open, so the removal is silent. A skipped entry is
+ * never counted as drift for the same reason — a non-authority has no standing to call another
+ * copy stale.
+ *
  * NOT shipped to users (scripts/ is outside package.json "files"). This file IS tracked in a
  * public repo, so personal paths must never be hardcoded — the per-machine repo list lives in
  * the gitignored sibling scripts/hook-fleet.local.json (falling back to the older
@@ -50,7 +59,18 @@ const MANIFEST = [
   // Dev-only (DEV_ONLY_FILES in bin/cli.js) — never in a user install, and deliberately NOT
   // synced to ~/.claude: the global hooks dir has no token-guard today, and putting one there
   // without a matching settings.json entry would be inert.
-  { file: 'token-guard.js', global: false },
+  //
+  // Sourced OUT OF TREE since 2026-08-21. This checkout's copy is the installable baseline, which
+  // is deliberately narrower than the copy an adopting repo runs: several verdict families were
+  // moved behind a configurable service, and a repo that has not configured one renders nothing
+  // in their place. So a `--write` from here would not update an adopting guard, it would REMOVE
+  // five working families from it — silently, because every handler in the file fails open, and
+  // the liveness canary only notices a guard that throws, not one that has quietly stopped
+  // deciding. `sourceKey` makes that impossible to do by accident: with no root recorded in the
+  // local fleet file's `sources` map this entry is skipped everywhere, and check mode stops
+  // reporting adopting copies as drifted (they are not behind — this tree is simply not their
+  // source). Record a root only when the authority actually moves.
+  { file: 'token-guard.js', global: false, sourceKey: 'token-guard' },
   // The guard's liveness canary. Paired: every token-guard handler is fail-open, so a repo
   // with the guard and no canary is a fleet gap — a dead guard there is silent by design.
   // The canary never require()s its partner (a load-time throw must not kill them both),
@@ -124,7 +144,16 @@ const PAD = 46;                                               // report column f
 
 // An entry lives under .claude/<subdir>/, defaulting to the hooks dir the fleet grew up in.
 const subdirOf = entry => entry.subdir || 'hooks';
-const canonicalFor = entry => path.join(repoRoot(), '.claude', subdirOf(entry), entry.file);
+
+// Which checkout is the authority for this entry. Default: this one. A `sourceKey` entry defers to
+// the root recorded under that key in the local fleet file, and null — no root recorded — is a
+// real answer meaning "nobody here", which makes the entry skip rather than quietly fall back to
+// this tree. CCA_CANONICAL_ROOT deliberately does not reach these: it relocates THIS repo for the
+// suite's HEAD-tolerance cases, and an entry sourced elsewhere was never reading this repo.
+const sourceRootFor = entry =>
+  entry.sourceKey ? (readLocalConfig().sources[entry.sourceKey] || null) : repoRoot();
+
+const canonicalFor = entry => path.join(sourceRootFor(entry), '.claude', subdirOf(entry), entry.file);
 
 // Where THIS entry belongs inside a target repo. The per-machine fleet file records each target
 // as its .claude/hooks dir, so a non-hooks entry resolves as that dir's sibling — no fleet-file
@@ -136,22 +165,35 @@ const targetDirFor = (target, entry) =>
 // Per-machine fleet. Prefer the general name; fall back to the terminal-title-era one so an
 // existing box keeps working with no migration step.
 //   [{ "label": "my-repo", "dir": "C:\\path\\to\\repo\\.claude\\hooks" }, ...]
-// CCA_HOOK_FLEET_FILE overrides both — the seam test/hook-fleet-sync.test.js drives the real
-// CLI against throwaway dirs instead of this machine's actual repos.
+//   { "targets": [ ...same... ], "sources": { "token-guard": "C:\\path\\to\\other\\repo" } }
+// Both shapes are read. The bare array is the original and stays supported forever — every box
+// already has one, and a config migration is not worth a fleet outage. The object shape adds
+// `sources`: where the out-of-tree canonicals live on THIS machine (see sourceRootFor).
+// CCA_HOOK_FLEET_FILE overrides the search — the seam test/hook-fleet-sync.test.js drives the
+// real CLI against throwaway dirs instead of this machine's actual repos.
 const FLEET_FILES = ['hook-fleet.local.json', 'terminal-title-fleet.local.json'];
-function readLocalFleet() {
+const EMPTY_CONFIG = { targets: [], sources: {} };
+const isTarget = t => t && typeof t.label === 'string' && typeof t.dir === 'string';
+
+// Null means "not a fleet file" — the caller then tries the next candidate, so a half-written or
+// unrelated JSON never masks a good file further down the list.
+function parseLocalConfig(raw) {
+  const obj = Array.isArray(raw) ? { targets: raw } : raw;
+  if (!obj || !Array.isArray(obj.targets)) return null;
+  return { targets: obj.targets.filter(isTarget), sources: obj.sources || {} };
+}
+
+function readLocalConfig() {
   const candidates = process.env.CCA_HOOK_FLEET_FILE
     ? [process.env.CCA_HOOK_FLEET_FILE]
     : FLEET_FILES.map(n => path.join(__dirname, n));
   for (const file of candidates) {
-    try {
-      const list = JSON.parse(fs.readFileSync(file, 'utf8'));
-      if (Array.isArray(list)) {
-        return list.filter(t => t && typeof t.label === 'string' && typeof t.dir === 'string');
-      }
-    } catch (_) { /* next candidate */ }
+    let parsed = null;
+    try { parsed = parseLocalConfig(JSON.parse(fs.readFileSync(file, 'utf8'))); }
+    catch (_) { /* next candidate */ }
+    if (parsed) return parsed;
   }
-  return [];
+  return EMPTY_CONFIG;
 }
 
 const norm = s => s.replace(/\r/g, '');                       // CRLF-proof comparison
@@ -175,14 +217,18 @@ const linesBehind = (current, canonical) => {
 // working-tree verdict standing exactly as before.
 const headCache = new Map();
 function canonicalAtHead(entry) {
+  // Keyed by root as well as path: an out-of-tree entry asks a DIFFERENT repo for its HEAD, and a
+  // path-only key would serve one repo's blob for another's file.
+  const root = sourceRootFor(entry);
   const rel = `.claude/${subdirOf(entry)}/${entry.file}`;
-  if (!headCache.has(rel)) {
+  const cacheKey = `${root}|${rel}`;
+  if (!headCache.has(cacheKey)) {
     const r = spawnSync('git', ['show', `HEAD:${rel}`], {
-      cwd: repoRoot(), encoding: 'utf8', windowsHide: true, maxBuffer: 32 * 1024 * 1024,
+      cwd: root, encoding: 'utf8', windowsHide: true, maxBuffer: 32 * 1024 * 1024,
     });
-    headCache.set(rel, r.status === 0 ? r.stdout : null);
+    headCache.set(cacheKey, r.status === 0 ? r.stdout : null);
   }
-  return headCache.get(rel);
+  return headCache.get(cacheKey);
 }
 
 // CHECK MODE ONLY: a target that matches the committed canonical is not stale with respect to
@@ -206,8 +252,28 @@ const key = p => path.resolve(p).replace(/\\/g, '/').toLowerCase();
 function resolveTargets(only) {
   return [
     { label: 'global (~/.claude)', dir: path.join(os.homedir(), '.claude', 'hooks'), isGlobal: true },
-    ...readLocalFleet(),
+    ...readLocalConfig().targets,
   ].filter(t => !only || key(t.dir).startsWith(key(only)));
+}
+
+// Entries with no authority on this machine, split off BEFORE any read so loadCanonical's
+// "a missing canonical is a broken checkout" invariant stays true — an out-of-tree entry has no
+// canonical here to miss.
+const splitBySource = entries => ({
+  sourced: entries.filter(e => sourceRootFor(e) != null),
+  unsourced: entries.filter(e => sourceRootFor(e) == null),
+});
+
+// Narrated once per ENTRY, not once per target: which repo is the authority for a file is a
+// property of the file, and repeating it under every fleet member would bury the fleet. Silence
+// is not an option either — an unsourced entry looks exactly like an in-sync one from the outside,
+// which is the state this whole mechanism exists to make visible.
+function noteUnsourced(entries, quiet, say, tally) {
+  for (const e of entries) {
+    tally.unsourced++;
+    if (quiet) continue;
+    say(`  [ src ]  ${e.file.padEnd(PAD)} sourced out of tree, no root configured (skipped)`);
+  }
 }
 
 // Read every canonical up front: a missing one is a broken checkout, not drift, and must abort
@@ -416,28 +482,30 @@ function applyOne(target, entry, canonText, mode, say, tally) {
  * @param {object[]} opts.targets explicit {label, dir, isGlobal} list, bypassing this machine's
  *                                fleet entirely (default: resolve it) — how the suite exercises
  *                                the global branch without writing into a real ~/.claude
- * @returns {{drifted:number, wrote:number, missing:number, lines:string[]}}
+ * @returns {{drifted:number, wrote:number, missing:number, unsourced:number, lines:string[]}}
  */
 function syncFleet(opts) {
   const write = opts.write === true;
   const quiet = opts.quiet === true;
-  const entries = opts.files ? MANIFEST.filter(e => opts.files.includes(e.file)) : MANIFEST;
+  const named = opts.files ? MANIFEST.filter(e => opts.files.includes(e.file)) : MANIFEST;
+  const { sourced, unsourced } = splitBySource(named);
   const lines = [];
   const say = s => lines.push(s);
-  const tally = { drifted: 0, wrote: 0, missing: 0, unwired: 0, lines };
+  const tally = { drifted: 0, wrote: 0, missing: 0, unwired: 0, unsourced: 0, lines };
   headCache.clear();
 
-  const { canon, missingFile } = loadCanonical(entries);
+  const { canon, missingFile } = loadCanonical(sourced);
   if (canon == null) {
     console.error(`canonical not found: ${missingFile}`);
     process.exitCode = 2;
     return tally;
   }
-  if (!quiet) header(entries, canon, write, say);
+  if (!quiet) header(sourced, canon, write, say);
+  noteUnsourced(unsourced, quiet, say, tally);
 
   const targets = opts.targets || resolveTargets(opts.only);
   for (const t of targets) {
-    for (const e of entries) {
+    for (const e of sourced) {
       if (t.isGlobal && !e.global) continue;                  // not part of this file's fleet
       applyOne(t, e, canon[e.file], { write, quiet }, say, tally);
     }
@@ -463,6 +531,12 @@ function report(r, write) {
   // finding, not a failure, and it must not read as the reason a push was blocked.
   if (r.unwired) {
     console.log(`${r.unwired} hook(s) present but unwired — see [!wire] above. Reported only; never fails.`);
+  }
+  // Same placement, same reason, and the exit code matters more here: the pre-push guard reads it,
+  // and an entry this repo is not the authority for must never block a push over another repo's
+  // copy. The line exists so "in sync" is never mistaken for "everything was checked".
+  if (r.unsourced) {
+    console.log(`${r.unsourced} entry(ies) sourced out of tree — see [ src ] above. Not checked, not drift.`);
   }
 }
 

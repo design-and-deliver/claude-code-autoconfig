@@ -38,6 +38,23 @@ const STALE = '// a stale copy\n';
 const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cca-fleet-'));
 let seq = 0;
 
+const REPO_ROOT = path.join(__dirname, '..');
+
+// Most cases below use token-guard.js as their generic fixture, and that entry is sourced OUT OF
+// TREE (`sourceKey`) — unmapped, it is skipped everywhere and none of them would exercise
+// anything. Mapping it back to this checkout restores the in-tree behaviour they were written
+// against, so they keep pinning what they were written to pin (ADOPT-ONLY, pairing, drift
+// direction, HEAD tolerance). The sourcing rule itself gets its own cases at the bottom.
+//
+// It also cuts the suite's last tie to this machine's real fleet file: without it, every
+// sourceRootFor() call in an in-process case would read scripts/*.local.json.
+const fleetJson = (targets, sources) =>
+  JSON.stringify({ targets, sources: sources || { 'token-guard': REPO_ROOT } });
+
+const IN_TREE_FLEET = path.join(tmpRoot, 'in-tree-sources.json');
+fs.writeFileSync(IN_TREE_FLEET, fleetJson([]));
+process.env.CCA_HOOK_FLEET_FILE = IN_TREE_FLEET;   // in-process cases pass `targets` explicitly
+
 // A throwaway adopting repo's hooks dir, pre-seeded with whatever files the case needs.
 function target(files, opts) {
   const o = opts || {};
@@ -253,7 +270,7 @@ test('CLI: drift exits 1, --write exits 0, and --only scopes the run', () => {
   const scoped = target({ 'token-guard.js': STALE }, { label: 'scoped-repo' });
   const excluded = target({ 'token-guard.js': STALE }, { label: 'excluded-repo' });
   const fleetFile = path.join(tmpRoot, 'fleet.json');
-  fs.writeFileSync(fleetFile, JSON.stringify([scoped, excluded]));
+  fs.writeFileSync(fleetFile, fleetJson([scoped, excluded]));
 
   // Handed to --only with forward slashes and the wrong case: both sides get normalized, so a
   // hand-written fleet entry and a shell-supplied path still match on Windows.
@@ -300,10 +317,14 @@ test('check mode: a target matching HEAD passes while canonical has uncommitted 
   // The downstream copy is current with everything that has actually been committed.
   const t = target({ 'token-guard.js': committed }, { label: 'at-head-repo' });
   const fleetFile = path.join(tmpRoot, 'fleet-head.json');
-  fs.writeFileSync(fleetFile, JSON.stringify([t]));
+  // token-guard.js is sourced out of tree, so the throwaway canonical repo is named as its
+  // SOURCE rather than through CCA_CANONICAL_ROOT. Same relocation, but it also pins that HEAD
+  // tolerance asks the AUTHORITY's git: ask this checkout's and a sourced entry could never
+  // clear the tolerance at all, since its file has no history here.
+  fs.writeFileSync(fleetFile, fleetJson([t], { 'token-guard': root }));
   const args = ['--only', t.dir, '--files', 'token-guard.js'];
 
-  const r = runCli(args, fleetFile, { CCA_CANONICAL_ROOT: root });
+  const r = runCli(args, fleetFile);
   assert(r.status === 0,
     `a copy matching HEAD must not fail the pre-push guard, got exit ${r.status}: ${r.out.trim()}`);
   assert(/in sync with HEAD/.test(r.out), `the reason must be narrated, got: ${r.out.trim()}`);
@@ -312,9 +333,8 @@ test('check mode: a target matching HEAD passes while canonical has uncommitted 
   // The tolerance is exactly one deep: a copy matching NEITHER canonical is still real drift.
   const stale = target({ 'token-guard.js': STALE }, { label: 'stale-repo' });
   const staleFleet = path.join(tmpRoot, 'fleet-head-stale.json');
-  fs.writeFileSync(staleFleet, JSON.stringify([stale]));
-  const s = runCli(['--only', stale.dir, '--files', 'token-guard.js'], staleFleet,
-    { CCA_CANONICAL_ROOT: root });
+  fs.writeFileSync(staleFleet, fleetJson([stale], { 'token-guard': root }));
+  const s = runCli(['--only', stale.dir, '--files', 'token-guard.js'], staleFleet);
   assert(s.status === 1, `a genuinely stale copy must still exit 1, got ${s.status}`);
   assert(s.out.includes('[DRIFT]'), 'real drift must still be reported');
 });
@@ -325,10 +345,9 @@ test('write mode keeps using the working tree, so edit -> --write -> commit stil
   const root = canonicalRepo(committed, dirty);
   const t = target({ 'token-guard.js': committed }, { label: 'write-tree-repo' });
   const fleetFile = path.join(tmpRoot, 'fleet-head-write.json');
-  fs.writeFileSync(fleetFile, JSON.stringify([t]));
+  fs.writeFileSync(fleetFile, fleetJson([t], { 'token-guard': root }));
 
-  const w = runCli(['--write', '--only', t.dir, '--files', 'token-guard.js'], fleetFile,
-    { CCA_CANONICAL_ROOT: root });
+  const w = runCli(['--write', '--only', t.dir, '--files', 'token-guard.js'], fleetFile);
   assert(w.status === 0, `--write must exit 0, got ${w.status}: ${w.out.trim()}`);
   assert(norm(read(t, 'token-guard.js') || '') === norm(dirty),
     '--write must propagate canonical AS EDITED — HEAD tolerance is a check-mode-only rule');
@@ -422,6 +441,65 @@ test('CLI: an unwired hook is reported without changing the exit code', () => {
   assert(r.out.includes('[!wire]') && r.out.includes('zz-cli-orphan.js'),
     `the finding must still be printed, got: ${r.out.trim()}`);
   assert(/never fails/.test(r.out), 'the summary must say out loud that this is not a failure');
+});
+
+// --- out-of-tree sourcing (`sourceKey`, 2026-08-21) ------------------------------------------
+// ADOPT-ONLY stops a sync from CREATING a hook a repo never had. It says nothing about a sync
+// REMOVING behaviour from a hook a repo does have — and that is the sharper edge, because
+// token-guard.js is fail-open top to bottom: a copy that has quietly stopped deciding looks
+// exactly like one that agrees with everything. The liveness canary does not close the gap
+// either; it flags a guard that THROWS. So an entry this checkout is no longer the authority for
+// must be skipped outright, and skipped LOUDLY — the failure mode being designed against is a
+// clean-looking report, not an error.
+
+test('an unmapped out-of-tree entry is skipped everywhere — --write must not touch the copy', () => {
+  const t = target({ 'token-guard.js': STALE }, { label: 'unmapped-repo' });
+  const fleetFile = path.join(tmpRoot, 'fleet-unmapped.json');
+  fs.writeFileSync(fleetFile, JSON.stringify({ targets: [t], sources: {} }));
+  const args = ['--only', t.dir, '--files', 'token-guard.js'];
+
+  const w = runCli(['--write', ...args], fleetFile);
+  assert(w.status === 0, `--write must still exit 0, got ${w.status}: ${w.out.trim()}`);
+  assert(read(t, 'token-guard.js') === STALE,
+    'THE guarantee: with no authority recorded, --write must not write — not even a stale copy');
+  assert(/\[ src \]/.test(w.out), `the skip must be narrated, got: ${w.out.trim()}`);
+
+  const c = runCli(args, fleetFile);
+  assert(c.status === 0, `a non-authority must never block a push, got exit ${c.status}`);
+  assert(!c.out.includes('[DRIFT]'),
+    'a copy this tree does not own is not "behind" — calling it drift is what re-arms the write');
+  assert(/Not checked, not drift/.test(c.out),
+    'silence would read as "in sync"; the summary has to say the entry went unchecked');
+});
+
+test('a mapped source syncs from THAT repo — and CCA_CANONICAL_ROOT cannot override it', () => {
+  const authority = canonicalRepo('// the authority\n', '// the authority\n');
+  const decoy = canonicalRepo('// this checkout, relocated\n', '// this checkout, relocated\n');
+  const t = target({ 'token-guard.js': STALE }, { label: 'mapped-repo' });
+  const fleetFile = path.join(tmpRoot, 'fleet-mapped.json');
+  fs.writeFileSync(fleetFile, fleetJson([t], { 'token-guard': authority }));
+
+  // CCA_CANONICAL_ROOT relocates THIS repo, which a sourced entry was never reading — if it won
+  // here, the seam would collapse back to "whatever tree is running the script".
+  const w = runCli(['--write', '--only', t.dir, '--files', 'token-guard.js'], fleetFile,
+    { CCA_CANONICAL_ROOT: decoy });
+  assert(w.status === 0, `--write must exit 0, got ${w.status}: ${w.out.trim()}`);
+  assert(norm(read(t, 'token-guard.js') || '') === '// the authority\n',
+    `the mapped source must win, got: ${JSON.stringify(read(t, 'token-guard.js'))}`);
+  assert(runCli(['--only', t.dir, '--files', 'token-guard.js'], fleetFile).status === 0,
+    're-check must read canonical back from the same repo it wrote from');
+});
+
+test('the legacy bare-array fleet file still resolves targets', () => {
+  // Every dev box already has one, and a config migration is not worth a fleet outage — so this
+  // shape is supported forever, not deprecated. terminal-title.js carries the case because it is
+  // in-tree: a bare array has no `sources`, so token-guard would skip and prove nothing.
+  const t = target({ 'terminal-title.js': STALE }, { label: 'legacy-shape-repo' });
+  const fleetFile = path.join(tmpRoot, 'fleet-legacy.json');
+  fs.writeFileSync(fleetFile, JSON.stringify([t]));
+  const r = runCli(['--write', '--only', t.dir, '--files', 'terminal-title.js'], fleetFile);
+  assert(r.status === 0, `--write must exit 0, got ${r.status}: ${r.out.trim()}`);
+  assert(inSync(t, 'terminal-title.js'), 'a bare-array fleet file must still drive a sync');
 });
 
 try { fs.rmSync(tmpRoot, { recursive: true, force: true }); } catch (_) { /* best-effort */ }
