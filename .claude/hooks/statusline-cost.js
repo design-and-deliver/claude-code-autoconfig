@@ -75,7 +75,7 @@ function writeCache(file, obj) {
     const tmp = `${file}.${process.pid}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(obj));
     fs.renameSync(tmp, file);
-  } catch (_) {}
+  } catch (_) { /* a statusline that cannot cache still renders — never throw here */ }
 }
 
 // One tiny cache file per session accumulates forever otherwise. Runs only on the real-meter
@@ -86,9 +86,9 @@ function pruneCaches(dir) {
     for (const n of fs.readdirSync(dir)) {
       if (!n.startsWith('statusline-')) continue;
       const p = path.join(dir, n);
-      try { if (fs.statSync(p).mtimeMs < cutoff) fs.unlinkSync(p); } catch (_) {}
+      try { if (fs.statSync(p).mtimeMs < cutoff) fs.unlinkSync(p); } catch (_) { /* another process got it first */ }
     }
-  } catch (_) {}
+  } catch (_) { /* no cache dir yet, or unreadable — pruning is best-effort */ }
 }
 
 function bucketSum(per) {

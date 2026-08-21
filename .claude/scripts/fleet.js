@@ -339,7 +339,7 @@ for (const g of duplicateTitles(mine)) {
 let claimRegistryMod = null;
 try {
   claimRegistryMod = require('../hooks/claim-registry.js');
-} catch (e) {}
+} catch (_) { /* no registry in this repo — claim overlaps just go unreported */ }
 
 function inFlightClaimOverlaps() {
   if (!claimRegistryMod || !claimRegistryMod.readLiveClaims) return [];
@@ -350,7 +350,7 @@ function inFlightClaimOverlaps() {
     byPath.get(c.normPath).push(c);
   }
   const overlaps = [];
-  for (const [normPath, group] of byPath) {
+  for (const [, group] of byPath) {
     const sids = [...new Set(group.map(c => c.sid))];
     if (sids.length > 1) {
       overlaps.push({

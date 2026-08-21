@@ -275,7 +275,6 @@ function main() {
   // whose trees are enormous and, under pnpm, largely symlinks. A .claude/worktrees/ full
   // of git worktrees put 812 MB of node_modules through this copier on one real project.
   const SKIP_BACKUP = ['migration', 'worktrees', 'node_modules', '.git'];
-  let migrationPath = null;
 
   // Diagnostic: log pre-install state
   console.log();
@@ -417,7 +416,9 @@ function main() {
 
   if (fs.existsSync(claudeDest) && hasUserContent(claudeDest)) {
     const timestamp = formatTimestamp();
-    migrationPath = safeBackup(timestamp, path.join(claudeDest, 'migration', timestamp));
+    // Return value deliberately dropped: since copyTree absorbed the per-entry backup loop
+    // (3.2), the backup path is only ever used inside backupUserContent, which logs it.
+    safeBackup(timestamp, path.join(claudeDest, 'migration', timestamp));
   }
   mark('backup');
 

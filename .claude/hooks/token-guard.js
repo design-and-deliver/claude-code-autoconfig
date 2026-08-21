@@ -768,7 +768,7 @@ function findActivePlan(projectDir) {
       const p = path.join(dir, n);
       let text; try { text = fs.readFileSync(p, 'utf8'); } catch (_) { continue; }
       if (!/^## Ledger\b/m.test(text)) continue;
-      let mtimeMs = 0; try { mtimeMs = fs.statSync(p).mtimeMs; } catch (_) {}
+      let mtimeMs = 0; try { mtimeMs = fs.statSync(p).mtimeMs; } catch (_) { /* unstatable — 0 sorts it oldest */ }
       candidates.push({ path: p, mtimeMs });
     }
   }
@@ -3293,7 +3293,7 @@ function claimAdvisoryGuard(ctx) {
         block: null
       };
     }
-  } catch (err) {}
+  } catch (_) { /* the claim registry is advisory — it must never break a prompt */ }
   return { notes: [], block: null };
 }
 
@@ -3449,7 +3449,7 @@ function writeVerdictCache(file, entry) {
 async function postVerdictMain(file) {
   let job = null;
   try { job = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) { return; }
-  try { fs.unlinkSync(file); } catch (_) {}
+  try { fs.unlinkSync(file); } catch (_) { /* job file is single-use; a failed unlink only litters */ }
   const entry = { v: 1, sid: job.sid, at: new Date().toISOString(),
     post: { ok: false, status: 0 }, verdicts: [] };
   try {
@@ -4502,7 +4502,7 @@ const PRETOOL_GUARDS = [r2WorkflowLaunchGuard, r8PayloadDoorGuard, r9MiniBombGat
 let claimRegistryMod = null;
 try {
   claimRegistryMod = require('./claim-registry.js');
-} catch (e) {}
+} catch (_) { /* no registry in this repo — claim writes become no-ops */ }
 
 function emitWriteClaimGuard(ctx) {
   try {
@@ -4527,7 +4527,7 @@ function emitWriteClaimGuard(ctx) {
         });
       }
     }
-  } catch (err) {}
+  } catch (_) { /* claiming is best-effort; a PreToolUse guard must never throw */ }
   return null;
 }
 

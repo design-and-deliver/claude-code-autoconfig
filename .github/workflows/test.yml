@@ -23,6 +23,12 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
 
+      # `npm test` ends on complexity-ratchet.test.js, which load()s eslint programmatically —
+      # without an install it dies "Cannot find module 'eslint'" AFTER every other suite has
+      # passed, so the job looks like a real test failure. Red every push since 2026-07-20.
+      - name: Install dependencies
+        run: npm ci
+
       - name: Run tests
         run: npm test
 

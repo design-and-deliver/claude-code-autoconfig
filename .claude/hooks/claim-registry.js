@@ -41,7 +41,7 @@ function writeClaim(opts) {
 
     fs.appendFileSync(targetFile, line, 'utf8');
     return true;
-  } catch (err) {
+  } catch (_) {
     return false;
   }
 }
@@ -53,7 +53,7 @@ function getGlyphMtime(sid) {
     if (fs.existsSync(glyphPath)) {
       return fs.statSync(glyphPath).mtimeMs;
     }
-  } catch (e) {}
+  } catch (_) { /* no glyph, or an unreadable titles dir — 0 reads as "not stale" */ }
   return 0;
 }
 
@@ -62,7 +62,7 @@ function getGlyphMtime(sid) {
 function listClaimFiles(dir) {
   try {
     return fs.readdirSync(dir).filter(f => f.endsWith('.jsonl'));
-  } catch (e) {
+  } catch (_) {
     return [];
   }
 }
@@ -70,7 +70,7 @@ function listClaimFiles(dir) {
 function readFileOrNull(file) {
   try {
     return fs.readFileSync(file, 'utf8');
-  } catch (e) {
+  } catch (_) {
     return null;
   }
 }
@@ -95,7 +95,7 @@ function parseClaimLine(line, sid) {
       intent: obj.intent || null,
       timestamp: obj.timestamp || 0
     };
-  } catch (e) {
+  } catch (_) {
     return null;                                    // malformed JSON line — skipped silently
   }
 }
