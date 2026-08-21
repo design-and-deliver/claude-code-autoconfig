@@ -1,0 +1,14 @@
+# Line endings are otherwise left to each machine's core.autocrlf, which made the docs
+# ratchet (test/contracts.test.js) platform-dependent: sync-docs.js inlines settings.json
+# verbatim into autoconfig.docs.html, so a checkout with autocrlf=true put a stray \r on
+# all 187 of its inlined lines and the byte-for-byte compare failed — on the three Windows
+# CI runners only, while every ubuntu/macos job passed. `-text` means "never convert": the
+# working file is the committed blob, byte for byte, on every platform.
+#
+# Deliberately scoped to the generator's inputs and its output rather than a repo-wide
+# `text=auto`. Nine tracked blobs already carry CRLF — including token-guard.js (fleet-
+# synced canonical), this generated HTML, and two .wav files — and normalizing those is a
+# separate decision with a much larger blast radius than this bug.
+.claude/docs/autoconfig.docs.html -text
+.claude/settings.json -text
+.claude/.mcp.json -text
