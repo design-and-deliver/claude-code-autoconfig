@@ -41,10 +41,13 @@ ARTICLES/
 #
 # WIP/DONE/ is the exception and IS tracked: those notes describe finished work, so they
 # never regenerate and never churn. They are the archive the lessons are read out of.
+# WIP/EOD/ (/eod-report output) is tracked for the same reason: a day's wrap-up carries the
+# open loops that existed only in a session's context, which no command can re-derive later.
 # Note the glob — `WIP/` (trailing slash) would exclude the directory itself and git would
 # never descend far enough to see the negation. `WIP/*` excludes the contents instead.
 WIP/*
 !WIP/DONE/
+!WIP/EOD/
 
 # Local feature pilots / experiments (not distributed)
 pilots/
