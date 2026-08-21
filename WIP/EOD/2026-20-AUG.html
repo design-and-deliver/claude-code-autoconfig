@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>End of day — August 20, 2026</title>
+<style>
+  :root{--ink:#1c1c1c;--body:#2b2b2b;--muted:#666;--link:#0a66c2;--rule:#e6e6e6;
+        /* side-by-side comparison: red-500 weak / emerald-500 sharp */
+        --good:#10b981;--warn:#ef4444;--code:#f0f2f5;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:#fff;color:var(--body);
+    font:20px/1.62 -apple-system,BlinkMacSystemFont,system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  .article{max-width:700px;margin:0 auto;padding:56px 24px 120px;}
+  .title{font-size:clamp(28px,5vw,38px);font-weight:700;line-height:1.15;letter-spacing:-.02em;
+    color:var(--ink);margin:0 0 8px;}
+  .stamp{color:var(--muted);font-size:14px;margin:0 0 18px;}
+  .dek{color:var(--muted);font-size:16px;margin:0 0 24px;}
+  .lead-in{font-size:21px;line-height:1.55;color:var(--ink);margin:0 0 20px;}
+  .toolbar{display:flex;justify-content:flex-end;margin:0 0 2px;}
+  .toggle-all{background:none;border:none;color:var(--link);font:inherit;font-size:14px;
+    cursor:pointer;padding:4px 0;}
+  .toggle-all:hover{text-decoration:underline;}
+  /* optional masthead:
+  .masthead{display:flex;align-items:center;gap:12px;margin:2px 0 26px;}
+  .masthead .avatar{width:48px;height:48px;border-radius:50%;background:#0a66c2;color:#fff;
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;flex:none;}
+  .masthead .who b{color:var(--ink);font-size:15px;} .masthead .who span{color:var(--muted);display:block;font-size:15px;} */
+  details{border-top:1px solid var(--rule);}
+  details:last-of-type{border-bottom:1px solid var(--rule);}
+  summary{list-style:none;cursor:pointer;padding:15px 2px;font-size:21px;font-weight:700;
+    color:var(--ink);display:flex;align-items:center;gap:13px;}
+  summary:hover{color:var(--link);}
+  summary::-webkit-details-marker{display:none;}
+  summary::before{content:"";width:8px;height:8px;border-right:2px solid var(--muted);
+    border-bottom:2px solid var(--muted);transform:rotate(-45deg);transition:transform .18s;flex:none;}
+  details[open] summary::before{transform:rotate(45deg);}
+  .s-body{padding:0 0 20px 21px;font-size:19px;line-height:1.6;}
+  .s-body p{margin:0 0 .9em;} .s-body p:last-child{margin-bottom:0;}
+  ul,ol{margin:0 0 .9em;padding-left:22px;} li{margin:.35em 0;}
+  strong{color:var(--ink);font-weight:700;}
+  code{font-family:ui-monospace,Consolas,monospace;font-size:15px;background:var(--code);padding:1px 6px;border-radius:5px;}
+  pre{background:var(--code);border-radius:8px;padding:12px 14px;overflow:auto;font-size:14px;line-height:1.5;}
+  pre code{background:none;padding:0;}
+  /* side-by-side comparison: colored prose, no boxes. weak line red, sharp line
+     green; a leading ✗ / ✓ (.mk) carries the meaning so it isn't hue-only. */
+  .pair{margin:.2em 0 1em;}
+  .pair .ctx{display:block;font-size:12px;font-weight:700;text-transform:uppercase;
+    letter-spacing:.06em;color:var(--muted);margin-bottom:6px;}
+  .pair .bad{color:var(--warn);margin:0 0 .4em;line-height:1.55;}
+  .pair .good{color:var(--good);margin:0;line-height:1.55;}
+  .pair .mk{display:inline-block;width:1.15em;font-weight:700;}
+  /* bold inside a colored line keeps the line's hue (red/green), not --ink */
+  .pair .bad strong,.pair .good strong{color:inherit;}
+  @media(max-width:560px){body{font-size:18px;}}
+</style></head>
+<body><div class="article">
+
+  <p class="stamp">August 21, 2026 12:09AM</p>
+
+  <h1 class="title">End of day — Thursday, August 20</h1>
+  <p class="dek">4 repos · 15 commits · 2 unpushed · 8 open — <code>proswitch-api</code>,
+  <code>claude-code-autoconfig</code>, <code>cca-cost-control</code>, <code>job-agent-extension</code></p>
+
+  <p class="lead-in">The paid verdict endpoint is merged and the cost-control plan is finished, but
+  neither is confirmed in production — the deploy pipeline has pointed at a dead server since June,
+  and prod tracks a different branch than the one merged. One SSH session would settle it.</p>
+
+  <p class="pickup" style="font-size:19px;margin:0 0 24px;padding:12px 16px;background:var(--code);border-radius:8px;">
+  <strong>Pick up here:</strong> SSH the API box and read which branch its checkout is on — that one
+  answer decides whether the guard-verdict endpoint is already live, and whether the deploy fixes
+  below matter at all.</p>
+
+  <div class="toolbar"><button class="toggle-all">Expand all</button></div>
+
+  <details>
+    <summary>Landed (9)</summary>
+    <div class="s-body">
+      <ul>
+        <li>Guard-verdict endpoint merged to <code>main</code> — counters in, display object out,
+        inert until <code>CCA_LICENSE_KEYS</code> is set — <code>proswitch-api@bc4e303</code></li>
+
+        <li>Decision-core suites migrated off the public hook into the API: 94 tests plus the
+        mapping — <code>proswitch-api@fb15638</code></li>
+
+        <li>R21 recovery-cost provenance re-ported into the decision core, and each fired verdict
+        now returns its one-shot arming state — <code>proswitch-api@7c407e0</code>,
+        <code>ab6cb17</code></li>
+
+        <li>Cost-control canonicality rewire finished — the plan is closed complete at substep 1.6 —
+        <code>cca-cost-control@fc07b23</code></li>
+
+        <li>Token-guard's prompt-path verdict set slimmed —
+        <code>claude-code-autoconfig@cb649da</code></li>
+
+        <li>Fleet manifest entries can now be sourced from outside the tree, so a synced file need
+        not live in this repo — <code>claude-code-autoconfig@9019e1d</code></li>
+
+        <li><code>/eod-report</code> added and dev-gated, then rewritten to render this page instead
+        of console bullets — <code>claude-code-autoconfig@bab57cd</code>, <code>a9026da</code></li>
+
+        <li>Autonomous-scan validation plan written — <code>job-agent-extension@756ff52</code></li>
+
+        <li>Diagnosed why the API was never deployed: the workflow's hardcoded IP went stale in June
+        and CI has not reached the box since.</li>
+      </ul>
+    </div>
+  </details>
+
+  <details>
+    <summary>Remaining (8 · ~1h est.)</summary>
+    <div class="s-body">
+      <p>⛔ <strong>This repo's CI has been red since July 20 — a month, every push.</strong> The
+      <code>test</code> job never installs dependencies, and <code>complexity-ratchet.test.js</code>
+      requires <code>eslint</code>, a devDependency. The <code>lint</code> job runs
+      <code>npm ci</code>; the test job does not. Every local green tonight was local-only.</p>
+
+      <pre><code># .github/workflows/*.yml — in the `test` job, before `npm test`
+- name: Install dependencies
+  run: npm ci</code></pre>
+
+      <p>⛔ <strong>The proswitch deploy pipeline has been dead since June 9.</strong> The workflow's
+      two hardcoded IPs still point at <code>3.131.159.186</code>; the instance drifted to
+      <code>3.12.9.222</code>. rsync times out on port 22, so nothing has reached prod from CI in
+      two months. Already written up in <code>.claude/retro/deploy-workflow-stale-ip.md</code>.</p>
+
+      <p>⛔ <strong>Prod tracks a different branch than the one that was merged.</strong> It is
+      deployed by hand and its checkout is on <code>magic-url-deploy</code>, not <code>main</code>,
+      so tonight's merge does not reach it even with the workflow fixed. Which branch prod tracks is
+      a decision, not a fix.</p>
+
+      <ul>
+        <li>Unresolved: is guard-verdict <em>already</em> live in prod? Those commits also exist on
+        <code>magic-url-deploy</code>, so it may be running. SSH the box and read the checkout.</li>
+
+        <li><code>job-agent-extension</code> has 2 unpushed commits and 20 uncommitted files — a
+        live sibling session owns that repo. Report only; leave it alone.</li>
+
+        <li><code>clean-code-remediation-plan</code>: substeps 3.7b, 4.5b and 4.5c still open.
+        Blocking nothing, nothing scheduled.</li>
+
+        <li><code>proswitch-api</code> has untracked <code>rds-postgres-17-upgrade.md</code> and
+        <code>ARTICLES/</code> — decide track or ignore.</li>
+
+        <li>Open question from tonight: should <code>WIP/EOD/</code> stay tracked, or be disposable
+        like the rest of <code>WIP/</code>? A one-line answer settles it.</li>
+      </ul>
+    </div>
+  </details>
+
+</div>
+
+<script>
+  var btn=document.querySelector('.toggle-all');
+  if(btn){btn.addEventListener('click',function(){
+    var ds=Array.prototype.slice.call(document.querySelectorAll('details'));
+    var anyClosed=ds.some(function(d){return !d.open;});
+    ds.forEach(function(d){d.open=anyClosed;});
+    btn.textContent=anyClosed?'Collapse all':'Expand all';
+  });}
+</script>
+</body></html>
