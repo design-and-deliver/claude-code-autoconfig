@@ -18,8 +18,8 @@ const os = require('os');
 const path = require('path');
 const { test, assert, summary } = require('./_harness');
 const { isRecoveryTurn, r13bTurnSpendGuard, r14TurnRentGuard, resolveConfig,
-  recordRecoverySpend, loadRecoverySpend, recoveryWasteVerdict, recoveryCostNote,
-  r21RecoveryCostGuard, noteClearAdvice, claimClearAdvice, loadClearAdvice } =
+  recordRecoverySpend, loadRecoverySpend, recoveryCostNote,
+  noteClearAdvice, claimClearAdvice, loadClearAdvice } =
   require('../.claude/hooks/token-guard');
 
 const CFG = resolveConfig({});
@@ -156,34 +156,6 @@ test('recovery spend round-trips through the store with rounded figures', () => 
     'tok rounds to whole tokens, usd to cents');
 });
 
-test('verdict is null while healthy: empty day, under the line, stale spend, or already reported', () => {
-  const now = 10 * DAY;
-  const line = 2000000;
-  assert(recoveryWasteVerdict({ samples: [], lastReportAt: 0 }, line, now) === null,
-    'an empty store is silent');
-  const under = { samples: [{ at: now - 1000, tok: 500000, usd: 1 }], lastReportAt: 0 };
-  assert(recoveryWasteVerdict(under, line, now) === null, 'under the line is silent');
-  const stale = { samples: [{ at: now - 2 * DAY, tok: 9000000, usd: 9 }], lastReportAt: 0 };
-  assert(recoveryWasteVerdict(stale, line, now) === null, 'spend older than 24h is out of window');
-  const reported = { samples: [{ at: now - 1000, tok: 3000000, usd: 3 }],
-    lastReportAt: now - 3600000 };
-  assert(recoveryWasteVerdict(reported, line, now) === null,
-    'a report shipped within 24h holds the one-shot');
-});
-
-test('verdict totals ONLY the trailing day once the line is crossed', () => {
-  const now = 10 * DAY;
-  const store = { samples: [
-    { at: now - 1000, tok: 1500000, usd: 2 },
-    { at: now - 2000, tok: 900000, usd: 1.5 },
-    { at: now - 2 * DAY, tok: 5000000, usd: 9 },   // out of window — must not count
-  ], lastReportAt: 0 };
-  const v = recoveryWasteVerdict(store, 2000000, now);
-  assert(v && v.n === 2 && v.tok === 2400000,
-    `two in-window samples totalling 2.4M — got ${JSON.stringify(v)}`);
-  assert(Math.abs(v.usd - 3.5) < 1e-9, 'usd sums the same window');
-});
-
 test('the note names count, tokens, and the crossed line; $ only when usd$ is on', () => {
   const v = { n: 3, tok: 2400000, usd: 3.5 };
   const withUsd = recoveryCostNote(v, 2000000, true);
@@ -195,26 +167,6 @@ test('the note names count, tokens, and the crossed line; $ only when usd$ is on
   assert(/1 self-initiated recovery /.test(
     recoveryCostNote({ n: 1, tok: 2400000, usd: 1 }, 2000000, false)),
   'a single recovery reads singular');
-});
-
-test('the guard fires once, stamps the store, and stays quiet for the next 24h', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cca-r21-'));
-  recordRecoverySpend(dir, 's1', 3000000, 4, Date.now());
-  const first = r21RecoveryCostGuard({ cfg: CFG, projectDir: dir, usd$: false });
-  assert(first.notes.length === 1 && /recovery-cost/.test(first.notes[0]),
-    `over the line -> one note — got ${JSON.stringify(first.notes)}`);
-  const second = r21RecoveryCostGuard({ cfg: CFG, projectDir: dir, usd$: false });
-  assert(second.notes.length === 0, 'the report is one-shot per 24h');
-  assert(loadRecoverySpend(dir).lastReportAt > 0,
-    'the stamp lives in the store, not session state — the habit spans sessions');
-});
-
-test('recoveryWasteTokens null disables the report end to end', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cca-r21-'));
-  recordRecoverySpend(dir, 's1', 9000000, 9, Date.now());
-  const off = r21RecoveryCostGuard({ cfg: resolveConfig({ recoveryWasteTokens: null }),
-    projectDir: dir, usd$: false });
-  assert(off.notes.length === 0, 'a null line must silence the report');
 });
 
 test('Stop bills a recovery turn to the ledger (source-order check, like the flag wiring above)', () => {
@@ -277,31 +229,6 @@ test('a recovery following advice is billed prompted; an unprompted one is not',
   assert(!own.prompted, 'a clear with no standing advice is the user\'s own');
   assert(ours.prompted === true && ours.source === 'R17-plan-boundary',
     `the advised clear carries its provenance — got ${JSON.stringify(ours)}`);
-});
-
-test('the line weighs ONLY self-initiated recoveries', () => {
-  const now = 10 * DAY;
-  const store = { samples: [
-    { at: now - 1000, tok: 1800000, usd: 2, prompted: true, source: 'R17-plan-boundary' },
-    { at: now - 2000, tok: 1500000, usd: 2, prompted: true, source: 'statusline' },
-    { at: now - 3000, tok: 400000, usd: 0.5 },
-  ], lastReportAt: 0 };
-  assert(recoveryWasteVerdict(store, 2000000, now) === null,
-    'a day the guard itself drove past the line must stay silent — 3.3M of it was our advice');
-  store.samples.push({ at: now - 4000, tok: 1700000, usd: 2 });
-  const v = recoveryWasteVerdict(store, 2000000, now);
-  assert(v && v.n === 2 && v.tok === 2100000,
-    `only the two self-initiated samples count — got ${JSON.stringify(v)}`);
-  assert(v.prompted === 2 && v.promptedTok === 3300000,
-    'the guard\'s own share rides out on the verdict so the note can name it');
-});
-
-test('samples written before provenance existed still read as self-initiated', () => {
-  const now = 10 * DAY;
-  const legacy = { samples: [{ at: now - 1000, tok: 2500000, usd: 3 }], lastReportAt: 0 };
-  const v = recoveryWasteVerdict(legacy, 2000000, now);
-  assert(v && v.n === 1 && v.prompted === 0,
-    'an absent `prompted` field is not "unknown" — old stores keep behaving exactly as before');
 });
 
 test('the note names the guard\'s own share only when there is one', () => {

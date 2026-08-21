@@ -677,7 +677,7 @@ re-decomposing).
       instead of inlining.
 - [x] Fleet sync + zero drift.
 
-**Verify:** token-guard suites green (`token-guard-canary/copy/ladder/liveness` + contracts);
+**Verify:** token-guard suites green (`token-guard-copy/liveness` + contracts);
 three entries gone from the "no new violations" list.
 **Commit:** `refactor(token-guard): usage cluster to CC≤9` + `Changelog: none`.
 

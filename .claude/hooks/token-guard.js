@@ -398,7 +398,7 @@ const TOKEN_SAVER = {
 };
 
 // Layer DEFAULTS < TOKEN_SAVER (when on) < explicit user config. Pure + exported for
-// fixtures (like meter/driftVerdict). The toggle is `tokenSaver` (boolean); a legacy
+// fixtures (like meter). The toggle is `tokenSaver` (boolean); a legacy
 // `mode: 'token-saver'` still turns it on, and the retired 'standard'/'flow' resolve to
 // the light default (off).
 function resolveConfig(user) {
@@ -927,50 +927,11 @@ function driftNote(dominant, scope, priorPct, autoMigrate, liveContext) {
     `a horizontal rule before the answer itself.`;
 }
 
-// Pure fire-rule (exported for fixtures, like meter). Input = ledgerScopes() tenures, the LAST one
-// stamped with `prompts` by the caller. Token share per scope = watermark deltas (tenure i owns
-// [its watermark, next tenure's watermark)); the last tenure runs to liveContext; the window's
-// FIRST tenure starts at 0 (it claims the pre-title baseline, so shares sum to liveContext). The
-// window RE-BASES after any watermark SHRINK (auto-compact replaced the context; earlier
-// watermarks describe a context that no longer exists — same rule as terminal-title's /clear
-// advisor). Fires only when ALL hold:
-//   - live context ≥ driftMinContextTokens (the STAY floor: below it a cut can't pay for
-//     itself — recovery overhead eats the savings — so nudging is pointless by construction)
-//   - the current scope has held ≥2 prompts (a one-prompt title blip is a detour, not a move —
-//     and the transition turn itself is the fat-ctx advisory's beat, not ours)
-//   - the current scope is a FIRST appearance (a return to an earlier scope = multiplexing or
-//     coming back from a detour — never drift; dominance math alone can't tell A<->B apart)
-//   - the current tenure has a measured watermark (an unmeasured current scope can't be scored)
-//   - the current scope is not the dominant-by-token-share scope
-//   - prior scopes hold ≥ driftPriorShareMin of live context
-// The once-per-scope one-shot (nudgedScope) is the CALLER's job — this stays pure.
-function driftVerdict(tenures, liveContext, cfg) {
-  const none = { fire: false };
-  if (!Array.isArray(tenures) || tenures.length < 2) return none;
-  if (liveContext < cfg.driftMinContextTokens) return none;
-  const cur = tenures[tenures.length - 1];
-  if ((cur.prompts || 0) < 2) return none;
-  if (tenures.findIndex(e => e.scope === cur.scope) !== tenures.length - 1) return none;
-  const known = tenures.filter(e => typeof e.ctxWatermark === 'number');
-  if (known[known.length - 1] !== cur) return none;
-  let base = 0;
-  for (let i = 1; i < known.length; i++) {
-    if (known[i].ctxWatermark < known[i - 1].ctxWatermark) base = i; // shrink → re-base
-  }
-  const win = known.slice(base);
-  if (win.length < 2) return none;
-  const share = {};
-  for (let i = 0; i < win.length; i++) {
-    const start = i === 0 ? 0 : win[i].ctxWatermark;
-    const end = i + 1 < win.length ? win[i + 1].ctxWatermark : liveContext;
-    share[win[i].scope] = (share[win[i].scope] || 0) + Math.max(0, end - start);
-  }
-  const dominant = Object.keys(share).sort((a, b) => share[b] - share[a])[0];
-  const priorShare = liveContext
-    ? Math.max(0, liveContext - (share[cur.scope] || 0)) / liveContext : 0;
-  if (dominant === cur.scope || priorShare < cfg.driftPriorShareMin) return none;
-  return { fire: true, dominant, priorPct: Math.round(priorShare * 100) };
-}
+// R6's fire-rule is decided by the verdict service (see the shim below): it scores the scope
+// tenures this client posts and returns a worded R6 note. The inputs it scores are all built
+// here — ledgerScopes() tenures with the current one stamped `prompts` (collectVerdictCounters),
+// plus liveContext — and the once-per-scope one-shot it arms is spent by commitDriftScope.
+// driftJudge/driftNote above stay: they are the copy this rule has always been worded with.
 
 // R6 defer loop (2026-07-18). The staged card's render gate lives in the in-turn model (see
 // driftJudge); a refusal comes back as the model-written drift-deferred flag. One flag per project,
@@ -982,9 +943,9 @@ function consumeDriftDeferred(projectDir) {
   catch (_) { return false; }
 }
 
-// Pure state-transition half of the defer loop (exported for fixtures, like driftVerdict). A
+// Pure state-transition half of the defer loop (exported for fixtures, like ledgerScopes). A
 // consumed flag converts the burnt one-shot into a snooze (re-offer after retryPrompts more prompts
-// in the nudged scope); an expired snooze re-arms the one-shot so driftVerdict may stage the card
+// in the nudged scope); an expired snooze re-arms the one-shot so the drift rule may stage the card
 // again with a fresh premise. Clearing nudgedScope can only ever ALLOW a re-offer the model
 // re-judges — never force a render — so every path here is fail-soft. A snooze whose scope is no
 // longer the nudged one is stale (a newer scope fired since): drop it.
@@ -1008,7 +969,7 @@ function driftDeferralTick(st, flagConsumed, retryPrompts) {
 
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|ico|svg|pdf)$/i; // vision tokens ≠ chars/2.6
 
-// Pure rule half (exported for fixtures, like driftVerdict) — decides from resolved sizes
+// Pure rule half (exported for fixtures, like ledgerScopes) — decides from resolved sizes
 // only, no fs. sizes: {skillTok, skillFloor} for Skill / {fileChars, isImage} for Read.
 function payloadVerdict(toolName, toolInput, sizes, cfg) {
   if (!sizes) return null;
@@ -1718,7 +1679,7 @@ function officialLines(u) {
 // R12 window guards — two flags read straight off the official meter (Anthropic's own server-side
 // window percentages). The insight that makes them cheap: the meter already publishes % used, so
 // "% of the window" needs no token/dollar denominator — a subscription's opaque rate-limit cap
-// never has to be guessed. Pure + exported so fixtures pin the fire conditions (like driftVerdict).
+// never has to be guessed. Pure + exported so fixtures pin the fire conditions (like bashVerdict).
 
 // A window's resets_at is a FIXED instant within a cycle, but the server recomputes it with
 // sub-second jitter each call (observed: 08:20:00.504765 vs 08:19:59.975486 for the same window).
@@ -1775,29 +1736,10 @@ function tightestWindow(u) {
   return { pct: w.pct, name: w.name, resetsAt: w.resetsAt };
 }
 
-// R12a verdict — did one interval eat >= windowSpikeWarnPct of the 5h window? Primary signal is the
-// meter's OWN % delta since the last prompt: self-calibrating, and naturally spike-shaped (a fast
-// small turn leaves the 180s-cached % unmoved → delta 0; a heavy turn outlasts the cache and the
-// jump shows). Fallback, only when the meter was unreachable this turn, is the Stop-stashed turn $
-// against windowBudgetUSD. The <=100 cap drops meter artifacts (a post-outage re-baseline reads as
-// a >full-window "jump" that no single turn could produce).
-function windowSpikeVerdict(now5h, prev, lastTurnUsd, cfg) {
-  const min = cfg.windowSpikeWarnPct;
-  if (now5h && prev && prev.pct != null && sameWindowCycle(prev.resetsAt, now5h.resetsAt) && now5h.pct >= prev.pct) {
-    const spikePct = now5h.pct - prev.pct;
-    if (spikePct >= min && spikePct <= 100) {
-      return { fire: true, spikePct, fromPct: prev.pct, toPct: now5h.pct, estimated: false };
-    }
-    return { fire: false };
-  }
-  if (!now5h && cfg.windowBudgetUSD > 0 && lastTurnUsd > 0) {
-    const spikePct = (lastTurnUsd / cfg.windowBudgetUSD) * 100;
-    if (spikePct >= min && spikePct <= 100) {
-      return { fire: true, spikePct, fromPct: null, toPct: null, estimated: true };
-    }
-  }
-  return { fire: false };
-}
+// R12a's spike rule is decided by the verdict service from the counters verdictWindowCounters
+// posts (this prompt's 5h reading, the previous prompt's baseline, and the Stop-stashed turn $).
+// The client keeps the baseline advance and the copy — spikeNoteFor below words the served
+// verdict against the local spend ledger, which never leaves the machine.
 
 // R12b verdict — has the tightest window crossed a NEW rung of the warn ladder this cycle?
 // windowThresholdWarnPct is a ladder (array) or a single number — both normalize here, so a
@@ -1869,14 +1811,9 @@ function saveMeterCanary(projectDir, at) {
   } catch (_) { /* lost memory just re-announces next prompt */ }
 }
 
-function meterCanaryVerdict(off, warnedAt, warnHours) {
-  if (!warnHours) return null;
-  if (!off || !off.stale || off.at == null) return null;
-  if (off.ageMs < warnHours * 3600000) return null;
-  if (warnedAt === off.at) return null;
-  return { at: off.at, hours: Math.round(off.ageMs / 3600000), warnHours };
-}
-
+// The canary's fire rule is decided by the verdict service from the fetch ENVELOPE
+// verdictMeterCanaryCounters posts (stale/at/ageMs) plus the last-success stamp above;
+// commitMeterCanary re-arms the one-shot when a served verdict lands. The copy stays here.
 function meterCanaryNote(cv) {
   return (
     `meter-canary: Anthropic's usage meter has been unreachable for ~${cv.hours}h — the ` +
@@ -2457,7 +2394,7 @@ function coldStartTokens(projectDir, sid, m, transcriptPath) {
 // speak once when not (Andrew 2026-08-12 — "only report to user if it reveals waste").
 //
 // Recording is one append per recovery turn (the Stop path — st.recoveryTurn survives until the
-// next prompt rewrites it). Reporting is recoveryWasteVerdict: the trailing 24h total against
+// next prompt rewrites it). Reporting is the R21 daily reading: the trailing 24h total against
 // the recoveryWasteTokens line, at most one note per 24h, stamped in the STORE rather than
 // session state because the habit being measured spans sessions by definition.
 // ── R21 provenance: did WE ask for this /clear? (2026-08-17) ─────────────────────────────────
@@ -2538,9 +2475,10 @@ function recordRecoverySpend(projectDir, sid, tok, usd, nowMs) {
   saveRecoverySpend(projectDir, store);
 }
 
-// The daily reading. Null while healthy: an empty day, a total under the line, or a report
-// already shipped within 24h. The caller stamps lastReportAt only when the note actually ships,
-// so a quiet check today never eats tomorrow's report.
+// The daily reading is decided by the verdict service from the whole store this client posts
+// (recovery: { store, nowMs }), and commitRecoveryReport stamps lastReportAt when a served
+// report lands — a 24h cadence rather than a value, so a second serving of the same day's
+// report is dropped while tomorrow's still lands. recoveryCostNote below words it.
 //
 // Only SELF-INITIATED recoveries are weighed against the line (2026-08-17). A recovery this guard
 // asked for is spend we caused, and billing it back as the user's habit is the one reading that
@@ -2548,17 +2486,6 @@ function recordRecoverySpend(projectDir, sid, tok, usd, nowMs) {
 // analyze digest and /cost-compare still see total recovery spend — and ride out on the verdict
 // so the note can name them; a day that is mostly prompted is a defect report about the fat line
 // and the plan-boundary nudge, not about the user.
-function recoveryWasteVerdict(store, wasteTokens, nowMs) {
-  const dayAgo = nowMs - DAY_MS;
-  if ((store.lastReportAt || 0) > dayAgo) return null;
-  const day = store.samples.filter(s => (s.at || 0) > dayAgo);
-  const own = day.filter(s => !s.prompted);
-  const tok = own.reduce((a, s) => a + (s.tok || 0), 0);
-  if (!own.length || tok < wasteTokens) return null;
-  return { n: own.length, tok, usd: own.reduce((a, s) => a + (s.usd || 0), 0),
-    prompted: day.length - own.length,
-    promptedTok: day.reduce((a, s) => a + (s.prompted ? s.tok || 0 : 0), 0) };
-}
 
 // Relay copy: ONE line to the user, factual, with the crossed line named (a number the user
 // sees carries its threshold). $ rides only under wantDollars, like every other card here.
@@ -3021,6 +2948,12 @@ function fatContextGuard(ctx) {
 // the build context) is handled in the copy itself: it advises STAYING when the new scope
 // builds on the earlier work. Model relays the block; it NEVER runs the command.
 // Once per scope (nudgedScope).
+//
+// This guard now keeps only the CLIENT-OWNED half of R6 — the residency counter and the defer
+// loop, both pure state the service cannot observe. The fire rule itself is decided remotely
+// and lands through the cached-verdict path (commitDriftScope spends the one-shot and stages
+// the recover-pointer). Residency still advances here, ahead of the post, because
+// collectVerdictCounters stamps st.curScopePrompts onto the tenure it sends.
 function r6ScopeDriftGuard(ctx) {
   const { cfg, st, projectDir, sid } = ctx;
   const notes = [];
@@ -3029,16 +2962,13 @@ function r6ScopeDriftGuard(ctx) {
   const cur = tenures[tenures.length - 1];
   if (!cur) return { notes, block: null };
   trackScopeResidency(ctx, cur, tenures);
-  cur.prompts = st.curScopePrompts;
   // Defer loop: consume a model-written drift-deferred flag (the in-turn judge refused the
   // staged card — stale premise or open threads), snooze, and re-arm the one-shot when the
-  // snooze expires; driftVerdict then re-stages and the model re-judges with a fresh premise.
+  // snooze expires; the rule then re-stages and the model re-judges with a fresh premise.
   const deferred = consumeDriftDeferred(projectDir);
   driftDeferralTick(st, deferred, cfg.driftRetryPrompts);
   if (deferred && st.driftSnooze) logLine(projectDir,
     `sid=${sid.slice(0, SID_SHORT_LEN)} drift-deferred scope="${st.driftSnooze.scope}" retry@${st.driftSnooze.retryAtPrompts}p`);
-  const v = driftVerdict(tenures, ctx.m.liveContext, cfg);
-  if (v.fire && st.nudgedScope !== cur.scope) notes.push(fireDriftNudge(ctx, cur, v));
   return { notes, block: null };
 }
 
@@ -3057,36 +2987,41 @@ function trackScopeResidency(ctx, cur, tenures) {
   }
 }
 
-// The nudge fires: one-shot the scope, word the note, and stage the recover-pointer.
-function fireDriftNudge(ctx, cur, v) {
-  const { st, projectDir, sid } = ctx;
-  st.nudgedScope = cur.scope;
-  st.driftSnooze = null;
-  logLine(projectDir,
-    `sid=${sid.slice(0, SID_SHORT_LEN)} drift-nudge from="${v.dominant}" to="${cur.scope}" prior=${v.priorPct}%`);
-  const note = driftNote(v.dominant, cur.scope, v.priorPct, ctx.cfg.driftAutoMigrate, ctx.m.liveContext);
-  // R11 (revised 2026-07-21): stage a recover-pointer pinned to the current tenure's
-  // enteredIso — the drifted thread's exact boundary. /continue's auto mode reads
-  // recover.json before any heuristic rung, so after the nudge's "/clear + /continue"
-  // (one-liner and prose branch alike) the fresh session recovers exactly this thread.
-  // (Replaces the retired SessionStart-injection candidate, deleted 2026-07-24 —
-  // git history is the museum.)
-  const ageMin = Math.max(1, Math.round((Date.now() - (Date.parse(cur.enteredIso) || Date.now())) / 60000));
-  writeRecoverPointer(projectDir, sid, ageMin, cur.enteredIso);
-  return note;
+// R11 (revised 2026-07-21): stage a recover-pointer pinned to the nudged tenure's enteredIso —
+// the drifted thread's exact boundary. /continue's auto mode reads recover.json before any
+// heuristic rung, so after the nudge's "/clear + /continue" (one-liner and prose branch alike)
+// the fresh session recovers exactly this thread. (Replaces the retired SessionStart-injection
+// candidate, deleted 2026-07-24 — git history is the museum.)
+//
+// ⚠ The boundary is a LOCAL lookup on purpose. A served R6 verdict carries the scope it nudged
+// about and nothing more, so the enteredIso has to come back off this machine's own ledger —
+// forwarding it would put a timestamp in the payload that the rule never needed. A scope the
+// ledger no longer shows (a title rewritten between post and render) stages nothing rather than
+// guessing a boundary; the note still ships, and /continue falls back to its heuristic rungs.
+function stageDriftRecoverPointer(ctx, scope) {
+  const { projectDir, sid } = ctx;
+  const tenure = readLedgerTenures(projectDir, sid).find(t => t.scope === scope);
+  if (!tenure || !tenure.enteredIso) return null;
+  const entered = Date.parse(tenure.enteredIso);
+  const ageMin = Math.max(1, Math.round((Date.now() - (Number.isFinite(entered) ? entered : Date.now())) / 60000));
+  return writeRecoverPointer(projectDir, sid, ageMin, tenure.enteredIso);
 }
 
-// Spend-step check-ins, denominated per billing (2026-08-05): API-billed sessions step in $
-// (the real bill); a subscription steps in TOKENS via sessionWarnTokens — the 2026-07-18 $
-// suppression stands ($-equivalent steps map to nothing the user experiences), but it had
-// removed the session-total EVENT with it, and a 15M-token session then sailed to the hard
-// gate unannounced. The token ladder reads sessionTokens(m) — the same figure the gate's
-// subscription copy shows. Unknown billing keeps the $ check-ins (the dollars may be real).
-// `kind` is injectable for tests only; callers take the default.
-function crossedSpendSteps(cfg, m, st, kind = billingKind()) {
-  if (kind === 'subscription')
-    return (cfg.sessionWarnTokens || []).filter(s => sessionTokens(m) >= s && (st.warnedTok || 0) < s);
-  return (cfg.sessionWarnUSD || []).filter(s => m.usd >= s && st.warnedUSD < s);
+// Spend-step check-ins are decided by the verdict service (see verdictSpendStepCounters), and
+// spendStepNote below words the crossing it returns. The ladder still has to be CONSULTED here,
+// though: whether the meter gets fetched at all depends on it.
+//
+// ⚠ This replaced `ctx.crossed.length` in the fetch condition below, and the swap is deliberate,
+// not a simplification. The old term asked "did a step cross THIS prompt?" — a question only the
+// decide half could answer. The client can no longer answer it, and it cannot wait a turn to
+// find out: by the time a served crossing arrives, spendStepNote needs ctx.official ALREADY
+// populated to lead with Anthropic's own percentages. So the condition widens from "a step
+// crossed" to "a ladder is configured at all". Strictly more fetching, and deliberately so — the
+// fetch is cached ≥180s and fails open, whereas a check-in that silently lost its official lines
+// would look like a meter outage. With the default window flags on, the term never even binds.
+function spendStepsConfigured(cfg, kind = billingKind()) {
+  const ladder = kind === 'subscription' ? cfg.sessionWarnTokens : cfg.sessionWarnUSD;
+  return !!(ladder && ladder.length);
 }
 
 // Anthropic's own window meter — fetched at most ONCE per prompt (cached >=180s, so most prompts
@@ -3094,13 +3029,11 @@ function crossedSpendSteps(cfg, m, st, kind = billingKind()) {
 // below AND the spend-step check-in, so the fetch never happens twice in a turn.
 async function officialUsagePrep(ctx) {
   const cfg = ctx.cfg;
-  ctx.crossed = crossedSpendSteps(cfg, ctx.m, ctx.st);
   ctx.official = null;
   ctx.officialOff = null;
-  const notes = [];
   if (cfg.officialUsageFetch &&
       (cfg.windowSpikeWarn || cfg.windowThresholdWarn || cfg.windowThresholdGate ||
-       ctx.crossed.length)) {
+       spendStepsConfigured(cfg))) {
     const off = await fetchOfficialUsage(ctx.projectDir);
     if (off && off.data) ctx.official = off.data;
     // The fetch ENVELOPE (stale/at/ageMs), not the usage data — it is the canary's whole input,
@@ -3108,10 +3041,8 @@ async function officialUsagePrep(ctx) {
     // No `?? null` guard: every fetchOfficialUsage path returns an object or null, and the
     // extra fallback costs a branch this function has no room for (ratchet bar is CC <= 9).
     ctx.officialOff = off;
-    const cv = meterCanaryVerdict(off, loadMeterCanary(ctx.projectDir), cfg.meterSilentWarnHours);
-    if (cv) { saveMeterCanary(ctx.projectDir, cv.at); notes.push(meterCanaryNote(cv)); }
   }
-  return { notes, block: null };
+  return { notes: [], block: null };
 }
 
 // R12 — window guards, both grounded in that meter. The stake here is a THROTTLE (lost access
@@ -3121,26 +3052,20 @@ async function officialUsagePrep(ctx) {
 //   R12b window-threshold: the tightest live window (5h or weekly) crossed the high-water mark
 //     — once per window cycle; re-arms when that window resets. windowThresholdGate (opt-in)
 //     escalates that same one-shot from a note to a BLOCK (mirrors idleGate).
-function r12aWindowSpikeGuard(ctx) {
+// R12a keeps ONLY its baseline advance here. That advance is unconditional — it always ran
+// whether or not the rule fired — so it is client state, not a decision, and it must keep
+// running on every prompt or the next delta is measured from a stale reading. The spike itself
+// is served (CACHED_VERDICT_RENDERERS.R12a), worded against ctx.priorWindowAtIso, which
+// onUserPromptSubmit captures before this advance for exactly that reason.
+function r12aWindowBaselineGuard(ctx) {
   const { cfg, st } = ctx;
-  const notes = [];
-  if (!cfg.windowSpikeWarn) return { notes, block: null };
+  if (!cfg.windowSpikeWarn) return { notes: [], block: null };
   const now5h = fiveHourWindow(ctx.official);
-  const prev = st.lastWindowPct != null
-    ? { pct: st.lastWindowPct, resetsAt: st.lastWindowResetsAt } : null;
-  const sv = windowSpikeVerdict(now5h, prev, st.lastTurnDeltaUsd || 0, cfg);
-  // windowSpikeConfirm upgrades the passive note to an interactive AskUserQuestion card — a SOFT
-  // relay, never a decision:'block', so it can't stall the turn. Off -> the standalone note.
-  if (sv.fire) {
-    const spikeNote = spikeNoteFor(ctx, sv, now5h);
-    if (spikeNote) notes.push(spikeNote);
-  }
-  // advance the baseline whenever the meter is live (fired or not) so the next delta is fresh
   if (now5h) {
     st.lastWindowPct = now5h.pct; st.lastWindowResetsAt = now5h.resetsAt;
     st.lastWindowAtIso = new Date().toISOString();
   }
-  return { notes, block: null };
+  return { notes: [], block: null };
 }
 
 // Attribute the interval's spend across sessions before wording the flag — the meter is
@@ -3148,7 +3073,7 @@ function r12aWindowSpikeGuard(ctx) {
 // The confirm card returns null when the window resets before projected exhaustion —
 // provably no throttle risk, so nothing is relayed at all (threshold ladder still runs).
 // `sinceIso` overrides the interval's start. The shim's cached-verdict renderer needs it: it
-// runs LAST in the prompt fold, by which point r12aWindowSpikeGuard has already advanced
+// runs LAST in the prompt fold, by which point r12aWindowBaselineGuard has already advanced
 // st.lastWindowAtIso to now — attributing the spike to an interval that started this turn.
 function spikeNoteFor(ctx, sv, now5h, sinceIso) {
   const since = sinceIso !== undefined ? sinceIso : ctx.st.lastWindowAtIso;
@@ -3160,38 +3085,34 @@ function spikeNoteFor(ctx, sv, now5h, sinceIso) {
     : windowSpikeNote(sv, now5h, attr, mins);
 }
 
-function r12bWindowThresholdGuard(ctx) {
+// R12b's NOTE is served (CACHED_VERDICT_RENDERERS.R12b). Its GATE is not, and cannot be: a gate
+// pre-empts the turn before anything reaches the API, which means deciding SYNCHRONOUSLY, and a
+// served verdict is a turn late by construction — it would block the turn AFTER the one worth
+// blocking. So windowThresholdVerdict stays client-side for this path alone (opt-in, default
+// off), the same argument that keeps the PreToolUse family local.
+//
+// Only the TOP rung blocks; lower rungs are FYI bearings the served note already carries. Arming
+// warnedWindow here is what lets the ↑+Enter re-send pass through silently next time — and it
+// also makes the served R12b for this same rung a no-op, since commitWindowWarn compares keys.
+function r12bWindowThresholdGate(ctx) {
   const { cfg, st } = ctx;
-  if (!cfg.windowThresholdWarn && !cfg.windowThresholdGate) return { notes: [], block: null };
+  if (!cfg.windowThresholdGate) return { notes: [], block: null };
   const worst = tightestWindow(ctx.official);
   const warned = effectiveWarn(worst, worst ? loadWindowWarn(worst.name) : null, st.warnedWindow);
   const tv = windowThresholdVerdict(worst, warned, cfg);
-  if (!tv.fire) return { notes: [], block: null };
+  if (!tv.fire || tv.rung !== tv.topRung) return { notes: [], block: null };
   st.warnedWindow = { name: tv.name, resetsAt: tv.resetsAt, rung: tv.rung };
   saveWindowWarn(tv.name, st.warnedWindow);
-  // Gate: pre-empt the turn before anything reaches the API — TOP rung only (lower rungs
-  // are FYI bearings and never block). The one-shot key set above lets the ↑+Enter re-send
-  // pass through silently next time (charge accepted). Note is the fallback.
-  if (cfg.windowThresholdGate && tv.rung === tv.topRung) {
-    return { notes: [], block: windowThresholdGateReason(tv) };
-  }
-  return { notes: cfg.windowThresholdWarn ? [windowThresholdNote(tv, cfg)] : [], block: null };
+  return { notes: [], block: windowThresholdGateReason(tv) };
 }
 
 // Session-spend steps — announce once per crossed step. v2: total includes fleets.
 // The trigger is dollar-weighted on API billing (cross-model normalization) and token-stepped
 // on a subscription; the MESSAGE leads with tokens either way, one metric per line. The 5h
 // scan is fresh-parse (no cache) — acceptable only because step crossings are rare by design.
-function spendStepGuard(ctx) {
-  if (!ctx.crossed.length) return { notes: [], block: null };
-  if (billingKind() === 'subscription') ctx.st.warnedTok = Math.max(...ctx.crossed);
-  else ctx.st.warnedUSD = Math.max(...ctx.crossed);
-  return { notes: [spendStepNote(ctx)], block: null };
-}
-
-// The check-in copy, split out from the guard so the shim's cached-verdict path can word a
-// server-decided `spend-steps` crossing with the same block. Pure over ctx — the one-shot
-// bookkeeping (warnedTok/warnedUSD) stays in the guard, where the crossing is actually owned.
+//
+// The crossing is decided remotely and the one-shot (warnedTok/warnedUSD) is armed by
+// commitSpendStep, so this is the whole client side of the rule: the copy.
 function spendStepNote(ctx) {
   // Anthropic's own percentages lead when reachable — the definitive measures; everything
   // after is supporting detail (Andrew 2026-07-12).
@@ -3376,23 +3297,7 @@ function claimAdvisoryGuard(ctx) {
   return { notes: [], block: null };
 }
 
-// Rule order is note order; officialUsagePrep must precede the three meter consumers after it.
-// R21 — the recovery-cost daily reading (the meter lives beside cold-start.json above).
-// Note-only and last in the fold: it never blocks, and its one-shot lives in the store, so the
-// report lands in whichever session prompts first once the line is crossed.
-function r21RecoveryCostGuard(ctx) {
-  const notes = [];
-  if (ctx.cfg.recoveryWasteTokens != null) {
-    const store = loadRecoverySpend(ctx.projectDir);
-    const v = recoveryWasteVerdict(store, ctx.cfg.recoveryWasteTokens, Date.now());
-    if (v) {
-      notes.push(recoveryCostNote(v, ctx.cfg.recoveryWasteTokens, ctx.usd$));
-      store.lastReportAt = Date.now();
-      saveRecoverySpend(ctx.projectDir, store);
-    }
-  }
-  return { notes, block: null };
-}
+// Rule order is note order; officialUsagePrep must precede the meter consumers after it.
 
 // ---------------------------------------------------------------------------
 // Remote-verdict shim (2026-08-13). With a verdict service configured (verdictService AND
@@ -3411,13 +3316,18 @@ function verdictCachePath(projectDir, sid) {
   return path.join(stateDir(projectDir), `verdict-cache-${sid}.json`);
 }
 
-// ⛔ Every forwarded family is decided from state the PROMPT_GUARDS themselves ADVANCE, and
-// remoteVerdictGuard runs LAST in that fold: r12a moves lastWindowPct/ResetsAt, r12b sets
-// warnedWindow + saves the global rung, spendStepGuard sets warnedTok/warnedUSD, and
-// officialUsagePrep re-arms the meter canary. A reducer reading `st` live therefore posts
-// ALREADY-FIRED state, and the service answers "nothing new" on every family at once — the
-// silent way forwarding fails. So the inputs are snapshotted here, before the fold. (1.5a hit
-// exactly this on R12a's attribution interval; this is its general shape.)
+// ⛔ Every forwarded family is decided from state this fold can ADVANCE, and remoteVerdictGuard
+// runs LAST in it. A reducer reading `st` live therefore risks posting ALREADY-FIRED state, and
+// the service answers "nothing new" on every family at once — the silent way forwarding fails.
+// So the inputs are snapshotted here, before the fold. (1.5a hit exactly this on R12a's
+// attribution interval; this is its general shape.)
+//
+// After the forward-delete only two writers remain ahead of the snapshot — r12aWindowBaselineGuard
+// (lastWindowPct/ResetsAt, every prompt) and the opt-in r12bWindowThresholdGate (warnedWindow +
+// the global rung). warnedTok/warnedUSD and meterCanaryAt are now advanced ONLY by the commits in
+// this guard, which run after the post, so snapshotting them is a no-op today. They stay in the
+// shape deliberately: the field list is the payload contract, and a reducer that reads live state
+// for some families and snapshot state for others is one refactor away from the bug above.
 function snapshotPriorGuardState(ctx) {
   const { st, projectDir } = ctx;
   return {
@@ -3475,9 +3385,22 @@ function verdictSpendStepCounters(ctx, prior) {
 // blocking ask/deny synchronously and has no notes channel, so a one-turn-lagged verdict has
 // nowhere to land (same call as R8/R10/R18 — see CACHED_VERDICT_RENDERERS). Widening would
 // post three more counter families whose answers nothing can render.
+// ⚠ `prompts` is stamped onto the CURRENT tenure here and nowhere else. The ledger cannot carry
+// it (residency is counted in session state, not written to {sid}.history.jsonl), and the rule
+// requires ≥2 prompts in the current scope — so a payload built from raw readLedgerTenures posts
+// a tenure with no `prompts` at all and the rule reads it as a one-prompt blip that never fires.
+// r6ScopeDriftGuard has already advanced st.curScopePrompts by the time this runs, and that
+// advance is not a fire, so the live counter is the right one to send (nothing to snapshot).
+function driftTenures(projectDir, sid, st) {
+  const tenures = readLedgerTenures(projectDir, sid);
+  const cur = tenures[tenures.length - 1];
+  if (cur) cur.prompts = st.curScopePrompts || 0;
+  return tenures;
+}
+
 function collectVerdictCounters(ctx) {
   const { cfg, m, st, projectDir, sid } = ctx;
-  const tenures = readLedgerTenures(projectDir, sid);
+  const tenures = driftTenures(projectDir, sid, st);
   // The fallback keeps the reducer callable standalone (tests, a statusline caller) — outside
   // the prompt fold there is nothing to have advanced, so live state IS the prior state.
   const prior = ctx.prior ?? snapshotPriorGuardState(ctx);
@@ -3613,7 +3536,12 @@ function renderCachedVerdicts(cached, ctx) {
 function commitDriftScope(s, ctx) {
   if (ctx.st.nudgedScope === s.nudgedScope) return false;
   ctx.st.nudgedScope = s.nudgedScope;
-  ctx.st.driftSnooze = null;   // a fresh nudge ends any snooze — same clear fireDriftNudge does
+  ctx.st.driftSnooze = null;   // a fresh nudge ends any snooze
+  logLine(ctx.projectDir,
+    `sid=${ctx.sid.slice(0, SID_SHORT_LEN)} drift-nudge to="${s.nudgedScope}"`);
+  // The note the user is about to read says "/clear then /continue" — the pointer is what makes
+  // that land on the drifted thread, so it is armed on the same beat the one-shot is spent.
+  stageDriftRecoverPointer(ctx, s.nudgedScope);
   return true;
 }
 
@@ -3636,7 +3564,7 @@ function commitMeterCanary(s, ctx) {
 }
 
 // The ladder is monotone per billing: a step at or below the armed one is the same crossing
-// served twice — exactly what crossedSpendSteps' `< s` filter means locally.
+// served twice — exactly what the ladder's `< s` filter means where the crossing is decided.
 function commitSpendStep(s, ctx) {
   const key = s.warnedTok != null ? 'warnedTok' : 'warnedUSD';
   const step = s[key];
@@ -3687,25 +3615,37 @@ function consumeCachedVerdicts(cached, ctx) {
   return fresh.map(v => renderOneVerdict(v, ctx)).filter(Boolean);
 }
 
+// ⚠ The free-tier floor belongs to the CONFIGURED shim only — an unconfigured install returns
+// empty here, and that is not the same as silent. The forward-delete takes the prompt-path
+// VERDICT half; the local context axis survives it (`fatContextGuard` and `r3ContextBombGuard`
+// are still in PROMPT_GUARDS below), so a default install already gets a per-prompt context
+// warning. Reaching the floor from the no-service branch stacks a second, near-identical note
+// on top of it every prompt — and because that copy names `/clear`, R19's instrumentation then
+// logs a restart-advice line per prompt, drowning the card measurement it exists to take.
 function remoteVerdictGuard(ctx) {
   const { cfg, projectDir, sid, m } = ctx;
-  if (!shimActive(cfg)) return { notes: [], block: null };
   try {
+    const basic = () => {
+      const note = freeTierNote(m.liveContext, cfg);
+      return note ? [note] : [];
+    };
+    if (!shimActive(cfg)) return { notes: [], block: null };
     postVerdictAsync(ctx);
     const cached = readVerdictCache(projectDir, sid, cfg);
     const notes = consumeCachedVerdicts(cached, ctx);
-    if (!cached || !(cached.post && cached.post.ok)) {
-      const basic = freeTierNote(m.liveContext, cfg); // service dark: degrade to the free floor
-      if (basic) notes.push(basic);
-    }
+    // Unreachable or never-answered service degrades to the same floor a dark install runs on.
+    if (!cached || !(cached.post && cached.post.ok)) notes.push(...basic());
     return { notes, block: null };
   } catch (_) { return { notes: [], block: null }; }
 }
 
+// Rule order is note order. officialUsagePrep still precedes every meter consumer, and
+// remoteVerdictGuard stays LAST: the families it renders are decided from state the guards
+// ahead of it advance (see snapshotPriorGuardState), and its commits spend one-shots those
+// guards no longer own.
 const PROMPT_GUARDS = [claimAdvisoryGuard, r2ReceiptGuard, r3ContextBombGuard, r4IdleReturnGuard, fatContextGuard,
-  r6ScopeDriftGuard, officialUsagePrep, r12aWindowSpikeGuard, r12bWindowThresholdGuard,
-  spendStepGuard, r17PlanBoundaryGuard, r13aPlanSteerGuard, r21RecoveryCostGuard,
-  remoteVerdictGuard];
+  r6ScopeDriftGuard, officialUsagePrep, r12aWindowBaselineGuard, r12bWindowThresholdGate,
+  r17PlanBoundaryGuard, r13aPlanSteerGuard, remoteVerdictGuard];
 
 async function onUserPromptSubmit(data, projectDir) {
   const cfg = loadConfig(projectDir);
@@ -3753,7 +3693,7 @@ async function onUserPromptSubmit(data, projectDir) {
   ctx.m = m;
   ctx.usd$ = wantDollars(cfg); // false => tokens-only copy (subscription users)
 
-  // R12a's attribution baseline, captured BEFORE r12aWindowSpikeGuard advances it — the shim
+  // R12a's attribution baseline, captured BEFORE r12aWindowBaselineGuard advances it — the shim
   // renders cached verdicts from the LAST guard in this fold, long after that advance.
   ctx.priorWindowAtIso = st.lastWindowAtIso || null;
   // Same reason, wider: every family the shim FORWARDS is decided from state this fold
@@ -5196,7 +5136,7 @@ if (require.main === module) {
   }
 }
 
-module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, ledgerScopes, officialLines,
+module.exports = { meter, meterSession, priceFor, attributeJump, ledgerScopes, officialLines,
   claudeCodeUA, fetchOfficialUsage,
   analyzeSession, renderAnalysis, payloadVerdict, fanVerdict, workflowSource, skillSizes, recordObservedSkill,
   payloadDivertCopy, readHead,                 // test/token-guard-divert.test.js — R8 door 2 divert
@@ -5207,16 +5147,15 @@ module.exports = { meter, meterSession, priceFor, attributeJump, driftVerdict, l
   restartVerdict, choiceBullet, rentAskCopy,   // test/token-guard-copy.test.js — R14 copy contract
   isRecoveryTurn,                              // test/token-guard-recovery.test.js — R13b/R14 exemption
   r13bTurnSpendGuard, r14TurnRentGuard,        // …and the two guards it drives through the exemption
-  recordRecoverySpend, loadRecoverySpend, recoveryWasteVerdict, recoveryCostNote,
-  r21RecoveryCostGuard,                        // …R21 recovery-cost meter, same suite
+  recordRecoverySpend, loadRecoverySpend, recoveryCostNote,
   noteClearAdvice, claimClearAdvice, loadClearAdvice,  // …R21 provenance join, same suite
   r20SessionTotalGuard,                        // test/token-guard-session-gate.test.js — R20
   bashVerdict,                                 // test/token-guard-bomb-gate.test.js — the Bash bomb rows
-  crossedSpendSteps,                           // test/token-guard-ladder.test.js — session-total ladder
-  meterCanaryVerdict, meterCanaryNote,         // test/token-guard-canary.test.js — meter fail-open canary
+  spendStepsConfigured,                        // …the meter-fetch term that replaced the ladder decide
+  meterCanaryNote,                             // test/token-guard-copy.test.js — meter fail-open copy
   coldStartTokens, firstContextOfHead, clearTail,  // R15b cold-start meter
-  writeRecoverPointer, idleReturnNote, resolveConfig, TOKEN_SAVER,
-  fiveHourWindow, tightestWindow, windowSpikeVerdict, windowThresholdVerdict, effectiveWarn,
+  writeRecoverPointer, stageDriftRecoverPointer, idleReturnNote, resolveConfig, TOKEN_SAVER,
+  fiveHourWindow, tightestWindow, windowThresholdVerdict, effectiveWarn,
   spikeAttribution, spikeCopyMode,
   windowSpikeNote, windowSpikeConfirmNote, windowRunway, windowThresholdNote, windowThresholdGateReason,
   findActivePlan, parsePlanSubsteps, parsePlanLedger, findCurrentSubstep,    // R17 plan-boundary

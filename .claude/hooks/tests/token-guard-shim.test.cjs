@@ -70,6 +70,20 @@ test('dark by default — no service config means no cache, no post file, no shi
   assert.doesNotMatch(note, /context-size note/, 'the free-tier floor belongs to the configured shim only');
 });
 
+// The line above only proves the floor stays quiet on a THIN fixture, where freeTierNote returns
+// null anyway — so it passed right through a change that made the no-service branch reach the
+// floor (2026-08-21). Fatten the context and the two halves of the contract separate: a dark
+// install is not silent (the local context axis survives the forward-delete), and it does not
+// say the same thing twice. The duplicate mattered beyond copy: the floor's wording names
+// `/clear`, so a second one every prompt floods R19's restart-advice log with notes, not cards.
+test('a FAT dark install gets the local context warning — and NOT a second one from the floor', () => {
+  const fix = mkFixture();
+  fs.appendFileSync(fix.tp, usageLine('m2', 300000));
+  const note = noteOf(promptSubmit(fix));
+  assert.match(note, /live context ≈ 300k/, 'unconfigured must not be silent on the context axis');
+  assert.doesNotMatch(note, /context-size note/, 'the floor must not stack onto the local warning');
+});
+
 test('configured shim posts counters and renders the previous response next prompt', async () => {
   let received = null;
   const server = http.createServer((req, res) => {

@@ -1,8 +1,10 @@
 // R12 window guards — plan-aware throttle flags for subscription (Max) sessions, where the
 // constraint is a rate-limit WINDOW, not a dollar bill. Two instruments:
-//   R12a windowSpikeVerdict — one turn ate a big slice of the 5h window (meter %-delta, self-calibrating)
-//   R12b windowThresholdVerdict — the tightest live window crossed the high-water mark (one-shot/cycle)
-// Pure unit tests on the exported verdict/extractor/note functions (like driftVerdict / driftNote).
+//   R12a — one turn ate a big slice of the 5h window; the spike DECIDE is served, so only its
+//          copy renderers (spikeAttribution/spikeCopyMode/windowSpikeNote/…) are covered here
+//   R12b windowThresholdVerdict — the tightest live window crossed the high-water mark (one-shot/cycle).
+//          Its GATE turns the verdict into a synchronous block, so this one stays client-side.
+// Pure unit tests on the exported verdict/extractor/note functions.
 // Run: node --test token-guard-r12-window.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
@@ -11,7 +13,7 @@ const path = require('path');
 const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
 const {
   resolveConfig, TOKEN_SAVER,
-  fiveHourWindow, tightestWindow, windowSpikeVerdict, windowThresholdVerdict, effectiveWarn,
+  fiveHourWindow, tightestWindow, windowThresholdVerdict, effectiveWarn,
   spikeAttribution, spikeCopyMode,
   windowSpikeNote, windowSpikeConfirmNote, windowRunway, windowThresholdNote, windowThresholdGateReason,
 } = require(HOOK);
@@ -111,61 +113,10 @@ test('tightestWindow falls back to flat fields and is null-safe', () => {
   assert.equal(flat.name, 'Weekly (all models)');
 });
 
-// ---------- R12a windowSpikeVerdict(): the self-calibrating 5h %-delta ----------
+// ---------- shared window fixtures (R12a copy renderers + R12b) ----------
 
 const R = '2026-07-15T08:20:00Z';
 const now = pct => ({ pct, resetsAt: R });
-
-test('spike fires when the 5h window jumped >= the threshold since the last prompt', () => {
-  const v = windowSpikeVerdict(now(33), { pct: 10, resetsAt: R }, 0, CFG);
-  assert.equal(v.fire, true);
-  assert.equal(v.spikePct, 23);
-  assert.equal(v.fromPct, 10);
-  assert.equal(v.toPct, 33);
-  assert.equal(v.estimated, false);   // measured off Anthropic's meter, not calibrated
-});
-
-test('spike stays quiet on a small hop below the threshold', () => {
-  assert.equal(windowSpikeVerdict(now(33), { pct: 20, resetsAt: R }, 0, CFG).fire, false);
-});
-
-test('spike stays quiet on the first prompt (no baseline to diff against)', () => {
-  assert.equal(windowSpikeVerdict(now(33), null, 0, CFG).fire, false);
-});
-
-test('spike does NOT fire across a window reset — it re-baselines instead of reading the drop as a jump', () => {
-  // new cycle: resets_at moved a full 5h and pct dropped to ~0. A naive delta would be hugely
-  // negative; a naive abs() would misread the reset as a spike. The same-cycle guard skips both.
-  const prevCycle = { pct: 90, resetsAt: '2026-07-15T03:20:00Z' };  // 5h before R
-  assert.equal(windowSpikeVerdict(now(5), prevCycle, 0, CFG).fire, false);
-});
-
-test('REGRESSION: spike STILL fires when resets_at jitters sub-second within one cycle', () => {
-  // the server recomputes resets_at with ~0.5s jitter each fetch (real values, observed live).
-  // exact-string cycle matching broke this outright — the baseline never lined up, so a genuine
-  // 40-point jump was silently dropped. Tolerance-based same-cycle identity is what fixes it.
-  const prev = { pct: 5, resetsAt: '2026-07-15T08:20:00.504765+00:00' };
-  const nowJitter = { pct: 45, resetsAt: '2026-07-15T08:19:59.975486+00:00' };
-  const v = windowSpikeVerdict(nowJitter, prev, 0, CFG);
-  assert.equal(v.fire, true);
-  assert.equal(v.spikePct, 40);
-});
-
-test('spike caps at a full window — a >100pt "jump" is a meter artifact (post-outage re-baseline), not a turn', () => {
-  assert.equal(windowSpikeVerdict(now(100), { pct: -50, resetsAt: R }, 0, CFG).fire, false);
-});
-
-test('spike falls back to weighted $ vs windowBudgetUSD only when the meter is unreachable', () => {
-  const cfg = resolveConfig({ windowBudgetUSD: 20 });
-  const v = windowSpikeVerdict(null, { pct: 10, resetsAt: R }, 8, cfg);  // $8 of a $20 window = 40%
-  assert.equal(v.fire, true);
-  assert.equal(v.spikePct, 40);
-  assert.equal(v.estimated, true);   // labeled: calibrated, not measured
-});
-
-test('spike stays silent when the meter is down AND no windowBudgetUSD proxy is set', () => {
-  assert.equal(windowSpikeVerdict(null, { pct: 10, resetsAt: R }, 8, CFG).fire, false);
-});
 
 // ---------- R12b windowThresholdVerdict(): one-shot per rung per window cycle ----------
 

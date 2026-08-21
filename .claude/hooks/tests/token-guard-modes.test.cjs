@@ -7,7 +7,7 @@ const assert = require('node:assert');
 const path = require('path');
 
 const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
-const { resolveConfig, TOKEN_SAVER } = require(HOOK);
+const { resolveConfig, TOKEN_SAVER, spendStepsConfigured } = require(HOOK);
 
 // ---------- default: toggle OFF == the light shipped posture ----------
 
@@ -93,4 +93,22 @@ test('an explicitly-set key overrides the preset for that key', () => {
   assert.equal(resolveConfig({ windowThresholdGate: true }).windowThresholdGate, true);
   // untouched keys still follow the preset
   assert.equal(resolveConfig({ tokenSaver: true, idleGate: false }).bombJumpTokens, 30000);
+});
+
+// ---------- the spend ladder: config here, crossing decided remotely ----------
+
+test('default config carries the token ladder', () => {
+  const cfg = resolveConfig({});
+  assert.ok(Array.isArray(cfg.sessionWarnTokens) && cfg.sessionWarnTokens.length >= 2,
+    `sessionWarnTokens default missing: ${JSON.stringify(cfg.sessionWarnTokens)}`);
+  assert.deepEqual(cfg.sessionWarnTokens.slice(0, 2), [5000000, 10000000]);
+});
+
+test('spendStepsConfigured gates the meter fetch per billing kind', () => {
+  // Load-bearing beyond the ladder itself: this term is one of the conditions that decides
+  // whether the usage meter is fetched at all, which sets the window/canary inputs downstream.
+  const cfg = resolveConfig({});
+  assert.equal(spendStepsConfigured(cfg, 'subscription'), true);
+  assert.equal(spendStepsConfigured(cfg, 'api'), true);
+  assert.equal(spendStepsConfigured({ sessionWarnTokens: [], sessionWarnUSD: [] }, 'subscription'), false);
 });

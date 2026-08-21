@@ -23,7 +23,7 @@ const os = require('os');
 const path = require('path');
 const { test, assert, summary } = require('./_harness');
 const {
-  restartVerdict, choiceBullet, rentAskCopy,
+  restartVerdict, choiceBullet, rentAskCopy, meterCanaryNote,
   coldStartTokens, firstContextOfHead, clearTail, restartBullet, restartPos,
 } = require('../.claude/hooks/token-guard');
 
@@ -304,6 +304,13 @@ test('the cold-start meter says nothing rather than guessing', () => {
     'an empty store must read null, not 0');
   assert(firstContextOfHead(path.join(os.tmpdir(), 'cca-no-such-transcript.jsonl')) === 0,
     'a missing transcript must read 0, never throw on the PreToolUse path');
+});
+
+test('the meter-canary line carries both numbers and no $ figure', () => {
+  const s = meterCanaryNote({ hours: 26, warnHours: 24 });
+  assert(/~26h/.test(s), `the age must appear, got: ${s}`);
+  assert(/past 24h/.test(s), `the threshold must appear (a number needs its threshold), got: ${s}`);
+  assert(!/\$/.test(s), `window copy never carries $, got: ${s}`);
 });
 
 summary();

@@ -34,7 +34,6 @@
       "Function 'claimAdvisoryGuard'",
       "Function 'coldStartTokens'",
       "Function 'driftDeferralTick'",
-      "Function 'driftVerdict'",
       "Function 'emitWriteClaimGuard'",
       "Function 'fanVerdict'",
       "Function 'firstContextOfHead'",
@@ -56,7 +55,6 @@
       "Function 'tightestWindow'",
       "Function 'windowSpikeConfirmNote'",
       "Function 'windowSpikeNote'",
-      "Function 'windowSpikeVerdict'",
       "Function 'windowThresholdVerdict'"
     ],
     ".claude/scripts/plan-progress.js": [
