@@ -1,8 +1,8 @@
 <!-- @description End-of-day wrap-up: what landed today and what's still open, rendered as an HTML report. -->
-<!-- @version 2 -->
+<!-- @version 3 -->
 <!-- @param days | number | optional | How many days back to scan. Default 1 (today). -->
 <!-- @response success | The report path, the one "pick up here" line, and the sharpest finding of the day. -->
-<!-- @sideeffect Writes WIP/EOD/<YYYY-DD-MON>.html in the BASE checkout. That folder IS tracked; the command never commits it. -->
+<!-- @sideeffect Writes reports/eod/<YYYY-DD-MON>.html in the BASE checkout. That folder IS tracked; the command never commits it. -->
 <!-- @sideeffect Opens the report in the default browser. -->
 <!-- @example /eod-report | Wrap up the day: what shipped, what's left -->
 <!-- @example /eod-report 3 | Same, but covering the last three days -->
@@ -46,12 +46,13 @@ Also pull in, when they exist and are cheap to read:
 
 ## Step 2 — the page
 
-One file at `WIP/EOD/<YYYY-DD-MON>.html` — e.g. `WIP/EOD/2026-20-AUG.html` — always in the **base
-checkout**, never inside `.claude/worktrees/`. On a multi-day scan the filename is the **end** date.
+One file at `reports/eod/<YYYY-DD-MON>.html` — e.g. `reports/eod/2026-20-AUG.html` — always in the
+**base checkout**, never inside `.claude/worktrees/`. On a multi-day scan the filename is the **end**
+date.
 
-**Re-running the same day overwrites it.** That is the opposite of `WIP/DONE/`'s immutability, and
-deliberately so: the day is not over until it is, and a wrap-up run at 4pm and again at 9pm should
-be one file, not two disagreeing ones.
+**Re-running the same day overwrites it.** That is the opposite of `reports/wip/done/`'s
+immutability, and deliberately so: the day is not over until it is, and a wrap-up run at 4pm and
+again at 9pm should be one file, not two disagreeing ones.
 
 ### ⛔ Instantiate the template from the FILE, never from memory
 
@@ -177,15 +178,15 @@ The page is the report. The console gets:
 3. **one** finding — the sharpest thing the day revealed. One. Not a digest of the page you just
    wrote; the user is about to look at it.
 
-Then, only when the file is new or changed: name the commit as the user's next step. `WIP/EOD/` is
-**tracked** — unlike the rest of `WIP/`, which is regenerated and gitignored — because the open
-loops in it exist nowhere else. **Do not commit it yourself**; a command that writes tracked files
-and commits them is a command that lands work nobody reviewed.
+Then, only when the file is new or changed: name the commit as the user's next step. `reports/eod/`
+is **tracked** — unlike `reports/wip/<date>/`, which is regenerated and gitignored — because the
+open loops in it exist nowhere else. **Do not commit it yourself**; a command that writes tracked
+files and commits them is a command that lands work nobody reviewed.
 
 ## Fallback — no template
 
 Only when `~/.claude/skills/create-web-page/template.html` does not exist. Write the same content
-as `WIP/EOD/<YYYY-DD-MON>.md` — `#` for the title, a bullet list for the `.dek` fields, `##` per
+as `reports/eod/<YYYY-DD-MON>.md` — `#` for the title, a bullet list for the `.dek` fields, `##` per
 section, the pick-up line bolded near the top — and skip the browser open. Say in the report that
 the page is markdown and why.
 
@@ -194,6 +195,6 @@ the page is markdown and why.
 - **Commit or push anything**, including its own output. See Step 4.
 - **Act on a finding.** It reports a red pipeline; fixing it is the next session's work.
 - **Pad the day.** One commit and a diagnosis is a legitimate day, reported as such.
-- **Write outside `WIP/EOD/`**, or inside a worktree.
+- **Write outside `reports/eod/`**, or inside a worktree.
 - **Read a whole plan doc or a whole transcript.** Ledger tail, substep list, transcript tail.
 - **Trust a transcript over git.** A session that says it committed and has no hash did not.
