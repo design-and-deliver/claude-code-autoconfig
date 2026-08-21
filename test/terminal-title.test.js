@@ -136,7 +136,11 @@ test('normal turn injects the compact REMINDER, not the full rulebook', () => {
   assert(/full rules were injected\s+at session start/.test(r.directive), 'reminder should point back to session-start rules');
   assert(!/DESIGN SCOPE/.test(r.directive), 'per-prompt injection must not carry the full RULES text');
   assert(!/implementation detail/.test(r.directive), 'normal turn must not carry the COMMAND addendum');
-  assert(r.directive.length < 800, `reminder must stay compact (token guard), got ${r.directive.length} chars`);
+  // Budget the WORDING, not the workspace path: the reminder substitutes the title-file path
+  // twice, so a total-chars assertion measures mkdtemp. It passed here on a 48-char temp dir
+  // (780) and failed on CI's longer one (810) — same wording, different runner.
+  const wording = r.directive.split(cwd).join('').length;
+  assert(wording < 800, `reminder must stay compact (token guard), got ${wording} chars of wording`);
 });
 
 test('slash-command turn appends the COMMAND addendum (with the command name)', () => {

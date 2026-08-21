@@ -10,6 +10,9 @@ jobs:
   test:
     runs-on: ${{ matrix.os }}
     strategy:
+      # One red cell used to cancel the other eight, so a platform-specific failure could hide
+      # behind an unrelated one. Let the whole matrix report.
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         node-version: [18, 20, 22]
