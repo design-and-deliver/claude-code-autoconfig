@@ -249,6 +249,10 @@ function onSessionStart(data, dir, sid, file, cwd) {
   // records the cleared sid as this session's "previous" — what bare /recover-context recovers,
   // and what carriedTitle() reads just below to carry the last title onto the tab.
   recordLineage(dir, sid, data.source || '');
+  // Age out scratch from long-dead sessions (once a day, best-effort). AFTER recordLineage so
+  // this session's fresh lineage is already on disk and its predecessor is shielded from the
+  // sweep — carriedTitle reads that predecessor's {prevSid}.txt a few lines below.
+  pruneTitleState(dir, sid);
   // Stamp this session's birth time (ordering token for the duplicate-session guard's kill mode).
   ensureStartedAt(dir, sid);
   // Fresh-session title: this session's own (preferred on resume/compact), else the previous
@@ -1204,6 +1208,78 @@ function recordLineage(dir, sid, source) {
       } catch (_) { /* prune is best-effort */ }
     }
   } catch (_) { /* lineage is a convenience — never break SessionStart */ }
+}
+
+// PER-SESSION SCRATCH SWEEP (2026-08-22). .titles/ gains ~9 files per session and, until now,
+// nothing ever removed them — the only prune in this file is the terminals/ registry above.
+// carriedTitle's note ("title files aren't pruned") records the restraint that caused it: a
+// {prevSid}.txt deleted out from under a carry silently blanks the next title in that terminal.
+// That argued for a CAREFUL sweep, not for none. Measured cost of none, on one dev box: 7,421
+// files in the heaviest repo, 2,136 in a repo one month old, all of it surfacing in `git status`
+// on projects without a .gitignore rule for it.
+//
+// The carry reaches exactly ONE session back, so age + an explicit prevSid guard is sufficient:
+// a file older than the horizon that no surviving lineage still names cannot be reached by any
+// read path in this file.
+const SWEEP_TTL_MS = 14 * 86400000;
+const SWEEP_EVERY_MS = 86400000;
+
+// Only {uuid}.* is swept — the shape Claude Code's session_id has always had. Anchoring on the
+// name (rather than an exempt-list of the non-session files) means an unrecognized newcomer in
+// .titles/ is never deleted by a sweep that predates it: the logs, the painter .exe/.cs, the
+// stamp below and terminals/ are all skipped because they simply don't match. If session_id
+// ever stops being a UUID the sweep quietly stops sweeping — i.e. it fails toward today's
+// behaviour (accumulation), never toward deleting live state.
+const SWEEP_OWNED_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\./i;
+
+// Age out scratch belonging to long-dead sessions. Best-effort throughout — a sweep is never
+// worth failing SessionStart over, and anything it misses the next one picks up.
+function pruneTitleState(dir, sid) {
+  try {
+    if (!claimSweep(dir)) return;
+    const keep = carryTargets(dir, sid);
+    const cutoff = Date.now() - SWEEP_TTL_MS;
+    for (const f of fs.readdirSync(dir)) {
+      if (!SWEEP_OWNED_RE.test(f)) continue;
+      if (keep.has(f.slice(0, 36))) continue;
+      unlinkIfOlder(path.join(dir, f), cutoff);
+    }
+  } catch (_) { /* sweep is a convenience — never break SessionStart */ }
+}
+
+// Once a day per titles dir. The stamp is claimed BEFORE the work, so two tabs opening together
+// don't both pay the walk — the loser simply skips, and the winner's sweep covers both.
+function claimSweep(dir) {
+  const stamp = path.join(dir, '.sweep-stamp');
+  try {
+    if (Date.now() - fs.statSync(stamp).mtimeMs < SWEEP_EVERY_MS) return false;
+  } catch (_) { /* never swept here — fall through and claim it */ }
+  try {
+    fs.writeFileSync(stamp, new Date().toISOString());
+    return true;
+  } catch (_) { return false; }
+}
+
+// Every sid a surviving lineage still points back to, plus the live session. Collected BEFORE
+// anything is unlinked, so a lineage that is itself about to age out still shields its
+// predecessor on this pass — one extra day of retention, never a broken carry.
+function carryTargets(dir, sid) {
+  const keep = new Set();
+  if (sid) keep.add(sid);
+  for (const f of fs.readdirSync(dir)) {
+    if (!f.endsWith('.lineage.json')) continue;
+    try {
+      const lin = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+      if (lin && lin.prevSid) keep.add(lin.prevSid);
+    } catch (_) { /* unreadable — that carry is already dead, nothing to shield */ }
+  }
+  return keep;
+}
+
+function unlinkIfOlder(fp, cutoff) {
+  try {
+    if (fs.statSync(fp).mtimeMs < cutoff) fs.unlinkSync(fp);
+  } catch (_) { /* locked, or raced with another tab — the next sweep gets it */ }
 }
 
 // Spawn the per-turn cancel watchdog (--turn-watch child). MUST be detached: on Windows a
@@ -2376,4 +2452,4 @@ function extractBlock(tpl, name) {
 // Exported for tests (require()'d when require.main !== module). The hook itself never reads these.
 // Contract: terminal-title.test.js, golden-endings.test.js, and arcade-beeps.js (lazy-requires
 // inspectLastResponse) depend on these names — renaming one silently degrades the beeps hook.
-module.exports = { inspectLastResponse, endsOnQuestion, normalize, GLYPH, shouldDefer, solicitsReply, readContextTokens, readTailWrites, recordMark, readMarks, recordWrites, readWriteLedger, clearAdvice, ancestryChain, recordLineage, carriedTitle, displayTitle, titlesCollide, isPlaceholderTitle, activeTwins, dupeGuardResult, dupeGuardPaint, ALARM_RE, appendCapped };
+module.exports = { inspectLastResponse, endsOnQuestion, normalize, GLYPH, shouldDefer, solicitsReply, readContextTokens, readTailWrites, recordMark, readMarks, recordWrites, readWriteLedger, clearAdvice, ancestryChain, recordLineage, pruneTitleState, carriedTitle, displayTitle, titlesCollide, isPlaceholderTitle, activeTwins, dupeGuardResult, dupeGuardPaint, ALARM_RE, appendCapped };
