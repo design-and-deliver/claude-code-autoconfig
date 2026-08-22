@@ -1,5 +1,5 @@
 <!-- @description End-of-day wrap-up: what got done and what's next, as two collapsible sections on an HTML page. -->
-<!-- @version 15 -->
+<!-- @version 16 -->
 <!-- @param days | number | optional | How many days back to scan. Default 1 (today). -->
 <!-- @response success | The report path, the first Next steps item, and the sharpest finding of the day. -->
 <!-- @sideeffect Writes reports/eod/<YYYY-DD-MON>.html in the BASE checkout. That folder IS tracked; the command never commits it. -->
@@ -32,7 +32,7 @@ git log --oneline @{u}.. 2>/dev/null    # committed but unpushed
 
 **The project is the report's boundary.** A wrap-up covering four repos is four wrap-ups stapled
 together: nothing in it can be ranked, because a commit here and a commit in an unrelated service
-are not competing for the same second slot. The two-item cap only means something inside one
+are not competing for the same three slots. The three-item cap only means something inside one
 project.
 
 **A related repo enters through an item, never through the scan.** When today's work here depended
@@ -111,7 +111,7 @@ padding this format exists to refuse.
 ⛔ **No counts, anywhere above the toolbar.** `4 repos · 15 commits · 2 unpushed · 8 open` looks
 like a summary and is not one: fifteen commits is not a better day than four, so the numbers give
 the reader nothing to conclude, and a repo list is a boundary the report already has. The day's
-shape is in the two items — that is what the two-item cap is for.
+shape is in the items themselves — that is what the three-item cap is for.
 
 ⛔ **The generation time does not appear on the page.** `.stamp` is the template's datetime slot
 everywhere else, so writing the project name there is a deliberate override, not an oversight —
@@ -148,12 +148,24 @@ Everything that is finished goes in `Done today`. Everything that is not — blo
 unstarted — goes in `Next steps`. There is no third bucket; the distinction between "blocked" and
 "just unstarted" is carried by the ⛔ mark, not by a section.
 
-### ⛔ Two headline items per section — the rest goes in a labeled drawer
+### ⛔ Three items per section, listed flat — what does not make the cut is off the page
 
-Each section shows **at most two** items at its top level. This is a hard cap and it is the whole
-mechanism: two slots force a ranking, and a ranking is the thing a wrap-up is actually for.
-Everything past the second item moves into a drawer below — provided it cleared the floor in the
-first place, which is a separate question and the next rule.
+Each section lists **at most three** items, ranked, one after another. There is no fourth slot and
+nothing below the third; an item that does not make the cut is simply not in today's wrap-up.
+
+**There is no drawer, and nothing on this page collapses except the two sections.** The overflow
+used to sit in a `<details class="more">` under a label like `1 more open loop — nothing blocking`,
+and it was the `Details` link at a different altitude: a hidden block behind a container label,
+guarding items that would have been shorter to read than the label announcing them. If an item is
+worth telling the team, it is worth a line; if it is not, a click does not rescue it.
+
+**The cap is a real cut, and that is safe because this page is a communication, not a tracker.**
+Open loops live wherever the work lives — the plan docs, the tracker, the branch. A fourth item
+left off the wrap-up is not lost, it is just not what tomorrow opens with. Reporting less than
+everything is the job.
+
+**Three, not two.** Two was survivable only while the drawer caught the remainder; with the cut now
+real, two would delete genuine work every day. Three is what a standup can actually hold.
 
 A headline item is **one line, 25 words, and complete on its own** — the outcome clause bolded via
 `.lede`, the remainder of the sentence carrying whatever else earns room:
@@ -163,17 +175,16 @@ A headline item is **one line, 25 words, and complete on its own** — the outco
 — the address it uses stopped being ours in June. <span class="owner">~20 min</span></p>
 ```
 
-### ⛔ The drawer is not a lower bar — work below a half-point story is off the page
+### ⛔ Work below a half-point story is off the page, cap or no cap
 
-`3 more commits — housekeeping`, opening onto *moved the session reports under a lowercase
-`reports/` tree* and *archived yesterday's wrap-up*, is not a ranking problem. Nobody would have
-written a story for either one, or estimated them at half a point. They happened, and happening is
-the only claim they have.
+*Moved the session reports under a lowercase `reports/` tree*, *archived yesterday's wrap-up* — a
+report once carried both under `3 more commits — housekeeping`. That is not a ranking problem.
+Nobody would have written a story for either one, or estimated them at half a point. They happened,
+and happening is the only claim they have.
 
 **Two different bars, and they run in this order.** A thing must be worth telling the team to be on
-the page *at all*; only then does the ranking decide headline or drawer. So the drawer catches what
-lost the ranking — never what failed the floor. Work that fails it does not fall into the drawer,
-it falls off.
+the page *at all*; only then does the ranking sort it against the others. So a free third slot is
+never a reason to fill it — the cap is a ceiling, not a quota.
 
 **Test: would anyone have written this down before it happened?** Real items exist as intentions
 first — someone wanted the deploy fixed, someone wanted CI green. Renames, file moves, archiving
@@ -181,14 +192,11 @@ the previous report, formatting passes, regenerated files: these exist only as c
 passing while doing the actual work. Scanning `git log` and writing up whatever is left over is how
 they get in, every time.
 
-Including them costs more than the space. A drawer that opens onto chore commits teaches the reader
-it is not worth opening — the same failure as the `Details` link, one level down. And it flattens
-the day: three lines about moving a directory sitting beside *CI green after 24 straight failures*
-implies the two are comparable.
+Including them costs more than the space — it flattens the day. A line about moving a directory
+sitting beside *CI green after 24 straight failures* implies the two are comparable.
 
-**A section with one item, or with no drawer at all, is the normal result of applying this.** Do not
-promote a leftover to fill the second slot, and do not assemble a drawer to prove the day was busy —
-a short section reports a quiet day, while a padded one misreports a busy one.
+**A section with one item is the normal result of applying this.** Do not promote a leftover to
+fill an empty slot: a short section reports a quiet day, while a padded one misreports a busy one.
 
 ### ⛔ There is no `Details` link — the item is the whole item
 
@@ -277,7 +285,7 @@ terms and where that capability stands:
 ✓ Hand a session's context to the next one — written and working, ships with the cleanup above.
 ```
 
-Banned in an item, headline or drawer: a plan's alias or filename, `substep`, `phase`, `unpushed`,
+Banned in an item: a plan's alias or filename, `substep`, `phase`, `unpushed`,
 `merged`, and any count of them. **The count is the tell** — "four of the substeps are done", "two
 more queued" is a fraction of an artifact only the writer can open, sitting where the outcome
 should be.
@@ -294,14 +302,13 @@ runs the standup; they will never type a commit hash, so a trailing
 ended. It is a changelog wearing a receipt's clothes.
 
 - **One `repo@hash` is allowed** when the item is a single commit someone would plausibly go read.
-  Multi-commit work gets nothing, and there is nowhere else on the page to move the trail to — not
-  a drawer, which holds items and never evidence (see below). `git log` already lists the day's
-  commits, and lists them better than this page can.
+  Multi-commit work gets nothing, and there is nowhere else on the page to move the trail to —
+  the item is the whole item. `git log` already lists the day's commits, and lists them better
+  than this page can.
 - **A pointer is not a hash.** `.claude/retro/deploy-workflow-stale-ip.md` is a destination someone
   may actually open, so it earns its place; keep those.
-- The `repo@hash` form still applies wherever hashes *do* appear (drawers) whenever the commit is
-  not this repo's — a bare hash is read as local, so an unprefixed one from a related repo is worse
-  than no hash.
+- The `repo@hash` form still applies whenever the one allowed hash is not this repo's — a bare hash
+  is read as local, so an unprefixed one from a related repo is worse than no hash.
 
 - **No unexplained internals.** An env var, a function, a table, a flag — gloss it in plain words on
   first mention, or cut it. `CCA_LICENSE_KEYS` becomes "the license key on the server".
@@ -333,54 +340,33 @@ ended. It is a changelog wearing a receipt's clothes.
 
 **It holds hardest in the `.lede`**, which is read first and is the part that gets quoted onward:
 "The paid verdict endpoint is live in `main`" becomes "Merged the paid usage check, switched off" —
-plain words, and active, per the voice rules below. Same for the `.more-body` drawers; every prose
-surface on this page has the same reader.
+plain words, and active, per the voice rules below.
 
 It **departs from** `C:\CODE\ux\copy\warnings-name-the-trigger.md`, which parks mechanism behind a
 details affordance rather than in the headline. This page has no such affordance to park it in, so
 mechanism either fits the line in plain words or waits for the reader to ask.
 
-The overflow sits in a `<div class="rest">` after the two items, one `details.more` per *kind*:
+The section body holds nothing but its items — no wrapper, no overflow container:
 
 ```html
-<div class="rest">
-  <details class="more">
-    <summary>2 more blocked — one fix, one decision</summary>
-    ...
-  </details>
-  <details class="more">
-    <summary>4 more open loops — nothing blocking</summary>
-    ...
-  </details>
-</div>
+<details>
+  <summary>Next steps</summary>
+  <div class="s-body">
+    <p class="item">…</p>
+    <p class="item">…</p>
+    <p class="item">…</p>
+  </div>
+</details>
 ```
 
-**A drawer label states its kind, never a bare count.** `7 smaller commits` and `2 more blocked —
-one fix, one decision` tell the reader whether to open them; `5 more` does not. Splitting the
-overflow by kind is also how the old third section's meaning survives the collapse to two.
+**The two sections are the only things on the page that open.** Every attempt to add a third
+expandable surface has been the same mistake wearing a new name — a `Details` modal, then a
+`details.more` drawer under a label like `1 more open loop — nothing blocking`, whose label ran
+longer than the item it hid. Both promised the reader a payoff behind a click and delivered either
+a paraphrase of the headline or a line that should simply have been printed.
 
-**The drawer is the page's only expandable thing, and it holds items — never evidence.** What
-opens is *a list continuing*, which is why it continues in place rather than on some other surface.
-It also sits below both headline items, so expanding it pushes nothing that matters. Overflow items
-follow the same rule as the headlines: one line, complete on its own, nothing behind them.
-
-### ⛔ A drawer holds the items that lost the ranking — never a breakdown of one that won
-
-`The three fixes behind the green run`, hanging under a headline that already said CI went green,
-is the `Details` modal wearing a drawer. Same promise, same failure: the reader opens it expecting
-the item to pay off and gets the commit-by-commit **how** instead — `install dependencies before
-the test step`, `pin the generator's inputs to LF` — which is a changelog, and which the person
-running standup will not read once. If they want the mechanism they will ask, and they almost
-never will.
-
-**Test it by its label.** A drawer's label names *more items* — `3 more commits`, `2 more blocked`.
-A label naming *one item's internals* — `the three fixes behind…`, `what changed in…`, `how we…` —
-means the drawer is decomposing a headline, so delete it. What was worth knowing was already in the
-line; what is left is evidence, and evidence lives in `git log`.
-
-This is why the hash allowance above is narrow. A drawer item may carry its own `repo@hash` because
-it is an item — a thing that happened and lost a slot. That is not license to list the commits
-*inside* a headline item, which is the same trail with a caption.
+So when an item will not fit the ranking, it comes off the page; when a *detail* will not fit the
+line, the reader asks. **Neither one gets a container.**
 
 ### ⛔ `Next steps` is ordered by what to do first — and carries no label saying so
 
@@ -405,8 +391,7 @@ only case a `Start here` chip could ever have disambiguated.
 
 ### Marks and owner tags
 
-- **`⛔` prefixes a blocked item**, in either the headline or a drawer. It means work is stopped,
-  not merely unstarted.
+- **`⛔` prefixes a blocked item.** It means work is stopped, not merely unstarted.
 - **Every `Next steps` item ends with an estimate** — `<span class="owner">~10 min</span>`,
   `2 lines`, `~1.5h`. Two items at `~1h` and `~1.5h` say half of tomorrow is already spoken for,
   which is the thing the reader is actually deciding.
@@ -424,8 +409,9 @@ only case a `Start here` chip could ever have disambiguated.
 - **Every item leads with a verb — both sections.** `Done today` in the past tense, `Next steps` in
   the imperative: *"Completed the cost-control plan"* · *"Repoint the deploy pipeline at the live
   box"*. One tense apart, so both sections scan as actions instead of a list of facts beside a list
-  of orders. A `Next steps` item's *condition* — "the deploy pipeline points at a dead box" — goes
-  in its detail block; the headline names the action, because that is what makes it a step.
+  of orders. A `Next steps` item's *condition* — "the deploy pipeline points at a dead box" — is
+  what the trailing clause is for; the headline names the action, because that is what makes it a
+  step.
 - **⛔ `Done today` is active voice, never a state description.** *"The cost-control plan is
   finished"* reports a condition the plan arrived at by itself; *"Completed the cost-control plan"*
   says a person did it. The passive drops the actor, which is the thing a wrap-up exists to record.
@@ -445,10 +431,10 @@ only case a `Start here` chip could ever have disambiguated.
   prefix is what marks the exception — a hash from `cca-cost-control` without it is unverifiable
   from this checkout, and reads as if the work happened here.
 - **Surface the unwelcome findings.** A broken pipeline, a deploy that did not take, a suite
-  skipped rather than passed — those outrank wins for the two `Next steps` slots. A wrap-up that
+  skipped rather than passed — those outrank wins for the `Next steps` slots. A wrap-up that
   only lists wins is a wrap-up that gets read once.
-- **Do not pad `Done today`.** If the day's real output was one commit and a diagnosis, the second slot
-  goes empty rather than inventing a peer for the first.
+- **Do not pad `Done today`.** If the day's real output was one commit and a diagnosis, the
+  remaining slots go empty rather than inventing peers for the first.
 - **Nothing open → `Next steps` holds one line saying so.** The section stays; "nothing is open" is
   the single most useful thing a wrap-up can report, and deleting the section hides it.
 - **Another session's work is reported, never touched.** Read `git log` and `git status` there;
@@ -461,30 +447,21 @@ The shared template has no rules for these classes. Paste this **verbatim** imme
 looking like the same document:
 
 ```css
-  /* ── two-section shape: two headline items per section, overflow in a labeled drawer ── */
+  /* ── two-section shape: up to three ranked items per section, listed flat ── */
   .title .when{display:block;margin-top:5px;font-size:.58em;font-weight:600;
     letter-spacing:-.01em;color:var(--muted);}
   .item{margin:0 0 18px;font-size:19px;line-height:1.5;color:var(--ink);}
   .item .lede{font-weight:700;}
   .item .owner{color:var(--muted);font-size:16px;font-style:italic;}
-  details.more{border:none;margin:0 0 18px;}
-  details.more:last-of-type{border-bottom:none;}
-  details.more > summary{font-size:15px;font-weight:600;color:var(--muted);
-    padding:2px 0;gap:8px;}
-  details.more > summary::before{width:6px;height:6px;border-width:1.5px;}
-  details.more > summary:hover{color:var(--link);}
-  .more-body{font-size:17px;line-height:1.55;color:var(--body);padding:6px 0 4px 18px;}
-  .more-body p{margin:0 0 .7em;} .more-body p:last-child{margin-bottom:0;}
-  .more-body ul{padding-left:20px;margin:0;}
-  .rest{margin:14px 0 0;padding-top:12px;border-top:1px dashed var(--rule);}
 ```
 
-One rule in there is load-bearing, not taste: **`details.more{border:none}`** — the template's
-`details:last-of-type` adds a bottom rule, and a nested drawer is last-of-type inside its own
-parent, so without the override every drawer draws a stray line across the section.
+**That is the whole addition — five rules.** The page has no nested `details`, so nothing needs to
+undo the template's `details:last-of-type` bottom rule, and there is no second body style to
+maintain alongside `.s-body`. If a report's `<style>` grows past this, something has been
+reintroduced that these rules deleted.
 
 **The script is the template's, unchanged.** `toggle-all` is the only behavior on the page; there
-is no second listener to append, because there is nothing to open but the sections and the drawers.
+is no second listener to append, because the two sections are the only things that open.
 
 ## Step 3 — open it
 
@@ -513,10 +490,9 @@ files and commits them is a command that lands work nobody reviewed.
 
 Only when `~/.claude/skills/create-web-page/template.html` does not exist. Write the same content
 as `reports/eod/<YYYY-DD-MON>.md` — the project name as the first line, `#` for the title,
-`## Done today` and `## Next steps`, the same two-items-plus-overflow shape with the overflow as a
-nested list — and skip the browser open. The shape ports cleanly because there is nothing
-interactive to port: an item is one line either way. Say in the report that the page is markdown
-and why.
+`## Done today` and `## Next steps`, the same at-most-three-items-listed-flat shape — and skip the
+browser open. The shape ports cleanly because there is nothing interactive to port: an item is one
+line either way. Say in the report that the page is markdown and why.
 
 ## What it will never do
 
