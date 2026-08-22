@@ -1,7 +1,7 @@
 <!-- @description End-of-day wrap-up: what got done and what's next, as two collapsible sections on an HTML page. -->
-<!-- @version 12 -->
+<!-- @version 13 -->
 <!-- @param days | number | optional | How many days back to scan. Default 1 (today). -->
-<!-- @response success | The report path, the "Start here" item, and the sharpest finding of the day. -->
+<!-- @response success | The report path, the first Next steps item, and the sharpest finding of the day. -->
 <!-- @sideeffect Writes reports/eod/<YYYY-DD-MON>.html in the BASE checkout. That folder IS tracked; the command never commits it. -->
 <!-- @sideeffect Opens the report in the default browser. -->
 <!-- @example /eod-report | Wrap up the day: what got done, what's next -->
@@ -354,17 +354,26 @@ This is why the hash allowance above is narrow. A drawer item may carry its own 
 it is an item — a thing that happened and lost a slot. That is not license to list the commits
 *inside* a headline item, which is the same trail with a caption.
 
-### `Next steps` item one is tagged `Start here`
+### ⛔ `Next steps` is ordered by what to do first — and carries no label saying so
 
-The first item in `Next steps` is the single thing tomorrow opens with, and it says so:
+The first item is the single thing tomorrow opens with. **Position is the entire signal; nothing
+marks it.** It used to wear a blue `Start here` chip, which failed the negation check above in the
+loudest element on the page: negate it and the reader is told *not* to start with item one, which
+none of them believed. A label that restates its own position is a chip's worth of nothing.
 
 ```html
-<p class="item"><span class="chip">Start here</span><span class="lede">SSH the API box and read
-which branch its checkout is on</span> — that answer decides whether anything below matters.
+<p class="item"><span class="lede">SSH the API box and read which branch its checkout is
+on</span> — that answer decides whether anything below matters.
 <span class="owner">Ours · 5 min</span></p>
 ```
 
-**One item, never two.** If two genuinely tie for first, the day has not been thought through yet.
+**So the order carries real weight — rank by what to pick up first, not by importance.** Those come
+apart when the top item is blocked: it may be the day's biggest thing and still be unstartable, and
+a list ranked by importance then opens on something the reader cannot act on. Rank the startable
+work first and let `⛔` items sit below it — `⛔` already says *this one is stopped*, which is the
+only case a `Start here` chip could ever have disambiguated.
+
+**One first item, never two.** If two genuinely tie, the day has not been thought through yet.
 
 ### Marks and owner tags
 
@@ -425,9 +434,6 @@ looking like the same document:
   .item{margin:0 0 18px;font-size:19px;line-height:1.5;color:var(--ink);}
   .item .lede{font-weight:700;}
   .item .owner{color:var(--muted);font-size:16px;font-style:italic;}
-  .chip{display:inline-block;font-size:12px;font-weight:700;text-transform:uppercase;
-    letter-spacing:.06em;color:#fff;background:var(--link);border-radius:4px;
-    padding:2px 7px;margin-right:8px;vertical-align:2px;}
   details.more{border:none;margin:0 0 18px;}
   details.more:last-of-type{border-bottom:none;}
   details.more > summary{font-size:15px;font-weight:600;color:var(--muted);
@@ -461,7 +467,7 @@ just asked for, at the moment it is meant to be read.**
 The page is the report. The console gets:
 
 1. the file path,
-2. the `Start here` item, verbatim,
+2. the first `Next steps` item, verbatim,
 3. **one** finding — the sharpest thing the day revealed. One. Not a digest of the page you just
    wrote; the user is about to look at it.
 
