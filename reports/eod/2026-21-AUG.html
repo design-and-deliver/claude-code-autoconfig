@@ -94,8 +94,8 @@
     <summary>Next steps</summary>
     <div class="s-body">
 
-      <p class="item"><span class="lede">Split the context-warning hook's biggest branching
-      function</span> — a second plan's finished work stays unpushed until that cleanup clears.
+      <p class="item"><span class="lede">Simplify the context-warning hook's biggest
+      function</span> — finished work on session handoffs cannot ship until this clears.
       <span class="owner">~1h</span></p>
 
       <p class="item"><span class="lede">Make a new worktree carry uncommitted work across</span> —
@@ -104,13 +104,11 @@
 
       <div class="rest">
         <details class="more">
-          <summary>2 more open loops — nothing blocking</summary>
+          <summary>1 more open loop — nothing blocking</summary>
           <div class="more-body">
             <ul>
-              <li><strong>Checkpoint handoff</strong> — its first four substeps are done and sitting
-                unpushed, waiting on the cleanup above.</li>
-              <li><strong>Cleanup plan</strong> — two more substeps queued behind that one, both on
-                the same hook's report renderer.</li>
+              <li><strong>Hand a session's context to the next one</strong> — written and working;
+                ships with the cleanup above.</li>
             </ul>
           </div>
         </details>

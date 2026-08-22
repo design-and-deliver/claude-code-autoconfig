@@ -1,5 +1,5 @@
 <!-- @description End-of-day wrap-up: what got done and what's next, as two collapsible sections on an HTML page. -->
-<!-- @version 14 -->
+<!-- @version 15 -->
 <!-- @param days | number | optional | How many days back to scan. Default 1 (today). -->
 <!-- @response success | The report path, the first Next steps item, and the sharpest finding of the day. -->
 <!-- @sideeffect Writes reports/eod/<YYYY-DD-MON>.html in the BASE checkout. That folder IS tracked; the command never commits it. -->
@@ -257,6 +257,34 @@ It wears a second disguise that is easy to miss: **"that's a separate decision",
 yet", "we'll look at it later"** announce that nothing follows from the item — the same non-ask with
 a calendar bolted on. A real ask names a person and what they must decide; anything short of that
 is the item ending, so let it end.
+
+#### ⛔ Report the work, never the plan tracking it
+
+*"Checkpoint handoff — its first four substeps are done and sitting unpushed, waiting on the
+cleanup above"* is a progress bar for a document. `Checkpoint handoff` is a plan file's internal
+alias, `substeps` are its sections, `unpushed` is a git state — and *four* is four out of a total
+the reader was never given. The line reports movement through the machinery for organizing the
+work without once saying what the work does.
+
+**A plan is how the work is arranged; it is not the work.** Whatever shape the effort has
+internally — plan, phase, substep, epic, ticket — the item names the capability in the product's
+terms and where that capability stands:
+
+```
+✗ Checkpoint handoff — its first four substeps are done and sitting unpushed, waiting on
+  the cleanup above.
+
+✓ Hand a session's context to the next one — written and working, ships with the cleanup above.
+```
+
+Banned in an item, headline or drawer: a plan's alias or filename, `substep`, `phase`, `unpushed`,
+`merged`, and any count of them. **The count is the tell** — "four of the substeps are done", "two
+more queued" is a fraction of an artifact only the writer can open, sitting where the outcome
+should be.
+
+This is not the "no unexplained internals" rule one paragraph down, and glossing does not rescue
+it. There the name is unfamiliar and a plain-words gloss fixes it; here the whole frame is wrong,
+and `substep` explained is still a fraction of a document. The fix is to say what the work does.
 
 ### ⛔ No hash trails in an item
 
