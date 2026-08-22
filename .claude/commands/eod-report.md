@@ -1,5 +1,5 @@
 <!-- @description End-of-day wrap-up: what got done and what's next, as two collapsible sections on an HTML page. -->
-<!-- @version 9 -->
+<!-- @version 10 -->
 <!-- @param days | number | optional | How many days back to scan. Default 1 (today). -->
 <!-- @response success | The report path, the "Start here" item, and the sharpest finding of the day. -->
 <!-- @sideeffect Writes reports/eod/<YYYY-DD-MON>.html in the BASE checkout. That folder IS tracked; the command never commits it. -->
@@ -344,6 +344,14 @@ which branch its checkout is on</span> — that answer decides whether anything 
   "Moved", "Deleted", "Completed" name a result; "Worked on", "Looked at", "Started", "Continued"
   name effort. Verb-first does not by itself make an item: *"Worked on `sync-hook-fleet.js`"*
   satisfies both rules above and still reports nothing.
+- **⛔ But "Finished" is a claim about a decision, not a description of the work.** The rule above
+  demands an outcome verb; a *finality* verb is a different thing, and only whoever gets to call it
+  done may write it. *"Finished the report format"* after a day of shaping it records an agreement
+  nobody made — and the page outlives the evening, so the overclaim is what survives. **Reserve
+  "Finished", "Completed", "Done with" for work whose owner said so** — a plan whose last substep
+  landed, a decision the user closed. Everything else gets **"Refined"**, "Advanced", "Tightened",
+  "Reshaped": still outcome verbs, still naming a result, minus the sign-off you do not have. Same
+  test as the negation check — *did they say so?* If not, name the change and stop.
 - **A bare hash means this repo; anything else is `repo@hash`.** The report has one project, so the
   prefix is what marks the exception — a hash from `cca-cost-control` without it is unverifiable
   from this checkout, and reads as if the work happened here.
