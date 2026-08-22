@@ -1,5 +1,5 @@
 <!-- @description End-of-day wrap-up: what got done and what's next, as two collapsible sections on an HTML page. -->
-<!-- @version 11 -->
+<!-- @version 12 -->
 <!-- @param days | number | optional | How many days back to scan. Default 1 (today). -->
 <!-- @response success | The report path, the "Start here" item, and the sharpest finding of the day. -->
 <!-- @sideeffect Writes reports/eod/<YYYY-DD-MON>.html in the BASE checkout. That folder IS tracked; the command never commits it. -->
@@ -151,8 +151,9 @@ unstarted — goes in `Next steps`. There is no third bucket; the distinction be
 ### ⛔ Two headline items per section — the rest goes in a labeled drawer
 
 Each section shows **at most two** items at its top level. This is a hard cap and it is the whole
-mechanism: two slots force a ranking, and a ranking is the thing a wrap-up is actually for. Nothing
-is discarded — everything past the second item moves into a drawer below.
+mechanism: two slots force a ranking, and a ranking is the thing a wrap-up is actually for.
+Everything past the second item moves into a drawer below — provided it cleared the floor in the
+first place, which is a separate question and the next rule.
 
 A headline item is **one line, 25 words, and complete on its own** — the outcome clause bolded via
 `.lede`, the remainder of the sentence carrying whatever else earns room:
@@ -161,6 +162,33 @@ A headline item is **one line, 25 words, and complete on its own** — the outco
 <p class="item">⛔ <span class="lede">Point the automatic deploy at the current server</span>
 — the address it uses stopped being ours in June. <span class="owner">Ours · ~20 min</span></p>
 ```
+
+### ⛔ The drawer is not a lower bar — work below a half-point story is off the page
+
+`3 more commits — housekeeping`, opening onto *moved the session reports under a lowercase
+`reports/` tree* and *archived yesterday's wrap-up*, is not a ranking problem. Nobody would have
+written a story for either one, or estimated them at half a point. They happened, and happening is
+the only claim they have.
+
+**Two different bars, and they run in this order.** A thing must be worth telling the team to be on
+the page *at all*; only then does the ranking decide headline or drawer. So the drawer catches what
+lost the ranking — never what failed the floor. Work that fails it does not fall into the drawer,
+it falls off.
+
+**Test: would anyone have written this down before it happened?** Real items exist as intentions
+first — someone wanted the deploy fixed, someone wanted CI green. Renames, file moves, archiving
+the previous report, formatting passes, regenerated files: these exist only as commits, produced in
+passing while doing the actual work. Scanning `git log` and writing up whatever is left over is how
+they get in, every time.
+
+Including them costs more than the space. A drawer that opens onto chore commits teaches the reader
+it is not worth opening — the same failure as the `Details` link, one level down. And it flattens
+the day: three lines about moving a directory sitting beside *CI green after 24 straight failures*
+implies the two are comparable.
+
+**A section with one item, or with no drawer at all, is the normal result of applying this.** Do not
+promote a leftover to fill the second slot, and do not assemble a drawer to prove the day was busy —
+a short section reports a quiet day, while a padded one misreports a busy one.
 
 ### ⛔ There is no `Details` link — the item is the whole item
 
