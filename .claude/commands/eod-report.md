@@ -1,5 +1,5 @@
 <!-- @description End-of-day wrap-up: what got done and what's next, as two collapsible sections on an HTML page. -->
-<!-- @version 8 -->
+<!-- @version 9 -->
 <!-- @param days | number | optional | How many days back to scan. Default 1 (today). -->
 <!-- @response success | The report path, the "Start here" item, and the sharpest finding of the day. -->
 <!-- @sideeffect Writes reports/eod/<YYYY-DD-MON>.html in the BASE checkout. That folder IS tracked; the command never commits it. -->
@@ -75,10 +75,9 @@ format drifts: the `<style>` block and the `toggle-all` script get dropped and t
 unstyled serif text with a dead button. Missing template (another box, a fresh checkout) → say so
 and fall back to the `## Fallback` shape at the bottom; do not improvise a stylesheet.
 
-**Output self-check:** the file starts at `<!DOCTYPE html>` and contains the full `<style>` block,
-the `toggle-all` `<script>`, the `.mask` shell, and one `.detail` block per `Details` link. A file
-starting at `<p class="stamp">` is a naked fragment — redo it from the template. A `Details` link
-whose `href` matches no id is a dead link: the modal silently declines to open.
+**Output self-check:** the file starts at `<!DOCTYPE html>` and contains the full `<style>` block
+and the `toggle-all` `<script>`. A file starting at `<p class="stamp">` is a naked fragment — redo
+it from the template.
 
 ### Slot mapping
 
@@ -97,9 +96,8 @@ the closing `</div>` there are **two `<details>` elements and nothing else** —
 format, and it is the point: a wrap-up whose sections are collapsed is read in four seconds, and a
 paragraph above them is a paragraph that gets read every time instead.
 
-Two things are not exceptions to this, because neither renders: the `.detail` blocks (hidden,
-adjacent to their items, inside the sections) and the modal shell (a sibling *after* `.article`
-closes). Nothing visible joins the two sections.
+Nothing hidden lives there either. Every element on the page renders — there are no display:none
+blocks waiting behind a link, because there are no links (see below).
 
 The `.stamp` is the one exception, and it holds **the project name and nothing else** —
 `claude-code-autoconfig`, in the template's small muted line above the title. It is an **anchor,
@@ -156,127 +154,86 @@ Each section shows **at most two** items at its top level. This is a hard cap an
 mechanism: two slots force a ranking, and a ranking is the thing a wrap-up is actually for. Nothing
 is discarded — everything past the second item moves into a drawer below.
 
-A headline item is one line, **25 words**, with the outcome clause bolded via `.lede`. When it has
-evidence to show, it ends with a `Details` link:
+A headline item is **one line, 25 words, and complete on its own** — the outcome clause bolded via
+`.lede`, the remainder of the sentence carrying whatever else earns room:
 
 ```html
 <p class="item">⛔ <span class="lede">Point the automatic deploy at the current server</span>
-— the address it uses stopped being ours in June. <span class="owner">Ours · ~20 min</span>
-<a class="det" href="#n2">Details</a></p>
-<div class="detail" id="n2">
-  <p>It times out rather than errors, so releases have looked fine while nothing reached the
-  live site for two months — <code>.claude/retro/deploy-workflow-stale-ip.md</code>.</p>
-</div>
+— the address it uses stopped being ours in June. <span class="owner">Ours · ~20 min</span></p>
 ```
 
-**A `Details` link is earned, not standard issue.** The block behind it is where the hashes, the
-commands, the reasoning, and the `<pre><code>` fix blocks live. The headline says what; the detail
-says how you know — so it earns its place only by carrying something the headline does not.
+### ⛔ There is no `Details` link — the item is the whole item
 
-⛔ **If the detail would restate the headline, delete the link and the block.** Some items really are
-one sentence long: a thing was merged, it is switched off, that is the whole story. A rule that
-attaches a block to every item is what manufactures the paraphrase — the reader clicks `Details`,
-gets the line they just read in longer words, and learns that this report's links do not pay. One
-of those teaches them to stop opening the ones that would have.
+An item never links to a fuller version of itself. No modal, no hidden block, no "read more".
+**What does not fit in the line does not go on the page: the reader asks.**
+
+That trade is the point, not a limitation accepted reluctantly. A wrap-up is read in front of the
+person who wrote it, or in a channel where they are one message away — so the expensive thing is
+never the reader's missing context, it is the writer pre-answering questions nobody asked. Every
+detail block is a guess at the follow-up, written at full length, and most guess wrong. A line the
+reader can question costs one message and returns the answer they actually wanted.
+
+It also deletes the format's one failure mode. A link is a promise, and a block that paraphrases
+its own headline breaks it — one of those and the reader stops opening the ones that would have
+paid. With no link there is nothing to promise and nothing to break.
+
+**So the line has to survive alone.** Everything below is about making it do that.
 
 #### ⛔ The check: could the reader have believed the opposite?
 
-Not "name the fact it adds" — that is a judgment call, and it passes anything you can phrase
-confidently. **Negate each sentence of the block. If the negation is absurd given the headline, the
-sentence carries no information.** Every sentence failing that means no block and no link.
+Twenty-five words is the entire budget, so a clause carrying no information is not merely padding —
+it displaces the clause that would have carried some. Not "name the fact it adds": that is a
+judgment call, and it passes anything you can phrase confidently. **Negate the clause. If the
+negation is absurd given the `.lede`, the clause carries no information** — cut it and let the lede
+stand alone.
 
-Worked example — headline *"Completed the cost-control plan — one copy of the logic now, in the
-private service."*
+Worked example — lede *"Completed the cost-control plan"*, with five candidate trailing clauses:
 
-| Sentence | Negated | Verdict |
+| Clause | Negated | Verdict |
 |---|---|---|
+| "one copy of the logic now, in the private service" | "two copies now" | believable — **keep** |
 | "used to live in two places" | "used to live in one place" | absurd — `now` already said it |
 | "that could quietly disagree" | "two copies that always agreed" | absurd — that is what two copies means |
-| "one copy now, in the private service" | — | verbatim the headline |
 | "the public tool reads from it" | "the public tool ignores it" | absurd — the tool works |
-| "the plan's last item, so finished not paused" | "the plan is paused" | contradicted by the headline |
+| "the plan's last item, so finished not paused" | "the plan is paused" | contradicted by the lede |
 
-Five for five, so that item ships with **no link at all**. Compare the deploy block above: *"it times
-out rather than errors"* negates to *"releases failed loudly"* — perfectly believable, and wrong.
-That is what a fact looks like.
+One survives, so the item is *"Completed the cost-control plan — one copy of the logic now, in the
+private service."* and stops there. Compare a clause that is genuinely a fact: *"it times out rather
+than errors"* negates to *"releases failed loudly"* — perfectly believable, and wrong. That is what
+earns its words.
 
-**Three idioms generate the empty sentences.** They are recognizable while typing, which the
-judgment call is not:
+**Three idioms generate the empty clauses.** They are recognizable while typing, which the judgment
+call is not:
 
 1. **Spelling out an entailment** — "one copy *now*" → "used to live in two places". The tense
    already carried it.
 2. **Naming the obvious consequence** — two copies "could quietly disagree". That is the definition,
    not a finding.
 3. **Negating an alternative nobody raised** — "finished rather than paused". `Finished` is not
-   ambiguous; denying an unheld reading manufactures a sentence out of nothing.
+   ambiguous; denying an unheld reading manufactures a clause out of nothing.
 
-Each one produces a clause the previous sentence did not literally contain, which is exactly why it
-feels like elaboration while writing. **Novelty of wording is not novelty of information.**
+Each one produces words the lede did not literally contain, which is exactly why it feels like
+elaboration while writing. **Novelty of wording is not novelty of information.**
 
-⛔ **The modal's heading repeating the `.lede` is by design — never count it as evidence.** The
-script sets `sheetH.textContent` from the item's own `.lede` on purpose, so the reader knows which
-item they opened. Apply the test to the block's **body only**; a body that survives it is earning
-its place even though the heading above it is a verbatim repeat.
+### ⛔ Write the line for the scrum master, not the committer
 
-### ⛔ Detail opens in a modal — it never expands in place
+The person reading runs the standup; they did not write the code. They are reading to answer one
+question — *can I tell the team this is done, and does anyone have to do anything?* So the item
+names **what changed**, in the product's terms, and — only when there is one — **what it needs**.
 
-`.detail` divs are `display:none` and are **never** read where they sit. The `Details` link opens
-the shared modal (the shell and script below), which lifts that block onto a `rgba(255,255,255,.95)`
-white mask with the item's own `.lede` as the modal's heading.
-
-The reason is the two-item cap. An inline drawer pushes item two down the page the moment item one
-is opened, so reading the evidence for the first item costs you the ranking the section exists to
-show. A modal leaves the two items exactly where they are — you drop into the detail and come back
-to an unmoved page.
-
-Rules that follow from it:
-
-- **The link text is the bare word `Details`** — not "detail", "more", "why", or a count. It is a
-  destination, so it reads like one.
-- **It sits at the END of the sentence**, after the owner tag on a `Next steps` item. Last thing on
-  the line, every time, so the eye finds it in the same place down the column.
-- **`href` is the `.detail` block's own `#id`**, never `#`. Ids are `d1`, `d2`, `n1`, `n2` — section
-  letter plus position — so a link and its block are checkable by eye.
-- **The `.detail` block goes immediately after its `<p class="item">`**, never at the bottom of the
-  file. It is hidden either way; keeping it adjacent is what makes the pair editable.
-- **Each `.detail` holds `<p>` and `<ul>`/`<pre>` only — no heading.** The modal writes the heading
-  itself from the item's `.lede`; a heading inside the block prints it twice.
-
-### ⛔ Write the detail for the scrum master, not the committer
-
-The person who opens `Details` runs the standup; they did not write the code. They are reading to
-answer one question — *can I tell the team this is done, and does anyone have to do anything?* So
-every `.detail` block answers up to three things, in this order — **and only the ones that have a
-real answer.** This is a ranking, not a template: a block answering one of them and stopping is
-correct, and is more common than a block answering all three. Treating it as three slots to fill is
-what produced the empty block above, so run the negation test on each sentence before it ships:
-
-1. **What changed**, in the product's terms.
-2. **What it means** — who can now do what, or what deliberately stays the same.
-3. **What it needs** — *only when it needs something.*
-
-**Answer three only if the answer is not "nothing".** "Nobody is blocked", "nothing needed from
-anyone", "no action required" — an item that ends without an ask has already said that, and a line
-that appears under every item stops being read under any of them. Say it when there is a real
-decision waiting, and stay silent otherwise.
+**Name what it needs only when the answer is not "nothing".** "Nobody is blocked", "nothing needed
+from anyone", "no action required" — an item that ends without an ask has already said that, and a
+phrase appearing on every item stops being read on any of them.
 
 It wears a second disguise that is easy to miss: **"that's a separate decision", "not scheduled
 yet", "we'll look at it later"** announce that nothing follows from the item — the same non-ask with
-a calendar bolted on. A real answer three names a person and what they must decide; anything short
-of that is the item ending, so let it end.
+a calendar bolted on. A real ask names a person and what they must decide; anything short of that
+is the item ending, so let it end.
 
-**Do not restate answer two in fresh words either.** "It does nothing until we set the license
-key" already tells the reader nothing changed for users; a sentence adding "so nothing changed for
-users today" is the previous sentence wearing a bow.
+### ⛔ No hash trails in an item
 
-**Two short paragraphs, 50 words, hard cap.** If the answers genuinely will not fit, the headline is
-carrying two items and wants splitting. A modal that scrolls has stopped being an answer and become
-a document, which is the thing the reader opened it to avoid.
-
-### ⛔ No hash trails in a detail
-
-A `Details` block gets **one identifier, or none** — and "none" is the common case. The person
-reading it runs the standup; they will never type a commit hash, so a trailing
+An item gets **one identifier, or none** — and "none" is the common case. The person reading it
+runs the standup; they will never type a commit hash, so a trailing
 `bc4e303, fb15638, 7c407e0, ab6cb17` is four tokens of noise sitting where the sentence should have
 ended. It is a changelog wearing a receipt's clothes.
 
@@ -317,15 +274,14 @@ ended. It is a changelog wearing a receipt's clothes.
   the license key on the server.                                                  (20 words)
 ```
 
-**It holds for the headline `.lede` too, and there it is structural**: the modal takes its heading
-straight from the item's `.lede`, so a jargon headline puts jargon on top of the plain-English block
-underneath it. "The paid verdict endpoint is live in `main`" becomes "Merged the paid usage check,
-switched off" — plain words, and active, per the voice rules below. Same for the `.more-body`
-drawers; every prose surface on this page has the same reader.
+**It holds hardest in the `.lede`**, which is read first and is the part that gets quoted onward:
+"The paid verdict endpoint is live in `main`" becomes "Merged the paid usage check, switched off" —
+plain words, and active, per the voice rules below. Same for the `.more-body` drawers; every prose
+surface on this page has the same reader.
 
-It also **sharpens** `C:\CODE\ux\copy\warnings-name-the-trigger.md`, which parks mechanism behind a
-details affordance rather than in the headline. Mechanism stays parked there; this says it arrives
-*after* the meaning, as provenance, never instead of it.
+It **departs from** `C:\CODE\ux\copy\warnings-name-the-trigger.md`, which parks mechanism behind a
+details affordance rather than in the headline. This page has no such affordance to park it in, so
+mechanism either fits the line in plain words or waits for the reader to ask.
 
 The overflow sits in a `<div class="rest">` after the two items, one `details.more` per *kind*:
 
@@ -346,11 +302,10 @@ The overflow sits in a `<div class="rest">` after the two items, one `details.mo
 one fix, one decision` tell the reader whether to open them; `5 more` does not. Splitting the
 overflow by kind is also how the old third section's meaning survives the collapse to two.
 
-**The overflow stays a drawer — do not convert it to a modal.** The two are answering different
-questions. A `Details` link opens *evidence for one item*, so it wants a surface that leaves the
-page still; a `.rest` drawer opens *more items*, which is a list continuing, and a list continues
-in place. It also sits below both headline items, so expanding it pushes nothing that matters.
-Overflow items are already brief enough not to need a `Details` link of their own.
+**The drawer is the page's only expandable thing, and it holds items — never evidence.** What
+opens is *a list continuing*, which is why it continues in place rather than on some other surface.
+It also sits below both headline items, so expanding it pushes nothing that matters. Overflow items
+follow the same rule as the headlines: one line, complete on its own, nothing behind them.
 
 ### `Next steps` item one is tagged `Start here`
 
@@ -359,7 +314,7 @@ The first item in `Next steps` is the single thing tomorrow opens with, and it s
 ```html
 <p class="item"><span class="chip">Start here</span><span class="lede">SSH the API box and read
 which branch its checkout is on</span> — that answer decides whether anything below matters.
-<span class="owner">Ours · 5 min</span> <a class="det" href="#n1">Details</a></p>
+<span class="owner">Ours · 5 min</span></p>
 ```
 
 **One item, never two.** If two genuinely tie for first, the day has not been thought through yet.
@@ -409,7 +364,7 @@ The shared template has no rules for these classes. Paste this **verbatim** imme
 looking like the same document:
 
 ```css
-  /* ── two-section shape: two headline items per section, detail behind a Details link ── */
+  /* ── two-section shape: two headline items per section, overflow in a labeled drawer ── */
   .title .when{display:block;margin-top:5px;font-size:.58em;font-weight:600;
     letter-spacing:-.01em;color:var(--muted);}
   .item{margin:0 0 18px;font-size:19px;line-height:1.5;color:var(--ink);}
@@ -418,10 +373,6 @@ looking like the same document:
   .chip{display:inline-block;font-size:12px;font-weight:700;text-transform:uppercase;
     letter-spacing:.06em;color:#fff;background:var(--link);border-radius:4px;
     padding:2px 7px;margin-right:8px;vertical-align:2px;}
-  .det{color:var(--link);text-decoration:none;font-size:17px;white-space:nowrap;
-    border-bottom:1px solid rgba(10,102,194,.35);cursor:pointer;}
-  .det:hover{border-bottom-color:var(--link);}
-  .detail{display:none;}
   details.more{border:none;margin:0 0 18px;}
   details.more:last-of-type{border-bottom:none;}
   details.more > summary{font-size:15px;font-weight:600;color:var(--muted);
@@ -432,80 +383,14 @@ looking like the same document:
   .more-body p{margin:0 0 .7em;} .more-body p:last-child{margin-bottom:0;}
   .more-body ul{padding-left:20px;margin:0;}
   .rest{margin:14px 0 0;padding-top:12px;border-top:1px dashed var(--rule);}
-  /* ── detail modal: .95 white mask, one shell reused by every Details link ── */
-  .mask{position:fixed;inset:0;z-index:100;background:rgba(255,255,255,.95);
-    display:flex;align-items:center;justify-content:center;padding:40px 20px;}
-  .mask[hidden]{display:none;}
-  .sheet{position:relative;background:#fff;border:1px solid var(--rule);border-radius:12px;
-    box-shadow:0 12px 44px rgba(0,0,0,.14);width:100%;max-width:640px;max-height:80vh;
-    overflow:auto;padding:30px 34px 28px;}
-  .sheet h3{margin:0 0 16px;padding-right:28px;font-size:22px;line-height:1.3;
-    font-weight:700;color:var(--ink);letter-spacing:-.01em;}
-  .sheet-body{font-size:18px;line-height:1.6;color:var(--body);}
-  .sheet-body p{margin:0 0 .8em;} .sheet-body p:last-child{margin-bottom:0;}
-  .sheet-body ul{padding-left:20px;margin:0 0 .8em;}
-  .sheet-x{position:absolute;top:12px;right:14px;background:none;border:none;cursor:pointer;
-    font:400 26px/1 -apple-system,system-ui,sans-serif;color:var(--muted);padding:2px 6px;}
-  .sheet-x:hover{color:var(--ink);}
 ```
 
-Two rules in there are load-bearing, not taste:
+One rule in there is load-bearing, not taste: **`details.more{border:none}`** — the template's
+`details:last-of-type` adds a bottom rule, and a nested drawer is last-of-type inside its own
+parent, so without the override every drawer draws a stray line across the section.
 
-- **`details.more{border:none}`** — the template's `details:last-of-type` adds a bottom rule, and a
-  nested drawer is last-of-type inside its own parent, so without the override every drawer draws a
-  stray line across the section.
-- **`.mask[hidden]{display:none}`** — `display:flex` beats the `hidden` attribute, so without this
-  the modal is open on page load, covering the report with a white sheet.
-
-### The modal shell and its script
-
-Paste the shell **after** the closing `</div>` of `.article`, as a sibling — inside the article it
-inherits the 700px column and stops centering on the viewport:
-
-```html
-<div class="mask" id="mask" hidden>
-  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-h">
-    <button class="sheet-x" aria-label="Close">&times;</button>
-    <h3 id="sheet-h"></h3>
-    <div class="sheet-body"></div>
-  </div>
-</div>
-```
-
-And append this to the template's existing `<script>`, below the `toggle-all` handler — one
-delegated listener serves every link, so items cost nothing to add:
-
-```js
-  var mask=document.getElementById('mask'),
-      sheetH=mask.querySelector('h3'),
-      sheetB=mask.querySelector('.sheet-body'),
-      opener=null;
-  function openDetail(link){
-    var src=document.querySelector(link.getAttribute('href'));
-    if(!src)return;
-    var item=link.closest('.item'), lede=item&&item.querySelector('.lede');
-    sheetH.textContent=lede?lede.textContent:'Details';
-    sheetB.innerHTML=src.innerHTML;
-    opener=link; mask.hidden=false;
-    mask.querySelector('.sheet-x').focus();
-  }
-  function closeDetail(){
-    mask.hidden=true; sheetB.innerHTML='';
-    if(opener){opener.focus();opener=null;}
-  }
-  document.addEventListener('click',function(e){
-    var link=e.target.closest('.det');
-    if(link){e.preventDefault();openDetail(link);return;}
-    if(e.target===mask||e.target.closest('.sheet-x'))closeDetail();
-  });
-  document.addEventListener('keydown',function(e){
-    if(e.key==='Escape'&&!mask.hidden)closeDetail();
-  });
-```
-
-Three closes — the `×`, a click on the mask, and `Escape` — and focus returns to the link that
-opened it. `e.target===mask` is deliberate: a click that lands on the sheet bubbles to the same
-listener, and testing the target identity is what keeps it from closing under your own cursor.
+**The script is the template's, unchanged.** `toggle-all` is the only behavior on the page; there
+is no second listener to append, because there is nothing to open but the sections and the drawers.
 
 ## Step 3 — open it
 
@@ -534,9 +419,9 @@ files and commits them is a command that lands work nobody reviewed.
 
 Only when `~/.claude/skills/create-web-page/template.html` does not exist. Write the same content
 as `reports/eod/<YYYY-DD-MON>.md` — the project name as the first line, `#` for the title,
-`## Done today` and `## Next steps`, the same two-items-plus-overflow shape with the overflow as a nested list — and
-skip the browser open. There is no modal in markdown: each item's detail becomes an indented
-paragraph under it, and no `Details` link is written. Say in the report that the page is markdown
+`## Done today` and `## Next steps`, the same two-items-plus-overflow shape with the overflow as a
+nested list — and skip the browser open. The shape ports cleanly because there is nothing
+interactive to port: an item is one line either way. Say in the report that the page is markdown
 and why.
 
 ## What it will never do
