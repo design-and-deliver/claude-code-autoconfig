@@ -1,5 +1,5 @@
 <!-- @description End-of-day wrap-up: what got done and what's next, as two collapsible sections on an HTML page. -->
-<!-- @version 7 -->
+<!-- @version 8 -->
 <!-- @param days | number | optional | How many days back to scan. Default 1 (today). -->
 <!-- @response success | The report path, the "Start here" item, and the sharpest finding of the day. -->
 <!-- @sideeffect Writes reports/eod/<YYYY-DD-MON>.html in the BASE checkout. That folder IS tracked; the command never commits it. -->
@@ -9,7 +9,7 @@
 
 # /eod-report
 
-Close out the working day. The whole report is **two collapsed sections — `Done Today` and `Next Steps`**
+Close out the working day. The whole report is **two collapsed sections — `Done today` and `Next steps`**
 — and nothing else. Someone reading it cold should know what moved and what to pick up first,
 without reading a paragraph to get there.
 
@@ -45,10 +45,10 @@ Also pull in, when they exist and are cheap to read:
 
 - **Plan Ledgers** — any `docs/*.md` or `.claude/plans/*.md` with a `## Ledger`: the newest entry
   names the substep that closed and what the next session needs. A plan whose last substep landed
-  today belongs in `Done Today`; its next unchecked substep belongs in `Next Steps`. Read the Ledger tail
+  today belongs in `Done today`; its next unchecked substep belongs in `Next steps`. Read the Ledger tail
   and the substep list, never the whole doc.
 - **Open loops from this conversation** — decisions deferred, questions asked and unanswered,
-  things deliberately tabled. These are the highest-value `Next Steps` items and they exist **only**
+  things deliberately tabled. These are the highest-value `Next steps` items and they exist **only**
   in the session; no command can re-derive them tomorrow. They are the reason this file is worth
   tracking at all.
 - **CI state** for anything pushed (`gh run list`) — a green push and a red one are different days.
@@ -88,7 +88,7 @@ whose `href` matches no id is a dead link: the modal silently declines to open.
 | `.stamp` | the project name, bare — `claude-code-autoconfig`. **Not the generation time.** |
 | `.title` | two lines — `End of day report`, then the date in a `<span class="when">` |
 | `.dek` | **omitted entirely** — no element, not an empty one |
-| `<details>` ×2 | `Done Today` · `Next Steps` — **exactly these two, in this order** |
+| `<details>` ×2 | `Done today` · `Next steps` — **exactly these two, in this order** |
 
 ### ⛔ Nothing lives outside the two sections
 
@@ -138,15 +138,16 @@ line — `Monday–Friday, August 17–21` — and the first line never changes.
 Each is a `<details>` (closed — never add `open`) with its content in `<div class="s-body">`.
 
 ```html
-<summary>Done Today</summary>
-<summary>Next Steps</summary>
+<summary>Done today</summary>
+<summary>Next steps</summary>
 ```
 
-**The summary is the label alone.** No counts, no `(9)`, no `— top 2 of 9`. A header that carries a
-number invites reading the number instead of the item.
+**The summary is the label alone, in sentence case.** `Done today` and `Next steps` — never
+`Done Today`, `DONE`, or a title-cased variant. No counts either, no `(9)`, no `— top 2 of 9`: a
+header that carries a number invites reading the number instead of the item.
 
-Everything that is finished goes in `Done Today`. Everything that is not — blocked, undecided, or merely
-unstarted — goes in `Next Steps`. There is no third bucket; the distinction between "blocked" and
+Everything that is finished goes in `Done today`. Everything that is not — blocked, undecided, or merely
+unstarted — goes in `Next steps`. There is no third bucket; the distinction between "blocked" and
 "just unstarted" is carried by the ⛔ mark and the owner tag, not by a section.
 
 ### ⛔ Two headline items per section — the rest goes in a labeled drawer
@@ -184,7 +185,7 @@ Not "name the fact it adds" — that is a judgment call, and it passes anything 
 confidently. **Negate each sentence of the block. If the negation is absurd given the headline, the
 sentence carries no information.** Every sentence failing that means no block and no link.
 
-Worked example — headline *"The cost-control plan is finished — one copy of the logic now, in the
+Worked example — headline *"Completed the cost-control plan — one copy of the logic now, in the
 private service."*
 
 | Sentence | Negated | Verdict |
@@ -232,7 +233,7 @@ Rules that follow from it:
 
 - **The link text is the bare word `Details`** — not "detail", "more", "why", or a count. It is a
   destination, so it reads like one.
-- **It sits at the END of the sentence**, after the owner tag on a `Next Steps` item. Last thing on
+- **It sits at the END of the sentence**, after the owner tag on a `Next steps` item. Last thing on
   the line, every time, so the eye finds it in the same place down the column.
 - **`href` is the `.detail` block's own `#id`**, never `#`. Ids are `d1`, `d2`, `n1`, `n2` — section
   letter plus position — so a link and its block are checkable by eye.
@@ -312,15 +313,15 @@ ended. It is a changelog wearing a receipt's clothes.
 ✗ Counters in, display object out; inert until CCA_LICENSE_KEYS is present, so merging it
   changed nothing for existing callers — proswitch-api@bc4e303, fb15638, 7c407e0, ab6cb17.
 
-✓ The paid tier's usage check is merged but switched off — it does nothing until we
-  set the license key on the server.                                              (22 words)
+✓ Merged the paid tier's usage check, switched off — it does nothing until we set
+  the license key on the server.                                                  (20 words)
 ```
 
 **It holds for the headline `.lede` too, and there it is structural**: the modal takes its heading
 straight from the item's `.lede`, so a jargon headline puts jargon on top of the plain-English block
-underneath it. "The paid verdict endpoint is live in `main`" becomes "The paid usage check is merged
-and switched off". Same for the `.more-body` drawers — every prose surface on this page has the same
-reader.
+underneath it. "The paid verdict endpoint is live in `main`" becomes "Merged the paid usage check,
+switched off" — plain words, and active, per the voice rules below. Same for the `.more-body`
+drawers; every prose surface on this page has the same reader.
 
 It also **sharpens** `C:\CODE\ux\copy\warnings-name-the-trigger.md`, which parks mechanism behind a
 details affordance rather than in the headline. Mechanism stays parked there; this says it arrives
@@ -351,9 +352,9 @@ page still; a `.rest` drawer opens *more items*, which is a list continuing, and
 in place. It also sits below both headline items, so expanding it pushes nothing that matters.
 Overflow items are already brief enough not to need a `Details` link of their own.
 
-### `Next Steps` item one is tagged `Start here`
+### `Next steps` item one is tagged `Start here`
 
-The first item in `Next Steps` is the single thing tomorrow opens with, and it says so:
+The first item in `Next steps` is the single thing tomorrow opens with, and it says so:
 
 ```html
 <p class="item"><span class="chip">Start here</span><span class="lede">SSH the API box and read
@@ -367,7 +368,7 @@ which branch its checkout is on</span> — that answer decides whether anything 
 
 - **`⛔` prefixes a blocked item**, in either the headline or a drawer. It means work is stopped,
   not merely unstarted.
-- **Every `Next Steps` item ends with an owner tag** — `<span class="owner">Ours · 2 lines</span>`,
+- **Every `Next steps` item ends with an owner tag** — `<span class="owner">Ours · 2 lines</span>`,
   `Ours · ~10 min`, `Yours · a decision`. With blocked and unblocked items in one list, the tag is
   the only thing telling the reader which ones they can just go do. An item with no owner is how a
   loop sits open for two months.
@@ -376,20 +377,27 @@ which branch its checkout is on</span> — that answer decides whether anything 
 
 ### ⛔ The rules that make it a wrap-up instead of noise
 
-- **Name the outcome, not the activity.** "Fleet actuator can no longer overwrite adopting repos'
-  guards" beats "worked on `sync-hook-fleet.js`".
-- **`Next Steps` items are imperatives.** "Repoint the deploy pipeline at the live box" — not "the
-  deploy pipeline points at a dead box". The condition belongs in the drawer; the headline names
-  the action, because that is what makes it a *step*.
+- **Every item leads with a verb — both sections.** `Done today` in the past tense, `Next steps` in
+  the imperative: *"Completed the cost-control plan"* · *"Repoint the deploy pipeline at the live
+  box"*. One tense apart, so both sections scan as actions instead of a list of facts beside a list
+  of orders. A `Next steps` item's *condition* — "the deploy pipeline points at a dead box" — goes
+  in its detail block; the headline names the action, because that is what makes it a step.
+- **⛔ `Done today` is active voice, never a state description.** *"The cost-control plan is
+  finished"* reports a condition the plan arrived at by itself; *"Completed the cost-control plan"*
+  says a person did it. The passive drops the actor, which is the thing a wrap-up exists to record.
+- **Name the outcome, not the activity** — so the verb has to be a finished one. "Merged", "Fixed",
+  "Moved", "Deleted", "Completed" name a result; "Worked on", "Looked at", "Started", "Continued"
+  name effort. Verb-first does not by itself make an item: *"Worked on `sync-hook-fleet.js`"*
+  satisfies both rules above and still reports nothing.
 - **A bare hash means this repo; anything else is `repo@hash`.** The report has one project, so the
   prefix is what marks the exception — a hash from `cca-cost-control` without it is unverifiable
   from this checkout, and reads as if the work happened here.
 - **Surface the unwelcome findings.** A broken pipeline, a deploy that did not take, a suite
-  skipped rather than passed — those outrank wins for the two `Next Steps` slots. A wrap-up that
+  skipped rather than passed — those outrank wins for the two `Next steps` slots. A wrap-up that
   only lists wins is a wrap-up that gets read once.
-- **Do not pad `Done Today`.** If the day's real output was one commit and a diagnosis, the second slot
+- **Do not pad `Done today`.** If the day's real output was one commit and a diagnosis, the second slot
   goes empty rather than inventing a peer for the first.
-- **Nothing open → `Next Steps` holds one line saying so.** The section stays; "nothing is open" is
+- **Nothing open → `Next steps` holds one line saying so.** The section stays; "nothing is open" is
   the single most useful thing a wrap-up can report, and deleting the section hides it.
 - **Another session's work is reported, never touched.** Read `git log` and `git status` there;
   write nothing, and say a live sibling owns it.
@@ -526,7 +534,7 @@ files and commits them is a command that lands work nobody reviewed.
 
 Only when `~/.claude/skills/create-web-page/template.html` does not exist. Write the same content
 as `reports/eod/<YYYY-DD-MON>.md` — the project name as the first line, `#` for the title,
-`## Done Today` and `## Next Steps`, the same two-items-plus-overflow shape with the overflow as a nested list — and
+`## Done today` and `## Next steps`, the same two-items-plus-overflow shape with the overflow as a nested list — and
 skip the browser open. There is no modal in markdown: each item's detail becomes an indented
 paragraph under it, and no `Details` link is written. Say in the report that the page is markdown
 and why.
