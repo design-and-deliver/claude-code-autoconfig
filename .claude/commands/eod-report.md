@@ -1,5 +1,5 @@
 <!-- @description End-of-day wrap-up: what got done and what's next, as two collapsible sections on an HTML page. -->
-<!-- @version 10 -->
+<!-- @version 11 -->
 <!-- @param days | number | optional | How many days back to scan. Default 1 (today). -->
 <!-- @response success | The report path, the "Start here" item, and the sharpest finding of the day. -->
 <!-- @sideeffect Writes reports/eod/<YYYY-DD-MON>.html in the BASE checkout. That folder IS tracked; the command never commits it. -->
@@ -238,8 +238,9 @@ runs the standup; they will never type a commit hash, so a trailing
 ended. It is a changelog wearing a receipt's clothes.
 
 - **One `repo@hash` is allowed** when the item is a single commit someone would plausibly go read.
-  Multi-commit work gets nothing — the commit-level trail belongs in the overflow drawer, which is
-  where an engineer scanning the day's commits is already looking.
+  Multi-commit work gets nothing, and there is nowhere else on the page to move the trail to — not
+  a drawer, which holds items and never evidence (see below). `git log` already lists the day's
+  commits, and lists them better than this page can.
 - **A pointer is not a hash.** `.claude/retro/deploy-workflow-stale-ip.md` is a destination someone
   may actually open, so it earns its place; keep those.
 - The `repo@hash` form still applies wherever hashes *do* appear (drawers) whenever the commit is
@@ -306,6 +307,24 @@ overflow by kind is also how the old third section's meaning survives the collap
 opens is *a list continuing*, which is why it continues in place rather than on some other surface.
 It also sits below both headline items, so expanding it pushes nothing that matters. Overflow items
 follow the same rule as the headlines: one line, complete on its own, nothing behind them.
+
+### ⛔ A drawer holds the items that lost the ranking — never a breakdown of one that won
+
+`The three fixes behind the green run`, hanging under a headline that already said CI went green,
+is the `Details` modal wearing a drawer. Same promise, same failure: the reader opens it expecting
+the item to pay off and gets the commit-by-commit **how** instead — `install dependencies before
+the test step`, `pin the generator's inputs to LF` — which is a changelog, and which the person
+running standup will not read once. If they want the mechanism they will ask, and they almost
+never will.
+
+**Test it by its label.** A drawer's label names *more items* — `3 more commits`, `2 more blocked`.
+A label naming *one item's internals* — `the three fixes behind…`, `what changed in…`, `how we…` —
+means the drawer is decomposing a headline, so delete it. What was worth knowing was already in the
+line; what is left is evidence, and evidence lives in `git log`.
+
+This is why the hash allowance above is narrow. A drawer item may carry its own `repo@hash` because
+it is an item — a thing that happened and lost a slot. That is not license to list the commits
+*inside* a headline item, which is the same trail with a caption.
 
 ### `Next steps` item one is tagged `Start here`
 
