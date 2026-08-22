@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>End of day — August 21, 2026</title>
+<style>
+  :root{--ink:#1c1c1c;--body:#2b2b2b;--muted:#666;--link:#0a66c2;--rule:#e6e6e6;
+        /* side-by-side comparison: red-500 weak / emerald-500 sharp */
+        --good:#10b981;--warn:#ef4444;--code:#f0f2f5;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:#fff;color:var(--body);
+    font:20px/1.62 -apple-system,BlinkMacSystemFont,system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  .article{max-width:700px;margin:0 auto;padding:56px 24px 120px;}
+  .title{font-size:clamp(28px,5vw,38px);font-weight:700;line-height:1.15;letter-spacing:-.02em;
+    color:var(--ink);margin:0 0 8px;}
+  .stamp{color:var(--muted);font-size:14px;margin:0 0 18px;}
+  .dek{color:var(--muted);font-size:16px;margin:0 0 24px;}
+  .lead-in{font-size:21px;line-height:1.55;color:var(--ink);margin:0 0 20px;}
+  .toolbar{display:flex;justify-content:flex-end;margin:0 0 2px;}
+  .toggle-all{background:none;border:none;color:var(--link);font:inherit;font-size:14px;
+    cursor:pointer;padding:4px 0;}
+  .toggle-all:hover{text-decoration:underline;}
+  /* optional masthead:
+  .masthead{display:flex;align-items:center;gap:12px;margin:2px 0 26px;}
+  .masthead .avatar{width:48px;height:48px;border-radius:50%;background:#0a66c2;color:#fff;
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;flex:none;}
+  .masthead .who b{color:var(--ink);font-size:15px;} .masthead .who span{color:var(--muted);display:block;font-size:15px;} */
+  details{border-top:1px solid var(--rule);}
+  details:last-of-type{border-bottom:1px solid var(--rule);}
+  summary{list-style:none;cursor:pointer;padding:15px 2px;font-size:21px;font-weight:700;
+    color:var(--ink);display:flex;align-items:center;gap:13px;}
+  summary:hover{color:var(--link);}
+  summary::-webkit-details-marker{display:none;}
+  summary::before{content:"";width:8px;height:8px;border-right:2px solid var(--muted);
+    border-bottom:2px solid var(--muted);transform:rotate(-45deg);transition:transform .18s;flex:none;}
+  details[open] summary::before{transform:rotate(45deg);}
+  .s-body{padding:0 0 20px 21px;font-size:19px;line-height:1.6;}
+  .s-body p{margin:0 0 .9em;} .s-body p:last-child{margin-bottom:0;}
+  ul,ol{margin:0 0 .9em;padding-left:22px;} li{margin:.35em 0;}
+  strong{color:var(--ink);font-weight:700;}
+  code{font-family:ui-monospace,Consolas,monospace;font-size:15px;background:var(--code);padding:1px 6px;border-radius:5px;}
+  pre{background:var(--code);border-radius:8px;padding:12px 14px;overflow:auto;font-size:14px;line-height:1.5;}
+  pre code{background:none;padding:0;}
+  /* side-by-side comparison: colored prose, no boxes. weak line red, sharp line
+     green; a leading ✗ / ✓ (.mk) carries the meaning so it isn't hue-only. */
+  .pair{margin:.2em 0 1em;}
+  .pair .ctx{display:block;font-size:12px;font-weight:700;text-transform:uppercase;
+    letter-spacing:.06em;color:var(--muted);margin-bottom:6px;}
+  .pair .bad{color:var(--warn);margin:0 0 .4em;line-height:1.55;}
+  .pair .good{color:var(--good);margin:0;line-height:1.55;}
+  .pair .mk{display:inline-block;width:1.15em;font-weight:700;}
+  /* bold inside a colored line keeps the line's hue (red/green), not --ink */
+  .pair .bad strong,.pair .good strong{color:inherit;}
+  @media(max-width:560px){body{font-size:18px;}}
+  /* ── two-section shape: two headline items per section, overflow in a labeled drawer ── */
+  .title .when{display:block;margin-top:5px;font-size:.58em;font-weight:600;
+    letter-spacing:-.01em;color:var(--muted);}
+  .item{margin:0 0 18px;font-size:19px;line-height:1.5;color:var(--ink);}
+  .item .lede{font-weight:700;}
+  .item .owner{color:var(--muted);font-size:16px;font-style:italic;}
+  .chip{display:inline-block;font-size:12px;font-weight:700;text-transform:uppercase;
+    letter-spacing:.06em;color:#fff;background:var(--link);border-radius:4px;
+    padding:2px 7px;margin-right:8px;vertical-align:2px;}
+  details.more{border:none;margin:0 0 18px;}
+  details.more:last-of-type{border-bottom:none;}
+  details.more > summary{font-size:15px;font-weight:600;color:var(--muted);
+    padding:2px 0;gap:8px;}
+  details.more > summary::before{width:6px;height:6px;border-width:1.5px;}
+  details.more > summary:hover{color:var(--link);}
+  .more-body{font-size:17px;line-height:1.55;color:var(--body);padding:6px 0 4px 18px;}
+  .more-body p{margin:0 0 .7em;} .more-body p:last-child{margin-bottom:0;}
+  .more-body ul{padding-left:20px;margin:0;}
+  .rest{margin:14px 0 0;padding-top:12px;border-top:1px dashed var(--rule);}
+</style></head>
+<body><div class="article">
+
+  <p class="stamp">claude-code-autoconfig</p>
+
+  <h1 class="title">End of day report<span class="when">Friday, August 21</span></h1>
+
+  <div class="toolbar"><button class="toggle-all">Expand all</button></div>
+
+  <details>
+    <summary>Done today</summary>
+    <div class="s-body">
+
+      <p class="item"><span class="lede">Fixed the Tests workflow</span> — two green runs today,
+      after 24 failures in a row going back to July.</p>
+
+      <p class="item"><span class="lede">Finished the end-of-day report format</span> — two collapsed
+      sections, two items each, and no link to a fuller version.</p>
+
+      <div class="rest">
+        <details class="more">
+          <summary>3 more commits — housekeeping</summary>
+          <div class="more-body">
+            <ul>
+              <li>Moved the session reports under a lowercase <code>reports/</code> tree —
+                <code>9221985</code>, merged in <code>0e992e8</code>.</li>
+              <li>Archived the Aug 20 wrap-up — <code>5f8543e</code>.</li>
+            </ul>
+          </div>
+        </details>
+        <details class="more">
+          <summary>The three fixes behind the green run</summary>
+          <div class="more-body">
+            <ul>
+              <li><code>d574c65</code> — install dependencies before the test step, and clear the 21
+                lint errors that had been failing it.</li>
+              <li><code>9045bd1</code> — budget the title reminder's wording rather than the runner's
+                temp path.</li>
+              <li><code>20eb326</code> — pin the docs generator's inputs to LF, so the check gives the
+                same answer on Windows and Linux.</li>
+            </ul>
+          </div>
+        </details>
+      </div>
+
+    </div>
+  </details>
+
+  <details>
+    <summary>Next steps</summary>
+    <div class="s-body">
+
+      <p class="item"><span class="chip">Start here</span><span class="lede">Split the
+      context-warning hook's biggest branching function</span> — a second plan's finished work stays
+      unpushed until that cleanup clears. <span class="owner">Ours · ~1h</span></p>
+
+      <p class="item"><span class="lede">Make a new worktree carry uncommitted work across</span> —
+      today it leaves that work behind, so a session that has started editing cannot move into one.
+      <span class="owner">Ours · ~1.5h</span></p>
+
+      <div class="rest">
+        <details class="more">
+          <summary>2 more open loops — nothing blocking</summary>
+          <div class="more-body">
+            <ul>
+              <li><strong>Checkpoint handoff</strong> — its first four substeps are done and sitting
+                unpushed, waiting on the cleanup above.</li>
+              <li><strong>Cleanup plan</strong> — two more substeps queued behind that one, both on
+                the same hook's report renderer.</li>
+            </ul>
+          </div>
+        </details>
+      </div>
+
+    </div>
+  </details>
+
+</div>
+
+<script>
+  var btn=document.querySelector('.toggle-all');
+  if(btn){btn.addEventListener('click',function(){
+    var ds=Array.prototype.slice.call(document.querySelectorAll('details'));
+    var anyClosed=ds.some(function(d){return !d.open;});
+    ds.forEach(function(d){d.open=anyClosed;});
+    btn.textContent=anyClosed?'Collapse all':'Expand all';
+  });}
+</script>
+</body></html>
