@@ -1,5 +1,5 @@
 <!-- @description End-of-day wrap-up: what got done and what's next, as two collapsible sections on an HTML page. -->
-<!-- @version 13 -->
+<!-- @version 14 -->
 <!-- @param days | number | optional | How many days back to scan. Default 1 (today). -->
 <!-- @response success | The report path, the first Next steps item, and the sharpest finding of the day. -->
 <!-- @sideeffect Writes reports/eod/<YYYY-DD-MON>.html in the BASE checkout. That folder IS tracked; the command never commits it. -->
@@ -146,7 +146,7 @@ header that carries a number invites reading the number instead of the item.
 
 Everything that is finished goes in `Done today`. Everything that is not — blocked, undecided, or merely
 unstarted — goes in `Next steps`. There is no third bucket; the distinction between "blocked" and
-"just unstarted" is carried by the ⛔ mark and the owner tag, not by a section.
+"just unstarted" is carried by the ⛔ mark, not by a section.
 
 ### ⛔ Two headline items per section — the rest goes in a labeled drawer
 
@@ -160,7 +160,7 @@ A headline item is **one line, 25 words, and complete on its own** — the outco
 
 ```html
 <p class="item">⛔ <span class="lede">Point the automatic deploy at the current server</span>
-— the address it uses stopped being ours in June. <span class="owner">Ours · ~20 min</span></p>
+— the address it uses stopped being ours in June. <span class="owner">~20 min</span></p>
 ```
 
 ### ⛔ The drawer is not a lower bar — work below a half-point story is off the page
@@ -364,7 +364,7 @@ none of them believed. A label that restates its own position is a chip's worth 
 ```html
 <p class="item"><span class="lede">SSH the API box and read which branch its checkout is
 on</span> — that answer decides whether anything below matters.
-<span class="owner">Ours · 5 min</span></p>
+<span class="owner">5 min</span></p>
 ```
 
 **So the order carries real weight — rank by what to pick up first, not by importance.** Those come
@@ -379,10 +379,15 @@ only case a `Start here` chip could ever have disambiguated.
 
 - **`⛔` prefixes a blocked item**, in either the headline or a drawer. It means work is stopped,
   not merely unstarted.
-- **Every `Next steps` item ends with an owner tag** — `<span class="owner">Ours · 2 lines</span>`,
-  `Ours · ~10 min`, `Yours · a decision`. With blocked and unblocked items in one list, the tag is
-  the only thing telling the reader which ones they can just go do. An item with no owner is how a
-  loop sits open for two months.
+- **Every `Next steps` item ends with an estimate** — `<span class="owner">~10 min</span>`,
+  `2 lines`, `~1.5h`. Two items at `~1h` and `~1.5h` say half of tomorrow is already spoken for,
+  which is the thing the reader is actually deciding.
+- **⛔ Only the exception gets an owner, and the exception is `Yours`** — `Yours · a decision`,
+  ahead of the estimate. Work is ours by default, so tagging `Ours` stamps every item with the
+  same value and distinguishes nothing; `Yours` means the item is parked in the reader's court and
+  changes what they do about it. This is the `⛔` pattern above: blocked items are marked, and
+  nothing carries a ✓ for being unblocked. **Generally — a tag whose value is the same on every
+  item is a column with one value.** Cut it and mark the exception instead.
 - Estimates are marked as estimates (`~`), sized off the item in front of you. **Never round up to
   look substantial.**
 
