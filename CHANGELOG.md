@@ -4,6 +4,10 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.223
+- feat(terminal-title): Stray per-session files no longer pile up in your project — old ones are now cleaned out automatically
+- docs(plan-authoring): Plan docs now keep multi-session work on its own branch until the whole plan is finished
+
 ## v1.0.222
 - fix(cli): Installing over a project that keeps git worktrees no longer crashes partway through, and the backup folder no longer fills up with copied dependency trees
 - fix(terminal-title): The "awaiting your reply" tab indicator now catches turns that hand you the next move
@@ -212,7 +216,4 @@
 
 ## v1.0.174
 - feat: add pre-publish rules for README and docs sync
-
-## v1.0.173
-- feat: ship /extract-rules to users
 
