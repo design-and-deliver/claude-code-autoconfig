@@ -1673,7 +1673,7 @@ if (process.platform !== 'win32') {
   // --- 4. assistant/tool_use tail + IDLE parent (silent Bash / open dialog) -> NO CPU rescue ---
   test('watchdog: assistant tail + idle parent -> never CPU-rescued (a silent tool looks the same)', () => {
     setState({ glyph: 'working|PostToolUse', watch: 'n4' });
-    wd4 = runWatch(mkWTranscript('t4', 'assistant'), wIdlePid, 'n4');
+    wd4 = runWatch(mkWTranscript('t4', 'assistant'), wIdlePid, 'n4', '0');
     sleepSync(15000);
     assert(wglyph() === 'working|PostToolUse', `an assistant/tool tail must never CPU-rescue, glyph="${wglyph()}"`);
   });

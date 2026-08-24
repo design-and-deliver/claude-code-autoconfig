@@ -302,6 +302,19 @@ function main() {
   console.log(paint('gray', '───────────────────────'));
   console.log();
 
+  // TOCTOU tolerance: on the dev box, live sessions write one-shot scratch files
+  // (.titles/*.needle and kin) that can vanish between copyTree's readdir and the copy —
+  // a file that no longer exists has nothing to install, so skip it instead of dying
+  // (ENOENT here killed a real install-test run mid-copy, 2026-08-24). Every other
+  // copy error still throws.
+  function copyFileTolerant(srcPath, destPath) {
+    try {
+      fs.copyFileSync(srcPath, destPath);
+    } catch (err) {
+      if (err.code !== 'ENOENT') throw err;
+    }
+  }
+
   // The one recursive copier behind every tree copy in the installer (backup,
   // commands, hooks, scripts, docs). The required filter(name) gates entries at
   // EVERY depth; reserved Windows device names are always skipped. overwrite:false
@@ -320,7 +333,7 @@ function main() {
       if (entry.isDirectory()) {
         copyTree(srcPath, destPath, { filter, overwrite });
       } else if (overwrite || !fs.existsSync(destPath)) {
-        fs.copyFileSync(srcPath, destPath);
+        copyFileTolerant(srcPath, destPath);
       }
     }
   }
