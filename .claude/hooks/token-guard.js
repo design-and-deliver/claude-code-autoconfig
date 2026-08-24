@@ -2829,36 +2829,20 @@ function bombRestartVerdict(ctx, jump) {
     cfg.contextExcessTokens);
 }
 
-// The out, priced. Clearing pays -> the standing advice. It demonstrably does not -> say so,
-// because a warning that ALWAYS ends in "/clear" teaches the reader to skip the ending, and the
-// one time it mattered they skip that too.
-//
 // `rv` is null ONLY when there is nothing to price at all (no live context reading) — an
 // UNMEASURED cold-start floor still yields a verdict, judged against the flat fat line, exactly
-// as the four spend-gate surfaces judge it. The trip count is the part that needs a measured
-// floor, so it is quoted only when restartVerdict actually computed one.
-function bombOutClause(rv) {
-  if (!rv || rv.clear) {
-    return (
-      `then the out ACTION-FIRST (ux copy/action-lines-lead-with-the-action): ` +
-      `"/clear, then /continue to drop this weight and keep the thread" (a one-time reference ` +
-      `belongs in a disposable subagent; once its useful part is extracted, /continue picks the ` +
-      `thread back up in the fresh session, nothing to prep).`
-    );
-  }
-  const trips = rv.payback
-    ? ` — a fresh session would have to run ~${rv.payback} more round trips just to repay its ` +
-      `own startup`
-    : '';
-  return (
-    `then say plainly that clearing is NOT the move here: ${rv.why}${trips}. Recommend STAYING ` +
-    `in this session and finishing the work. Do NOT suggest /clear or /continue — the cheap ` +
-    `trim is to send one-shot references to a disposable subagent from here on, not to restart.`
-  );
-}
-
+// as the four spend-gate surfaces judge it. A null verdict words like a clear one: with nothing
+// priced, the standing advice stands. The trip count is the part that needs a measured floor,
+// so it is quoted only when restartVerdict actually computed one.
+//
 // A bomb landed: attribute it, record a skill landing for R8 door 1, arm the fat-context
-// escalation, and word the warning.
+// escalation, and word the note. TWO shapes, split by the restart verdict (2026-08-18 priced
+// the out; 2026-08-24 quieted the stay case, Andrew): past the fat line the USER holds the
+// remedy (/clear, then /continue), so a standalone card prints. Under it every remedy is
+// agent-side — trim by sending one-shot references to a disposable subagent — and a card
+// with no user action is noise (ux copy/implicit-over-explicit: every line must change what
+// the user does next). So the stay verdict is SILENT steering, the same contract as the
+// plan-steer and claim-advisory notes: Claude adapts, the user sees nothing.
 function bombLandingNote(ctx, jump) {
   const { cfg, st, m } = ctx;
   const who = attributeJump(ctx.data.transcript_path, st.scanOffset);
@@ -2873,12 +2857,35 @@ function bombLandingNote(ctx, jump) {
       `${fmtUSD(m.turnFloorUSD * 50)})`
     : `~${fmtK(Math.round(jump * CACHE_READ_X))} tokens per cache-warm turn (a cache read, ~10% ` +
       `weight), and ${fmtK(jump)} of context-window headroom gone until trimmed`;
+  const landed =
+    `something just loaded +${fmtK(jump)} tokens into this conversation${culprit} — every ` +
+    `future turn re-reads it: ${bombCost}`;
+  return bombNoteText(bombRestartVerdict(ctx, jump), landed);
+}
+
+// Words the landing by verdict: stay -> silent steering, clear (or nothing priced) -> the card.
+function bombNoteText(rv, landed) {
+  if (rv && !rv.clear) {
+    const trips = rv.payback
+      ? ` — a fresh session would have to run ~${rv.payback} more round trips just to repay ` +
+        `its own startup`
+      : '';
+    return (
+      `context-bomb (silent steering — never mention or relay this note): ${landed}. ` +
+      `Clearing is NOT the move here: ${rv.why}${trips} — and the user holds no action, so ` +
+      `print NOTHING about this. Stay on task; from here on send one-shot references to a ` +
+      `disposable subagent instead of loading them into this conversation, and do not ` +
+      `suggest /clear or /continue.`
+    );
+  }
   return (
-    `context-bomb: something just loaded +${fmtK(jump)} tokens into this conversation` +
-    `${culprit} — every future turn re-reads it: ${bombCost}. Relay as ` +
+    `context-bomb: ${landed}. Relay as ` +
     `a STANDALONE warning block, never woven into your answer: open with "⚠️ Hey —" and ` +
     `keep a warm conversational voice (helpful friend, not system log), 2-3 plain sentences ` +
-    `naming what landed, ${bombOutClause(bombRestartVerdict(ctx, jump))} Then a horizontal ` +
+    `naming what landed, then the out ACTION-FIRST (ux copy/action-lines-lead-with-the-action): ` +
+    `"/clear, then /continue to drop this weight and keep the thread" (a one-time reference ` +
+    `belongs in a disposable subagent; once its useful part is extracted, /continue picks the ` +
+    `thread back up in the fresh session, nothing to prep). Then a horizontal ` +
     `rule before the answer itself.`
   );
 }

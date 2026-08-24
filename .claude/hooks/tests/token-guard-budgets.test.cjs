@@ -218,22 +218,26 @@ function bombOut(dir, sid, first, after, coldStarts) {
   return runHook(dir, prompt);
 }
 
-test('E2E: R3 under the fat line recommends STAYING, never /clear', () => {
+test('E2E: R3 under the fat line goes silent — steering, never a user card', () => {
   // 61k of live context against the flat 150k line — clearing sheds little, so the out must not
-  // be the restart. Same numbers as the cache-weight test above, which predates the branch.
+  // be the restart. And since 2026-08-24 the stay verdict prints NOTHING to the user: every
+  // remedy is agent-side (subagent trims), and a card with no user action is noise
+  // (ux copy/implicit-over-explicit). Same numbers as the cache-weight test above.
   const out = bombOut(mkProject(), 'sid-stay', 1000, 61000);
-  assert.match(out, /context-bomb/);
-  assert.match(out, /clearing is NOT the move here/);
-  assert.match(out, /Recommend STAYING/);
+  assert.match(out, /context-bomb \(silent steering — never mention or relay this note\)/);
+  assert.match(out, /Clearing is NOT the move here/);
+  assert.doesNotMatch(out, /STANDALONE/, 'no relay contract — the user sees nothing');
+  assert.doesNotMatch(out, /⚠️/, 'no card styling on a silent note');
   assert.doesNotMatch(out, /\/clear, then \/continue/,
     'advice that costs more than it saves was the whole bug (2026-08-18)');
 });
 
-test('E2E: R3 past the fat line still recommends /clear, then /continue', () => {
+test('E2E: R3 past the fat line still relays the /clear, then /continue card', () => {
   const out = bombOut(mkProject(), 'sid-clear', 1000, 200000);
   assert.match(out, /context-bomb/);
+  assert.match(out, /STANDALONE warning block/);
   assert.match(out, /\/clear, then \/continue to drop this weight/);
-  assert.doesNotMatch(out, /Recommend STAYING/);
+  assert.doesNotMatch(out, /context-bomb \(silent steering/);
 });
 
 test('E2E: R3 quotes the payback trips only once a floor is actually measured', () => {
@@ -242,11 +246,11 @@ test('E2E: R3 quotes the payback trips only once a floor is actually measured', 
   // startup. The trip count is the part that needs the measurement; the verdict is not.
   const samples = [{ sid: 'a', tok: 65000 }, { sid: 'b', tok: 65000 }, { sid: 'c', tok: 65000 }];
   const measured = bombOut(mkProject(), 'sid-trips', 1000, 120000, samples);
-  assert.match(measured, /Recommend STAYING/);
+  assert.match(measured, /silent steering/);
   assert.match(measured, /~\d+ more round trips just to repay its own startup/);
   // …and with no floor on disk the same verdict lands without inventing a number.
   const unmeasured = bombOut(mkProject(), 'sid-notrips', 1000, 61000);
-  assert.match(unmeasured, /Recommend STAYING/);
+  assert.match(unmeasured, /silent steering/);
   assert.doesNotMatch(unmeasured, /more round trips/);
 });
 
