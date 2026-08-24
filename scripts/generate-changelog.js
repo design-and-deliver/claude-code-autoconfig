@@ -14,6 +14,7 @@ const postversion = process.argv.includes('--postversion');
 // convention (keyed by commit-hash prefix). Value null drops the bullet entirely.
 // Do NOT add rows for new work — author a `Changelog:` trailer instead.
 const OVERRIDES = {
+  'cb60a64': "fix(cli): Installer no longer dies if a temporary file vanishes mid-copy",
   '82f27d6': "feat(terminal-title): More reliable 'awaiting your reply' tab indicator",
   '4d43ede': null, // folded into the indicator-reliability line above
   'e347106': "feat(cli): Clearer 'what's new' summary when updating",
