@@ -362,6 +362,11 @@ const DEFAULTS = {
   verdictServiceKey: null,       // sent as license.key on every post; the shim only activates when
                                  // BOTH this and verdictService are set.
   verdictCacheTtlMinutes: 30,    // cached verdicts older than this render nothing (stale = dark)
+  verdictDetail: 'console',      // spend-gate card detail (R13b/R14/R20). 'console' renders the
+                                 // full arithmetic card in the ask dialog; 'file' renders the
+                                 // consolidated two-line card and keeps the full version in
+                                 // .token-guard/<sid>.cards.jsonl for /cost-control-details.
+                                 // The full card is persisted in BOTH modes.
 };
 
 // ---------------------------------------------------------------------------
@@ -3786,10 +3791,36 @@ function preState(ctx) {
   return ctx.st;
 }
 
+// Rationale encapsulation (Andrew 2026-08-24): most users never want the arithmetic, so with
+// verdictDetail 'file' the three migration-remedy gates (R13b/R14/R20) render this consolidated
+// card instead, and the full card is read back via /cost-control-details. Not a black box —
+// the rationale is one command away, which still shows the work; inline detail wears the
+// reader down exactly when the rec is confidently valid. Wording is Andrew's, verbatim.
+const QUIET_CARD =
+  '[!] cost control -- deny, then /clear + /continue to optimize token savings and pick up ' +
+  'where you left off\n/cost-control-details to see rationale';
+
+// Append the full card to the per-session ledger the details command reads (newest-last
+// JSONL). Written in BOTH detail modes, so /cost-control-details answers even for a card that
+// rendered verbose. Runs after saveState, which mkdirs the state directory.
+function persistCard(projectDir, sid, family, card) {
+  try {
+    fs.appendFileSync(path.join(stateDir(projectDir), `${sid}.cards.jsonl`),
+      JSON.stringify({ at: new Date().toISOString(), family, card }) + '\n');
+  } catch (_) { /* a lost record degrades the details command, never the gate */ }
+}
+
 // A gate armed or re-armed state before speaking: persist it, then hand the ask back to the
-// fold. Same save-then-speak beat as emitBlock on the prompt side.
-function gateAsk(ctx, reason) {
+// fold. Same save-then-speak beat as emitBlock on the prompt side. `family` marks the three
+// migration-remedy gates (R13b/R14/R20) for card persistence + the quiet-card swap; callers
+// with a different remedy (R8's doors, R4b's receipt, the $ backstop) omit it and are
+// untouched by verdictDetail — the consolidated wording would misdescribe their deny action.
+function gateAsk(ctx, reason, family) {
   saveState(ctx.projectDir, ctx.sid, ctx.st);
+  if (family) {
+    persistCard(ctx.projectDir, ctx.sid, family, reason);
+    if (ctx.cfg.verdictDetail === 'file') reason = QUIET_CARD;
+  }
   return { kind: 'ask', reason };
 }
 
@@ -4027,7 +4058,7 @@ function turnSpendAsk(ctx, turnTok) {
     choiceBullet(verdict, {
       neutral: 'approve to push on — or deny, and Claude should stop and propose that plan.',
       denyTail: 'denying means Claude stops and proposes that plan.',
-    }, rv));
+    }, rv), 'TASK SIZE');
 }
 
 // The verdict + rationale pair — R14's Choice paragraph, collapsed to two label — value lines:
@@ -4189,7 +4220,7 @@ function r14TurnRentGuard(ctx) {
   if (rv && rv.clear) noteClearAdvice(ctx.projectDir, 'R14', Date.now());
   st.rentGateFires = fires;
   st.rentGateAt = nextAt;
-  return gateAsk(ctx, rentAskCopy(ctx, rent, rv));
+  return gateAsk(ctx, rentAskCopy(ctx, rent, rv), 'RENT');
 }
 
 // v1 hard gate on total session spend (v2: fleet-aware total). Default off.
@@ -4340,7 +4371,7 @@ function sessionTotalAsk(ctx, tok) {
         `so you can /clear + /continue${clearTail(rv)}.`,
       denyTail: 'denying lands this turn at a commit point so you can /clear + ' +
         `/continue${clearTail(rv)}.`,
-    }, rv));
+    }, rv), 'SESSION');
 }
 
 // The spend gates share one meter with R4b: PreToolUse runs on every tool call, so meter ONCE
@@ -5086,6 +5117,24 @@ async function report(transcriptPath) {
   process.stdout.write(lines.join('\n') + '\n');
 }
 
+// --details support: the newest persisted spend-gate card across ALL of this project's
+// sessions — newest, not current-sid, because the natural moment to ask is right after the
+// /clear + /continue migration the card recommended, when the sid has already changed.
+function latestCard(projectDir) {
+  const dir = stateDir(projectDir);
+  let best = null;
+  for (const f of fs.readdirSync(dir).filter(n => n.endsWith('.cards.jsonl'))) {
+    for (const line of fs.readFileSync(path.join(dir, f), 'utf8').split('\n')) {
+      if (!line.trim()) continue;
+      try {
+        const e = JSON.parse(line);
+        if (!best || String(e.at) > String(best.at)) best = e;
+      } catch (_) { /* torn tail line — skip */ }
+    }
+  }
+  return best;
+}
+
 // ---------------------------------------------------------------------------
 if (require.main === module) {
   if (process.argv[2] === '--report') {
@@ -5117,6 +5166,18 @@ if (require.main === module) {
     postVerdictMain(process.argv[3])
       .catch(() => { /* never throw */ })
       .finally(() => process.exit(0));
+  } else if (process.argv[2] === '--details') {
+    // CLI surface behind /cost-control-details. A missing state dir is the same answer as an
+    // empty one: nothing recorded yet.
+    try {
+      const e = latestCard(process.argv[3] || process.env.CLAUDE_PROJECT_DIR || process.cwd());
+      process.stdout.write(e
+        ? `Full card behind the last cost-control verdict (${e.family}, fired ${e.at}):\n\n${e.card}\n`
+        : 'no cost-control verdicts recorded in this project yet.\n');
+    } catch (_) {
+      process.stdout.write('no cost-control verdicts recorded in this project yet.\n');
+    }
+    process.exit(0);
   } else {
     let input = '';
     process.stdin.setEncoding('utf8');
