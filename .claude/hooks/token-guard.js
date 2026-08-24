@@ -362,11 +362,11 @@ const DEFAULTS = {
   verdictServiceKey: null,       // sent as license.key on every post; the shim only activates when
                                  // BOTH this and verdictService are set.
   verdictCacheTtlMinutes: 30,    // cached verdicts older than this render nothing (stale = dark)
-  verdictDetail: 'console',      // spend-gate card detail (R13b/R14/R20). 'console' renders the
-                                 // full arithmetic card in the ask dialog; 'file' renders the
-                                 // consolidated two-line card and keeps the full version in
-                                 // .token-guard/<sid>.cards.jsonl for /cost-control-details.
-                                 // The full card is persisted in BOTH modes.
+  verdictDetail: 'console',      // cost-ask card detail, every family in QUIET_CARDS. 'console'
+                                 // renders the full arithmetic card in the ask dialog; 'file'
+                                 // renders the family's consolidated two-line card and keeps the
+                                 // full version in .token-guard/<sid>.cards.jsonl for
+                                 // /cost-control-details. The full card is persisted in BOTH modes.
 };
 
 // ---------------------------------------------------------------------------
@@ -3792,34 +3792,74 @@ function preState(ctx) {
 }
 
 // Rationale encapsulation (Andrew 2026-08-24): most users never want the arithmetic, so with
-// verdictDetail 'file' the three migration-remedy gates (R13b/R14/R20) render this consolidated
-// card instead, and the full card is read back via /cost-control-details. Not a black box —
-// the rationale is one command away, which still shows the work; inline detail wears the
-// reader down exactly when the rec is confidently valid. Wording is Andrew's, verbatim.
-const QUIET_CARD =
+// verdictDetail 'file' every family-tagged cost ask renders its family's consolidated card
+// instead, and the full card is read back via /cost-control-details. Not a black box — the
+// rationale is one command away, which still shows the work; inline detail wears the reader
+// down exactly when the rec is confidently valid.
+//
+// The keys are the card taxonomy — short codes that double as conversation references and the
+// `family` field in the cards ledger. One card per family because each family has its OWN
+// remedy: one shared card misdescribed six of them, which is why only the migration trio was
+// tagged at first. Those three (task-size/rent/session-total) share wording deliberately —
+// same remedy — and that line is Andrew's, verbatim (copy contract; patch only with sign-off).
+// Codes stay off the card face: the agreed wording is the contract, and /cost-control-details
+// names the family instead. NOT covered here by design: R4's prompt-side idle block (different
+// surface — it pre-empts the charge; remedy is ↑+Enter) and R10's hard-cap deny (a deny reason
+// is model-facing, and the model needs the why inline to adapt instead of retrying blind).
+const DETAILS_LINE = '/cost-control-details to see rationale';
+const MIGRATE_CARD =
   '[!] cost control -- deny, then /clear + /continue to optimize token savings and pick up ' +
-  'where you left off\n/cost-control-details to see rationale';
+  'where you left off\n' + DETAILS_LINE;
+const QUIET_CARDS = {
+  'task-size': MIGRATE_CARD,       // R13b — one turn's spend crossed the turn gate
+  'rent': MIGRATE_CARD,            // R14 — the turn's cached re-reads crossed the rent gate
+  'session-total': MIGRATE_CARD,   // R20 — total session spend crossed the tripwire
+  'idle-cache':                    // R4b — self-wake past the cache TTL, charge already landed
+    '[!] cost control -- idle past the cache window; picking up here re-uploaded the session ' +
+    'at full price. Deny, then /clear + /continue to continue cheaply\n' + DETAILS_LINE,
+  'payload-door':                  // R8 — a Read/Skill call is about to import a bomb payload
+    '[!] cost control -- this call imports a large payload into permanent context. Deny, then ' +
+    'use a ranged read or a subagent\n' + DETAILS_LINE,
+  'mini-bomb':                     // R9 — the turn's tool results piled up bomb-sized
+    "[!] cost control -- this turn's results are piling up large. Deny, then route the rest " +
+    'through a subagent\n' + DETAILS_LINE,
+  'post-bomb':                     // R3 — a bomb landed at fat context, one-time confirm
+    '[!] cost control -- a large payload just landed. Deny, then /clear + /continue to shed ' +
+    'it and keep this thread\n' + DETAILS_LINE,
+  'spend-gate':                    // hardGateUSD backstop the user armed by hand
+    '[!] cost control -- session passed the spend gate you armed. Approve to continue, or ' +
+    'deny and /clear for a fresh session\n' + DETAILS_LINE,
+  'workflow-launch':               // R2 — fire-on-every-launch workflow confirm
+    '[!] cost control -- workflow fleets bill outside the visible transcript. Approve to ' +
+    'launch\n' + DETAILS_LINE,
+  'workflow-fan':                  // R10 — over-fanned workflow, below the hard cap
+    '[!] cost control -- this workflow looks over-fanned for one task. Deny and cut the fan, ' +
+    'or approve to launch as-is\n' + DETAILS_LINE,
+};
 
 // Append the full card to the per-session ledger the details command reads (newest-last
 // JSONL). Written in BOTH detail modes, so /cost-control-details answers even for a card that
-// rendered verbose. Runs after saveState, which mkdirs the state directory.
+// rendered verbose. Mkdirs for itself: the workflow asks reach here without saveState (they
+// never load state), so the directory may not exist yet.
 function persistCard(projectDir, sid, family, card) {
   try {
+    fs.mkdirSync(stateDir(projectDir), { recursive: true });
     fs.appendFileSync(path.join(stateDir(projectDir), `${sid}.cards.jsonl`),
       JSON.stringify({ at: new Date().toISOString(), family, card }) + '\n');
   } catch (_) { /* a lost record degrades the details command, never the gate */ }
 }
 
 // A gate armed or re-armed state before speaking: persist it, then hand the ask back to the
-// fold. Same save-then-speak beat as emitBlock on the prompt side. `family` marks the three
-// migration-remedy gates (R13b/R14/R20) for card persistence + the quiet-card swap; callers
-// with a different remedy (R8's doors, R4b's receipt, the $ backstop) omit it and are
-// untouched by verdictDetail — the consolidated wording would misdescribe their deny action.
+// fold. Same save-then-speak beat as emitBlock on the prompt side. `family` is the card's
+// short code in QUIET_CARDS — every cost ask carries one; persistence and the quiet-card swap
+// both key on it. An unknown family falls back to the verbose reason (fail-open: a new gate
+// without a card renders loud, never blank). ctx.st can be absent — R2's Workflow doors
+// decide without ever loading state, so there is nothing to persist for them.
 function gateAsk(ctx, reason, family) {
-  saveState(ctx.projectDir, ctx.sid, ctx.st);
+  if (ctx.st) saveState(ctx.projectDir, ctx.sid, ctx.st);
   if (family) {
     persistCard(ctx.projectDir, ctx.sid, family, reason);
-    if (ctx.cfg.verdictDetail === 'file') reason = QUIET_CARD;
+    if (ctx.cfg.verdictDetail === 'file') reason = QUIET_CARDS[family] || reason;
   }
   return { kind: 'ask', reason };
 }
@@ -3876,10 +3916,15 @@ function r2WorkflowLaunchGuard(ctx) {
   // fire-on-every-launch confirm (R2) is off, spend no ask here.
   if (!fan && !cfg.workflowConfirm) return null;
   const estimate = wfEstimate(ctx.projectDir, wantDollars(cfg));
-  if (fan) return fanDecision(fan, cfg, estimate);
-  return { kind: 'ask', reason:
+  if (fan) {
+    const d = fanDecision(fan, cfg, estimate);
+    // Only the ask tier goes through gateAsk: the hard-cap deny is model-facing and must
+    // keep its rationale inline (see the QUIET_CARDS header).
+    return d.kind === 'deny' ? d : gateAsk(ctx, d.reason, 'workflow-fan');
+  }
+  return gateAsk(ctx,
     `⚠️ Hey — Workflow launch — ${estimate}; fleets spend outside the visible transcript. ` +
-    `Approve to launch.` };
+    `Approve to launch.`, 'workflow-launch');
 }
 
 // Which door R8 is pricing: a Skill's bundled files, or one Read's file.
@@ -3943,7 +3988,7 @@ function r8PayloadDoorGuard(ctx) {
   const st = preState(ctx);
   st.approvedPayloadHop = { est: v.estTokens, ttl: 1 };
   if (v.door === 'skill') st.approvedPayloadHop.skill = String(ti.skill || '');
-  return gateAsk(ctx, payloadAskCopy(ti, v));
+  return gateAsk(ctx, payloadAskCopy(ti, v), 'payload-door');
 }
 
 // R9 — one-shot ask armed by the accumulator (miniBombGate only): the turn already piled up
@@ -3955,7 +4000,8 @@ function r9MiniBombGateGuard(ctx) {
   return gateAsk(ctx,
     `⚠️ Hey — this turn's tool results have already piled up ~${fmtK(st.turnPayloadTok)} ` +
     `tokens of new context — bomb-sized in aggregate, and every later message re-reads it. ` +
-    `Approve to keep going here; a disposable subagent or ranged reads keep the rest out.`);
+    `Approve to keep going here; a disposable subagent or ranged reads keep the rest out.`,
+    'mini-bomb');
 }
 
 // R3 — one-shot post-bomb gate (armed only when bombGateWhenFat and the bomb landed fat).
@@ -3966,7 +4012,7 @@ function r3PostBombGateGuard(ctx) {
   return gateAsk(ctx,
     `⚠️ Hey — a context bomb just landed at fat context (see warning above) — one-time ` +
     `confirm before more work compounds on top of it. If the payload isn't needed here: ` +
-    `/clear, then /continue to shed it and keep this thread.`);
+    `/clear, then /continue to shed it and keep this thread.`, 'post-bomb');
 }
 
 // Is THIS prompt one of the recovery commands? Accepts the bare `/continue` a user types and
@@ -4058,7 +4104,7 @@ function turnSpendAsk(ctx, turnTok) {
     choiceBullet(verdict, {
       neutral: 'approve to push on — or deny, and Claude should stop and propose that plan.',
       denyTail: 'denying means Claude stops and proposes that plan.',
-    }, rv), 'TASK SIZE');
+    }, rv), 'task-size');
 }
 
 // The verdict + rationale pair — R14's Choice paragraph, collapsed to two label — value lines:
@@ -4220,7 +4266,7 @@ function r14TurnRentGuard(ctx) {
   if (rv && rv.clear) noteClearAdvice(ctx.projectDir, 'R14', Date.now());
   st.rentGateFires = fires;
   st.rentGateAt = nextAt;
-  return gateAsk(ctx, rentAskCopy(ctx, rent, rv), 'RENT');
+  return gateAsk(ctx, rentAskCopy(ctx, rent, rv), 'rent');
 }
 
 // v1 hard gate on total session spend (v2: fleet-aware total). Default off.
@@ -4233,7 +4279,8 @@ function sessionSpendGuard(ctx) {
   if (wantDollars(cfg)) {
     return gateAsk(ctx,
       `⚠️ Hey — session estimate ${fmtUSD(m.usd)} ≥ ${fmtUSD(gate)} gate. ` +
-      `Approve to continue (next check at ${fmtUSD(st.gateArmedAt)}), or /clear for a fresh session.`);
+      `Approve to continue (next check at ${fmtUSD(st.gateArmedAt)}), or /clear for a fresh session.`,
+      'spend-gate');
   }
   // Subscription copy: the gate still fires (it's a backstop the user armed), but the message is
   // token-denominated — thresholds stay $-weighted internally (that's the normalization) and are
@@ -4244,7 +4291,7 @@ function sessionSpendGuard(ctx) {
   return gateAsk(ctx,
     `⚠️ Hey — session estimate ${fmtK(tok)} tokens ≥ the ~${fmtK(gate * perUSD)}-token gate. ` +
     `Approve to continue (next check ≈ ${fmtK(st.gateArmedAt * perUSD)} tokens), or /clear for a ` +
-    `fresh session.`);
+    `fresh session.`, 'spend-gate');
 }
 
 // R4b idle-return RECEIPT — the background-wake half of R4. A session re-invoked by a finished
@@ -4273,7 +4320,7 @@ function r4bColdWriteReceiptGuard(ctx) {
     `conversation cached, so Claude Code just re-uploaded all ~${fmtK(m.lastCacheWrite)} ` +
     `tokens of it at full price — about 20x what the same turn costs while cached.\n\n` +
     `To keep going here: approve. To pick this work up cheaply instead: /clear, then ` +
-    `/continue — it reloads the recent thread of this conversation.`);
+    `/continue — it reloads the recent thread of this conversation.`, 'idle-cache');
 }
 
 // R20 — the session-total tripwire. The gap R13b and R14 structurally CANNOT see: both baseline
@@ -4371,7 +4418,7 @@ function sessionTotalAsk(ctx, tok) {
         `so you can /clear + /continue${clearTail(rv)}.`,
       denyTail: 'denying lands this turn at a commit point so you can /clear + ' +
         `/continue${clearTail(rv)}.`,
-    }, rv), 'SESSION');
+    }, rv), 'session-total');
 }
 
 // The spend gates share one meter with R4b: PreToolUse runs on every tool call, so meter ONCE
@@ -5198,6 +5245,7 @@ if (require.main === module) {
 }
 
 module.exports = { meter, meterSession, priceFor, attributeJump, ledgerScopes, officialLines,
+  QUIET_CARDS,                                 // token-guard-quiet-card.test.cjs — card taxonomy copy contract
   claudeCodeUA, fetchOfficialUsage,
   analyzeSession, renderAnalysis, payloadVerdict, fanVerdict, workflowSource, skillSizes, recordObservedSkill,
   payloadDivertCopy, readHead,                 // test/token-guard-divert.test.js — R8 door 2 divert

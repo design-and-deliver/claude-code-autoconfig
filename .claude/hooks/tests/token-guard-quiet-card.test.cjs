@@ -1,14 +1,17 @@
 // Rationale encapsulation (Andrew 2026-08-24) — verdictDetail + the /cost-control-details rail.
 //
-// The ruling this pins: most users never want the arithmetic, so with verdictDetail 'file' the
-// migration-remedy gates (R13b/R14/R20) render ONE consolidated two-line card — Andrew's wording
-// verbatim, a copy contract like the verbose cards' — and the full card is persisted to
-// .token-guard/<sid>.cards.jsonl for `--details` (the /cost-control-details command) to read
-// back. "It's not a black box, it's encapsulation": the rationale is one command away, never
-// deleted. Two mechanics matter enough to pin: the full card is persisted in BOTH modes (the
-// details command answers even where the card rendered verbose), and --details reads the newest
-// card across ALL sessions — the natural moment to ask is right after the /clear + /continue
-// migration, when the asker's sid has already changed.
+// The ruling this pins: most users never want the arithmetic, so with verdictDetail 'file'
+// every family-tagged cost ask renders its family's consolidated two-line card, and the full
+// card is persisted to .token-guard/<sid>.cards.jsonl for `--details` (the
+// /cost-control-details command) to read back. "It's not a black box, it's encapsulation":
+// the rationale is one command away, never deleted. The taxonomy (2026-08-24, same ruling
+// thread): ten short codes in QUIET_CARDS, doubling as conversation references and the ledger's
+// `family` field — one card per family because each family names its OWN remedy; the migration
+// trio (task-size/rent/session-total) shares Andrew's agreed wording verbatim. Two mechanics
+// matter enough to pin: the full card is persisted in BOTH modes (the details command answers
+// even where the card rendered verbose), and --details reads the newest card across ALL
+// sessions — the natural moment to ask is right after the /clear + /continue migration, when
+// the asker's sid has already changed.
 //
 // Default posture is UNCHANGED: verdictDetail 'console' renders the same verbose cards the
 // copy-contract tests pin, so nothing shifts under a live session until a config opts in.
@@ -21,6 +24,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
+const { QUIET_CARDS } = require(HOOK);
 
 const QUIET_CARD =
   '[!] cost control -- deny, then /clear + /continue to optimize token savings and pick up ' +
@@ -86,7 +90,7 @@ test("verdictDetail 'file': the full card is persisted for the details command",
   const { fix } = fired({ verdictDetail: 'file' });
   const entries = fs.readFileSync(cardsPath(fix), 'utf8').trim().split('\n').map(JSON.parse);
   assert.equal(entries.length, 1);
-  assert.equal(entries[0].family, 'RENT');
+  assert.equal(entries[0].family, 'rent');
   assert.match(entries[0].card, /• verdict — deny/);
   assert.match(entries[0].card, /round trip/);
   assert.ok(entries[0].at); // timestamp present — --details sorts on it
@@ -99,13 +103,13 @@ test('default (console) mode: verbose card unchanged AND still persisted', () =>
   assert.match(out.permissionDecisionReason, /• verdict — deny/);
   const entries = fs.readFileSync(cardsPath(fix), 'utf8').trim().split('\n').map(JSON.parse);
   assert.equal(entries.length, 1);                                // both modes feed --details
-  assert.equal(entries[0].family, 'RENT');
+  assert.equal(entries[0].family, 'rent');
 });
 
 test('--details prints the persisted full card, not the consolidated one', () => {
   const { fix } = fired({ verdictDetail: 'file' });
   const out = details(fix.proj);
-  assert.match(out, /Full card behind the last cost-control verdict \(RENT/);
+  assert.match(out, /Full card behind the last cost-control verdict \(rent/);
   assert.match(out, /• verdict — deny/);
   assert.ok(!out.includes('[!] cost control')); // the quiet card is what it decodes, never echoes
 });
@@ -115,13 +119,54 @@ test('--details reads the NEWEST card across sessions — it answers after the m
   // The post-migration session has a different sid; its (newer) card must win.
   fs.writeFileSync(
     path.join(fix.proj, '.claude', 'hooks', '.token-guard', 'sid-next.cards.jsonl'),
-    JSON.stringify({ at: '2999-01-01T00:00:00.000Z', family: 'SESSION', card: 'NEWEST-CARD' }) + '\n');
+    JSON.stringify({ at: '2999-01-01T00:00:00.000Z', family: 'session-total', card: 'NEWEST-CARD' }) + '\n');
   const out = details(fix.proj);
-  assert.match(out, /\(SESSION, fired 2999-01-01/);
+  assert.match(out, /\(session-total, fired 2999-01-01/);
   assert.match(out, /NEWEST-CARD/);
 });
 
 test('--details with nothing recorded says so instead of erroring', () => {
   const fix = mkFixture();
   assert.match(details(fix.proj), /no cost-control verdicts recorded in this project yet\./);
+});
+
+// --- Card taxonomy (the enumeration itself) ---------------------------------------------
+// Ten short codes, doubling as conversation references and the ledger's `family` field.
+// Full-verbatim pins exist only for the migration trio (Andrew's agreed wording); the other
+// seven cards pin their REMEDY phrase — the design property that forced per-family cards —
+// and get verbatim pins once their wording has had Andrew's pass.
+
+const CODES = ['task-size', 'rent', 'session-total', 'idle-cache', 'payload-door',
+  'mini-bomb', 'post-bomb', 'spend-gate', 'workflow-launch', 'workflow-fan'];
+
+test('the taxonomy is exactly the ten agreed short codes', () => {
+  assert.deepEqual(Object.keys(QUIET_CARDS).sort(), [...CODES].sort());
+});
+
+test('every quiet card is two lines: verdict + the shared details pointer', () => {
+  for (const [code, card] of Object.entries(QUIET_CARDS)) {
+    const lines = card.split('\n');
+    assert.equal(lines.length, 2, code);
+    assert.match(lines[0], /^\[!\] cost control -- /, code);
+    assert.equal(lines[1], '/cost-control-details to see rationale', code);
+  }
+});
+
+test("the migration trio shares Andrew's agreed card verbatim", () => {
+  for (const code of ['task-size', 'rent', 'session-total']) {
+    assert.equal(QUIET_CARDS[code], QUIET_CARD, code);
+  }
+});
+
+test('each non-migration card names its own remedy — the reason one shared card failed', () => {
+  const remedy = {
+    'idle-cache': /\/clear \+ \/continue/,
+    'payload-door': /ranged read or a subagent/,
+    'mini-bomb': /through a subagent/,
+    'post-bomb': /\/clear \+ \/continue to shed/,
+    'spend-gate': /\/clear for a fresh session/,
+    'workflow-launch': /Approve to launch/,
+    'workflow-fan': /cut the fan/,
+  };
+  for (const [code, re] of Object.entries(remedy)) assert.match(QUIET_CARDS[code], re, code);
 });
