@@ -55,6 +55,7 @@ LIVENESS_SECS = 180        # same bar as the dupe-session guard
 HANDOFF_DRIFT = 180        # note is STALE if the transcript ran on past it
 MAX_EXTRACT_TOKENS = 3000  # payload ceiling -- see cap_to_budget()
 MIN_EXTRACT_MSGS = 4       # ...never trimmed below this, however long the messages
+TAIL_BYTES = 262144        # transcript tail scanned by current_model() -- see its docstring
 ACTION_TOOLS = {'Bash', 'Edit', 'Write', 'MultiEdit', 'NotebookEdit'}
 MAX_ACTION_LINES = 15      # newest state-changing tool calls kept -- see action_line()
 STOP_WORDS = {'plan', 'plans', 'doc', 'docs', 'the', 'and', 'for', 'with'}
@@ -133,6 +134,47 @@ POINTERS = [os.path.join(r, POINTER_REL) for r in ROOTS[:2]]
 def transcript_for(sid):
     hits = glob.glob(os.path.join(PROJECTS, '*', sid + '.jsonl'))
     return hits[0] if hits else None
+
+
+def current_model(sid):
+    """The model THIS session's requests are actually being served by.
+
+    Reported because the command's `model:` frontmatter is ignored at runtime
+    (anthropics/claude-code#45191, closed "not planned"), and the obvious check for that --
+    "read the model name out of your own system prompt" -- is itself broken: the harness
+    applies the pin to the system prompt text while routing to the session's real model, so
+    a pinned turn reads as Sonnet in the prompt and bills as Opus in the transcript. Measured
+    2026-08-23 on 2.1.220: session 90eb56c6's system prompt said claude-sonnet-5 while all 44
+    of its requests recorded claude-opus-5, and across 85 /continue sessions in one project
+    not a single one switched model at the command boundary.
+
+    The transcript's `message.model` is the API's own answer, so it is the only honest source.
+    Reads the tail only -- the value is the same in every record of a session, and a long
+    session's transcript runs to megabytes.
+    """
+    path = transcript_for(sid) if sid else None
+    if not path:
+        return ''
+    try:
+        size = os.path.getsize(path)
+        with open(path, 'rb') as fh:
+            if size > TAIL_BYTES:
+                fh.seek(size - TAIL_BYTES)
+                fh.readline()               # drop the partial line the seek landed in
+            chunk = fh.read().decode('utf-8', 'replace')
+    except OSError:
+        return ''
+    for line in reversed(chunk.splitlines()):
+        if '"model"' not in line:
+            continue
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            continue
+        model = (rec.get('message') or {}).get('model') or ''
+        if model:
+            return model
+    return ''
 
 
 def glyph_mtime(sid, floor=0.0):
@@ -656,6 +698,7 @@ def main():
                'tokens': sum(len(r['text']) for r in res) // 4,
                'tempFile': tmp, 'readTempFile': True}
         out.update(capped)
+        out['currentModel'] = current_model(sid_now)
         print(json.dumps(out, indent=2))
         return
 
@@ -754,6 +797,7 @@ def main():
                 # A fresh note already says what the walk-back would infer.
                 'readTempFile': not (handoff and handoff_fresh)})
     out.update(capped)
+    out['currentModel'] = current_model(sid_now)
     print(json.dumps(out, indent=2))
 
 
