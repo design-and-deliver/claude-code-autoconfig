@@ -75,6 +75,10 @@ const OVERRIDES = {
   // the commit was the by-the-book fix and would have rebased eight hashes on a shared
   // main for one line of wording; the null lands the same bullet-level outcome for free.
   'b514201': null, // token-guard recovery-cost note — dev-gated
+  // Pushed subject names the internal directory it sweeps and carries no type prefix, so it
+  // would ship as-is under "Fixes & improvements". Reworded to the outcome a user sees —
+  // stray files no longer accumulating in their project — and typed as the feature it is.
+  'eb021c3': 'feat(terminal-title): Stray per-session files no longer pile up in your project — old ones are now cleaned out automatically',
 };
 
 // The changelog line for one commit, or null to omit it. Precedence:
