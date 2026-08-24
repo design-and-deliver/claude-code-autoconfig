@@ -49,6 +49,10 @@ ARTICLES/
 reports/wip/*
 !reports/wip/done/
 
+# Root WIP and QA scratch directories (local-only session audits)
+wip/
+qa/
+
 # Local feature pilots / experiments (not distributed)
 pilots/
 
