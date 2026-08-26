@@ -888,6 +888,11 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">continue.md</span>
                             </div>
+                            <div class="tree-item indent-3 hidden" data-info="cost-control-details" data-parent="commands">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">cost-control-details.md</span>
+                            </div>
                             <div class="tree-item indent-3 hidden" data-info="disable-arcade-beeps" data-parent="commands">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
@@ -1027,6 +1032,11 @@
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">terminal-title.js</span>
+                            </div>
+                            <div class="tree-item indent-3 hidden" data-info="token-guard-hook" data-parent="hooks">
+                                <span class="tree-spacer"></span>
+                                <span class="tree-file-icon">📄</span>
+                                <span class="file">token-guard.js</span>
                             </div>
                             <div class="tree-item indent-2 folder-row hidden collapsed" data-info="docs" data-folder="docs-folder" data-parent="claude-dir">
                                 <span class="tree-chevron">›</span>
@@ -1378,6 +1388,11 @@
                 desc: 'Recovers where your previous session in this terminal left off — reports the state and the precise next action, then stops for your go-ahead. Plan-aware: if that session was executing a substep of a plan doc AND the transcript confirms nothing came after it, the report comes from the plan\'s Ledger instead of the transcript.<div style="margin-top: 12px;"><strong>Parameters</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Name</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Type</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>--show</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>flag</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Opens the recovered transcript in your default editor (no-op on a fresh checkpoint handoff note — nothing is read there).</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Picking up where we left off — {what we were doing}. State summary + the one next action, then a go-ahead question.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>plan</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Picking up where we left off — {plan alias}: substep {N.k} done ({hash}); next: {N.next}. Then a go-ahead question.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-previous</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">I can\'t find a previous session for this terminal.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Reads .jsonl transcripts from ~/.claude/projects/, writes temp file</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/continue</code> <span style="opacity: 0.6;">— Recover the previous session here, see where it stands, reply "go" to resume</span></div></div></div>',
                 trigger: '/continue'
             },
+            'cost-control-details': {
+                title: 'cost-control-details.md',
+                desc: 'Show the full rationale behind the most recent cost-control verdict card — the arithmetic the consolidated card encapsulates.<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Prints the persisted full card verbatim, with which meter fired and when.</td></tr></table></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/cost-control-details</code> <span style="opacity: 0.6;">— See the math behind the last "deny, then /clear + /continue" card</span></div></div></div>',
+                trigger: '/cost-control-details'
+            },
             'disable-arcade-beeps': {
                 title: 'disable-arcade-beeps.md',
                 desc: 'disable-arcade-beeps.md in commands/<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div>',
@@ -1496,6 +1511,11 @@
             'terminal-title-hook': {
                 title: 'terminal-title.js',
                 desc: 'terminal-title.js in hooks/',
+                trigger: 'PostToolUse hook'
+            },
+            'token-guard-hook': {
+                title: 'token-guard.js',
+                desc: 'token-guard.js in hooks/',
                 trigger: 'PostToolUse hook'
             },
             'feedback-feedback': {
@@ -1858,6 +1878,38 @@ that prefers a picker for closed choices. Ask in text, end the message, wait.
 **There is no model pin, and v9–v16's claim that there was one was wrong (removed v17).**
 Claude Code ignores command \`model:\` frontmatter at runtime — a known bug
 (anthropics/claude-code#45191, closed "not planned"): the pin parses into`
+            },
+            'cost-control-details': {
+                filename: 'cost-control-details.md',
+                content: `---
+description: Show the full rationale behind the most recent cost-control verdict card
+allowed-tools: Bash(node .claude/hooks/token-guard.js --details:*)
+---
+<!-- @description Show the full rationale behind the most recent cost-control verdict card — the arithmetic the consolidated card encapsulates. -->
+<!-- @version 1 -->
+<!-- @response success | Prints the persisted full card verbatim, with which meter fired and when. -->
+<!-- @example /cost-control-details | See the math behind the last "deny, then /clear + /continue" card -->
+
+# Cost Control Details
+
+The consolidated cost-control card deliberately leaves out its arithmetic. This command prints
+the full card that was persisted when the verdict fired — the newest one across ALL of this
+project's sessions, because the natural moment to ask is right after the \`/clear\` + \`/continue\`
+migration the card recommended, when the session id has already changed.
+
+## Steps
+
+1. Run:
+
+   \`\`\`bash
+   node "\${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/token-guard.js" --details
+   \`\`\`
+
+2. Relay the output **verbatim** in a fenced code block — do not paraphrase, reformat, or
+   summarize the card; its wording is a pinned copy contract.
+
+3. If it printed \`no cost-control verdicts recorded in this project yet.\`, say exactly that and
+   stop — do not go hunting through state files for older evidence.`
             },
             'disable-arcade-beeps': {
                 filename: 'disable-arcade-beeps.md',
@@ -2518,6 +2570,39 @@ Maintain it across the session:
  *                       (~90% less directive overhead); resume/compact re-inject so a squeezed
  *                       context re-learns the rules.`
             },
+            'token-guard-hook': {
+                filename: 'token-guard.js',
+                content: `#!/usr/bin/env node
+/**
+ * token-guard v2 — session spend meter + tripwires for Claude Code (prototyped in wifi-app,
+ * destined for CCA distribution as a module beside terminal-title.js / arcade-beeps.js).
+ * Spec-by-example: .claude/hooks/tests/ (the suites pin every guard's contract). Evidence base: the July 10-11 blowup forensics
+ * (RENT / BOMBS / FLEETS) — every v2 guard maps to a measured failure mode.
+ *
+ * WHY: the API is stateless — every turn re-sends (via cache) the whole conversation, so a fat
+ * session makes even a one-line question expensive. Dollars here are API-list-price
+ * EQUIVALENTS: on a subscription they proxy for rate-limit consumption, on an API key real money.
+ *
+ * MESSAGING UNIT (2026-07-12): user-facing check-ins lead with TOKENS — meaningful on both Max
+ * (dollars are fictional there) and API plans — one metric per line (session / 5h window / plan
+ * target); the model-weighted dollar figure stays as internal normalization + a parenthetical.
+ *
+ * ONE self-dispatching hook, keyed on hook_event_name:
+ *   UserPromptSubmit -> meter the session (v2: INCLUDING subagent/workflow fleets); inject
+ *                       compact additionalContext warnings: fat-context advisory, session-spend
+ *                       steps, context-bomb tripwire (R3), idle-return TTL warning (R4),
+ *                       workflow completion receipts (R2), scope-drift nudge (R6), window
+ *                       spike + threshold flags (R12), plan-first steer (R13a), plan-boundary
+ *                       advisory (R17); re-baseline the R13b turn-spend meter.
+ *   Stop             -> append one line to the bounded usage log (now with a main/agents split);
+ *                       detect workflow cost growth and queue a receipt for the next prompt.
+ *   PreToolUse       -> (a) R2 + R10: gate Workflow launches — R2 confirms the launch COST from a
+ *                           history-based estimate; R10 flags a fan whose SHAPE is disproportionate
+ *                           to the task (a fan-named constant >= threshold, or a fan nested inside a
+ *                           fan over run-time data). R10 asks (never blocks) and fires even with R2 off;
+ *                       (b) R8: payload pre-gate — intercept BEFORE a bomb-sized Skill/Read
+ *                           payload lands (R3 warns after; this fires while the rent is still`
+            },
             'feedback-feedback': {
                 filename: 'FEEDBACK.md',
                 content: `# Team Feedback
@@ -2585,6 +2670,10 @@ Claude reads this file but must never write to it. When Claude discovers project
         "hooks": [
           {
             "type": "command",
+            "command": "node \\"\${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/token-guard.js\\""
+          },
+          {
+            "type": "command",
             "command": "node \\"\${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/terminal-title.js\\""
           }
         ]
@@ -2604,6 +2693,10 @@ Claude reads this file but must never write to it. When Claude discovers project
       {
         "matcher": "",
         "hooks": [
+          {
+            "type": "command",
+            "command": "node \\"\${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/token-guard.js\\""
+          },
           {
             "type": "command",
             "command": "node \\"\${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/terminal-title.js\\""
@@ -2641,6 +2734,15 @@ Claude reads this file but must never write to it. When Claude discovers project
     ],
     "PreToolUse": [
       {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \\"\${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/token-guard.js\\""
+          }
+        ]
+      },
+      {
         "matcher": "Bash",
         "hooks": [
           {
@@ -2651,6 +2753,15 @@ Claude reads this file but must never write to it. When Claude discovers project
       }
     ],
     "PostToolUse": [
+      {
+        "matcher": "Read|Grep|Glob|Bash|PowerShell|WebFetch|WebSearch|Skill|Agent|TaskOutput|ToolSearch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \\"\${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/token-guard.js\\""
+          }
+        ]
+      },
       {
         "matcher": "Edit|Write",
         "hooks": [

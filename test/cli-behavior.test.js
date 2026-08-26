@@ -125,7 +125,7 @@ test('DEV_ONLY_FILES are NOT installed', () => {
   for (const c of DEV_ONLY_COMMANDS) {
     assert(!fs.existsSync(path.join(freshCmds, c)), `dev-only command ${c} must not be installed`);
   }
-  assert(!fs.existsSync(path.join(fresh, '.claude', 'hooks', 'token-guard.js')), 'dev-only hook token-guard.js must not be installed');
+  assert(!fs.existsSync(path.join(fresh, '.claude', 'hooks', 'token-guard-liveness.js')), 'dev-only hook token-guard-liveness.js must not be installed');
 });
 
 test('deprecated aliases are pruned on a fresh install', () => {
@@ -141,6 +141,7 @@ test('every file class lands (docs, agents, feedback, hooks, scripts, sounds)', 
     ['feedback', 'FEEDBACK.md'],
     ['hooks', 'format.js'],
     ['hooks', 'terminal-title.js'],
+    ['hooks', 'token-guard.js'],
     ['scripts', 'sync-docs.js'],
     ['sounds', 'pp3-getready-G4.wav']
   ];

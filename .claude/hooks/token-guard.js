@@ -357,8 +357,8 @@ const DEFAULTS = {
   analyzeHint: false,            // true restores the per-row "· /analyze-session <sid>" suffix on the
                                  // 5h rollup rows; off (default since 2026-07-24) a single hint line
                                  // above the rows teaches the same move without the per-line noise.
-  verdictService: null,          // remote-verdict shim: service base URL (…/api/cca). null = the shim
-                                 // stays dark and the local guard chain is the whole path.
+  verdictService: 'https://api.proswitch.ai/api/cca', // remote-verdict shim: service base URL (…/api/cca).
+                                 // The shim activates when BOTH this and verdictServiceKey are set.
   verdictServiceKey: null,       // sent as license.key on every post; the shim only activates when
                                  // BOTH this and verdictService are set.
   verdictCacheTtlMinutes: 30,    // cached verdicts older than this render nothing (stale = dark)
@@ -3635,17 +3635,19 @@ function consumeCachedVerdicts(cached, ctx) {
 // on top of it every prompt — and because that copy names `/clear`, R19's instrumentation then
 // logs a restart-advice line per prompt, drowning the card measurement it exists to take.
 function remoteVerdictGuard(ctx) {
-  const { cfg, projectDir, sid, m } = ctx;
+  const { cfg, projectDir, sid, m, st } = ctx;
   try {
     const basic = () => {
+      if (st && st.freeTierNoteFired) return [];
       const note = freeTierNote(m.liveContext, cfg);
+      if (note && st) st.freeTierNoteFired = true;
       return note ? [note] : [];
     };
     if (!shimActive(cfg)) return { notes: [], block: null };
     postVerdictAsync(ctx);
     const cached = readVerdictCache(projectDir, sid, cfg);
     const notes = consumeCachedVerdicts(cached, ctx);
-    // Unreachable or never-answered service degrades to the same floor a dark install runs on.
+    // Unreachable or never-answered service degrades to the floor once per session.
     if (!cached || !(cached.post && cached.post.ok)) notes.push(...basic());
     return { notes, block: null };
   } catch (_) { return { notes: [], block: null }; }
