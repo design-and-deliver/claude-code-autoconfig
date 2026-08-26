@@ -143,10 +143,12 @@ function render(tg, data, projectDir) {
   // the nudge stands, and one standing recommendation must not become a disk write per paint.
   if (tg.noteClearAdvice) tg.noteClearAdvice(projectDir, 'statusline', Date.now());
   const DIM = '\x1b[2m', YEL = '\x1b[33m', OFF = '\x1b[0m';
+  // "time to" opens the line (Andrew, 2026-08-26): payback-math-first scanned as a forecast
+  // ("it will be time in a few turns") when the gate above means it is time NOW.
   const remedy = be.upfront <= 0
-    ? `/clear then /continue to save ${be.save1} tokens per turn, starting on the first turn`
-    : `/clear then /continue — ${fmtK(be.upfront)} upfront breaks even within ${be.turns} turns, ` +
-      `then saves ${be.save1} tokens per turn`;
+    ? `time to /clear then /continue — saves ${be.save1}/turn, starting on the first turn`
+    : `time to /clear then /continue — ${fmtK(be.upfront)} upfront, breaks even in ` +
+      `${be.turns} turn${be.turns === 1 ? '' : 's'}, then saves ${be.save1}/turn`;
   return `${DIM}session tokens = ${fmtK(session)} (${fmtK(ctx)} cache price) ·  ` +
     `new session cost = ${fmtK(cold)}${OFF}\n` +
     `${YEL}${remedy}${OFF}`;
@@ -211,7 +213,7 @@ function verdictLines(be, bold) {
     return [`* ${bold('verdict')} — /clear`,
       be.upfront <= 0
         ? `* ${bold('rationale')} — purge the old bloated context to save ${be.save1} tokens, starting on the first turn`
-        : `* ${bold('rationale')} — purge the old bloated context: ${fmtK(be.upfront)} upfront breaks even within ${be.turns} turns, then saves ${be.save1} tokens per turn`];
+        : `* ${bold('rationale')} — purge the old bloated context: ${fmtK(be.upfront)} upfront breaks even within ${be.turns} turn${be.turns === 1 ? '' : 's'}, then saves ${be.save1} tokens per turn`];
   }
   if (be.savings > 0) {
     return [`* ${bold('verdict')} — stay the course`,
