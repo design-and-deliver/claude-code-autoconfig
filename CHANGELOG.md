@@ -4,6 +4,11 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.224
+- feat(token-guard): un-gate Token Guard commercial decision core and ship cost-control-details
+- fix(cli): Installer no longer dies if a temporary file vanishes mid-copy
+- fix(continue): /continue now warns you when session recovery is running on an expensive model, instead of quietly claiming it was cheap
+
 ## v1.0.223
 - feat(terminal-title): Stray per-session files no longer pile up in your project — old ones are now cleaned out automatically
 - docs(plan-authoring): Plan docs now keep multi-session work on its own branch until the whole plan is finished
@@ -213,7 +218,4 @@
 
 ## v1.0.175
 - fix: include extract-rules command in user installs
-
-## v1.0.174
-- feat: add pre-publish rules for README and docs sync
 
