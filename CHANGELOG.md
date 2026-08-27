@@ -4,8 +4,10 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.225
+- fix(cli): The cost-control preview that briefly shipped in v1.0.224 has been removed — cost control is part of the paid module
+
 ## v1.0.224
-- feat(token-guard): un-gate Token Guard commercial decision core and ship cost-control-details
 - fix(cli): Installer no longer dies if a temporary file vanishes mid-copy
 - fix(continue): /continue now warns you when session recovery is running on an expensive model, instead of quietly claiming it was cheap
 
@@ -215,7 +217,4 @@
 
 ## v1.0.176
 - fix: add feedback to AUTOCONFIG_FILES to prevent false upgrade detection
-
-## v1.0.175
-- fix: include extract-rules command in user installs
 
