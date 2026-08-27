@@ -4,6 +4,9 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.226
+- fix(continue): cut all model-switch advice from the /clear + /continue flow (v18)
+
 ## v1.0.225
 - fix(cli): The cost-control preview that briefly shipped in v1.0.224 has been removed — cost control is part of the paid module
 
@@ -214,7 +217,4 @@
 
 ## v1.0.177
 - feat: add pre-install diagnostic logging and fix AUTOCONFIG_FILES
-
-## v1.0.176
-- fix: add feedback to AUTOCONFIG_FILES to prevent false upgrade detection
 
