@@ -30,10 +30,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/token-guard.js\""
-          },
-          {
-            "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/terminal-title.js\""
           }
         ]
@@ -53,10 +49,6 @@
       {
         "matcher": "",
         "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/token-guard.js\""
-          },
           {
             "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/terminal-title.js\""
@@ -94,15 +86,6 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/token-guard.js\""
-          }
-        ]
-      },
-      {
         "matcher": "Bash",
         "hooks": [
           {
@@ -113,15 +96,6 @@
       }
     ],
     "PostToolUse": [
-      {
-        "matcher": "Read|Grep|Glob|Bash|PowerShell|WebFetch|WebSearch|Skill|Agent|TaskOutput|ToolSearch",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/token-guard.js\""
-          }
-        ]
-      },
       {
         "matcher": "Edit|Write",
         "hooks": [

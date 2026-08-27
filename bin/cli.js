@@ -476,8 +476,8 @@ function main() {
   // gated OUT of user installs until R6/R8/R9/R10 are live-baked — see CLAUDE.md "Invariants & Landmines".
   // THIS list (not package.json "files") is what gates installs — new dev-only commands/hooks
   // must be added here. Keep the literal on one line: tests parse it by regex.
-  const DEV_ONLY_FILES = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-session.md', 'migrate-new-session.md', 'plan-progress.md', 'plan-progress.js', 'whats-happening.md', 'whats-happening.js', 'refactor.md', 'parallel-session-worktrees.md',
-    'fleet.md', 'fleet.js', 'sync-worktrees.md', 'sync-worktrees.js', 'session-close.js', 'restore-after-reboot.md', 'restore-after-reboot.js', 'worktree-gate.js', 'claim-registry.js', 'token-guard-liveness.js', 'statusline-cost.js', 'cost-compare.md', 'gimme-one-liner.md', 'create-wip-report.md', 'abort-plan.md', 'eod-report.md'];
+  const DEV_ONLY_FILES = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-session.md', 'migrate-new-session.md', 'token-guard.js', 'plan-progress.md', 'plan-progress.js', 'whats-happening.md', 'whats-happening.js', 'refactor.md', 'parallel-session-worktrees.md',
+    'fleet.md', 'fleet.js', 'sync-worktrees.md', 'sync-worktrees.js', 'session-close.js', 'restore-after-reboot.md', 'restore-after-reboot.js', 'worktree-gate.js', 'claim-registry.js', 'token-guard-liveness.js', 'statusline-cost.js', 'cost-compare.md', 'gimme-one-liner.md', 'create-wip-report.md', 'abort-plan.md', 'eod-report.md', 'cost-control-details.md'];
 
   // Everything the installer ships to user projects passes this gate, at every depth.
   const shipsToUsers = (name) => !DEV_ONLY_FILES.includes(name);
@@ -594,7 +594,7 @@ function main() {
   // (overwrite:false), BUT the cca-managed title-hook files are ALWAYS refreshed so bug-fixes
   // reach existing installs — without this, the preserve-mode copy leaves stale hooks in place
   // forever (same always-overwrite rationale as scripts/ below). --force already overwrites everything.
-  const MANAGED_HOOKS = ['terminal-title.js', 'terminal-title.directive.md', 'arcade-beeps.js', 'mark-commit-active.js', 'auto-guard.js', 'token-guard.js'];
+  const MANAGED_HOOKS = ['terminal-title.js', 'terminal-title.directive.md', 'arcade-beeps.js', 'mark-commit-active.js', 'auto-guard.js'];
   if (fs.existsSync(hooksSrc)) {
     copyTree(hooksSrc, path.join(claudeDest, 'hooks'), { filter: shipsToUsers, overwrite: forceMode });
     if (!forceMode) {
@@ -623,6 +623,33 @@ function main() {
   // On fresh install, all updates are pre-marked as applied and the content
   // is already baked into /autoconfig itself, so the files are unnecessary.
 
+  // v1.0.224 briefly shipped the token-guard cost-control core un-gated (re-gated since —
+  // see DEV_ONLY_FILES). Retract it from projects that picked it up: delete the orphaned
+  // files here, and strip its hook entries inside the settings merge below. A project with
+  // a paid activation key (tokenGuard.verdictServiceKey in cca.config.json) got these files
+  // from the licensed delivery path, not this installer — leave it untouched.
+  const retractCfg = readCcaConfig();
+  const paidTokenGuard = !!(retractCfg && retractCfg.tokenGuard && retractCfg.tokenGuard.verdictServiceKey);
+  const TOKEN_GUARD_HOOK_ENTRY = { type: 'command', command: 'node "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/token-guard.js"' };
+  const TOKEN_GUARD_SETTINGS_FRAGMENT = { hooks: {
+    UserPromptSubmit: [{ matcher: '', hooks: [TOKEN_GUARD_HOOK_ENTRY] }],
+    Stop: [{ matcher: '', hooks: [TOKEN_GUARD_HOOK_ENTRY] }],
+    PreToolUse: [{ matcher: '', hooks: [TOKEN_GUARD_HOOK_ENTRY] }],
+    PostToolUse: [{ matcher: '', hooks: [TOKEN_GUARD_HOOK_ENTRY] }]
+  } };
+  if (!paidTokenGuard) {
+    let retracted = false;
+    for (const rel of [path.join('hooks', 'token-guard.js'), path.join('commands', 'cost-control-details.md')]) {
+      const p = path.join(claudeDest, rel);
+      if (fs.existsSync(p)) {
+        try { fs.unlinkSync(p); retracted = true; } catch (_) { /* locked file — the settings strip below still disarms it */ }
+      }
+    }
+    if (retracted) {
+      console.log(paint('gray', '🔒 Removed the cost-control preview that briefly shipped in v1.0.224 — cost control is part of the paid module.'));
+    }
+  }
+
   // Copy settings.json — fresh install gets full copy, upgrades get hooks + permissions merged
   const settingsSrc = path.join(packageDir, '.claude', 'settings.json');
   const settingsDest = path.join(claudeDest, 'settings.json');
@@ -643,6 +670,10 @@ function main() {
         // newer Claude Code warns about at session start) — the additive merge below never
         // removes anything, so old installs keep them forever without this.
         migrateRetiredPermissionRules(userSettings);
+
+        // Strip the hook entries the un-gated 1.0.224 settings merge wired in (exact command
+        // match per event — a user's own hooks survive; see the retraction block above).
+        if (!paidTokenGuard) unmergeSettingsFrom(userSettings, TOKEN_GUARD_SETTINGS_FRAGMENT);
 
         // Additively fold package hooks/env/permissions into the user's settings
         // (shared with the plugin installer — see mergeSettingsInto).

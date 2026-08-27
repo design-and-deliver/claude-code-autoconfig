@@ -357,8 +357,8 @@ const DEFAULTS = {
   analyzeHint: false,            // true restores the per-row "· /analyze-session <sid>" suffix on the
                                  // 5h rollup rows; off (default since 2026-07-24) a single hint line
                                  // above the rows teaches the same move without the per-line noise.
-  verdictService: 'https://api.proswitch.ai/api/cca', // remote-verdict shim: service base URL (…/api/cca).
-                                 // The shim activates when BOTH this and verdictServiceKey are set.
+  verdictService: null,          // remote-verdict shim: service base URL (…/api/cca). null = the shim
+                                 // stays dark and the local guard chain is the whole path.
   verdictServiceKey: null,       // sent as license.key on every post; the shim only activates when
                                  // BOTH this and verdictService are set.
   verdictCacheTtlMinutes: 30,    // cached verdicts older than this render nothing (stale = dark)
@@ -3817,32 +3817,32 @@ function preState(ctx) {
 // is model-facing, and the model needs the why inline to adapt instead of retrying blind).
 const DETAILS_LINE = '/cost-control-details to see rationale';
 const MIGRATE_CARD =
-  '[!] cost control -- deny, then /clear + /continue to optimize token savings and pick up ' +
+  '⚠️ cost control -- Select No, then /clear + /continue to optimize token savings and pick up ' +
   'where you left off\n' + DETAILS_LINE;
 const QUIET_CARDS = {
   'task-size': MIGRATE_CARD,       // R13b — one turn's spend crossed the turn gate
   'rent': MIGRATE_CARD,            // R14 — the turn's cached re-reads crossed the rent gate
   'session-total': MIGRATE_CARD,   // R20 — total session spend crossed the tripwire
   'idle-cache':                    // R4b — self-wake past the cache TTL, charge already landed
-    '[!] cost control -- idle past the cache window; picking up here re-uploaded the session ' +
-    'at full price. Deny, then /clear + /continue to continue cheaply\n' + DETAILS_LINE,
+    '⚠️ cost control -- idle past the cache window; picking up here re-uploaded the session ' +
+    'at full price. Select No, then /clear + /continue to continue cheaply\n' + DETAILS_LINE,
   'payload-door':                  // R8 — a Read/Skill call is about to import a bomb payload
-    '[!] cost control -- this call imports a large payload into permanent context. Deny, then ' +
+    '⚠️ cost control -- this call imports a large payload into permanent context. Select No, then ' +
     'use a ranged read or a subagent\n' + DETAILS_LINE,
   'mini-bomb':                     // R9 — the turn's tool results piled up bomb-sized
-    "[!] cost control -- this turn's results are piling up large. Deny, then route the rest " +
+    "⚠️ cost control -- this turn's results are piling up large. Select No, then route the rest " +
     'through a subagent\n' + DETAILS_LINE,
   'post-bomb':                     // R3 — a bomb landed at fat context, one-time confirm
-    '[!] cost control -- a large payload just landed. Deny, then /clear + /continue to shed ' +
+    '⚠️ cost control -- a large payload just landed. Select No, then /clear + /continue to shed ' +
     'it and keep this thread\n' + DETAILS_LINE,
   'spend-gate':                    // hardGateUSD backstop the user armed by hand
-    '[!] cost control -- session passed the spend gate you armed. Approve to continue, or ' +
-    'deny and /clear for a fresh session\n' + DETAILS_LINE,
+    '⚠️ cost control -- session passed the spend gate you armed. Approve to continue, or ' +
+    'Select No and /clear for a fresh session\n' + DETAILS_LINE,
   'workflow-launch':               // R2 — fire-on-every-launch workflow confirm
-    '[!] cost control -- workflow fleets bill outside the visible transcript. Approve to ' +
+    '⚠️ cost control -- workflow fleets bill outside the visible transcript. Approve to ' +
     'launch\n' + DETAILS_LINE,
   'workflow-fan':                  // R10 — over-fanned workflow, below the hard cap
-    '[!] cost control -- this workflow looks over-fanned for one task. Deny and cut the fan, ' +
+    '⚠️ cost control -- this workflow looks over-fanned for one task. Select No and cut the fan, ' +
     'or approve to launch as-is\n' + DETAILS_LINE,
 };
 

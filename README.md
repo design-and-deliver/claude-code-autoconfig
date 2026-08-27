@@ -128,7 +128,6 @@ Autoconfig is **self-configuring**. Run `/autoconfig` and Claude:
 | `/check-commit` | Checks whether uncommitted work has piled up |
 | `/sync-claude-md` | Repairs CLAUDE.md markers and Discoveries section |
 | `/enable-retro` | Opt-in: Claude logs tech debt to `.claude/retro/` |
-| `/cost-control-details` | Shows full arithmetic card and token breakdown for cost control verdicts |
 | `/submit-claude-code-github-issue` | Files an upstream issue with duplicate-checking |
 | `/enable-status-beeps` | Turn on opt-in Pole Position status beeps |
 | `/disable-status-beeps` | Turn off the status beeps |

@@ -80,6 +80,14 @@ const OVERRIDES = {
   // would ship as-is under "Fixes & improvements". Reworded to the outcome a user sees —
   // stray files no longer accumulating in their project — and typed as the feature it is.
   'eb021c3': 'feat(terminal-title): Stray per-session files no longer pile up in your project — old ones are now cleaned out automatically',
+
+  // ---- token-guard re-gate (2026-08-27). 73e1b2c un-gated the cost-control core into
+  // v1.0.224 against the paid-only distribution decision; the release after it re-gates and
+  // retracts. The pushed bullet announces a feature users are losing — drop it, and let the
+  // re-gate commit's own trailer carry the user-facing story. e715a6f is statusline +
+  // /cost-compare wording, both dev-gated.
+  '73e1b2c': null, // un-gate announcement — retracted the following release
+  'e715a6f': null, // statusline / cost-compare copy — dev-gated
 };
 
 // The changelog line for one commit, or null to omit it. Precedence:

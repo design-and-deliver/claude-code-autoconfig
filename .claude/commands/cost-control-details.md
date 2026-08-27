@@ -5,7 +5,7 @@ allowed-tools: Bash(node .claude/hooks/token-guard.js --details:*)
 <!-- @description Show the full rationale behind the most recent cost-control verdict card — the arithmetic the consolidated card encapsulates. -->
 <!-- @version 1 -->
 <!-- @response success | Prints the persisted full card verbatim, with which meter fired and when. -->
-<!-- @example /cost-control-details | See the math behind the last "deny, then /clear + /continue" card -->
+<!-- @example /cost-control-details | See the math behind the last "Select No, then /clear + /continue" card -->
 
 # Cost Control Details
 

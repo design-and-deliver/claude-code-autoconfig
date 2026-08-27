@@ -21,7 +21,11 @@
  *                             rendered segments), version marker advanced, upgrade detection
  *                             reported, no unsupported-version notice, and the user's @applied
  *                             block preserved — a PENDING update id must not be pre-marked
- *                             applied by the upgrade (BH-3).
+ *                             applied by the upgrade (BH-3), and un-gated 1.0.224 token-guard
+ *                             leftovers (files + hook entries) are retracted.
+ *   2b. paid activation      — `--bootstrap` upgrade over a project with a
+ *                             tokenGuard.verdictServiceKey: the licensed token-guard files and
+ *                             hook entries survive the retraction untouched.
  *   3. populated @applied    — `--pull-updates`: already-applied updates are NOT re-copied and
  *                             the user's @applied block is preserved (exercises parseAppliedUpdates
  *                             + pullUpdates' block-preservation for real).
@@ -125,6 +129,7 @@ test('DEV_ONLY_FILES are NOT installed', () => {
   for (const c of DEV_ONLY_COMMANDS) {
     assert(!fs.existsSync(path.join(freshCmds, c)), `dev-only command ${c} must not be installed`);
   }
+  assert(!fs.existsSync(path.join(fresh, '.claude', 'hooks', 'token-guard.js')), 'dev-only hook token-guard.js must not be installed');
   assert(!fs.existsSync(path.join(fresh, '.claude', 'hooks', 'token-guard-liveness.js')), 'dev-only hook token-guard-liveness.js must not be installed');
 });
 
@@ -141,7 +146,6 @@ test('every file class lands (docs, agents, feedback, hooks, scripts, sounds)', 
     ['feedback', 'FEEDBACK.md'],
     ['hooks', 'format.js'],
     ['hooks', 'terminal-title.js'],
-    ['hooks', 'token-guard.js'],
     ['scripts', 'sync-docs.js'],
     ['sounds', 'pp3-getready-G4.wav']
   ];
@@ -215,9 +219,19 @@ writeFile(up, '.claude/hooks/terminal-title.js', '// STALE managed hook — must
 writeFile(up, '.claude/hooks/user-own.js', '// USER HOOK — must be left untouched\n');
 writeFile(up, '.claude/settings.json', JSON.stringify({
   env: { MY_VAR: 'keep' },
-  hooks: { Stop: [{ matcher: '', hooks: [{ type: 'command', command: 'node .claude/hooks/user-own.js' }] }] },
+  hooks: {
+    Stop: [
+      { matcher: '', hooks: [{ type: 'command', command: 'node .claude/hooks/user-own.js' }] },
+      { matcher: '', hooks: [{ type: 'command', command: 'node "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/token-guard.js"' }] }
+    ],
+    PostToolUse: [{ matcher: 'Read|Grep|Glob|Bash|PowerShell|WebFetch|WebSearch|Skill|Agent|TaskOutput|ToolSearch', hooks: [{ type: 'command', command: 'node "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/token-guard.js"' }] }]
+  },
   permissions: { allow: ['Read(./**)'], deny: [] }
 }, null, 2));
+// Leftovers from the un-gated 1.0.224 window (no paid key in cca.config.json) — the
+// upgrade must retract the files AND the settings entries above (see cli.js retraction).
+writeFile(up, '.claude/hooks/token-guard.js', '// un-gated 1.0.224 leftover — must be removed\n');
+writeFile(up, '.claude/commands/cost-control-details.md', '<!-- @description leftover -->\n');
 // The user has applied 001 + 003; bundled 004 is still PENDING. The upgrade's copyDir
 // overwrites this file with the shipped empty-@applied copy — the block must be preserved,
 // or the pre-mark pass refills it with ALL bundled ids and 004 never runs (BH-3).
@@ -294,6 +308,15 @@ test('a routine upgrade of a configured project prints no unsupported-version no
     `the unsupported-version notice must not fire on a configured project, got:\n${upResult.out}`);
 });
 
+test('un-gated token-guard leftovers are retracted on upgrade (no paid key)', () => {
+  assert(!fs.existsSync(path.join(upClaude, 'hooks', 'token-guard.js')), 'leftover token-guard.js must be removed');
+  assert(!fs.existsSync(path.join(upClaude, 'commands', 'cost-control-details.md')), 'leftover cost-control-details.md must be removed');
+  const merged = readJson(path.join(upClaude, 'settings.json'));
+  assert(!hasCommandContaining(merged, 'Stop', 'token-guard.js'), 'token-guard Stop entry must be stripped');
+  assert(!hasCommandContaining(merged, 'PostToolUse', 'token-guard.js'), 'token-guard PostToolUse entry must be stripped');
+  assert(hasCommandContaining(merged, 'Stop', 'user-own.js'), "stripping must not touch the user's own hooks");
+});
+
 test('a PENDING update id is NOT marked applied by the upgrade (BH-3)', () => {
   const md = fs.readFileSync(path.join(upClaude, 'commands', 'autoconfig-update.md'), 'utf8');
   const block = md.match(/<!-- @applied\r?\n([\s\S]*?)-->/);
@@ -303,6 +326,36 @@ test('a PENDING update id is NOT marked applied by the upgrade (BH-3)', () => {
   assert(!ids.includes('004'), 'pending update 004 must NOT be pre-marked applied — it has not run, and --pull-updates must still deliver it');
   assert(ids.length === 2, `only the user's applied ids belong in the block, got: ${ids.join(', ')}`);
   assert(!md.includes('old body'), 'the command body itself should still be refreshed to the shipped version');
+});
+
+// ── Fixture 2b: a paid activation survives the token-guard retraction ─────────
+console.log();
+console.log('upgrade with a paid token-guard activation (--bootstrap):');
+
+const paid = makeProject('paid-activation');
+cleanups.push(paid);
+writeFile(paid, 'CLAUDE.md', '# My Project\n\n<!-- AUTO-GENERATED BY /autoconfig -->\n');
+writeFile(paid, '.claude/.autoconfig-version', '1.0.224');
+// The paid key marks these files as licensed-path deliveries, not un-gated leftovers.
+writeFile(paid, '.claude/cca.config.json', JSON.stringify({ tokenGuard: { verdictServiceKey: 'lic_test' } }, null, 2));
+writeFile(paid, '.claude/hooks/token-guard.js', '// licensed copy — must survive\n');
+writeFile(paid, '.claude/commands/cost-control-details.md', '<!-- licensed copy — must survive -->\n');
+writeFile(paid, '.claude/settings.json', JSON.stringify({
+  hooks: { Stop: [{ matcher: '', hooks: [{ type: 'command', command: 'node "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/token-guard.js"' }] }] }
+}, null, 2));
+
+const paidResult = runCli(paid, ['--bootstrap'], shimDir);
+const paidClaude = path.join(paid, '.claude');
+
+test('exits 0', () => {
+  assert(paidResult.code === 0, `expected exit 0, got ${paidResult.code}\n${paidResult.out}`);
+});
+
+test('licensed token-guard files and hook entries survive the upgrade', () => {
+  assert(fs.existsSync(path.join(paidClaude, 'hooks', 'token-guard.js')), 'licensed token-guard.js must survive');
+  assert(fs.existsSync(path.join(paidClaude, 'commands', 'cost-control-details.md')), 'licensed cost-control-details.md must survive');
+  const merged = readJson(path.join(paidClaude, 'settings.json'));
+  assert(hasCommandContaining(merged, 'Stop', 'token-guard.js'), 'licensed token-guard Stop entry must survive');
 });
 
 // ── Fixture 3: --pull-updates preserves a populated @applied block ────────────

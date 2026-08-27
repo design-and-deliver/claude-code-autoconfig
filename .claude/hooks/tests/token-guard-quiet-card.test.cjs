@@ -27,7 +27,7 @@ const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
 const { QUIET_CARDS } = require(HOOK);
 
 const QUIET_CARD =
-  '[!] cost control -- deny, then /clear + /continue to optimize token savings and pick up ' +
+  '⚠️ cost control -- Select No, then /clear + /continue to optimize token savings and pick up ' +
   'where you left off\n/cost-control-details to see rationale';
 
 const usageLine = (id, inp) => JSON.stringify({ type: 'assistant',
@@ -111,7 +111,7 @@ test('--details prints the persisted full card, not the consolidated one', () =>
   const out = details(fix.proj);
   assert.match(out, /Full card behind the last cost-control verdict \(rent/);
   assert.match(out, /• verdict — deny/);
-  assert.ok(!out.includes('[!] cost control')); // the quiet card is what it decodes, never echoes
+  assert.ok(!out.includes('⚠️ cost control')); // the quiet card is what it decodes, never echoes
 });
 
 test('--details reads the NEWEST card across sessions — it answers after the migration', () => {
@@ -147,7 +147,7 @@ test('every quiet card is two lines: verdict + the shared details pointer', () =
   for (const [code, card] of Object.entries(QUIET_CARDS)) {
     const lines = card.split('\n');
     assert.equal(lines.length, 2, code);
-    assert.match(lines[0], /^\[!\] cost control -- /, code);
+    assert.match(lines[0], /^⚠️ cost control -- /, code);
     assert.equal(lines[1], '/cost-control-details to see rationale', code);
   }
 });
