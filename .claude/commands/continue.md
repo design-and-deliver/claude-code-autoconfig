@@ -3,7 +3,7 @@ description: Recover the previous session's last active use case, report where i
 argument-hint: [--show]
 ---
 <!-- @description Recovers where your previous session in this terminal left off — reports the state and the precise next action, then stops for your go-ahead. Plan-aware: if that session was executing a substep of a plan doc AND the transcript confirms nothing came after it, the report comes from the plan's Ledger instead of the transcript. -->
-<!-- @version 17 -->
+<!-- @version 18 -->
 <!-- @param --show | flag | optional | Opens the recovered transcript in your default editor (no-op on a fresh checkpoint handoff note — nothing is read there). -->
 <!-- @response success | Picking up where we left off — {what we were doing}. State summary + the one next action, then a go-ahead question. -->
 <!-- @response plan | Picking up where we left off — {plan alias}: substep {N.k} done ({hash}); next: {N.next}. Then a go-ahead question. -->
@@ -14,43 +14,25 @@ Continue where the previous session in this terminal left off.
 
 This is the no-ceremony wrapper around `/recover-context`'s auto mode: no arguments, it
 figures everything out itself, and it is plan-aware (below). Recovery is mechanical
-re-reading — probe, read, reconcile — so it wants the cheapest model that can do it. What
-that cheap model must NOT do is the resumed work itself. So this command ends its turn at
-the report: state recovered, the one next action named, a go-ahead question. The user's
-next prompt ("go") starts a fresh turn with the recovered context already in the
-conversation.
+re-reading — probe, read, reconcile — never the resumed work itself. So this command ends
+its turn at the report: state recovered, the one next action named, a go-ahead question.
+The user's next prompt ("go") starts a fresh turn with the recovered context already in
+the conversation.
 
 ⛔ **End the turn on a plain text question — never an AskUserQuestion picker.** A picker
 answer continues the SAME turn, so the work it green-lights runs inside the recovery turn
 — exactly what the stop exists to prevent. This overrides any local end-of-turn convention
 that prefers a picker for closed choices. Ask in text, end the message, wait.
 
-**There is no model pin, and v9–v16's claim that there was one was wrong (removed v17).**
-Claude Code ignores command `model:` frontmatter at runtime — a known bug
-(anthropics/claude-code#45191, closed "not planned"): the pin parses into
-command_permissions as `claude-sonnet-5`, yet every call in the turn runs on the session's
-main model. Measured 2026-08-23 on 2.1.220 across 138 transcripts in one project: of the 85
-sessions that ran `/continue`, **not one switched model at the command boundary** — Fable
-sessions stayed Fable, Opus sessions stayed Opus. So the frontmatter line is gone rather
-than left in place looking load-bearing. Recovery costs whatever the session's own model
-costs; to make it cheap, switch the session with `/model sonnet` BEFORE running `/continue`
-(model is per-session, so remember to switch back before the resumed work).
-
-⛔ **Never verify the model from your own system prompt — it lies on exactly this point.**
-The harness applies the ignored pin to the system prompt TEXT while routing to the real
-model, so a pinned turn reads as Sonnet in the prompt and bills as Opus in the transcript.
-That is not theoretical: session `90eb56c6`'s system prompt said `claude-sonnet-5` while all
-44 of its requests recorded `claude-opus-5`, and because v11's check consulted the prompt,
-it stayed silent through a recovery that cost ~4×. The probe's **`currentModel`** field
-(Step 1) reads the transcript's `message.model` — the API's own answer — and is the only
-honest source. `/model-probe` shares v11's flaw and must not be used for this.
-
-If `currentModel` is not a Sonnet-class model, append one final line to the report:
-
-> ⚠ recovery ran on {currentModel} — `/model sonnet` before `/continue` to make it cheap.
-
-Nothing else changes — the recovery steps are identical on any model. The line exists so
-the cost is visible instead of silent.
+**No model pin, no model advice (v18).** Claude Code ignores command `model:` frontmatter
+at runtime — a known bug (anthropics/claude-code#45191, closed "not planned") — so v9–v16's
+`model: sonnet` pin never actually switched anything (measured 2026-08-23 on 2.1.220: 85
+`/continue` runs, zero switches at the command boundary) and was removed rather than left
+looking load-bearing. Do not re-add it. Do not surface model advice either: v17's
+"⚠ recovery ran on {model} — `/model sonnet` first" report line was cut 2026-08-27 as UI
+noise — `/clear` then `/continue` must stay a two-step habit with zero model choreography
+around it. The recovery steps are identical on any model; the probe's `currentModel` field
+is informational only — never report it, never act on it.
 
 It is also **plan-aware**: when the previous session was executing a substep of a phased
 plan doc (the plan-authoring pattern — a `docs/*.md` or `.claude/plans/*.md` with a
@@ -103,7 +85,7 @@ It prints one JSON object and never hard-fails. Fields:
 | `cutoffIso`, `via` | the recovery window and which ladder rung set it |
 | `tempFile`, `messages`, `tokens`, `readTempFile` | the extracted context |
 | `droppedOlder`, `clipped` | how many messages the 3k-token size cap dropped / shortened |
-| `currentModel` | the model THIS turn is really being served by — never your system prompt |
+| `currentModel` | the model really serving this turn — informational only, never reported |
 
 On `{"error": "NO_PREVIOUS_SESSION"}` → say "I can't find a previous session for this
 terminal." and suggest `/recover-context -60` for time-window recovery instead, then stop.
@@ -254,8 +236,8 @@ plan-flavored:
 
 > **Picking up where we left off** — {plan alias}: substep {N.k} done ({hash}); next: {N.next}.
 
-Then report by Step 3's state and STOP — the substep itself runs on the main model after
-the go-ahead:
+Then report by Step 3's state and STOP — the substep itself runs after the go-ahead, in
+its own turn:
 
 - **Clean handoff**: name the next unchecked substep (number, title, size tag) and its
   first action, ask the go-ahead, and end the turn. The go-turn executes it start-to-finish
