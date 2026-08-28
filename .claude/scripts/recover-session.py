@@ -56,6 +56,7 @@ HANDOFF_DRIFT = 180        # note is STALE if the transcript ran on past it
 MAX_EXTRACT_TOKENS = 3000  # payload ceiling -- see cap_to_budget()
 MIN_EXTRACT_MSGS = 4       # ...never trimmed below this, however long the messages
 TAIL_BYTES = 262144        # transcript tail scanned by current_model() -- see its docstring
+ORDER_TAIL_BYTES = 65536   # smaller tail for last_msg_ts() -- one timestamp per record, read per candidate
 ACTION_TOOLS = {'Bash', 'Edit', 'Write', 'MultiEdit', 'NotebookEdit'}
 MAX_ACTION_LINES = 15      # newest state-changing tool calls kept -- see action_line()
 STOP_WORDS = {'plan', 'plans', 'doc', 'docs', 'the', 'and', 'for', 'with'}
@@ -186,6 +187,41 @@ def glyph_mtime(sid, floor=0.0):
     return m
 
 
+_LAST_TS = {}
+
+
+def last_msg_ts(path):
+    """Transcript-internal last-message time -- the activity/ordering key for
+    candidate transcripts. File mtime used to serve here, but external sweeps
+    (backup, AV, indexer) mass-touch transcripts: on 2026-08-28 twelve of them
+    across five projects got identical mtimes within 3s, which would have made
+    the newest-other-transcript rung recover a day-old session over the real
+    predecessor. The trailing "timestamp" inside the file is immune to touches.
+    Falls back to mtime when nothing parses (empty or corrupt transcript)."""
+    if path in _LAST_TS:
+        return _LAST_TS[path]
+    ts = 0.0
+    try:
+        size = os.path.getsize(path)
+        with open(path, 'rb') as fh:
+            if size > ORDER_TAIL_BYTES:
+                fh.seek(size - ORDER_TAIL_BYTES)
+                fh.readline()               # drop the partial line the seek landed in
+            chunk = fh.read().decode('utf-8', 'replace')
+        stamps = re.findall(r'"timestamp":"([^"]+)"', chunk)
+        if stamps:
+            ts = datetime.fromisoformat(stamps[-1].replace('Z', '+00:00')).timestamp()
+    except (OSError, ValueError):
+        ts = 0.0
+    if not ts:
+        try:
+            ts = os.path.getmtime(path)
+        except OSError:
+            ts = 0.0
+    _LAST_TS[path] = ts
+    return ts
+
+
 def is_closed(sid, activity):
     """session-close.js stamps {sid}.closed on every orderly SessionEnd, so a
     marker at-or-after the last activity is proof of death -- release the session
@@ -219,7 +255,7 @@ def resolve_previous(sid_now):
 
     proj = re.sub(r'[^A-Za-z0-9]', '-', os.getcwd())
     files = sorted(glob.glob(os.path.join(PROJECTS, proj, '*.jsonl')),
-                   key=os.path.getmtime, reverse=True)
+                   key=last_msg_ts, reverse=True)
     files = [p for p in files if os.path.splitext(os.path.basename(p))[0] != sid_now]
 
     # Live-twin filter: another terminal's CURRENT occupant that showed activity
@@ -236,7 +272,7 @@ def resolve_previous(sid_now):
         s = os.path.splitext(os.path.basename(p))[0]
         if s not in occupied:
             return False
-        act = glyph_mtime(s, os.path.getmtime(p))
+        act = glyph_mtime(s, last_msg_ts(p))
         return not is_closed(s, act) and time.time() - act < LIVENESS_SECS
 
     files = [p for p in files if not is_live(p)]
