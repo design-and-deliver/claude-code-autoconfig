@@ -78,7 +78,10 @@ test('ordinary prompts and near-misses are NOT exempt', () => {
 
 test('R13b fires on a 1.5M-token turn when it is NOT a recovery', () => {
   const st = state();
-  const d = r13bTurnSpendGuard(ctxFor(st, meter({ inp: 1500000 }), null));
+  // liveContext rides fat: since 2026-08-27 R13b shares the status-quo silence (a lean window
+  // stays quiet — pinned in token-guard-session-gate.test.js), and this case is about the
+  // recovery exemption, not the silence.
+  const d = r13bTurnSpendGuard(ctxFor(st, meter({ inp: 1500000, liveContext: 180000 }), null));
   assert(d && d.kind === 'ask', `a 1.5M turn must still trip R13b, got: ${JSON.stringify(d)}`);
 });
 

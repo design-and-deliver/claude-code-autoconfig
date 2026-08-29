@@ -29,9 +29,9 @@ const HOOK_SRC = fs.readFileSync(
 // guard a fat window is a precondition of R20 speaking at all — under the line its only remedy
 // (/clear + /continue) sheds almost nothing, so the card stays quiet. Cases that care about the
 // lean branch pass their own liveContext.
-function meter({ tok = 0, turns = 40, liveContext = 180000 } = {}) {
+function meter({ tok = 0, inp = 0, turns = 40, liveContext = 180000 } = {}) {
   return {
-    main: { perModel: { 'claude-opus-5': { inp: 0, out: 0, cr: tok, cw: 0, searches: 0, usd: 0 } },
+    main: { perModel: { 'claude-opus-5': { inp, out: 0, cr: tok, cw: 0, searches: 0, usd: 0 } },
       turns, firstContext: 0 },
     agents: { perModel: {} },
     liveContext, usd: 0,
@@ -114,7 +114,9 @@ test('a turn-ender defers the gate without re-arming', () => {
 // --- the status-quo silence (2026-08-16) -----------------------------------------------------
 // R14 took this rule on 2026-07-31; R20 landed nine days later without it and shipped a blocking
 // card whose own Choice bullet read `approve (recommended)` — a round trip spent to arrive at the
-// user's default action. Every case here returns an ask on the pre-silence code.
+// user's default action. Every case here returns an ask on the pre-silence code. R13b joined on
+// 2026-08-27 (the quiet card's trigger line claims restarting pays, so it may only render when
+// that is true) — its cases close this section, sharing migrateAskSpeaks with R20.
 
 test('a lean window silences the card — approve is the default action', () => {
   const st = state();
@@ -149,6 +151,28 @@ test('an unmeasured window still speaks — the script does not suppress on no r
   const d = r20SessionTotalGuard(ctxFor(st, meter({ tok: 8300000, liveContext: 0 }), null));
   assert(d && d.kind === 'ask',
     `rv == null is an honest "no reading", not a reason to retire the session axis: ${JSON.stringify(d)}`);
+});
+
+test('R13b under a lean window is silent and does NOT re-arm — speaks once the window turns fat', () => {
+  const st = state();
+  const d = r13bTurnSpendGuard(ctxFor(st, meter({ inp: 1500000, liveContext: 100000 }), null));
+  assert(d === null,
+    `the card's trigger line claims restarting pays — under the fat line it does not: ${JSON.stringify(d)}`);
+  assert(st.turnGateAt === null && !st.turnGateFires,
+    `a fire that never reached the reader is not a repeat, so the width must stay put: ${st.turnGateAt}`);
+  // Same turn, same spend, the window now past the line: the deferred check speaks at once
+  // rather than sitting out the doubled width a spoken fire would have bought.
+  const d2 = r13bTurnSpendGuard(ctxFor(st, meter({ inp: 1500000, liveContext: 180000 }), null));
+  assert(d2 && d2.kind === 'ask',
+    `the first call after the window crosses the fat line must speak: ${JSON.stringify(d2)}`);
+  assert(st.turnGateFires === 1, 'that fire is the first, not the second');
+});
+
+test('a bomb CALL outranks R13b\'s lean-window silence too — the shared rule\'s deny branch', () => {
+  const st = state();
+  const d = r13bTurnSpendGuard(
+    ctxFor(st, meter({ inp: 1500000, liveContext: 100000 }), { kind: 'deny', why: 'runs the whole test suite' }));
+  assert(d && d.kind === 'ask', `a bomb outranks the lean-window silence: ${JSON.stringify(d)}`);
 });
 
 test('every card that DOES speak recommends deny, never approve', () => {

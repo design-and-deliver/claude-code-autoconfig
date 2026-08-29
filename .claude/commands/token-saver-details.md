@@ -1,15 +1,15 @@
 ---
-description: Show the full rationale behind the most recent cost-control verdict card
+description: Show the full rationale behind the most recent TokenSaver verdict card
 allowed-tools: Bash(node .claude/hooks/token-guard.js --details:*)
 ---
-<!-- @description Show the full rationale behind the most recent cost-control verdict card — the arithmetic the consolidated card encapsulates. -->
-<!-- @version 1 -->
+<!-- @description Show the full rationale behind the most recent TokenSaver verdict card — the arithmetic the consolidated card encapsulates. -->
+<!-- @version 2 -->
 <!-- @response success | Prints the persisted full card verbatim, with which meter fired and when. -->
-<!-- @example /cost-control-details | See the math behind the last "Select No, then /clear + /continue" card -->
+<!-- @example /token-saver-details | See the math behind the last TokenSaver card -->
 
-# Cost Control Details
+# TokenSaver Details
 
-The consolidated cost-control card deliberately leaves out its arithmetic. This command prints
+The consolidated TokenSaver card deliberately leaves out its arithmetic. This command prints
 the full card that was persisted when the verdict fired — the newest one across ALL of this
 project's sessions, because the natural moment to ask is right after the `/clear` + `/continue`
 migration the card recommended, when the session id has already changed.

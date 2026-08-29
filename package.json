@@ -78,7 +78,7 @@
     "!.claude/commands/create-wip-report.md",
     "!.claude/commands/abort-plan.md",
     "!.claude/commands/eod-report.md",
-    "!.claude/commands/cost-control-details.md",
+    "!.claude/commands/token-saver-details.md",
     "!.claude/rules/parallel-session-worktrees.md",
     "!.claude/plans",
     "!.claude/worktrees",

@@ -1,13 +1,15 @@
-// Rationale encapsulation (Andrew 2026-08-24) — verdictDetail + the /cost-control-details rail.
+// Rationale encapsulation (Andrew 2026-08-24) — verdictDetail + the /token-saver-details rail.
 //
 // The ruling this pins: most users never want the arithmetic, so with verdictDetail 'file'
 // every family-tagged cost ask renders its family's consolidated two-line card, and the full
 // card is persisted to .token-guard/<sid>.cards.jsonl for `--details` (the
-// /cost-control-details command) to read back. "It's not a black box, it's encapsulation":
+// /token-saver-details command) to read back. "It's not a black box, it's encapsulation":
 // the rationale is one command away, never deleted. The taxonomy (2026-08-24, same ruling
 // thread): ten short codes in QUIET_CARDS, doubling as conversation references and the ledger's
-// `family` field — one card per family because each family names its OWN remedy; the migration
-// trio (task-size/rent/session-total) shares Andrew's agreed wording verbatim. Two mechanics
+// `family` field — one card per family because each family names its OWN remedy; every card
+// leads with a one-line trigger under the header (Andrew 2026-08-27), and the migration trio
+// (task-size/rent/session-total) shares Andrew's remedy steps verbatim, each under its own
+// trigger line. Two mechanics
 // matter enough to pin: the full card is persisted in BOTH modes (the details command answers
 // even where the card rendered verbose), and --details reads the newest card across ALL
 // sessions — the natural moment to ask is right after the /clear + /continue migration, when
@@ -24,11 +26,18 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
-const { QUIET_CARDS } = require(HOOK);
+const { QUIET_CARDS, AUTO_RECEIPTS } = require(HOOK);
 
-const QUIET_CARD =
-  '⚠️ cost control -- Select No, then /clear + /continue to optimize token savings and pick up ' +
-  'where you left off\n/cost-control-details to see rationale';
+const MIGRATE_TAIL =
+  '1. Select "No" below\n2. /clear to purge old context\n' +
+  '3. /continue to restore the context for your last active use case\n' +
+  '~ Want to see the rationale? /token-saver-details';
+const TRIO_TRIGGER = {
+  'task-size': 'This task has outgrown one session — restarting now costs less',
+  'rent': 'Each turn re-pays to carry old context — restarting now costs less',
+  'session-total': "This session's context only grows — restarting now costs less",
+};
+const QUIET_CARD = code => '⚠️ TokenSaver — Restart Session\n~ ' + TRIO_TRIGGER[code] + '\n' + MIGRATE_TAIL;
 
 const usageLine = (id, inp) => JSON.stringify({ type: 'assistant',
   message: { id, model: 'claude-fable-5', usage: { input_tokens: inp, output_tokens: 10 } } }) + '\n';
@@ -83,7 +92,7 @@ const details = (projectDir) =>
 test("verdictDetail 'file': the ask renders Andrew's consolidated card, verbatim", () => {
   const { out } = fired({ verdictDetail: 'file' });
   assert.equal(out.permissionDecision, 'ask');
-  assert.equal(out.permissionDecisionReason, QUIET_CARD);
+  assert.equal(out.permissionDecisionReason, QUIET_CARD('rent'));
 });
 
 test("verdictDetail 'file': the full card is persisted for the details command", () => {
@@ -111,7 +120,7 @@ test('--details prints the persisted full card, not the consolidated one', () =>
   const out = details(fix.proj);
   assert.match(out, /Full card behind the last cost-control verdict \(rent/);
   assert.match(out, /• verdict — deny/);
-  assert.ok(!out.includes('⚠️ cost control')); // the quiet card is what it decodes, never echoes
+  assert.ok(!out.includes('⚠️ TokenSaver')); // the quiet card is what it decodes, never echoes
 });
 
 test('--details reads the NEWEST card across sessions — it answers after the migration', () => {
@@ -132,9 +141,9 @@ test('--details with nothing recorded says so instead of erroring', () => {
 
 // --- Card taxonomy (the enumeration itself) ---------------------------------------------
 // Ten short codes, doubling as conversation references and the ledger's `family` field.
-// Full-verbatim pins exist only for the migration trio (Andrew's agreed wording); the other
-// seven cards pin their REMEDY phrase — the design property that forced per-family cards —
-// and get verbatim pins once their wording has had Andrew's pass.
+// Full-verbatim pins exist only for the migration trio (Andrew's agreed steps + its trigger
+// lines); the other seven cards pin their REMEDY phrase — the design property that forced
+// per-family cards — and get verbatim pins once their wording has had Andrew's pass.
 
 const CODES = ['task-size', 'rent', 'session-total', 'idle-cache', 'payload-door',
   'mini-bomb', 'post-bomb', 'spend-gate', 'workflow-launch', 'workflow-fan'];
@@ -143,30 +152,70 @@ test('the taxonomy is exactly the ten agreed short codes', () => {
   assert.deepEqual(Object.keys(QUIET_CARDS).sort(), [...CODES].sort());
 });
 
-test('every quiet card is two lines: verdict + the shared details pointer', () => {
+// The five restart-remedy cards carry the '— Restart Session' header suffix (2026-08-27):
+// only their remedy continues after the dialog; the other five finish in approve / "No".
+const RESTART_SUFFIXED = new Set(['task-size', 'rent', 'session-total', 'idle-cache', 'post-bomb']);
+
+test('every quiet card is header, trigger one-liner, numbered steps, and the rationale pointer', () => {
   for (const [code, card] of Object.entries(QUIET_CARDS)) {
     const lines = card.split('\n');
-    assert.equal(lines.length, 2, code);
-    assert.match(lines[0], /^⚠️ cost control -- /, code);
-    assert.equal(lines[1], '/cost-control-details to see rationale', code);
+    assert.ok(lines.length >= 4, code);
+    assert.equal(lines[0], RESTART_SUFFIXED.has(code)
+      ? '⚠️ TokenSaver — Restart Session' : '⚠️ TokenSaver', code);
+    assert.ok(lines[1] && lines[1].startsWith('~ '), code); // the '~' trigger line precedes the steps
+    assert.ok(lines.some(l => /^1\. /.test(l)), code);
+    assert.equal(lines[lines.length - 1], '~ Want to see the rationale? /token-saver-details', code);
   }
 });
 
-test("the migration trio shares Andrew's agreed card verbatim", () => {
-  for (const code of ['task-size', 'rent', 'session-total']) {
-    assert.equal(QUIET_CARDS[code], QUIET_CARD, code);
+test("the migration trio: per-family trigger over Andrew's shared steps, verbatim", () => {
+  for (const code of Object.keys(TRIO_TRIGGER)) {
+    assert.equal(QUIET_CARDS[code], QUIET_CARD(code), code);
   }
 });
 
 test('each non-migration card names its own remedy — the reason one shared card failed', () => {
   const remedy = {
-    'idle-cache': /\/clear \+ \/continue/,
+    'idle-cache': /Idle past the cache window/,
     'payload-door': /ranged read or a subagent/,
     'mini-bomb': /through a subagent/,
-    'post-bomb': /\/clear \+ \/continue to shed/,
+    'post-bomb': /\/clear to shed/,
     'spend-gate': /\/clear for a fresh session/,
     'workflow-launch': /Approve to launch/,
     'workflow-fan': /cut the fan/,
   };
   for (const [code, re] of Object.entries(remedy)) assert.match(QUIET_CARDS[code], re, code);
+});
+
+// --- Autonomous-save receipts (2026-08-27) ------------------------------------------------
+// The silent diverts (R8 read-divert, R18 re-read) carry a user-facing receipt via the hook's
+// systemMessage while the deny reason stays model-facing, and the rationale feeds --details.
+
+test('the receipt taxonomy is exactly the two silent diverts', () => {
+  assert.deepEqual(Object.keys(AUTO_RECEIPTS).sort(), ['re-read', 'read-divert'].sort());
+});
+
+test("every receipt is Andrew's three-line card: saved header, one-liner, details pointer", () => {
+  for (const [code, card] of Object.entries(AUTO_RECEIPTS)) {
+    const lines = card.split('\n');
+    assert.equal(lines.length, 3, code);
+    assert.equal(lines[0], '⚠️ TokenSaver — you just saved tokens', code);
+    assert.ok(lines[1] && !lines[1].startsWith('~'), code); // the one-liner, not a pointer
+    assert.equal(lines[2], '~ See the details at /token-saver-details', code);
+  }
+});
+
+test('a read divert denies model-facing, receipts the user, and feeds --details', () => {
+  const fix = mkFixture({ readDivertTokens: 1000 });
+  const big = path.join(fix.proj, 'big.txt');
+  fs.writeFileSync(big, 'x'.repeat(60000));
+  const raw = runHook(fix, { hook_event_name: 'PreToolUse', tool_name: 'Read',
+    tool_input: { file_path: big } });
+  const parsed = JSON.parse(raw);
+  assert.equal(parsed.hookSpecificOutput.permissionDecision, 'deny');
+  assert.match(parsed.hookSpecificOutput.permissionDecisionReason, /diverted, not loaded/);
+  assert.equal(parsed.systemMessage, AUTO_RECEIPTS['read-divert']);
+  const out = details(fix.proj);
+  assert.match(out, /read-divert/);
+  assert.match(out, /diverted, not loaded/);
 });

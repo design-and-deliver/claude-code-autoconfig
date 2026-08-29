@@ -364,9 +364,9 @@ const DEFAULTS = {
   verdictCacheTtlMinutes: 30,    // cached verdicts older than this render nothing (stale = dark)
   verdictDetail: 'console',      // cost-ask card detail, every family in QUIET_CARDS. 'console'
                                  // renders the full arithmetic card in the ask dialog; 'file'
-                                 // renders the family's consolidated two-line card and keeps the
+                                 // renders the family's consolidated TokenSaver card and keeps the
                                  // full version in .token-guard/<sid>.cards.jsonl for
-                                 // /cost-control-details. The full card is persisted in BOTH modes.
+                                 // /token-saver-details. The full card is persisted in BOTH modes.
 };
 
 // ---------------------------------------------------------------------------
@@ -3802,52 +3802,75 @@ function preState(ctx) {
 
 // Rationale encapsulation (Andrew 2026-08-24): most users never want the arithmetic, so with
 // verdictDetail 'file' every family-tagged cost ask renders its family's consolidated card
-// instead, and the full card is read back via /cost-control-details. Not a black box — the
+// instead, and the full card is read back via /token-saver-details. Not a black box — the
 // rationale is one command away, which still shows the work; inline detail wears the reader
 // down exactly when the rec is confidently valid.
 //
 // The keys are the card taxonomy — short codes that double as conversation references and the
 // `family` field in the cards ledger. One card per family because each family has its OWN
 // remedy: one shared card misdescribed six of them, which is why only the migration trio was
-// tagged at first. Those three (task-size/rent/session-total) share wording deliberately —
-// same remedy — and that line is Andrew's, verbatim (copy contract; patch only with sign-off).
-// Codes stay off the card face: the agreed wording is the contract, and /cost-control-details
+// tagged at first. Every card's first line under the header is a one-line TRIGGER opening
+// with '~ ' — the scenario in the user's terms, never gate internals (Andrew 2026-08-27; the
+// tilde is his pick as the trigger glyph, shared with the rationale pointer). The migration trio
+// (task-size/rent/session-total) shares its remedy steps deliberately — same remedy — and
+// those steps are Andrew's, verbatim (copy contract; patch only with sign-off); each of the
+// three still carries its own trigger line.
+// Codes stay off the card face: the agreed wording is the contract, and /token-saver-details
 // names the family instead. NOT covered here by design: R4's prompt-side idle block (different
 // surface — it pre-empts the charge; remedy is ↑+Enter) and R10's hard-cap deny (a deny reason
 // is model-facing, and the model needs the why inline to adapt instead of retrying blind).
-const DETAILS_LINE = '/cost-control-details to see rationale';
-const MIGRATE_CARD =
-  '⚠️ cost control -- Select No, then /clear + /continue to optimize token savings and pick up ' +
-  'where you left off\n' + DETAILS_LINE;
+const DETAILS_LINE = '~ Want to see the rationale? /token-saver-details';
+const MIGRATE_STEPS =
+  '1. Select "No" below\n' +
+  '2. /clear to purge old context\n' +
+  '3. /continue to restore the context for your last active use case\n';
+// The five restart-remedy cards carry a '— Restart Session' header suffix (Andrew 2026-08-27):
+// they are the only cards whose remedy continues AFTER the dialog; the other five finish in the
+// dialog's own approve / "No", so their header stays bare (ux: implicit-over-explicit).
+const migrateCard = trigger => '⚠️ TokenSaver — Restart Session\n~ ' + trigger + '\n' + MIGRATE_STEPS + DETAILS_LINE;
 const QUIET_CARDS = {
-  'task-size': MIGRATE_CARD,       // R13b — one turn's spend crossed the turn gate
-  'rent': MIGRATE_CARD,            // R14 — the turn's cached re-reads crossed the rent gate
-  'session-total': MIGRATE_CARD,   // R20 — total session spend crossed the tripwire
+  'task-size':                     // R13b — one turn's spend crossed the turn gate
+    migrateCard('This task has outgrown one session — restarting now costs less'),
+  'rent':                          // R14 — the turn's cached re-reads crossed the rent gate
+    migrateCard('Each turn re-pays to carry old context — restarting now costs less'),
+  'session-total':                 // R20 — total session spend crossed the tripwire
+    migrateCard("This session's context only grows — restarting now costs less"),
   'idle-cache':                    // R4b — self-wake past the cache TTL, charge already landed
-    '⚠️ cost control -- idle past the cache window; picking up here re-uploaded the session ' +
-    'at full price. Select No, then /clear + /continue to continue cheaply\n' + DETAILS_LINE,
+    '⚠️ TokenSaver — Restart Session\n' +
+    '~ Idle past the cache window — picking up here re-uploaded the session at full price\n' +
+    MIGRATE_STEPS + DETAILS_LINE,
   'payload-door':                  // R8 — a Read/Skill call is about to import a bomb payload
-    '⚠️ cost control -- this call imports a large payload into permanent context. Select No, then ' +
-    'use a ranged read or a subagent\n' + DETAILS_LINE,
+    '⚠️ TokenSaver\n' +
+    '~ This call imports a large payload into permanent context\n' +
+    '1. Select "No" below\n' +
+    '2. Use a ranged read or a subagent instead\n' + DETAILS_LINE,
   'mini-bomb':                     // R9 — the turn's tool results piled up bomb-sized
-    "⚠️ cost control -- this turn's results are piling up large. Select No, then route the rest " +
-    'through a subagent\n' + DETAILS_LINE,
+    '⚠️ TokenSaver\n' +
+    "~ This turn's results are piling up large\n" +
+    '1. Select "No" below\n' +
+    '2. Route the rest through a subagent\n' + DETAILS_LINE,
   'post-bomb':                     // R3 — a bomb landed at fat context, one-time confirm
-    '⚠️ cost control -- a large payload just landed. Select No, then /clear + /continue to shed ' +
-    'it and keep this thread\n' + DETAILS_LINE,
+    '⚠️ TokenSaver — Restart Session\n' +
+    '~ A large payload just landed\n' +
+    '1. Select "No" below\n' +
+    '2. /clear to shed it\n' +
+    '3. /continue to restore the context for your last active use case\n' + DETAILS_LINE,
   'spend-gate':                    // hardGateUSD backstop the user armed by hand
-    '⚠️ cost control -- session passed the spend gate you armed. Approve to continue, or ' +
-    'Select No and /clear for a fresh session\n' + DETAILS_LINE,
+    '⚠️ TokenSaver\n' +
+    '~ Session passed the spend gate you armed\n' +
+    '1. Approve to continue, or select "No" and /clear for a fresh session\n' + DETAILS_LINE,
   'workflow-launch':               // R2 — fire-on-every-launch workflow confirm
-    '⚠️ cost control -- workflow fleets bill outside the visible transcript. Approve to ' +
-    'launch\n' + DETAILS_LINE,
+    '⚠️ TokenSaver\n' +
+    '~ Workflow fleets bill outside the visible transcript\n' +
+    '1. Approve to launch\n' + DETAILS_LINE,
   'workflow-fan':                  // R10 — over-fanned workflow, below the hard cap
-    '⚠️ cost control -- this workflow looks over-fanned for one task. Select No and cut the fan, ' +
-    'or approve to launch as-is\n' + DETAILS_LINE,
+    '⚠️ TokenSaver\n' +
+    '~ This workflow looks over-fanned for one task\n' +
+    '1. Select "No" and cut the fan, or approve to launch as-is\n' + DETAILS_LINE,
 };
 
 // Append the full card to the per-session ledger the details command reads (newest-last
-// JSONL). Written in BOTH detail modes, so /cost-control-details answers even for a card that
+// JSONL). Written in BOTH detail modes, so /token-saver-details answers even for a card that
 // rendered verbose. Mkdirs for itself: the workflow asks reach here without saveState (they
 // never load state), so the directory may not exist yet.
 function persistCard(projectDir, sid, family, card) {
@@ -3871,6 +3894,30 @@ function gateAsk(ctx, reason, family) {
     if (ctx.cfg.verdictDetail === 'file') reason = QUIET_CARDS[family] || reason;
   }
   return { kind: 'ask', reason };
+}
+
+// Autonomous-save receipts (Andrew 2026-08-27): the silent divert denies (R8's read divert,
+// R18's re-read divert) save tokens with no user action at all — the model self-corrects and
+// nothing ever told the user it happened. Each such deny now carries a three-line receipt,
+// rendered straight to the user via the hook's systemMessage field, while the deny reason
+// stays model-facing (the model still needs the why inline to adapt). The full model-facing
+// rationale is persisted under the receipt's family, so the receipt's details line is backed
+// by /token-saver-details exactly like a quiet card. NOT receipted by design: R10's hard-cap
+// deny (the model relays it, so the user already sees it) and the Bash/Grep verdicts (they
+// fold into the spend cards' ask copy, never a silent deny).
+const RECEIPT_LINE = '~ See the details at /token-saver-details';
+const savedCard = oneLiner => '⚠️ TokenSaver — you just saved tokens\n' + oneLiner + '\n' + RECEIPT_LINE;
+const AUTO_RECEIPTS = {
+  'read-divert':                   // R8 door 2 — a whole-file Read rerouted to a ranged read
+    savedCard('A whole-file read was rerouted to a ranged read — the payload stayed out of context'),
+  're-read':                       // R18 — a duplicate read of content already in the conversation
+    savedCard('A re-read of a file already in this conversation was blocked'),
+};
+
+// A silent divert saved tokens without asking anybody: persist the rationale, attach the receipt.
+function denySaved(ctx, family, reason) {
+  persistCard(ctx.projectDir, ctx.sid, family, reason);
+  return { kind: 'deny', reason, receipt: AUTO_RECEIPTS[family] };
 }
 
 // A turn-ender defers BOTH in-turn tripwires without re-arming — see gateVerdict for why
@@ -3976,8 +4023,9 @@ const PAYLOAD_DOORS = new Set(['Skill', 'Read']);
 
 // A divert lands nothing and asks nobody: no payload enters context, so there is no hop for
 // R3 to attribute and no state to arm. Split out so the door guard stays under the CC bar.
-function payloadDivert(ti, v) {
-  return { kind: 'deny', reason: payloadDivertCopy(ti, v, readHead(String(ti.file_path || ''))) };
+function payloadDivert(ctx, ti, v) {
+  return denySaved(ctx, 'read-divert',
+    payloadDivertCopy(ti, v, readHead(String(ti.file_path || ''))));
 }
 
 // R8 — payload pre-gate, doors 1-2. One ask in the moment the rent is still avoidable;
@@ -3990,7 +4038,7 @@ function r8PayloadDoorGuard(ctx) {
   if (!v) return null;
   // It never touches preState — this runs on EVERY tool call, and the common path stays a
   // stat plus a 1.2KB head read.
-  if (v.action === 'divert') return payloadDivert(ti, v);
+  if (v.action === 'divert') return payloadDivert(ctx, ti, v);
   // One decision, one surface: mark the hop so R3 doesn't re-warn what the user just
   // decided at this gate. ttl 1 = disarms at the next prompt if nothing landed (denied).
   // Skill hops carry the name so the landing can be recorded as an observed budget row.
@@ -4080,19 +4128,28 @@ function r13bTurnSpendGuard(ctx) {
   return turnSpendAsk(ctx, turnTok);
 }
 
-// The R13b fire path — re-arm, then render the card. Split out of the guard above when the
+// The R13b fire path — read the restart verdict, silence the status-quo branch, then re-arm and
+// render the card. Split out of the guard above when the
 // recovery exemption's one guard clause took it to CC 10: the guard is now purely "should this
 // fire?", this is "what does firing say", and each clears the bar on its own.
 function turnSpendAsk(ctx, turnTok) {
   const { cfg, m, st, verdict } = ctx;
   // Re-arm ABOVE the observed spend, at a width that DOUBLES each same-turn fire — see
   // nextCheckClause for why a flat step stopped working.
-  st.turnGateFires = (st.turnGateFires || 0) + 1;
-  st.turnGateAt = reArmAt(turnTok, cfg.turnGateTokens, st.turnGateFires);
+  const fires = (st.turnGateFires || 0) + 1;
+  const nextAt = reArmAt(turnTok, cfg.turnGateTokens, fires);
   // ONE verdict object, both bullets — see restartVerdict for why they can no longer disagree.
-  const rv = restartVerdict(m.liveContext, st.turnGateAt - turnTok, cfg.contextWarnTokens,
+  const rv = restartVerdict(m.liveContext, nextAt - turnTok, cfg.contextWarnTokens,
     coldStartTokens(ctx.projectDir, ctx.sid, m, ctx.data && ctx.data.transcript_path),
     cfg.contextExcessTokens);
+  // Silence on the status-quo branch — R14's rule (Andrew 2026-07-31), R20's since 2026-08-16,
+  // R13b's since 2026-08-27: the quiet card's trigger line claims restarting pays, so the card
+  // may only render when that is measured true (or unmeasurable). Like R20, a silent fire does
+  // not re-arm — the gate speaks on the first call after the verdict flips, instead of sitting
+  // out the doubled width a spoken fire would have bought.
+  if (!migrateAskSpeaks(verdict, rv)) return null;
+  st.turnGateFires = fires;
+  st.turnGateAt = nextAt;
   // R21 provenance — this card is about to recommend clearing, so a recovery that follows it is
   // ours and must not come back as the user's habit. Stamped at the verdict, not inside the copy
   // helpers, so restartBullet/choiceBullet stay pure for the copy-contract test.
@@ -4364,9 +4421,10 @@ function r20SessionTotalGuard(ctx) {
 }
 
 // The silence clause as its own predicate. It is four boolean forks standing alone, and inlined it
-// put sessionTotalAsk one over the complexity bar; the reasoning it encodes is at the call site.
+// put sessionTotalAsk one over the complexity bar; the reasoning it encodes is at the call sites
+// (R20 below, and R13b's turnSpendAsk — same quieting since 2026-08-27, same claim to honor).
 // Speaks when: the pending call is a bomb, OR nothing was measured, OR clearing actually pays.
-function totalAskSpeaks(verdict, rv) {
+function migrateAskSpeaks(verdict, rv) {
   if (verdict && verdict.kind === 'deny') return true;
   return !rv || rv.clear;
 }
@@ -4401,7 +4459,7 @@ function sessionTotalAsk(ctx, tok) {
   // gate speaks on the first call AFTER the window crosses the fat line — instead of sitting out
   // a doubled width that a silent fire would have bought. That matters more here than on R14: a
   // session total never comes back down, so a width skipped now is skipped for good.
-  if (!totalAskSpeaks(verdict, rv)) return null;
+  if (!migrateAskSpeaks(verdict, rv)) return null;
   // R21 provenance — same reasoning as R14 above: past the silence clause this card speaks, and
   // the only lever it offers is /clear + /continue.
   if (rv && rv.clear) noteClearAdvice(ctx.projectDir, 'R20', Date.now());
@@ -4571,7 +4629,7 @@ function r18ReReadGuard(ctx) {
   const key = reReadKey(fp);
   const win = readWindow(ctx.data.tool_input ?? {});
   const v = reReadVerdict(st.turnReads[key], win, stamp, ctx.cfg);
-  if (v) return { kind: 'deny', reason: reReadDivertCopy(fp, st.turnReads[key], v) };
+  if (v) return denySaved(ctx, 're-read', reReadDivertCopy(fp, st.turnReads[key], v));
   // Recorded on FALL-THROUGH and from the last guard in the fold, so the ledger only ever holds
   // reads nothing else blocked. A read the user then denies by hand is the one stale case left,
   // and the copy's widen/Edit escapes cover it without a second gate.
@@ -4630,7 +4688,7 @@ function onPreToolUse(data, projectDir) {
     // costs one file read on a path that is already firing a card.
     logRestartAdvice(projectDir, ctx.sid, ctx.st || loadState(projectDir, ctx.sid),
       'pretool-' + d.kind, d.reason);
-    return d.kind === 'deny' ? deny('PreToolUse', d.reason) : ask('PreToolUse', d.reason);
+    return d.kind === 'deny' ? deny('PreToolUse', d.reason, d.receipt) : ask('PreToolUse', d.reason);
   }
 }
 
@@ -4647,13 +4705,16 @@ function ask(event, reason) {
 // Hard stop — the runaway backstop (R10 fanHardCap). Unlike ask, the launch cannot be waved
 // through inline: the reason goes back to the model, which relays it, and the human re-cuts the
 // fan or raises the cap. Reserved for a CONCRETE oversized fan, never an estimate.
-function deny(event, reason) {
+function deny(event, reason, receipt) {
   process.stdout.write(JSON.stringify({
     hookSpecificOutput: {
       hookEventName: event,
       permissionDecision: 'deny',
       permissionDecisionReason: reason,
     },
+    // A silent save's receipt: systemMessage renders to the USER directly, so the "you just
+    // saved tokens" card shows the moment the divert fires without spending model tokens.
+    ...(receipt ? { systemMessage: receipt } : {}),
   }));
 }
 
@@ -5223,7 +5284,7 @@ if (require.main === module) {
       .catch(() => { /* never throw */ })
       .finally(() => process.exit(0));
   } else if (process.argv[2] === '--details') {
-    // CLI surface behind /cost-control-details. A missing state dir is the same answer as an
+    // CLI surface behind /token-saver-details. A missing state dir is the same answer as an
     // empty one: nothing recorded yet.
     try {
       const e = latestCard(process.argv[3] || process.env.CLAUDE_PROJECT_DIR || process.cwd());
@@ -5254,7 +5315,7 @@ if (require.main === module) {
 }
 
 module.exports = { meter, meterSession, priceFor, attributeJump, ledgerScopes, officialLines,
-  QUIET_CARDS,                                 // token-guard-quiet-card.test.cjs — card taxonomy copy contract
+  QUIET_CARDS, AUTO_RECEIPTS,                  // token-guard-quiet-card.test.cjs — card taxonomy + receipts copy contract
   claudeCodeUA, fetchOfficialUsage,
   analyzeSession, renderAnalysis, payloadVerdict, fanVerdict, workflowSource, skillSizes, recordObservedSkill,
   payloadDivertCopy, readHead,                 // test/token-guard-divert.test.js — R8 door 2 divert
