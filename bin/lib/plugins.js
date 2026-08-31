@@ -24,9 +24,17 @@
 // ============================================================================
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const PLUGINS_LEDGER = '.autoconfig-plugins.json';
+
+// Licensed-delivery endpoint base. Matches token-guard.js's `verdictService` convention:
+// the base ends at /api/cca and each consumer appends its own route. Tests override via
+// deps.apiBase / deps.fetch in-process; the env var lets a manual run target a local or
+// staging service (the pre-deploy E2E path).
+const CCA_API_BASE = process.env.CCA_API_BASE || 'https://api.proswitch.ai/api/cca';
+const TOKEN_SAVER = 'token-saver';
 
 // Build a fresh settings-delta accumulator (BH-1), seeded from a prior install's recorded
 // delta so a re-install UNIONS onto it rather than shrinking it to only what the second
@@ -248,26 +256,212 @@ function pluginList(claudeDir) {
   }
 }
 
-function runPluginCommand(argv, deps) {
-  const sub = argv[3];
-  const arg = argv[4];
-  const claudeDir = path.join(deps.cwd, '.claude');
-  try {
-    if (sub === 'add' || sub === 'install') {
-      if (!arg) throw new Error('usage: claude-code-autoconfig plugin add <path-to-plugin-dir>');
-      pluginAdd(arg, claudeDir, deps);
-    } else if (sub === 'remove' || sub === 'rm' || sub === 'uninstall') {
-      if (!arg) throw new Error('usage: claude-code-autoconfig plugin remove <name>');
-      pluginRemove(arg, claudeDir, deps);
-    } else if (sub === 'list' || sub === 'ls') {
-      pluginList(claudeDir);
-    } else {
-      console.log('Usage:');
-      console.log('  claude-code-autoconfig plugin add <dir>      Install a plugin from a folder');
-      console.log('  claude-code-autoconfig plugin remove <name>  Uninstall a plugin');
-      console.log('  claude-code-autoconfig plugin list           List installed plugins');
-      process.exit(sub ? 1 : 0);
+// ── Licensed delivery: activate / verify ─────────────────────────────────────
+
+// POST the key to the module-bundle endpoint. 200 → the bundle's plugin object;
+// 204 → null (invalid key — the API's no-oracle convention, never a 401/403 with reasons).
+async function fetchModuleBundle(apiBase, key, fetchFn) {
+  const res = await fetchFn(`${apiBase.replace(/\/+$/, '')}/module-bundle`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ key })
+  });
+  if (res.status === 204) return null;
+  if (res.status !== 200) throw new Error(`licensing service returned HTTP ${res.status} — try again in a minute`);
+  const body = await res.json();
+  const plugin = body && body.plugin;
+  if (!plugin || typeof plugin.name !== 'string' || !Array.isArray(plugin.files)) {
+    throw new Error('licensing service returned an unexpected bundle shape');
+  }
+  return plugin;
+}
+
+// Write the fetched bundle to a temp dir shaped like a local plugin folder, so the
+// EXISTING pluginAdd path (validation, ledger, settings merge, clean remove) installs it.
+function materializeBundle(plugin) {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cca-bundle-'));
+  const files = [];
+  for (const f of plugin.files) {
+    if (!f || typeof f.to !== 'string' || typeof f.content !== 'string') {
+      throw new Error('each bundle "files" entry must have "to" and "content"');
     }
+    const dest = path.join(tempDir, f.to);
+    if (!dest.startsWith(tempDir + path.sep)) throw new Error(`refusing bundle path outside the staging dir: ${f.to}`);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, f.content);
+    files.push({ from: f.to, to: f.to });
+  }
+  fs.writeFileSync(path.join(tempDir, 'plugin.json'), JSON.stringify({
+    name: plugin.name,
+    version: plugin.version || null,
+    description: plugin.description || '',
+    files,
+    settings: plugin.settings || null
+  }, null, 2));
+  return tempDir;
+}
+
+function readActivationConfig(claudeDir) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(claudeDir, 'cca.config.json'), 'utf8'));
+  } catch (_) {
+    return null;
+  }
+}
+
+// MERGE the activation keys into .claude/cca.config.json — preserve every other key, and
+// nest under "tokenGuard" (top-level placement is a dead key AND makes cli.js's paid check
+// treat the project as unpaid and retract its files — the exact bug fixed 2026-08-31).
+function writeActivationConfig(claudeDir, key, apiBase) {
+  const p = path.join(claudeDir, 'cca.config.json');
+  let cfg = {};
+  if (fs.existsSync(p)) {
+    try {
+      cfg = JSON.parse(fs.readFileSync(p, 'utf8'));
+    } catch (e) {
+      throw new Error(`.claude/cca.config.json is not valid JSON (${e.message}) — refusing to overwrite it. Fix or delete it, then re-run activation.`);
+    }
+  }
+  cfg.tokenGuard = Object.assign({}, cfg.tokenGuard, {
+    verdictService: apiBase,
+    verdictServiceKey: key
+  });
+  fs.mkdirSync(claudeDir, { recursive: true });
+  fs.writeFileSync(p, JSON.stringify(cfg, null, 2));
+  console.log('\x1b[90m%s\x1b[0m', '   ✎ wrote tokenGuard.verdictService + verdictServiceKey to .claude/cca.config.json');
+}
+
+function collectHookCommands(hooksObj, event) {
+  const out = new Set();
+  for (const m of (hooksObj && hooksObj[event]) || []) {
+    for (const h of m.hooks || []) out.add(h.command);
+  }
+  return out;
+}
+
+function missingHookEvents(userSettings, fragmentHooks) {
+  const missing = [];
+  for (const event of Object.keys(fragmentHooks)) {
+    const installed = collectHookCommands(userSettings.hooks, event);
+    const wanted = collectHookCommands(fragmentHooks, event);
+    if ([...wanted].some(c => !installed.has(c))) missing.push(event);
+  }
+  return missing;
+}
+
+// Check (a): every file the plugins ledger says token-saver installed is on disk.
+function checkBundleFiles(claudeDir) {
+  const entry = readPluginsLedger(claudeDir)[TOKEN_SAVER];
+  if (!entry || !Array.isArray(entry.files) || entry.files.length === 0) {
+    return { ok: false, msg: `${TOKEN_SAVER} is not installed (no ${PLUGINS_LEDGER} entry)` };
+  }
+  const missing = entry.files.filter(rel => !fs.existsSync(path.join(claudeDir, rel)));
+  if (missing.length > 0) return { ok: false, msg: `bundle files missing: ${missing.join(', ')}` };
+  return { ok: true, msg: `bundle files present (${entry.files.map(f => '.claude/' + f).join(', ')})` };
+}
+
+// Check (b): the token-guard settings fragment the install recorded is merged into
+// .claude/settings.json — all four hook events. The ledger entry is the source of truth
+// for WHAT should be merged (never a second copy of cli.js's fragment literal — trap 3).
+function checkSettingsFragment(claudeDir) {
+  const entry = readPluginsLedger(claudeDir)[TOKEN_SAVER];
+  const fragmentHooks = entry && entry.settings && entry.settings.hooks;
+  if (!fragmentHooks) return { ok: false, msg: 'no recorded settings fragment to check (not installed)' };
+  let userSettings;
+  try {
+    userSettings = JSON.parse(fs.readFileSync(path.join(claudeDir, 'settings.json'), 'utf8'));
+  } catch (e) {
+    return { ok: false, msg: `.claude/settings.json unreadable (${e.message})` };
+  }
+  const missing = missingHookEvents(userSettings, fragmentHooks);
+  if (missing.length > 0) return { ok: false, msg: `hook events not merged into settings.json: ${missing.join(', ')}` };
+  return { ok: true, msg: `token-guard hooks merged into settings.json (${Object.keys(fragmentHooks).join(', ')})` };
+}
+
+// Check (c): the configured key is still accepted by the licensing service.
+async function checkLicenseKey(claudeDir, deps) {
+  const cfg = readActivationConfig(claudeDir);
+  const tg = (cfg && cfg.tokenGuard) || {};
+  if (!tg.verdictServiceKey) return { ok: false, msg: 'no license key in .claude/cca.config.json (tokenGuard.verdictServiceKey)' };
+  const apiBase = deps.apiBase || tg.verdictService || CCA_API_BASE;
+  try {
+    const plugin = await fetchModuleBundle(apiBase, tg.verdictServiceKey, deps.fetch || global.fetch);
+    if (!plugin) return { ok: false, msg: 'key not recognized by the licensing service' };
+    return { ok: true, msg: 'license key accepted by the licensing service' };
+  } catch (e) {
+    return { ok: false, msg: `could not reach the licensing service (${e.message})` };
+  }
+}
+
+// Read-only three-check verification; prints one ✓/✗ line per check, returns overall pass.
+async function verifyTokenSaver(claudeDir, deps) {
+  const checks = [checkBundleFiles(claudeDir), checkSettingsFragment(claudeDir), await checkLicenseKey(claudeDir, deps)];
+  for (const c of checks) {
+    console.log(c.ok ? '\x1b[32m%s\x1b[0m' : '\x1b[31m%s\x1b[0m', `   ${c.ok ? '✓' : '✗'} ${c.msg}`);
+  }
+  return checks.every(c => c.ok);
+}
+
+async function pluginActivate(key, claudeDir, deps) {
+  console.log('\x1b[36m%s\x1b[0m', '🔑 Activating TokenSaver…');
+  const plugin = await fetchModuleBundle(deps.apiBase || CCA_API_BASE, key, deps.fetch || global.fetch);
+  if (!plugin) throw new Error('key not recognized — check the license key from your purchase email');
+  const tempDir = materializeBundle(plugin);
+  try {
+    pluginAdd(tempDir, claudeDir, deps);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+  writeActivationConfig(claudeDir, key, deps.apiBase || CCA_API_BASE);
+  console.log('\x1b[90m%s\x1b[0m', `   (later, "plugin remove ${TOKEN_SAVER}" reverts the files and hooks; it leaves the license key in cca.config.json, which is harmless)`);
+  console.log('\x1b[36m%s\x1b[0m', '🔎 Verifying the install:');
+  const ok = await verifyTokenSaver(claudeDir, deps);
+  if (!ok) throw new Error('activation finished but verification failed — see the ✗ lines above');
+  console.log('\x1b[32m%s\x1b[0m', '✅ TokenSaver is activated and verified');
+}
+
+// ── Dispatch ─────────────────────────────────────────────────────────────────
+
+function requireArg(arg, usage) {
+  if (!arg) throw new Error(`usage: claude-code-autoconfig ${usage}`);
+  return arg;
+}
+
+async function runVerifyCommand(arg, claudeDir, deps) {
+  if (arg !== TOKEN_SAVER) throw new Error(`usage: claude-code-autoconfig plugin verify ${TOKEN_SAVER}`);
+  const ok = await verifyTokenSaver(claudeDir, deps);
+  if (!ok) {
+    console.log('\x1b[33m%s\x1b[0m', '   Fix: npx claude-code-autoconfig@latest plugin activate <key>  (the key is in your purchase email)');
+    process.exit(1);
+  }
+}
+
+const addCmd = (arg, claudeDir, deps) => pluginAdd(requireArg(arg, 'plugin add <path-to-plugin-dir>'), claudeDir, deps);
+const removeCmd = (arg, claudeDir, deps) => pluginRemove(requireArg(arg, 'plugin remove <name>'), claudeDir, deps);
+const listCmd = (_arg, claudeDir) => pluginList(claudeDir);
+const activateCmd = (arg, claudeDir, deps) => pluginActivate(requireArg(arg, 'plugin activate <key>'), claudeDir, deps);
+
+const PLUGIN_SUBCOMMANDS = {
+  add: addCmd, install: addCmd,
+  remove: removeCmd, rm: removeCmd, uninstall: removeCmd,
+  list: listCmd, ls: listCmd,
+  activate: activateCmd,
+  verify: runVerifyCommand
+};
+
+async function runPluginCommand(argv, deps) {
+  const handler = PLUGIN_SUBCOMMANDS[argv[3]];
+  if (!handler) {
+    console.log('Usage:');
+    console.log('  claude-code-autoconfig plugin add <dir>           Install a plugin from a folder');
+    console.log('  claude-code-autoconfig plugin remove <name>       Uninstall a plugin');
+    console.log('  claude-code-autoconfig plugin list                List installed plugins');
+    console.log('  claude-code-autoconfig plugin activate <key>      Install TokenSaver with a license key');
+    console.log(`  claude-code-autoconfig plugin verify ${TOKEN_SAVER}  Check a TokenSaver activation end-to-end`);
+    process.exit(argv[3] ? 1 : 0);
+  }
+  try {
+    await handler(argv[4], path.join(deps.cwd, '.claude'), deps);
   } catch (err) {
     console.log('\x1b[31m%s\x1b[0m', `❌ ${err.message}`);
     process.exit(1);
@@ -276,11 +470,18 @@ function runPluginCommand(argv, deps) {
 
 module.exports = {
   PLUGINS_LEDGER,
+  CCA_API_BASE,
   readPluginsLedger,
   writePluginsLedger,
   loadManifest,
   pluginAdd,
   pluginRemove,
   pluginList,
+  pluginActivate,
+  verifyTokenSaver,
+  fetchModuleBundle,
+  materializeBundle,
+  writeActivationConfig,
+  readActivationConfig,
   runPluginCommand
 };

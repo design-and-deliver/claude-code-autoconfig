@@ -153,8 +153,12 @@ function main() {
   // (cwd, isReservedName, mergeSettingsInto, unmergeSettingsFrom) at the dispatch
   // boundary below.
   if (process.argv[2] === 'plugin') {
-    runPluginCommand(process.argv, { cwd, isReservedName, mergeSettingsInto, unmergeSettingsFrom });
-    process.exit(0);
+    // runPluginCommand is async (activate/verify hit the licensing service). A sync
+    // process.exit(0) here would kill the process mid-fetch — exit only when it settles;
+    // the pending promise keeps the event loop alive past this early return.
+    runPluginCommand(process.argv, { cwd, isReservedName, mergeSettingsInto, unmergeSettingsFrom })
+      .then(() => process.exit(0), () => process.exit(1));
+    return;
   }
 
   const forceMode = process.argv.includes('--force');
