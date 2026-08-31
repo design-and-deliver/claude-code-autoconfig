@@ -4,6 +4,10 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.227
+- feat(plugins): New: `plugin activate <key>` installs TokenSaver with a license key
+- fix(continue): /continue no longer loses its place when a backup or antivirus sweep touches your session transcripts
+
 ## v1.0.226
 - fix(continue): cut all model-switch advice from the /clear + /continue flow (v18)
 
@@ -214,7 +218,4 @@
 
 ## v1.0.178
 - fix: move insideClaude check before file copying
-
-## v1.0.177
-- feat: add pre-install diagnostic logging and fix AUTOCONFIG_FILES
 
