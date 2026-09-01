@@ -177,7 +177,7 @@ test('every quiet card is header, trigger one-liner, numbered steps, and the rat
     const lines = card.split('\n');
     assert.ok(lines.length >= 4, code);
     assert.equal(lines[0], RESTART_SUFFIXED.has(code)
-      ? '⚠️ TokenSaver — /clear then /continue' : '⚠️ TokenSaver', code);
+      ? '⚠️ TokenSaver — /clear then /continue costs less' : '⚠️ TokenSaver', code);
     assert.ok(lines[1] && lines[1].startsWith('~ '), code); // the '~' trigger line precedes the steps
     assert.ok(lines.some(l => /^1\. /.test(l)), code);
     assert.equal(lines[lines.length - 1], '~ Want to see the rationale? /token-saver-rationale', code);
