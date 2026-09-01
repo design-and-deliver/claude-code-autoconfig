@@ -3825,7 +3825,7 @@ function preState(ctx) {
 // names the family instead. NOT covered here by design: R4's prompt-side idle block (different
 // surface — it pre-empts the charge; remedy is ↑+Enter) and R10's hard-cap deny (a deny reason
 // is model-facing, and the model needs the why inline to adapt instead of retrying blind).
-const DETAILS_LINE = '~ Want to see the rationale? /token-saver-rationale';
+const DETAILS_LINE = '~ Rationale → /token-saver-rationale';
 const MIGRATE_STEPS =
   '1. Select "No" below\n' +
   '2. /clear to purge old context\n' +

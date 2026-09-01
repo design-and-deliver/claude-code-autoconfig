@@ -31,7 +31,7 @@ const { QUIET_CARDS, AUTO_RECEIPTS } = require(HOOK);
 const MIGRATE_TAIL =
   '1. Select "No" below\n2. /clear to purge old context\n' +
   '3. /continue to restore the context for your last active use case\n' +
-  '~ Want to see the rationale? /token-saver-rationale';
+  '~ Rationale → /token-saver-rationale';
 const TRIO_TRIGGER = {
   'task-size': 'This task has outgrown one session',
   'rent': 'Each turn re-pays to carry old context',
@@ -180,7 +180,7 @@ test('every quiet card is header, trigger one-liner, numbered steps, and the rat
       ? '⚠️ TokenSaver — /clear then /continue costs less' : '⚠️ TokenSaver', code);
     assert.ok(lines[1] && lines[1].startsWith('~ '), code); // the '~' trigger line precedes the steps
     assert.ok(lines.some(l => /^1\. /.test(l)), code);
-    assert.equal(lines[lines.length - 1], '~ Want to see the rationale? /token-saver-rationale', code);
+    assert.equal(lines[lines.length - 1], '~ Rationale → /token-saver-rationale', code);
   }
 });
 
