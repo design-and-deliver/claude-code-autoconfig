@@ -67,7 +67,7 @@ function makeBundlePayload() {
       settings: { hooks },
       files: [
         { to: 'hooks/token-guard.js', content: '// token-guard body\n' },
-        { to: 'commands/token-saver-details.md', content: '# details\n' }
+        { to: 'commands/token-saver-rationale.md', content: '# rationale\n' }
       ]
     }
   };
@@ -139,7 +139,7 @@ async function main() {
 
   test('activate: bundle files land under .claude/', () => {
     assert(fs.readFileSync(path.join(claudeDir, 'hooks', 'token-guard.js'), 'utf8') === '// token-guard body\n', 'token-guard.js content');
-    assert(fs.existsSync(path.join(claudeDir, 'commands', 'token-saver-details.md')), 'token-saver-details.md exists');
+    assert(fs.existsSync(path.join(claudeDir, 'commands', 'token-saver-rationale.md')), 'token-saver-rationale.md exists');
   });
 
   test('activate: all four hook events merged into settings.json, user entries kept', () => {
@@ -223,7 +223,7 @@ async function main() {
 
   test('remove: files deleted, hooks reverted, user entries + license key kept', () => {
     assert(!fs.existsSync(path.join(claudeDir, 'hooks', 'token-guard.js')), 'token-guard.js removed');
-    assert(!fs.existsSync(path.join(claudeDir, 'commands', 'token-saver-details.md')), 'details command removed');
+    assert(!fs.existsSync(path.join(claudeDir, 'commands', 'token-saver-rationale.md')), 'rationale command removed');
     const settings = readJson(settingsPath);
     for (const ev of HOOK_EVENTS) {
       assert(countCommand(settings, ev, GUARD_CMD) === 0, `${ev} token-guard hook reverted`);

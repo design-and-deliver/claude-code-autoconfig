@@ -1,9 +1,9 @@
-// Rationale encapsulation (Andrew 2026-08-24) — verdictDetail + the /token-saver-details rail.
+// Rationale encapsulation (Andrew 2026-08-24) — verdictDetail + the /token-saver-rationale rail.
 //
 // The ruling this pins: most users never want the arithmetic, so with verdictDetail 'file'
 // every family-tagged cost ask renders its family's consolidated two-line card, and the full
 // card is persisted to .token-guard/<sid>.cards.jsonl for `--details` (the
-// /token-saver-details command) to read back. "It's not a black box, it's encapsulation":
+// /token-saver-rationale command) to read back. "It's not a black box, it's encapsulation":
 // the rationale is one command away, never deleted. The taxonomy (2026-08-24, same ruling
 // thread): ten short codes in QUIET_CARDS, doubling as conversation references and the ledger's
 // `family` field — one card per family because each family names its OWN remedy; every card
@@ -31,13 +31,13 @@ const { QUIET_CARDS, AUTO_RECEIPTS } = require(HOOK);
 const MIGRATE_TAIL =
   '1. Select "No" below\n2. /clear to purge old context\n' +
   '3. /continue to restore the context for your last active use case\n' +
-  '~ Want to see the rationale? /token-saver-details';
+  '~ Want to see the rationale? /token-saver-rationale';
 const TRIO_TRIGGER = {
-  'task-size': 'This task has outgrown one session — restarting now costs less',
-  'rent': 'Each turn re-pays to carry old context — restarting now costs less',
-  'session-total': "This session's context only grows — restarting now costs less",
+  'task-size': 'This task has outgrown one session',
+  'rent': 'Each turn re-pays to carry old context',
+  'session-total': "This session's context only grows",
 };
-const QUIET_CARD = code => '⚠️ TokenSaver — Restart Session\n~ ' + TRIO_TRIGGER[code] + '\n' + MIGRATE_TAIL;
+const QUIET_CARD = code => '⚠️ TokenSaver — /clear then /continue costs less\n~ ' + TRIO_TRIGGER[code] + '\n' + MIGRATE_TAIL;
 
 const usageLine = (id, inp) => JSON.stringify({ type: 'assistant',
   message: { id, model: 'claude-fable-5', usage: { input_tokens: inp, output_tokens: 10 } } }) + '\n';
@@ -85,14 +85,16 @@ function fired(guardCfg) {
 
 const cardsPath = fix =>
   path.join(fix.proj, '.claude', 'hooks', '.token-guard', 'sid-qc.cards.jsonl');
-const details = (projectDir) =>
-  (spawnSync('node', [HOOK, '--details', projectDir], { encoding: 'utf8', timeout: 20000 })
-    .stdout || '');
+const details = (projectDir, token) =>
+  (spawnSync('node', [HOOK, '--details', projectDir].concat(token ? [token] : []),
+    { encoding: 'utf8', timeout: 20000 }).stdout || '');
 
-test("verdictDetail 'file': the ask renders Andrew's consolidated card, verbatim", () => {
+// The rendered card's rationale pointer carries the fire-time sid token; the static
+// QUIET_CARDS map stays untagged (the copy contract the taxonomy tests pin below).
+test("verdictDetail 'file': the ask renders Andrew's consolidated card + the session token", () => {
   const { out } = fired({ verdictDetail: 'file' });
   assert.equal(out.permissionDecision, 'ask');
-  assert.equal(out.permissionDecisionReason, QUIET_CARD('rent'));
+  assert.equal(out.permissionDecisionReason, QUIET_CARD('rent') + ' sid-qc');
 });
 
 test("verdictDetail 'file': the full card is persisted for the details command", () => {
@@ -134,6 +136,19 @@ test('--details reads the NEWEST card across sessions — it answers after the m
   assert.match(out, /NEWEST-CARD/);
 });
 
+test('--details with the card-face token pins the firing session past a newer sibling', () => {
+  const { fix } = fired({ verdictDetail: 'file' });
+  // A parallel session lands a newer card; the token from sid-qc's card face must still win.
+  fs.writeFileSync(
+    path.join(fix.proj, '.claude', 'hooks', '.token-guard', 'sid-other.cards.jsonl'),
+    JSON.stringify({ at: '2999-01-01T00:00:00.000Z', family: 'session-total', card: 'SIBLING-CARD' }) + '\n');
+  const pinned = details(fix.proj, 'sid-qc');
+  assert.match(pinned, /\(rent, fired /);
+  assert.ok(!pinned.includes('SIBLING-CARD'));
+  // An unknown token names itself instead of silently falling back to the sibling's card.
+  assert.match(details(fix.proj, 'sid-gone'), /no cost-control verdicts recorded for session sid-gone\./);
+});
+
 test('--details with nothing recorded says so instead of erroring', () => {
   const fix = mkFixture();
   assert.match(details(fix.proj), /no cost-control verdicts recorded in this project yet\./);
@@ -152,7 +167,8 @@ test('the taxonomy is exactly the ten agreed short codes', () => {
   assert.deepEqual(Object.keys(QUIET_CARDS).sort(), [...CODES].sort());
 });
 
-// The five restart-remedy cards carry the '— Restart Session' header suffix (2026-08-27):
+// The five restart-remedy cards carry the '— /clear then /continue costs less' header suffix
+// (2026-08-27 as 'Restart Session'; literal commands + the shared verdict both 2026-08-31):
 // only their remedy continues after the dialog; the other five finish in approve / "No".
 const RESTART_SUFFIXED = new Set(['task-size', 'rent', 'session-total', 'idle-cache', 'post-bomb']);
 
@@ -161,10 +177,10 @@ test('every quiet card is header, trigger one-liner, numbered steps, and the rat
     const lines = card.split('\n');
     assert.ok(lines.length >= 4, code);
     assert.equal(lines[0], RESTART_SUFFIXED.has(code)
-      ? '⚠️ TokenSaver — Restart Session' : '⚠️ TokenSaver', code);
+      ? '⚠️ TokenSaver — /clear then /continue' : '⚠️ TokenSaver', code);
     assert.ok(lines[1] && lines[1].startsWith('~ '), code); // the '~' trigger line precedes the steps
     assert.ok(lines.some(l => /^1\. /.test(l)), code);
-    assert.equal(lines[lines.length - 1], '~ Want to see the rationale? /token-saver-details', code);
+    assert.equal(lines[lines.length - 1], '~ Want to see the rationale? /token-saver-rationale', code);
   }
 });
 
@@ -201,7 +217,7 @@ test("every receipt is Andrew's three-line card: saved header, one-liner, detail
     assert.equal(lines.length, 3, code);
     assert.equal(lines[0], '⚠️ TokenSaver — you just saved tokens', code);
     assert.ok(lines[1] && !lines[1].startsWith('~'), code); // the one-liner, not a pointer
-    assert.equal(lines[2], '~ See the details at /token-saver-details', code);
+    assert.equal(lines[2], '~ See the details at /token-saver-rationale', code);
   }
 });
 
@@ -214,7 +230,7 @@ test('a read divert denies model-facing, receipts the user, and feeds --details'
   const parsed = JSON.parse(raw);
   assert.equal(parsed.hookSpecificOutput.permissionDecision, 'deny');
   assert.match(parsed.hookSpecificOutput.permissionDecisionReason, /diverted, not loaded/);
-  assert.equal(parsed.systemMessage, AUTO_RECEIPTS['read-divert']);
+  assert.equal(parsed.systemMessage, AUTO_RECEIPTS['read-divert'] + ' sid-qc');
   const out = details(fix.proj);
   assert.match(out, /read-divert/);
   assert.match(out, /diverted, not loaded/);

@@ -366,7 +366,7 @@ const DEFAULTS = {
                                  // renders the full arithmetic card in the ask dialog; 'file'
                                  // renders the family's consolidated TokenSaver card and keeps the
                                  // full version in .token-guard/<sid>.cards.jsonl for
-                                 // /token-saver-details. The full card is persisted in BOTH modes.
+                                 // /token-saver-rationale. The full card is persisted in BOTH modes.
 };
 
 // ---------------------------------------------------------------------------
@@ -2097,7 +2097,7 @@ const reArmAt = (observed, base, fires) => observed + base * Math.pow(2, fires -
 // recommendation that never varies is wallpaper. The discriminator is the SHAPE of the call being
 // gated, which PreToolUse already hands us. Two classes are mechanically decidable:
 //
-//   'skip'  a turn-ender (git add/commit/status/diff --stat). Tiny output, and it IS the
+//   'skip'  a turn-ender (git add/commit/push/status/diff --stat). Tiny output, and it IS the
 //           "land this turn at a commit point" the gate's own Choice bullet asks for. Firing here
 //           would contradict the advice three lines above it — and once a gate has recommended
 //           approve, the next real warning gets dismissed by reflex. So the gate does not fire at
@@ -2118,10 +2118,16 @@ const reArmAt = (observed, base, fires) => observed + base * Math.pow(2, fires -
 // unrecognized segment disqualifies the whole command, so a miss costs one extra warning — never
 // a silently skipped gate. (Quoted `;`/`&&` inside a commit message split badly and fail closed
 // for the same reason.)
+// `git push` and a BOUNDED head/tail joined 2026-08-31: the common landing shape is one
+// `git add && git commit && git push 2>&1 | tail -2`, and either unlisted segment was drawing
+// the R14 card onto the exact commit its own remedy asks for (observed in a JAE session that
+// day). Push output is tiny; head/tail must carry a count (`-N`/`-n N`) so a bare `tail -f`
+// still fails closed.
 const TURN_ENDER_SEG = [
   /^git\s+add\b/, /^git\s+commit\b/, /^git\s+status\b/, /^git\s+rev-parse\b/,
   /^git\s+diff\s+(--stat|--cached\s+--stat|--staged\s+--stat)\b/,
   /^git\s+log\s+--oneline\b/, /^git\s+branch\s+--show-current\b/, /^cd\s/,
+  /^git\s+push\b/, /^(?:head|tail)\s+-(?:n\s*)?\d+\b/,
 ];
 const shellSegs = cmd => String(cmd || '').split(/&&|\|\||[;|]/).map(s => s.trim()).filter(Boolean);
 function isTurnEnder(cmd) {
@@ -3802,7 +3808,7 @@ function preState(ctx) {
 
 // Rationale encapsulation (Andrew 2026-08-24): most users never want the arithmetic, so with
 // verdictDetail 'file' every family-tagged cost ask renders its family's consolidated card
-// instead, and the full card is read back via /token-saver-details. Not a black box — the
+// instead, and the full card is read back via /token-saver-rationale. Not a black box — the
 // rationale is one command away, which still shows the work; inline detail wears the reader
 // down exactly when the rec is confidently valid.
 //
@@ -3815,28 +3821,34 @@ function preState(ctx) {
 // (task-size/rent/session-total) shares its remedy steps deliberately — same remedy — and
 // those steps are Andrew's, verbatim (copy contract; patch only with sign-off); each of the
 // three still carries its own trigger line.
-// Codes stay off the card face: the agreed wording is the contract, and /token-saver-details
+// Codes stay off the card face: the agreed wording is the contract, and /token-saver-rationale
 // names the family instead. NOT covered here by design: R4's prompt-side idle block (different
 // surface — it pre-empts the charge; remedy is ↑+Enter) and R10's hard-cap deny (a deny reason
 // is model-facing, and the model needs the why inline to adapt instead of retrying blind).
-const DETAILS_LINE = '~ Want to see the rationale? /token-saver-details';
+const DETAILS_LINE = '~ Want to see the rationale? /token-saver-rationale';
 const MIGRATE_STEPS =
   '1. Select "No" below\n' +
   '2. /clear to purge old context\n' +
   '3. /continue to restore the context for your last active use case\n';
-// The five restart-remedy cards carry a '— Restart Session' header suffix (Andrew 2026-08-27):
-// they are the only cards whose remedy continues AFTER the dialog; the other five finish in the
-// dialog's own approve / "No", so their header stays bare (ux: implicit-over-explicit).
-const migrateCard = trigger => '⚠️ TokenSaver — Restart Session\n~ ' + trigger + '\n' + MIGRATE_STEPS + DETAILS_LINE;
+// The five restart-remedy cards carry a '— /clear then /continue costs less' header suffix
+// (Andrew 2026-08-27 as 'Restart Session'; renamed to the literal commands at his ask
+// 2026-08-31 — "Restart Session" could read as close-the-terminal, and the commands ARE the
+// remedy, per ux: action-lines-lead-with-the-action; 'costs less' joined the header later the
+// same day — the '— restarting now costs less' tail was identical across the trio, so the
+// shared verdict moved into the shared header and each '~' line carries only its per-family
+// trigger): they are the only cards whose remedy continues AFTER the dialog; the other five
+// finish in the dialog's own approve / "No", so their header stays bare
+// (ux: implicit-over-explicit).
+const migrateCard = trigger => '⚠️ TokenSaver — /clear then /continue costs less\n~ ' + trigger + '\n' + MIGRATE_STEPS + DETAILS_LINE;
 const QUIET_CARDS = {
   'task-size':                     // R13b — one turn's spend crossed the turn gate
-    migrateCard('This task has outgrown one session — restarting now costs less'),
+    migrateCard('This task has outgrown one session'),
   'rent':                          // R14 — the turn's cached re-reads crossed the rent gate
-    migrateCard('Each turn re-pays to carry old context — restarting now costs less'),
+    migrateCard('Each turn re-pays to carry old context'),
   'session-total':                 // R20 — total session spend crossed the tripwire
-    migrateCard("This session's context only grows — restarting now costs less"),
+    migrateCard("This session's context only grows"),
   'idle-cache':                    // R4b — self-wake past the cache TTL, charge already landed
-    '⚠️ TokenSaver — Restart Session\n' +
+    '⚠️ TokenSaver — /clear then /continue costs less\n' +
     '~ Idle past the cache window — picking up here re-uploaded the session at full price\n' +
     MIGRATE_STEPS + DETAILS_LINE,
   'payload-door':                  // R8 — a Read/Skill call is about to import a bomb payload
@@ -3850,7 +3862,7 @@ const QUIET_CARDS = {
     '1. Select "No" below\n' +
     '2. Route the rest through a subagent\n' + DETAILS_LINE,
   'post-bomb':                     // R3 — a bomb landed at fat context, one-time confirm
-    '⚠️ TokenSaver — Restart Session\n' +
+    '⚠️ TokenSaver — /clear then /continue costs less\n' +
     '~ A large payload just landed\n' +
     '1. Select "No" below\n' +
     '2. /clear to shed it\n' +
@@ -3870,7 +3882,7 @@ const QUIET_CARDS = {
 };
 
 // Append the full card to the per-session ledger the details command reads (newest-last
-// JSONL). Written in BOTH detail modes, so /token-saver-details answers even for a card that
+// JSONL). Written in BOTH detail modes, so /token-saver-rationale answers even for a card that
 // rendered verbose. Mkdirs for itself: the workflow asks reach here without saveState (they
 // never load state), so the directory may not exist yet.
 function persistCard(projectDir, sid, family, card) {
@@ -3891,10 +3903,18 @@ function gateAsk(ctx, reason, family) {
   if (ctx.st) saveState(ctx.projectDir, ctx.sid, ctx.st);
   if (family) {
     persistCard(ctx.projectDir, ctx.sid, family, reason);
-    if (ctx.cfg.verdictDetail === 'file') reason = QUIET_CARDS[family] || reason;
+    if (ctx.cfg.verdictDetail === 'file') reason = withSidToken(QUIET_CARDS[family], ctx.sid) || reason;
   }
   return { kind: 'ask', reason };
 }
+
+// The rendered rationale pointer carries the FIRE-TIME session token (first 8 chars of the sid)
+// so `/token-saver-rationale <token>` pins the lookup to the session that fired: a parallel
+// session's newer card can't shadow it, and the token survives the /clear + /continue sid
+// change the card itself recommends. Appended at render time, never baked into QUIET_CARDS /
+// AUTO_RECEIPTS — the static maps stay the copy contract the tests pin.
+const sidToken = sid => String(sid).slice(0, 8);
+const withSidToken = (card, sid) => (card && sid) ? card + ' ' + sidToken(sid) : card;
 
 // Autonomous-save receipts (Andrew 2026-08-27): the silent divert denies (R8's read divert,
 // R18's re-read divert) save tokens with no user action at all — the model self-corrects and
@@ -3902,10 +3922,10 @@ function gateAsk(ctx, reason, family) {
 // rendered straight to the user via the hook's systemMessage field, while the deny reason
 // stays model-facing (the model still needs the why inline to adapt). The full model-facing
 // rationale is persisted under the receipt's family, so the receipt's details line is backed
-// by /token-saver-details exactly like a quiet card. NOT receipted by design: R10's hard-cap
+// by /token-saver-rationale exactly like a quiet card. NOT receipted by design: R10's hard-cap
 // deny (the model relays it, so the user already sees it) and the Bash/Grep verdicts (they
 // fold into the spend cards' ask copy, never a silent deny).
-const RECEIPT_LINE = '~ See the details at /token-saver-details';
+const RECEIPT_LINE = '~ See the details at /token-saver-rationale';
 const savedCard = oneLiner => '⚠️ TokenSaver — you just saved tokens\n' + oneLiner + '\n' + RECEIPT_LINE;
 const AUTO_RECEIPTS = {
   'read-divert':                   // R8 door 2 — a whole-file Read rerouted to a ranged read
@@ -3917,7 +3937,7 @@ const AUTO_RECEIPTS = {
 // A silent divert saved tokens without asking anybody: persist the rationale, attach the receipt.
 function denySaved(ctx, family, reason) {
   persistCard(ctx.projectDir, ctx.sid, family, reason);
-  return { kind: 'deny', reason, receipt: AUTO_RECEIPTS[family] };
+  return { kind: 'deny', reason, receipt: withSidToken(AUTO_RECEIPTS[family], ctx.sid) };
 }
 
 // A turn-ender defers BOTH in-turn tripwires without re-arming — see gateVerdict for why
@@ -5236,11 +5256,14 @@ async function report(transcriptPath) {
 
 // --details support: the newest persisted spend-gate card across ALL of this project's
 // sessions — newest, not current-sid, because the natural moment to ask is right after the
-// /clear + /continue migration the card recommended, when the sid has already changed.
-function latestCard(projectDir) {
+// /clear + /continue migration the card recommended, when the sid has already changed. A
+// session token (the sid prefix every card face prints) pins the lookup to the firing
+// session instead, so a parallel session's newer card can't shadow it.
+function latestCard(projectDir, token) {
   const dir = stateDir(projectDir);
   let best = null;
   for (const f of fs.readdirSync(dir).filter(n => n.endsWith('.cards.jsonl'))) {
+    if (token && !f.startsWith(token)) continue;
     for (const line of fs.readFileSync(path.join(dir, f), 'utf8').split('\n')) {
       if (!line.trim()) continue;
       try {
@@ -5284,13 +5307,17 @@ if (require.main === module) {
       .catch(() => { /* never throw */ })
       .finally(() => process.exit(0));
   } else if (process.argv[2] === '--details') {
-    // CLI surface behind /token-saver-details. A missing state dir is the same answer as an
-    // empty one: nothing recorded yet.
+    // CLI surface behind /token-saver-rationale. A missing state dir is the same answer as an
+    // empty one: nothing recorded yet. argv[3] = projectDir; argv[4] = optional session token
+    // from the card face, pinning the lookup to the session that fired.
     try {
-      const e = latestCard(process.argv[3] || process.env.CLAUDE_PROJECT_DIR || process.cwd());
+      const token = process.argv[4] || null;
+      const e = latestCard(process.argv[3] || process.env.CLAUDE_PROJECT_DIR || process.cwd(), token);
       process.stdout.write(e
         ? `Full card behind the last cost-control verdict (${e.family}, fired ${e.at}):\n\n${e.card}\n`
-        : 'no cost-control verdicts recorded in this project yet.\n');
+        : token
+          ? `no cost-control verdicts recorded for session ${token}.\n`
+          : 'no cost-control verdicts recorded in this project yet.\n');
     } catch (_) {
       process.stdout.write('no cost-control verdicts recorded in this project yet.\n');
     }
