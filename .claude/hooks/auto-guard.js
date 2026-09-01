@@ -12,8 +12,10 @@
 //   "autoGuard": { "enabled": true }
 // Per-category override (optional):
 //   "autoGuard": { "enabled": true, "categories": { "installs": "off" } }
-// with values "ask" | "deny" | "off". /autoconfig offers this once; the answer is
-// recorded as autoGuardPrompted in the same file.
+// with values "ask" | "deny" | "off". /enable-auto-mode and /disable-auto-mode
+// (backed by scripts/auto-guard-set.js) write these overrides so nobody hand-edits
+// the JSON. /autoconfig offers the opt-in once; the answer is recorded as
+// autoGuardPrompted in the same file.
 //
 // FAIL OPEN: any internal error exits 0 with no output — a broken guard must
 // slow nothing down and block nothing. Severity: any "deny" hit wins over "ask".
@@ -114,10 +116,16 @@ function main() {
       hookEventName: 'PreToolUse',
       permissionDecision: top.action,
       permissionDecisionReason:
-        `auto-guard: ${top.label} (${top.name}). Tune in .claude/cca.config.json → autoGuard.categories.${top.name}: "ask" | "deny" | "off".`,
+        `auto-guard: ${top.label} (${top.name}). ` + (top.action === 'deny'
+          ? `/enable-auto-mode ${top.name} to allow this category.`
+          : `/enable-auto-mode ${top.name} to stop these prompts.`),
     },
   }));
 }
 
-try { main(); } catch { /* fail open */ }
-process.exit(0);
+module.exports = { CATEGORIES };
+
+if (require.main === module) {
+  try { main(); } catch { /* fail open */ }
+  process.exit(0);
+}

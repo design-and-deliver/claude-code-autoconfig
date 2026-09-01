@@ -49,6 +49,8 @@ your-project/
     │   ├── check-commit.md            #   /check-commit - uncommitted-work check
     │   ├── commit-and-push.md         #   /commit-and-push - git workflow
     │   ├── continue.md                #   /continue - resume the last session's work
+    │   ├── enable-auto-mode.md        #   /enable-auto-mode - stop auto-guard prompts for a category
+    │   ├── disable-auto-mode.md       #   /disable-auto-mode - restore a category's default guard
     │   ├── enable-retro.md            #   /enable-retro - opt-in tech-debt log
     │   ├── enable-status-beeps.md     #   /enable-status-beeps - tab status beeps on
     │   ├── disable-status-beeps.md    #   /disable-status-beeps - tab status beeps off
@@ -80,6 +82,7 @@ your-project/
     ├── docs/                          # Interactive documentation
     │   └── autoconfig.docs.html       #   Open with /show-docs
     ├── scripts/                       # Utility scripts
+    │   ├── auto-guard-set.js          #   Backend for /enable-auto-mode + /disable-auto-mode
     │   ├── gls-downscale.js           #   Shrink /gls screenshots to save image tokens
     │   └── sync-docs.js               #   Regenerate interactive HTML docs
     ├── sounds/                        # Status-cue audio for the status beeps
@@ -129,6 +132,8 @@ Autoconfig is **self-configuring**. Run `/autoconfig` and Claude:
 | `/sync-claude-md` | Repairs CLAUDE.md markers and Discoveries section |
 | `/enable-retro` | Opt-in: Claude logs tech debt to `.claude/retro/` |
 | `/submit-claude-code-github-issue` | Files an upstream issue with duplicate-checking |
+| `/enable-auto-mode` | Stop auto-guard prompts for one category so auto mode can cover it |
+| `/disable-auto-mode` | Restore auto-guard's default prompting/blocking for a category |
 | `/enable-status-beeps` | Turn on opt-in Pole Position status beeps |
 | `/disable-status-beeps` | Turn off the status beeps |
 | `/enable-arcade-beeps` | Deprecated alias for `/enable-status-beeps` (upgrades only) |
