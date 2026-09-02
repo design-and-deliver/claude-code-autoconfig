@@ -4,14 +4,7 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
-## v1.0.228
-- feat(cards): tighten quiet-card footer to '~ Rationale → /token-saver-rationale'
-- feat(auto-guard): add /enable-auto-mode + /disable-auto-mode one-tap outs
-- test(token-guard): catch quiet-card header assertion up to the 'costs less' copy
-- feat(token-saver): rename details command to /token-saver-rationale
-
 ## v1.0.227
-- feat(plugins): New: `plugin activate <key>` installs TokenSaver with a license key
 - fix(continue): /continue no longer loses its place when a backup or antivirus sweep touches your session transcripts
 
 ## v1.0.226

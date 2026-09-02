@@ -58,6 +58,16 @@ const OVERRIDES = {
   // advisory is gated on the project-tier token-guard.js, so user installs never see it.
   // Nulled rather than reworded — advertising it would announce a feature users can't get.
   '016a2e9': null, 'bbf754f': null,
+  // TokenSaver (paid cost-control module) is still being tested locally and is not ready to
+  // be advertised to users (Andrew, 2026-09-02). These bullets rode into v1.0.227 (published)
+  // and v1.0.228 (versioned, never published) before that call — nulled so no upgrade screen
+  // announces it. 0b0ce53 / 57bee17 were unpushed but sat under the v1.0.228 tag, so an
+  // OVERRIDES row is still the sanctioned fix over rewriting tagged history.
+  '654ed97': null, // plugin activate <key> installs TokenSaver
+  '0406005': null, // rename details command to /token-saver-rationale
+  'de591ad': null, // test(token-guard) quiet-card header assertion
+  '0b0ce53': null, // /enable-auto-mode + /disable-auto-mode
+  '57bee17': null, // quiet-card footer wording
   // …and the v1.0.214 bullets that advertised it (120d3c7) or other token-guard features
   // (ccr's guard flow, drift card, warn ladder, 80% heads-up) — CHANGELOG regenerates from
   // all tags on every release, so these nulls scrub the historical sections too:

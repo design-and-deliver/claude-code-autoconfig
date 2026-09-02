@@ -456,8 +456,8 @@ async function runPluginCommand(argv, deps) {
     console.log('  claude-code-autoconfig plugin add <dir>           Install a plugin from a folder');
     console.log('  claude-code-autoconfig plugin remove <name>       Uninstall a plugin');
     console.log('  claude-code-autoconfig plugin list                List installed plugins');
-    console.log('  claude-code-autoconfig plugin activate <key>      Install TokenSaver with a license key');
-    console.log(`  claude-code-autoconfig plugin verify ${TOKEN_SAVER}  Check a TokenSaver activation end-to-end`);
+    // `activate <key>` and `verify token-saver` still work but are deliberately unlisted:
+    // TokenSaver is in local testing and not yet advertised to users (2026-09-02).
     process.exit(argv[3] ? 1 : 0);
   }
   try {
