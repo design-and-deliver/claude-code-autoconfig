@@ -119,7 +119,10 @@ function installDeps(cwd, main_, report) {
       ? 'junction is opt-in — see ⛔9 in parallel-session-worktrees.md'
       : 'package-lock.json differs from main checkout';
   report.push(`  – fallback npm install (${reason})`);
-  execFileSync(NPM, ['install', '--no-audit', '--no-fund'], { cwd, stdio: 'inherit' });
+  // Node >= 18.20 / 20.12 refuses to spawn a .cmd without a shell (EINVAL, CVE-2024-27980),
+  // so on Windows npm.cmd has to go through one.
+  execFileSync(NPM, ['install', '--no-audit', '--no-fund'],
+    { cwd, stdio: 'inherit', shell: process.platform === 'win32' });
   report.push('  ✓ done     npm install');
 }
 
