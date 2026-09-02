@@ -8,6 +8,8 @@
 //   - migrateLegacyHookCommands: rewrite legacy cwd-relative hook commands to the
 //     ${CLAUDE_PROJECT_DIR:-.}-anchored form (must run BEFORE a merge, or the merge
 //     doubles the hook — see the ordering guard in test/cli-install.test.js).
+//   - migrateRenamedToolMatchers: add `Agent` beside `Task` in CCA-managed hook matchers
+//     (Claude Code renamed the subagent tool); also BEFORE the merge, for the same reason.
 //   - migrateRetiredPermissionRules: strip permission rules CCA once shipped and has
 //     withdrawn (the additive merge would otherwise preserve them forever), returning the
 //     count removed so a caller can skip rewriting an unchanged file.
@@ -55,6 +57,40 @@ function migrateLegacyHookCommands(userSettings) {
       }
     }
   }
+}
+
+// Claude Code renamed its subagent tool from `Task` to `Agent` (2.1.x). A hook matcher that
+// still names only `Task` silently stops firing for subagent calls on current builds — no
+// error, the title just stops repainting while a subagent runs. Rewrite CCA-managed matchers
+// (ones carrying a .claude/hooks/ command) IN PLACE to name both: the matcher is a regex
+// alternation, so older builds keep matching `Task` and newer ones match `Agent`. `Agent`
+// is inserted right after `Task` so the result is byte-identical to the shipped template,
+// letting mergeSettingsInto find the same-matcher entry instead of appending a second one.
+// A matcher carrying only the user's own hooks is theirs and is never touched. Must run
+// BEFORE the merge (see the ordering guard in test/cli-install.test.js).
+function migrateRenamedToolMatchers(userSettings) {
+  if (!userSettings || !userSettings.hooks) return;
+  for (const matchers of Object.values(userSettings.hooks)) {
+    if (!Array.isArray(matchers)) continue;
+    for (const matcher of matchers) {
+      if (carriesManagedHook(matcher)) matcher.matcher = withAgentBesideTask(matcher.matcher);
+    }
+  }
+}
+
+// The matcher string with `Agent` inserted right after `Task`; returned unchanged when the
+// string names no `Task`, already names `Agent`, or is not a string at all.
+function withAgentBesideTask(matcherString) {
+  if (typeof matcherString !== 'string') return matcherString;
+  const parts = matcherString.split('|');
+  if (!parts.includes('Task') || parts.includes('Agent')) return matcherString;
+  parts.splice(parts.indexOf('Task') + 1, 0, 'Agent');
+  return parts.join('|');
+}
+
+// True when at least one hook under this matcher is a CCA-managed .claude/hooks/ command.
+function carriesManagedHook(matcher) {
+  return (matcher.hooks || []).some(h => typeof h.command === 'string' && /\.claude\/hooks\//.test(h.command));
 }
 
 // Permission rules CCA once shipped and has since withdrawn. Two families:
@@ -300,6 +336,7 @@ function unmergeSettingsFrom(userSettings, fragment, added) {
 
 module.exports = {
   migrateLegacyHookCommands,
+  migrateRenamedToolMatchers,
   migrateRetiredPermissionRules,
   mergeSettingsInto,
   unmergeSettingsFrom

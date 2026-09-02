@@ -6,7 +6,7 @@ const readline = require('readline');
 const { execSync, spawn } = require('child_process');
 const { formatUpdateSummary } = require('./update-summary.js');
 const { runPluginCommand } = require('./lib/plugins.js');
-const { migrateLegacyHookCommands, migrateRetiredPermissionRules, mergeSettingsInto, unmergeSettingsFrom } = require('./lib/settings-merge.js');
+const { migrateLegacyHookCommands, migrateRenamedToolMatchers, migrateRetiredPermissionRules, mergeSettingsInto, unmergeSettingsFrom } = require('./lib/settings-merge.js');
 const { pullUpdates } = require('./lib/updates.js');
 const { cleanupNulFile } = require('./lib/nul-cleanup.js');
 
@@ -669,6 +669,11 @@ function main() {
         // Upgrade legacy relative hook commands FIRST so the anchored template entries below
         // dedupe against them instead of doubling up (see migrateLegacyHookCommands).
         migrateLegacyHookCommands(userSettings);
+
+        // Claude Code renamed the subagent tool Task -> Agent; a matcher naming only Task
+        // stops firing for subagents. Rewrite CCA-managed matchers to name both, BEFORE the
+        // merge so the template's matcher is found as the same entry rather than appended.
+        migrateRenamedToolMatchers(userSettings);
 
         // Scrub permission rules CCA once shipped and has withdrawn (e.g. Write(./**), which
         // newer Claude Code warns about at session start) — the additive merge below never

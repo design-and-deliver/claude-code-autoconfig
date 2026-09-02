@@ -503,7 +503,7 @@ console.log('Legacy Hook-Command Migration:');
 
 // The settings-merge helpers live in bin/lib/settings-merge.js (Phase 3 seam 2) — require
 // them directly (a real module under test) instead of source-extracting them from cli.js.
-const { migrateLegacyHookCommands, migrateRetiredPermissionRules, mergeSettingsInto } = require('../bin/lib/settings-merge.js');
+const { migrateLegacyHookCommands, migrateRenamedToolMatchers, migrateRetiredPermissionRules, mergeSettingsInto } = require('../bin/lib/settings-merge.js');
 
 test('migrateLegacyHookCommands rewrites managed relative commands, leaves user commands alone', () => {
   const migrate = migrateLegacyHookCommands;
@@ -591,6 +591,56 @@ test('cli.js migrates BEFORE merging on the settings upgrade path (ordering guar
   assert(migrateAt !== -1, 'upgrade path must call migrateLegacyHookCommands');
   assert(mergeAt !== -1, 'upgrade path must call mergeSettingsInto');
   assert(migrateAt < mergeAt, 'migration must run before the merge or upgrades double the hooks');
+});
+
+test('migrateRenamedToolMatchers adds Agent beside Task on CCA-managed matchers only', () => {
+  const TT = 'node "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/terminal-title.js"';
+  const OLD = 'Bash|Write|Edit|MultiEdit|NotebookEdit|WebFetch|WebSearch|Task|AskUserQuestion';
+  const NEW = 'Bash|Write|Edit|MultiEdit|NotebookEdit|WebFetch|WebSearch|Task|Agent|AskUserQuestion';
+  const s = {
+    hooks: {
+      PostToolUse: [
+        { matcher: OLD, hooks: [{ type: 'command', command: TT }] },
+        { matcher: 'Task', hooks: [{ type: 'command', command: 'node my-own-hook.js' }] },
+        { matcher: 'Task|Agent', hooks: [{ type: 'command', command: TT }] },
+        { matcher: 'TaskOutput|Bash', hooks: [{ type: 'command', command: TT }] },
+      ],
+    },
+  };
+  migrateRenamedToolMatchers(s);
+  const m = s.hooks.PostToolUse.map(x => x.matcher);
+  assert(m[0] === NEW, `managed Task matcher must gain Agent right after Task, got: ${m[0]}`);
+  assert(m[1] === 'Task', `a user-owned matcher must be left alone, got: ${m[1]}`);
+  assert(m[2] === 'Task|Agent', `an already-migrated matcher must not double up, got: ${m[2]}`);
+  assert(m[3] === 'TaskOutput|Bash', `TaskOutput is not Task — must be untouched, got: ${m[3]}`);
+  migrateRenamedToolMatchers(s);
+  assert(s.hooks.PostToolUse[0].matcher === NEW, 'migration must be idempotent');
+  assert(migrateRenamedToolMatchers(null) === undefined, 'null settings must be a no-op');
+});
+
+test('upgrade path: migrate-then-merge lands the shipped Task|Agent matcher as ONE entry', () => {
+  const TT = 'node "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/terminal-title.js"';
+  const OLD = 'Bash|Write|Edit|MultiEdit|NotebookEdit|WebFetch|WebSearch|Task|AskUserQuestion';
+  const shipped = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '.claude', 'settings.json'), 'utf8'));
+  const shippedTT = shipped.hooks.PostToolUse.find(m => (m.hooks || []).some(h => h.command === TT));
+  assert(shippedTT, 'shipped settings.json must register terminal-title under PostToolUse');
+  assert(shippedTT.matcher.split('|').includes('Agent'),
+    `shipped PostToolUse terminal-title matcher must name Agent, got: ${shippedTT.matcher}`);
+  const user = { hooks: { PostToolUse: [{ matcher: OLD, hooks: [{ type: 'command', command: TT }] }] } };
+  migrateRenamedToolMatchers(user);
+  mergeSettingsInto(user, { hooks: { PostToolUse: shipped.hooks.PostToolUse } });
+  const ttEntries = user.hooks.PostToolUse.filter(m => (m.hooks || []).some(h => h.command === TT));
+  assert(ttEntries.length === 1, `terminal-title must run under exactly one matcher after upgrade, got ${ttEntries.length}`);
+  assert(ttEntries[0].matcher === shippedTT.matcher,
+    `upgraded matcher must equal the shipped one, got: ${ttEntries[0].matcher}`);
+});
+
+test('cli.js migrates renamed tool matchers BEFORE merging (ordering guard)', () => {
+  const src = fs.readFileSync(CLI_PATH, 'utf8');
+  const migrateAt = src.indexOf('migrateRenamedToolMatchers(userSettings);');
+  const mergeAt = src.indexOf('mergeSettingsInto(userSettings, pkgSettings);');
+  assert(migrateAt !== -1, 'upgrade path must call migrateRenamedToolMatchers');
+  assert(migrateAt < mergeAt, 'matcher migration must run before the merge or the old matcher is kept');
 });
 
 test('migrateRetiredPermissionRules strips retired rules, leaves user rules alone', () => {

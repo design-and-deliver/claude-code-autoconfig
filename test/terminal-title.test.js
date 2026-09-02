@@ -1199,6 +1199,18 @@ test('every .claude/hooks command in the shipped settings.json is CLAUDE_PROJECT
     }
   }
 });
+test('the shipped PostToolUse terminal-title matcher covers the subagent tool under both names', () => {
+  const shipped = JSON.parse(
+    fs.readFileSync(path.join(__dirname, '..', '.claude', 'settings.json'), 'utf8')
+  );
+  const entry = (shipped.hooks.PostToolUse || []).find(m =>
+    (m.hooks || []).some(h => /terminal-title\.js"$/.test(h.command)));
+  assert(entry, 'terminal-title must be registered under PostToolUse');
+  const re = new RegExp(`^(${entry.matcher})$`);
+  // Claude Code renamed Task -> Agent (2.1.x); older builds still send Task.
+  assert(re.test('Agent'), `matcher must fire for Agent (current builds), got: ${entry.matcher}`);
+  assert(re.test('Task'), `matcher must still fire for Task (older builds), got: ${entry.matcher}`);
+});
 console.log();
 
 // ---- Duplicate-session guard (warn / kill on a live colliding twin) --------
