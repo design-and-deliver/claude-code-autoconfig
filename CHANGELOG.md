@@ -4,6 +4,9 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.229
+- fix(terminal-title): Tab titles keep updating while Claude runs a subagent on current Claude Code builds
+
 ## v1.0.227
 - fix(continue): /continue no longer loses its place when a backup or antivirus sweep touches your session transcripts
 
@@ -211,7 +214,4 @@
 
 ## v1.0.180
 - fix: improve autoconfig-update messaging when all updates are applied
-
-## v1.0.179
-- fix: add settings.local.json to AUTOCONFIG_FILES, tighten docs table columns
 
