@@ -7,6 +7,7 @@ const { execSync, spawn } = require('child_process');
 const { formatUpdateSummary } = require('./update-summary.js');
 const { runPluginCommand } = require('./lib/plugins.js');
 const { migrateLegacyHookCommands, migrateRenamedToolMatchers, migrateRetiredPermissionRules, mergeSettingsInto, unmergeSettingsFrom } = require('./lib/settings-merge.js');
+const { MIN_CLAUDE_CODE_VERSION, checkClaudeVersion } = require('./lib/claude-version.js');
 const { pullUpdates } = require('./lib/updates.js');
 const { cleanupNulFile } = require('./lib/nul-cleanup.js');
 
@@ -235,13 +236,13 @@ function main() {
     } catch (_) { /* cosmetic only — never block the install */ }
   })();
 
-  // Step 1: Check if Claude Code is installed
-  function isClaudeInstalled() {
+  // Step 1: Check if Claude Code is installed — and new enough. The probe keeps its output
+  // (`2.1.257 (Claude Code)`) for the version gate below; a failed probe means not installed.
+  function probeClaudeVersion() {
     try {
-      execSync('claude --version', { stdio: 'ignore' });
-      return true;
+      return execSync('claude --version', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
     } catch {
-      return false;
+      return null;
     }
   }
 
@@ -260,17 +261,35 @@ function main() {
     }
   }
 
-  if (!isClaudeInstalled()) {
+  let claudeVersionOutput = probeClaudeVersion();
+  if (claudeVersionOutput === null) {
     mark('claude-check');
     if (!installClaude()) {
       process.exit(1);
     }
     mark('claude-install');
+    claudeVersionOutput = probeClaudeVersion();
   } else {
     mark('claude-check');
   }
 
-  console.log(paint('green', '✅ Claude Code detected'));
+  // Minimum-version gate — must run BEFORE any file copying. The shipped settings turn on
+  // the Concise output style, which Claude Code below v2.1.237 silently ignores; rather than
+  // install a setting that does nothing, stop here and say what to do. Applies on every
+  // path, --bootstrap included: an in-session refresh on an old binary is the same no-op.
+  // Unparseable probe output passes (see checkClaudeVersion) — the floor can't be read.
+  const claudeVersion = checkClaudeVersion(claudeVersionOutput);
+  if (claudeVersion.tooOld) {
+    console.log(paint('red', `● Claude Code v${claudeVersion.found} is too old — claude-code-autoconfig needs v${MIN_CLAUDE_CODE_VERSION} or newer.`));
+    console.log();
+    console.log('   Update Claude Code, then run this command again:');
+    console.log();
+    console.log('   ' + paint('cyan', 'claude update'));
+    console.log();
+    process.exit(1);
+  }
+
+  console.log(paint('green', claudeVersion.found ? `✅ Claude Code v${claudeVersion.found} detected` : '✅ Claude Code detected'));
 
   // Step 2: Backup existing .claude/ if it has user content
   const claudeDest = path.join(cwd, '.claude');

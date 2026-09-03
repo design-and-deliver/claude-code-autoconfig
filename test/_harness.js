@@ -63,15 +63,19 @@ function summary() {
 }
 
 // A throwaway dir on PATH holding a `claude` that answers `claude --version` and exits 0, so
-// isClaudeInstalled() returns true without a real Claude Code install (and never shells out to
-// `npm install -g`). Cross-platform: .cmd on Windows, an executable shell script elsewhere.
-function makeClaudeShim() {
+// probeClaudeVersion() sees an install without a real Claude Code (and never shells out to
+// `npm install -g`). It answers in the real banner shape (`2.1.257 (Claude Code)`) at a version
+// above the installer's floor by default; pass `version` to drive the minimum-version gate
+// (an old one to trip it, a non-version string to exercise the fail-open path).
+// Cross-platform: .cmd on Windows, an executable shell script elsewhere.
+function makeClaudeShim(version = '2.1.257') {
   const shimDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cca-shim-'));
+  const banner = `${version} (Claude Code)`;
   if (process.platform === 'win32') {
-    fs.writeFileSync(path.join(shimDir, 'claude.cmd'), '@echo off\r\necho claude 1.0.0\r\n');
+    fs.writeFileSync(path.join(shimDir, 'claude.cmd'), `@echo off\r\necho ${banner}\r\n`);
   } else {
     const p = path.join(shimDir, 'claude');
-    fs.writeFileSync(p, '#!/bin/sh\necho claude 1.0.0\n');
+    fs.writeFileSync(p, `#!/bin/sh\necho "${banner}"\n`);
     fs.chmodSync(p, 0o755);
   }
   return shimDir;

@@ -16,6 +16,8 @@ Claude Code is powerful out of the box, but every new project means manually wri
 
 Run it from a regular terminal — not from inside a Claude Code session (the installer detects that and asks you to switch to a separate terminal).
 
+Needs Claude Code **v2.1.237 or newer** (the version that added the built-in Concise output style, which autoconfig turns on). The installer checks first and, on an older version, stops and tells you to run `claude update` before trying again.
+
 **macOS / Linux** (bash, zsh):
 
 ```bash
@@ -88,7 +90,7 @@ your-project/
     ├── sounds/                        # Status-cue audio for the status beeps
     │   ├── pp3-getready-G4.wav        #   Awaiting tone (get-ready tick)
     │   └── pp3-go-F#5.wav             #   Complete tone (GO beep)
-    └── settings.json                  # Permissions & security
+    └── settings.json                  # Permissions, hooks & the Concise output style
 ```
 
 ## How It Works
@@ -160,6 +162,10 @@ npx claude-code-autoconfig@latest --force
 ### MEMORY.md
 
 Autoconfig writes a debug methodology to Claude's persistent memory (`MEMORY.md`), ensuring Claude investigates root causes with evidence before jumping to fixes. This loads into every future session automatically.
+
+### Concise Output Style
+
+Autoconfig sets Claude Code's built-in **Concise** output style in the project's `settings.json`: Claude leads with the result and skips the narration, doing the same work in fewer words. It is a project setting, so it travels with the repo and never overrides a style you already chose — upgrades only add it when the project has none set. Pick another any time with `/output-style`.
 
 ### Terminal Titles
 

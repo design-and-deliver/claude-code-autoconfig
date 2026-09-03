@@ -13,7 +13,8 @@
 //   - migrateRetiredPermissionRules: strip permission rules CCA once shipped and has
 //     withdrawn (the additive merge would otherwise preserve them forever), returning the
 //     count removed so a caller can skip rewriting an unchanged file.
-//   - mergeSettingsInto:  additively fold a fragment in (never overwrite user values);
+//   - mergeSettingsInto:  additively fold a fragment in (never overwrite user values) —
+//     hooks / env / permissions plus the TOP_LEVEL_KEYS scalars (outputStyle);
 //     optionally records the true delta it added into an accumulator (BH-1).
 //   - unmergeSettingsFrom: strip back out only what was recorded as added (falling back to
 //     value-equality for old ledgers with no recorded delta), never a user-owned entry.
@@ -33,6 +34,12 @@
 // ============================================================================
 
 const PERMISSION_KEYS = ['allow', 'deny'];
+
+// Top-level scalar settings CCA ships and folds in additively (`outputStyle`, since the
+// Concise style shipped). Listed explicitly rather than "every unknown top-level key": a
+// blanket copy would carry a future template's `model` or mode choice into user settings
+// unreviewed, and the plugin unmerge could not tell what it was allowed to take back.
+const TOP_LEVEL_KEYS = ['outputStyle'];
 
 // Rewrite legacy cwd-relative hook commands ("node .claude/hooks/X.js") to the
 // ${CLAUDE_PROJECT_DIR:-.}-anchored form IN PLACE, mutating the given settings object.
@@ -125,12 +132,13 @@ function migrateRetiredPermissionRules(userSettings) {
   return removed;
 }
 
-// The BH-1 delta accumulator, as three recording callbacks — or three no-ops when the caller
+// The BH-1 delta accumulator, as four recording callbacks — or four no-ops when the caller
 // passed nothing (the upgrade path), so the merge helpers never branch on `added` themselves.
 // The accumulator's shape (`{ env, hooks, permissions }`) is seeded by the caller
-// (bin/lib/plugins.js seedAddedDelta); only `hooks[event]` is created lazily here.
+// (bin/lib/plugins.js seedAddedDelta); `hooks[event]` and `topLevel` are created lazily here
+// (`topLevel` post-dates the seeded shape — old ledgers simply lack it).
 function recorders(added) {
-  if (!added) return { env() {}, hook() {}, perm() {} };
+  if (!added) return { env() {}, hook() {}, perm() {}, top() {} };
   return {
     env: (key) => {
       if (!added.env.includes(key)) added.env.push(key);
@@ -142,6 +150,10 @@ function recorders(added) {
     },
     perm: (key, rule) => {
       if (!added.permissions[key].includes(rule)) added.permissions[key].push(rule);
+    },
+    top: (key) => {
+      if (!added.topLevel) added.topLevel = [];
+      if (!added.topLevel.includes(key)) added.topLevel.push(key);
     }
   };
 }
@@ -240,7 +252,19 @@ function mergeSettingsInto(userSettings, fragment, added) {
   if (fragment.hooks) mergeHooksInto(userSettings, fragment.hooks, rec);
   if (fragment.env) mergeEnvInto(userSettings, fragment.env, rec);
   if (fragment.permissions) mergePermissionsInto(userSettings, fragment.permissions, rec);
+  mergeTopLevelInto(userSettings, fragment, rec);
   return userSettings;
+}
+
+// top-level scalars (TOP_LEVEL_KEYS): set only when the user has no value at all. A user who
+// picked another output style — or explicitly wrote the default — keeps it; the key's mere
+// presence is the signal, never its value.
+function mergeTopLevelInto(userSettings, fragment, rec) {
+  for (const key of TOP_LEVEL_KEYS) {
+    if (!(key in fragment) || key in userSettings) continue;
+    userSettings[key] = fragment[key];
+    rec.top(key);
+  }
 }
 
 // The recorded delta, re-shaped per event as command sets.
@@ -331,7 +355,17 @@ function unmergeSettingsFrom(userSettings, fragment, added) {
   unmergeHooksFrom(userSettings, hookCommandsToStrip(fragment, precise));
   unmergeEnvFrom(userSettings, fragment, precise);
   unmergePermissionsFrom(userSettings, fragment, precise);
+  unmergeTopLevelFrom(userSettings, fragment, precise);
   return userSettings;
+}
+
+// top-level twin: the recorded keys, else (old ledger) every listed key whose value still
+// equals what the fragment set. A user-changed value is never taken away.
+function unmergeTopLevelFrom(userSettings, fragment, added) {
+  let keys = [];
+  if (added) keys = added.topLevel || [];
+  else keys = TOP_LEVEL_KEYS.filter(k => k in fragment && userSettings[k] === fragment[k]);
+  for (const key of keys) delete userSettings[key];
 }
 
 module.exports = {

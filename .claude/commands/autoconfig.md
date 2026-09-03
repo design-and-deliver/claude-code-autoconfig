@@ -1,5 +1,5 @@
 <!-- @description Configures Claude Code scaffolding for your project. Sets up settings, permissions, hooks, commands, and docs. -->
-<!-- @version 16 -->
+<!-- @version 17 -->
 <!-- @response success | Scaffolding configured, CLAUDE.md initialized, docs opened in browser. -->
 <!-- @response no-project | No project detected — asks user to confirm directory. -->
 <!-- @sideeffect Initializes CLAUDE.md, settings.json, hooks, commands, and MEMORY.md -->
@@ -22,6 +22,8 @@ npx claude-code-autoconfig@latest --bootstrap
 ```
 
 This downloads the latest package and copies slash commands, hooks, agents, docs, and settings into `.claude/`. The `--bootstrap` flag makes it safe to run inside Claude Code — it copies files and exits silently with code 0. If it fails (e.g., no network), continue anyway — the existing files will still work.
+
+**One failure is a hard stop.** If the output says Claude Code is **too old** (`● Claude Code vX.Y.Z is too old — claude-code-autoconfig needs vA.B.C or newer.`), nothing was copied and nothing below can run correctly: the package's settings turn on Claude Code's Concise output style, which this version does not have. Show the user that block verbatim — the version found, the version needed, and the `claude update` line — tell them to update Claude Code and then run `/autoconfig` again, and STOP. Do not continue to the later steps.
 
 If the output says the project is **pinned** (`⏸ Pinned to vX.Y.Z — skipped ... refresh`), that is expected, not an error: the project intentionally freezes its installed version via `pinVersion` in `.claude/cca.config.json`. Continue with the existing files and do not try to update them.
 

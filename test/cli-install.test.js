@@ -689,4 +689,79 @@ test('shipped settings.json contains no retired permission rule (would be re-mer
   }
 });
 
+console.log();
+
+// -----------------------------------------------------------------------------
+// Concise output style + the Claude Code minimum-version gate
+// -----------------------------------------------------------------------------
+
+console.log('Concise output style + version gate:');
+
+const { MIN_CLAUDE_CODE_VERSION, parseVersion, compareVersions, checkClaudeVersion } = require('../bin/lib/claude-version.js');
+
+test('shipped settings.json turns on the Concise output style', () => {
+  const shipped = JSON.parse(fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'settings.json'), 'utf8'));
+  assert(shipped.outputStyle === 'Concise', `shipped settings.json should set outputStyle Concise, got ${JSON.stringify(shipped.outputStyle)}`);
+});
+
+test('the version floor is the release that added the Concise style', () => {
+  assert(MIN_CLAUDE_CODE_VERSION === '2.1.237', `MIN_CLAUDE_CODE_VERSION is ${MIN_CLAUDE_CODE_VERSION}; raise it only for a newer shipped dependency, and update README + this test together`);
+});
+
+test('parseVersion reads the real banner shape and tolerates junk', () => {
+  assert(JSON.stringify(parseVersion('2.1.257 (Claude Code)')) === '[2,1,257]', 'real banner');
+  assert(JSON.stringify(parseVersion('claude 1.0.0')) === '[1,0,0]', 'legacy "claude x.y.z" shape');
+  assert(parseVersion('Claude Code (dev build)') === null, 'no version → null');
+  assert(parseVersion('') === null && parseVersion(null) === null, 'empty / null → null');
+});
+
+test('compareVersions orders numerically, not lexically', () => {
+  assert(compareVersions([2, 1, 237], [2, 1, 237]) === 0, 'equal');
+  assert(compareVersions([2, 1, 99], [2, 1, 237]) < 0, '99 < 237 (lexical would say otherwise)');
+  assert(compareVersions([2, 10, 0], [2, 9, 0]) > 0, '10 > 9');
+  assert(compareVersions([1, 99, 99], [2, 0, 0]) < 0, 'major wins');
+});
+
+test('checkClaudeVersion: below the floor is too old, at/above passes, unreadable passes (fail open)', () => {
+  assert(checkClaudeVersion('2.1.236 (Claude Code)').tooOld === true, 'one patch below the floor is too old');
+  assert(checkClaudeVersion('2.1.237 (Claude Code)').tooOld === false, 'exactly the floor passes');
+  assert(checkClaudeVersion('2.1.257 (Claude Code)').tooOld === false, 'above the floor passes');
+  assert(checkClaudeVersion('1.0.0').tooOld === true, 'a 1.x binary is too old');
+  const odd = checkClaudeVersion('Claude Code (dev build)');
+  assert(odd.tooOld === false && odd.found === null, 'unreadable output must not block');
+  assert(checkClaudeVersion('2.1.257 (Claude Code)').found === '2.1.257', 'the found version is reported as a string');
+});
+
+test('mergeSettingsInto adds outputStyle only when absent, and records it in the delta', () => {
+  const { mergeSettingsInto, unmergeSettingsFrom } = require('../bin/lib/settings-merge.js');
+  const fragment = { outputStyle: 'Concise' };
+
+  const added = { env: [], hooks: {}, permissions: { allow: [], deny: [] } };
+  const bare = mergeSettingsInto({}, fragment, added);
+  assert(bare.outputStyle === 'Concise', 'absent → set');
+  assert(JSON.stringify(added.topLevel) === '["outputStyle"]', 'the delta records the key it added');
+
+  const own = mergeSettingsInto({ outputStyle: 'Explanatory' }, fragment, { env: [], hooks: {}, permissions: { allow: [], deny: [] } });
+  assert(own.outputStyle === 'Explanatory', "user's value is never overwritten");
+
+  const explicitDefault = mergeSettingsInto({ outputStyle: 'default' }, fragment);
+  assert(explicitDefault.outputStyle === 'default', 'an explicit default is a user choice too (presence, not value)');
+
+  // Unmerge: the recorded delta takes back exactly what was added; a user-changed value survives.
+  unmergeSettingsFrom(bare, fragment, added);
+  assert(!('outputStyle' in bare), 'recorded delta → key removed');
+  const changed = { outputStyle: 'Learning' };
+  unmergeSettingsFrom(changed, fragment);
+  assert(changed.outputStyle === 'Learning', 'no delta + value differs from the fragment → left alone');
+  const same = { outputStyle: 'Concise' };
+  unmergeSettingsFrom(same, fragment);
+  assert(!('outputStyle' in same), 'no delta (old ledger) + value equals the fragment → removed');
+});
+
+test('/autoconfig relays the too-old hard stop and does not continue past it', () => {
+  const autoconfig = fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'commands', 'autoconfig.md'), 'utf8');
+  assert(/is too old/.test(autoconfig) && /claude update/.test(autoconfig), '/autoconfig should show the too-old block and the update command');
+  assert(/STOP/.test(autoconfig), '/autoconfig must stop rather than configure on an old Claude Code');
+});
+
 summary();
