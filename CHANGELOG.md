@@ -4,6 +4,10 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.230
+- fix(installer): Clearer message when your Claude Code is older than autoconfig requires
+- feat(installer): Claude now uses Claude Code's built-in Concise output style in every configured project (a style you already chose is kept), and the installer asks you to update Claude Code if it is older than v2.1.237.
+
 ## v1.0.229
 - fix(terminal-title): Tab titles keep updating while Claude runs a subagent on current Claude Code builds
 
@@ -211,7 +215,4 @@
 
 ## v1.0.181
 - fix: tighten td code padding in docs parameter tables
-
-## v1.0.180
-- fix: improve autoconfig-update messaging when all updates are applied
 
