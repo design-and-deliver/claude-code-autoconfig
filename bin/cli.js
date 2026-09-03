@@ -280,9 +280,11 @@ function main() {
   // Unparseable probe output passes (see checkClaudeVersion) — the floor can't be read.
   const claudeVersion = checkClaudeVersion(claudeVersionOutput);
   if (claudeVersion.tooOld) {
-    console.log(paint('red', `● Claude Code v${claudeVersion.found} is too old — claude-code-autoconfig needs v${MIN_CLAUDE_CODE_VERSION} or newer.`));
+    console.log(paint('red', `● claude-code-autoconfig requires Claude Code v${MIN_CLAUDE_CODE_VERSION} or newer.`));
     console.log();
-    console.log('   Update Claude Code, then run this command again:');
+    console.log(`   Your environment is running v${claudeVersion.found}.`);
+    console.log();
+    console.log('   Update Claude Code, then try again:');
     console.log();
     console.log('   ' + paint('cyan', 'claude update'));
     console.log();

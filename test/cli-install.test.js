@@ -758,9 +758,9 @@ test('mergeSettingsInto adds outputStyle only when absent, and records it in the
   assert(!('outputStyle' in same), 'no delta (old ledger) + value equals the fragment → removed');
 });
 
-test('/autoconfig relays the too-old hard stop and does not continue past it', () => {
+test('/autoconfig relays the version-floor hard stop and does not continue past it', () => {
   const autoconfig = fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'commands', 'autoconfig.md'), 'utf8');
-  assert(/is too old/.test(autoconfig) && /claude update/.test(autoconfig), '/autoconfig should show the too-old block and the update command');
+  assert(/requires Claude Code v/.test(autoconfig) && /claude update/.test(autoconfig), '/autoconfig should show the version-floor block and the update command');
   assert(/STOP/.test(autoconfig), '/autoconfig must stop rather than configure on an old Claude Code');
 });
 

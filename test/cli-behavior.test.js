@@ -997,7 +997,7 @@ console.log('minimum Claude Code version gate:');
 
 // The shipped settings turn on the Concise output style, which Claude Code below the floor
 // silently ignores. The installer must refuse BEFORE copying anything — an install that
-// lands files and then says "too old" leaves a half-configured project behind.
+// lands files and then says "requires a newer Claude Code" leaves a half-configured project behind.
 const { MIN_CLAUDE_CODE_VERSION } = require('../bin/lib/claude-version.js');
 const oldShim = makeClaudeShim('2.1.100');
 cleanups.push(oldShim);
@@ -1005,10 +1005,10 @@ const tooOld = makeProject('too-old');
 cleanups.push(tooOld);
 const tooOldResult = runCli(tooOld, ['--bootstrap'], oldShim);
 
-test('an old Claude Code exits 1 with the version found, the floor, and the update command', () => {
+test('an old Claude Code exits 1 with the floor, the version found, and the update command', () => {
   assert(tooOldResult.code === 1, `expected exit 1, got ${tooOldResult.code}\n${tooOldResult.out}`);
-  assert(tooOldResult.out.includes('Claude Code v2.1.100 is too old'), `message should name the version found\n${tooOldResult.out}`);
-  assert(tooOldResult.out.includes(`needs v${MIN_CLAUDE_CODE_VERSION} or newer`), `message should name the floor\n${tooOldResult.out}`);
+  assert(tooOldResult.out.includes(`requires Claude Code v${MIN_CLAUDE_CODE_VERSION} or newer`), `message should name the floor\n${tooOldResult.out}`);
+  assert(tooOldResult.out.includes('Your environment is running v2.1.100.'), `message should name the version found\n${tooOldResult.out}`);
   assert(tooOldResult.out.includes('claude update'), `message should give the update command\n${tooOldResult.out}`);
 });
 
@@ -1017,7 +1017,7 @@ test('an old Claude Code gets NO files copied (the gate runs before any install 
   assert(!fs.existsSync(path.join(tooOld, 'CLAUDE.md')), 'CLAUDE.md must not be created when the gate stops the install');
 });
 
-// A banner the parser cannot read is NOT "too old": the floor is unknowable, so the install
+// A banner the parser cannot read does NOT fail the gate: the floor is unknowable, so the install
 // proceeds (fail open). The alternative — blocking on a wording change upstream — would lock
 // every user out the day Claude Code reworded its banner.
 const oddShim = makeClaudeShim('Claude Code (dev build)');
@@ -1029,7 +1029,7 @@ const unparseableResult = runCli(unparseable, ['--bootstrap'], oddShim);
 test('an unparseable version banner passes the gate (fail open) and installs normally', () => {
   assert(unparseableResult.code === 0, `expected exit 0, got ${unparseableResult.code}\n${unparseableResult.out}`);
   assert(fs.existsSync(path.join(unparseable, '.claude', 'settings.json')), 'the install should proceed on an unreadable version');
-  assert(!unparseableResult.out.includes('too old'), 'no version warning should print when the version could not be read');
+  assert(!unparseableResult.out.includes('requires Claude Code v'), 'no version warning should print when the version could not be read');
 });
 
 test('the version found is echoed on the detected line when readable', () => {
