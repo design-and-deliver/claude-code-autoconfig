@@ -32,12 +32,15 @@ const MIGRATE_TAIL =
   '1. Select "No" below\n2. /clear to purge old context\n' +
   '3. /continue to restore the context for your last active use case\n' +
   '~ Rationale → /token-saver-rationale';
+const MIGRATE_HEADER = '⚠️ TokenSaver — /clear then /continue to save tokens';
+// session-total carries no '~' trigger line (dropped 2026-09-02 — it said nothing the header didn't).
 const TRIO_TRIGGER = {
   'task-size': 'This task has outgrown one session',
   'rent': 'Each turn re-pays to carry old context',
-  'session-total': "This session's context only grows",
+  'session-total': null,
 };
-const QUIET_CARD = code => '⚠️ TokenSaver — /clear then /continue costs less\n~ ' + TRIO_TRIGGER[code] + '\n' + MIGRATE_TAIL;
+const QUIET_CARD = code => MIGRATE_HEADER + '\n' +
+  (TRIO_TRIGGER[code] ? '~ ' + TRIO_TRIGGER[code] + '\n' : '') + MIGRATE_TAIL;
 
 const usageLine = (id, inp) => JSON.stringify({ type: 'assistant',
   message: { id, model: 'claude-fable-5', usage: { input_tokens: inp, output_tokens: 10 } } }) + '\n';
@@ -167,18 +170,25 @@ test('the taxonomy is exactly the ten agreed short codes', () => {
   assert.deepEqual(Object.keys(QUIET_CARDS).sort(), [...CODES].sort());
 });
 
-// The five restart-remedy cards carry the '— /clear then /continue costs less' header suffix
-// (2026-08-27 as 'Restart Session'; literal commands + the shared verdict both 2026-08-31):
-// only their remedy continues after the dialog; the other five finish in approve / "No".
+// The five restart-remedy cards carry the '— /clear then /continue to save tokens' header suffix
+// (2026-08-27 as 'Restart Session'; literal commands + the shared verdict both 2026-08-31;
+// 'to save tokens' 2026-09-02): only their remedy continues after the dialog; the other five
+// finish in approve / "No".
 const RESTART_SUFFIXED = new Set(['task-size', 'rent', 'session-total', 'idle-cache', 'post-bomb']);
+// Cards whose '~' trigger line was dropped on purpose — the steps follow the header directly.
+const NO_TRIGGER_LINE = new Set(['session-total']);
 
 test('every quiet card is header, trigger one-liner, numbered steps, and the rationale pointer', () => {
   for (const [code, card] of Object.entries(QUIET_CARDS)) {
     const lines = card.split('\n');
     assert.ok(lines.length >= 4, code);
-    assert.equal(lines[0], RESTART_SUFFIXED.has(code)
-      ? '⚠️ TokenSaver — /clear then /continue costs less' : '⚠️ TokenSaver', code);
-    assert.ok(lines[1] && lines[1].startsWith('~ '), code); // the '~' trigger line precedes the steps
+    assert.equal(lines[0], RESTART_SUFFIXED.has(code) ? MIGRATE_HEADER : '⚠️ TokenSaver', code);
+    if (NO_TRIGGER_LINE.has(code)) {
+      assert.ok(lines[1] && /^1\. /.test(lines[1]), code); // no '~' line — steps follow the header
+      assert.ok(!lines.some(l => l.startsWith('~ ') && !l.startsWith('~ Rationale')), code);
+    } else {
+      assert.ok(lines[1] && lines[1].startsWith('~ '), code); // the '~' trigger line precedes the steps
+    }
     assert.ok(lines.some(l => /^1\. /.test(l)), code);
     assert.equal(lines[lines.length - 1], '~ Rationale → /token-saver-rationale', code);
   }

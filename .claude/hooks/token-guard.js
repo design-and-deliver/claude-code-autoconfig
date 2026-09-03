@@ -3830,25 +3830,29 @@ const MIGRATE_STEPS =
   '1. Select "No" below\n' +
   '2. /clear to purge old context\n' +
   '3. /continue to restore the context for your last active use case\n';
-// The five restart-remedy cards carry a '— /clear then /continue costs less' header suffix
+// The five restart-remedy cards carry a '— /clear then /continue to save tokens' header suffix
 // (Andrew 2026-08-27 as 'Restart Session'; renamed to the literal commands at his ask
 // 2026-08-31 — "Restart Session" could read as close-the-terminal, and the commands ARE the
-// remedy, per ux: action-lines-lead-with-the-action; 'costs less' joined the header later the
-// same day — the '— restarting now costs less' tail was identical across the trio, so the
-// shared verdict moved into the shared header and each '~' line carries only its per-family
-// trigger): they are the only cards whose remedy continues AFTER the dialog; the other five
-// finish in the dialog's own approve / "No", so their header stays bare
-// (ux: implicit-over-explicit).
-const migrateCard = trigger => '⚠️ TokenSaver — /clear then /continue costs less\n~ ' + trigger + '\n' + MIGRATE_STEPS + DETAILS_LINE;
+// remedy, per ux: action-lines-lead-with-the-action; the shared verdict joined the header later
+// the same day — the '— restarting now costs less' tail was identical across the trio, so it
+// moved into the shared header and each '~' line carries only its per-family trigger; 'costs
+// less' → 'to save tokens' at his ask 2026-09-02): they are the only cards whose remedy
+// continues AFTER the dialog; the other five finish in the dialog's own approve / "No", so
+// their header stays bare (ux: implicit-over-explicit).
+const MIGRATE_HEADER = '⚠️ TokenSaver — /clear then /continue to save tokens';
+// A migration card's '~' trigger line is optional: session-total dropped its
+// ("This session's context only grows" said nothing the header didn't — Andrew 2026-09-02).
+const migrateCard = trigger =>
+  MIGRATE_HEADER + '\n' + (trigger ? '~ ' + trigger + '\n' : '') + MIGRATE_STEPS + DETAILS_LINE;
 const QUIET_CARDS = {
   'task-size':                     // R13b — one turn's spend crossed the turn gate
     migrateCard('This task has outgrown one session'),
   'rent':                          // R14 — the turn's cached re-reads crossed the rent gate
     migrateCard('Each turn re-pays to carry old context'),
   'session-total':                 // R20 — total session spend crossed the tripwire
-    migrateCard("This session's context only grows"),
+    migrateCard(),
   'idle-cache':                    // R4b — self-wake past the cache TTL, charge already landed
-    '⚠️ TokenSaver — /clear then /continue costs less\n' +
+    MIGRATE_HEADER + '\n' +
     '~ Idle past the cache window — picking up here re-uploaded the session at full price\n' +
     MIGRATE_STEPS + DETAILS_LINE,
   'payload-door':                  // R8 — a Read/Skill call is about to import a bomb payload
@@ -3862,7 +3866,7 @@ const QUIET_CARDS = {
     '1. Select "No" below\n' +
     '2. Route the rest through a subagent\n' + DETAILS_LINE,
   'post-bomb':                     // R3 — a bomb landed at fat context, one-time confirm
-    '⚠️ TokenSaver — /clear then /continue costs less\n' +
+    MIGRATE_HEADER + '\n' +
     '~ A large payload just landed\n' +
     '1. Select "No" below\n' +
     '2. /clear to shed it\n' +
