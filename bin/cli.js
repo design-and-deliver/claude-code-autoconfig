@@ -15,6 +15,20 @@ const { cleanupNulFile } = require('./lib/nul-cleanup.js');
 // The entire install flow (and its helpers) lives inside main() — requiring this
 // file is side-effect-free by contract (nothing runs, nothing is exported); only
 // direct execution installs. Keep new flow code inside main() so that holds.
+// Commands that once shipped and were later retired. copyTree never writes them any more,
+// but an upgraded project still holds its old copy, so the installer deletes each one it
+// finds (the arcade-beeps pair were deprecated aliases of /enable-status-beeps and
+// /disable-status-beeps, retired 2026-09-03). Returns the files actually removed.
+const RETIRED_COMMANDS = ['enable-arcade-beeps.md', 'disable-arcade-beeps.md'];
+function removeRetiredCommands(commandsDest, existingCommandContents) {
+  const removed = [];
+  for (const f of RETIRED_COMMANDS) {
+    if (!existingCommandContents.has(f)) continue;
+    try { fs.unlinkSync(path.join(commandsDest, f)); removed.push(f); } catch (_) { /* locked — stays until the next run */ }
+  }
+  return removed;
+}
+
 function main() {
   const cwd = process.cwd();
   const packageDir = path.dirname(__dirname);
@@ -559,15 +573,11 @@ function main() {
     fs.writeFileSync(updateCmdDest, shippedCmd.replace(/<!-- @applied[\s\S]*?-->/, () => savedAppliedBlock));
   }
 
-  // Deprecated command aliases (old names kept as shims after a rename) REPLACE an existing
-  // command but are never introduced: a fresh install — or any project that never had the
-  // old name — must not gain a deprecated alias, so drop the just-copied file unless the
-  // destination already had it before this run (existingCommandContents snapshots pre-copy).
-  const DEPRECATED_COMMAND_ALIASES = ['enable-arcade-beeps.md', 'disable-arcade-beeps.md'];
-  for (const f of DEPRECATED_COMMAND_ALIASES) {
-    if (!existingCommandContents.has(f)) {
-      try { fs.unlinkSync(path.join(commandsDest, f)); } catch (_) { /* never copied */ }
-    }
+  // Retired commands are no longer shipped, but the preserve-mode copy leaves an older
+  // install's copy in place — and a stale .md is still a live slash command. Remove them.
+  const retiredCommands = removeRetiredCommands(commandsDest, existingCommandContents);
+  if (retiredCommands.length) {
+    console.log(paint('gray', `🗑  Removed retired command(s): ${retiredCommands.map(f => '/' + f.replace(/\.md$/, '')).join(', ')}`));
   }
 
   // Detect new and updated commands (with version tracking)

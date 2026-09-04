@@ -56,8 +56,6 @@ your-project/
     │   ├── enable-retro.md            #   /enable-retro - opt-in tech-debt log
     │   ├── enable-status-beeps.md     #   /enable-status-beeps - tab status beeps on
     │   ├── disable-status-beeps.md    #   /disable-status-beeps - tab status beeps off
-    │   ├── enable-arcade-beeps.md     #   (deprecated alias of /enable-status-beeps)
-    │   ├── disable-arcade-beeps.md    #   (deprecated alias of /disable-status-beeps)
     │   ├── extract-rules.md            #   /extract-rules - scan & extract rules
     │   ├── gls.md                     #   /gls - view latest screenshot
     │   ├── recover-context.md         #   /recover-context - restore context after compaction
@@ -138,8 +136,6 @@ Autoconfig is **self-configuring**. Run `/autoconfig` and Claude:
 | `/disable-auto-mode` | Restore auto-guard's default prompting/blocking for a category |
 | `/enable-status-beeps` | Turn on opt-in Pole Position status beeps |
 | `/disable-status-beeps` | Turn off the status beeps |
-| `/enable-arcade-beeps` | Deprecated alias for `/enable-status-beeps` (upgrades only) |
-| `/disable-arcade-beeps` | Deprecated alias for `/disable-status-beeps` (upgrades only) |
 
 ### Updates
 
@@ -173,7 +169,7 @@ Run several Claude Code sessions at once and the tabs all look alike. Autoconfig
 
 ### Status Beeps (opt-in)
 
-Prefer your ears to your eyes? Run `/enable-status-beeps` for Pole Position–style tab cues that mirror the title glyph: a low get-ready tick when a session is **waiting on you** and a higher GO tone when it **finishes**. Cross-platform (Windows / macOS / Linux) and off unless you opt in — fresh installs ask once at the end of `/autoconfig`, upgrades ask once during `/autoconfig-update`, and you can flip the answer any time with `/enable-status-beeps` / `/disable-status-beeps`. (The old `/enable-arcade-beeps` and `/disable-arcade-beeps` names still work as deprecated aliases.)
+Prefer your ears to your eyes? Run `/enable-status-beeps` for Pole Position–style tab cues that mirror the title glyph: a low get-ready tick when a session is **waiting on you** and a higher GO tone when it **finishes**. Cross-platform (Windows / macOS / Linux) and off unless you opt in — fresh installs ask once at the end of `/autoconfig`, upgrades ask once during `/autoconfig-update`, and you can flip the answer any time with `/enable-status-beeps` / `/disable-status-beeps`.
 
 ### Auto Permission Mode (opt-in)
 

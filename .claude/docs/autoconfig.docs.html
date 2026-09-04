@@ -888,11 +888,6 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">continue.md</span>
                             </div>
-                            <div class="tree-item indent-3 hidden" data-info="disable-arcade-beeps" data-parent="commands">
-                                <span class="tree-spacer"></span>
-                                <span class="tree-file-icon">📄</span>
-                                <span class="file">disable-arcade-beeps.md</span>
-                            </div>
                             <div class="tree-item indent-3 hidden" data-info="disable-auto-mode" data-parent="commands">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
@@ -902,11 +897,6 @@
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">disable-status-beeps.md</span>
-                            </div>
-                            <div class="tree-item indent-3 hidden" data-info="enable-arcade-beeps" data-parent="commands">
-                                <span class="tree-spacer"></span>
-                                <span class="tree-file-icon">📄</span>
-                                <span class="file">enable-arcade-beeps.md</span>
                             </div>
                             <div class="tree-item indent-3 hidden" data-info="enable-auto-mode" data-parent="commands">
                                 <span class="tree-spacer"></span>
@@ -1388,11 +1378,6 @@
                 desc: 'Recovers where your previous session in this terminal left off — reports the state and the precise next action, then stops for your go-ahead. Plan-aware: if that session was executing a substep of a plan doc AND the transcript confirms nothing came after it, the report comes from the plan\'s Ledger instead of the transcript.<div style="margin-top: 12px;"><strong>Parameters</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Name</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Type</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>--show</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>flag</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Opens the recovered transcript in your default editor (no-op on a fresh checkpoint handoff note — nothing is read there).</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Picking up where we left off — {what we were doing}. State summary + the one next action, then a go-ahead question.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>plan</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Picking up where we left off — {plan alias}: substep {N.k} done ({hash}); next: {N.next}. Then a go-ahead question.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-previous</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">I can\'t find a previous session for this terminal.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Reads .jsonl transcripts from ~/.claude/projects/, writes temp file</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/continue</code> <span style="opacity: 0.6;">— Recover the previous session here, see where it stands, reply "go" to resume</span></div></div></div>',
                 trigger: '/continue'
             },
-            'disable-arcade-beeps': {
-                title: 'disable-arcade-beeps.md',
-                desc: 'disable-arcade-beeps.md in commands/<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div>',
-                trigger: '/disable-arcade-beeps'
-            },
             'disable-auto-mode': {
                 title: 'disable-auto-mode.md',
                 desc: 'disable-auto-mode.md in commands/<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div>',
@@ -1402,11 +1387,6 @@
                 title: 'disable-status-beeps.md',
                 desc: 'disable-status-beeps.md in commands/<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div>',
                 trigger: '/disable-status-beeps'
-            },
-            'enable-arcade-beeps': {
-                title: 'enable-arcade-beeps.md',
-                desc: 'enable-arcade-beeps.md in commands/<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div>',
-                trigger: '/enable-arcade-beeps'
             },
             'enable-auto-mode': {
                 title: 'enable-auto-mode.md',
@@ -1879,22 +1859,6 @@ at runtime — a known bug (anthropics/claude-code#45191, closed "not planned") 
 \`model: sonnet\` pin never actually switched anything (measured 2026-08-23 on 2.1.220: 85
 \`/continue\` runs, zero switches at the command boundary) and was removed rather than left`
             },
-            'disable-arcade-beeps': {
-                filename: 'disable-arcade-beeps.md',
-                content: `---
-description: (deprecated — use /disable-status-beeps) Turn OFF Pole Position tab status beeps
-allowed-tools: Bash
----
-<!-- @version 2 -->
-<!-- Deprecated alias: /disable-arcade-beeps was renamed to /disable-status-beeps.
-     Kept so existing users' muscle memory still works; remove in a future major version. -->
-
-Run exactly this command, then reply with a single confirmation line and nothing else:
-
-\`\`\`
-rm -f "\${CLAUDE_PROJECT_DIR:-.}/.claude/sounds/status-beeps.enabled" "\${CLAUDE_PROJECT_DIR:-.}/.claude/sounds/arcade-beeps.enabled" ~/.claude/sounds/status-beeps.enabled ~/.claude/sounds/arcade-beeps.enabled && echo "status beeps DISABLED. Heads up: /disable-arcade-beeps is deprecated — next time use /disable-status-beeps."
-\`\`\``
-            },
             'disable-auto-mode': {
                 filename: 'disable-auto-mode.md',
                 content: `---
@@ -1928,22 +1892,6 @@ Run exactly this command, then reply with a single confirmation line and nothing
 
 \`\`\`
 rm -f "\${CLAUDE_PROJECT_DIR:-.}/.claude/sounds/status-beeps.enabled" "\${CLAUDE_PROJECT_DIR:-.}/.claude/sounds/arcade-beeps.enabled" ~/.claude/sounds/status-beeps.enabled ~/.claude/sounds/arcade-beeps.enabled && echo "status beeps DISABLED."
-\`\`\``
-            },
-            'enable-arcade-beeps': {
-                filename: 'enable-arcade-beeps.md',
-                content: `---
-description: (deprecated — use /enable-status-beeps) Turn ON Pole Position tab status beeps
-allowed-tools: Bash
----
-<!-- @version 2 -->
-<!-- Deprecated alias: /enable-arcade-beeps was renamed to /enable-status-beeps.
-     Kept so existing users' muscle memory still works; remove in a future major version. -->
-
-Run exactly this command, then reply with a single confirmation line and nothing else:
-
-\`\`\`
-mkdir -p "\${CLAUDE_PROJECT_DIR:-.}/.claude/sounds" && touch "\${CLAUDE_PROJECT_DIR:-.}/.claude/sounds/status-beeps.enabled" && echo "status beeps ENABLED for this project (every turn-end beeps: awaiting=low, complete=high). Heads up: /enable-arcade-beeps is deprecated — next time use /enable-status-beeps. Disable with /disable-status-beeps."
 \`\`\``
             },
             'enable-auto-mode': {
@@ -2326,8 +2274,9 @@ This scans \`.claude/\` for all files, extracts \`@description\` metadata, and u
  * OFF unless the enable flag exists:  <install>/.claude/sounds/status-beeps.enabled
  *   toggle via  /enable-status-beeps   /disable-status-beeps
  * (The legacy flag arcade-beeps.enabled is still honored so installs that enabled beeps
- * before the status-beeps rename keep beeping after an upgrade; the deprecated
- * /enable-arcade-beeps + /disable-arcade-beeps aliases now write/remove the new flag.
+ * before the status-beeps rename keep beeping after an upgrade. The deprecated
+ * /enable-arcade-beeps + /disable-arcade-beeps aliases were retired 2026-09-03 — the
+ * installer deletes them from upgraded projects (RETIRED_COMMANDS in bin/cli.js).
  * This FILE keeps its arcade-beeps.js name — every installed settings.json points at it.)
  * The flag lives beside THIS install's sounds dir, so it is PER-PROJECT: a fresh
  * \`npx claude-code-autoconfig\` install never beeps until /enable-status-beeps is run in that
@@ -2346,8 +2295,7 @@ This scans \`.claude/\` for all files, extracts \`@description\` metadata, and u
  * copy at <project>/.claude/sounds — no dependency on a global sounds dir.
  *
  * Playback is cross-platform and best-effort: PowerShell SoundPlayer on Windows, afplay on
- * macOS, paplay||aplay on Linux. If none is present the hook stays silent — never errors, but it
- * DOES log \`play-failed\`, so a silent tab is distinguishable from a hook that never ran.`
+ * macOS, paplay||aplay on Linux. If none is present the hook stays silent — never errors, but it`
             },
             'auto-guard-hook': {
                 filename: 'auto-guard.js',

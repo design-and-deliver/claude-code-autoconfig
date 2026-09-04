@@ -144,23 +144,6 @@ test('enable/disable toggle commands ship and target the project flag', () => {
   );
 });
 
-test('deprecated arcade-beeps aliases still ship and delegate to the new flag', () => {
-  for (const name of ['enable-arcade-beeps', 'disable-arcade-beeps']) {
-    const p = path.join(PACKAGE_CLAUDE_DIR, 'commands', `${name}.md`);
-    assertExists(p, `${name} deprecated alias should still exist (renamed commands must not break existing users)`);
-    const content = fs.readFileSync(p, 'utf8');
-    assert(
-      /deprecated/i.test(content) && content.includes(name.replace('arcade', 'status')),
-      `${name} should be marked deprecated and point at the status-beeps replacement`
-    );
-  }
-  const enableAlias = fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'commands', 'enable-arcade-beeps.md'), 'utf8');
-  assert(
-    enableAlias.includes('${CLAUDE_PROJECT_DIR:-.}/.claude/sounds/status-beeps.enabled'),
-    'deprecated enable alias should create the NEW flag so installs converge on status-beeps.enabled'
-  );
-});
-
 console.log();
 
 // -----------------------------------------------------------------------------
@@ -302,16 +285,19 @@ test('version pin freezes silent refreshes but yields to an explicit install', (
   );
 });
 
-test('CLI never introduces deprecated aliases — they only replace a pre-existing command', () => {
+test('CLI removes retired commands from upgraded installs and never ships them', () => {
   const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
   assert(
-    /DEPRECATED_COMMAND_ALIASES\s*=\s*\[[^\]]*'enable-arcade-beeps\.md'[^\]]*'disable-arcade-beeps\.md'[^\]]*\]/.test(cliCode),
-    'CLI should define DEPRECATED_COMMAND_ALIASES with both arcade-beeps files'
+    /RETIRED_COMMANDS\s*=\s*\[[^\]]*'enable-arcade-beeps\.md'[^\]]*'disable-arcade-beeps\.md'[^\]]*\]/.test(cliCode),
+    'CLI should list both retired arcade-beeps aliases in RETIRED_COMMANDS'
   );
   assert(
-    /for \(const f of DEPRECATED_COMMAND_ALIASES\)[\s\S]*?existingCommandContents\.has\(f\)[\s\S]*?unlinkSync/.test(cliCode),
-    'CLI should unlink a deprecated alias after the commands copy unless it pre-existed (fresh installs stay alias-free)'
+    /for \(const f of RETIRED_COMMANDS\)[\s\S]*?unlinkSync/.test(cliCode),
+    'CLI should unlink each retired command it finds in the installed commands dir'
   );
+  for (const name of ['enable-arcade-beeps.md', 'disable-arcade-beeps.md']) {
+    assert(!fs.existsSync(path.join(PACKAGE_CLAUDE_DIR, 'commands', name)), `${name} must no longer ship`);
+  }
 });
 
 console.log();

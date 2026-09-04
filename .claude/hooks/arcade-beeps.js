@@ -6,8 +6,9 @@
  * OFF unless the enable flag exists:  <install>/.claude/sounds/status-beeps.enabled
  *   toggle via  /enable-status-beeps   /disable-status-beeps
  * (The legacy flag arcade-beeps.enabled is still honored so installs that enabled beeps
- * before the status-beeps rename keep beeping after an upgrade; the deprecated
- * /enable-arcade-beeps + /disable-arcade-beeps aliases now write/remove the new flag.
+ * before the status-beeps rename keep beeping after an upgrade. The deprecated
+ * /enable-arcade-beeps + /disable-arcade-beeps aliases were retired 2026-09-03 — the
+ * installer deletes them from upgraded projects (RETIRED_COMMANDS in bin/cli.js).
  * This FILE keeps its arcade-beeps.js name — every installed settings.json points at it.)
  * The flag lives beside THIS install's sounds dir, so it is PER-PROJECT: a fresh
  * `npx claude-code-autoconfig` install never beeps until /enable-status-beeps is run in that

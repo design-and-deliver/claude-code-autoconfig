@@ -74,7 +74,7 @@ const PKG_VERSION = require(path.join(PKG_DIR, 'package.json')).version;
 // Kept in sync with bin/cli.js by substep 2.2's dev-gate-consistency test — here we only need
 // a representative subset to assert absence.
 const DEV_ONLY_COMMANDS = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-session.md', 'migrate-new-session.md'];
-const DEPRECATED_ALIASES = ['enable-arcade-beeps.md', 'disable-arcade-beeps.md'];
+const RETIRED_COMMANDS = ['enable-arcade-beeps.md', 'disable-arcade-beeps.md'];
 const SHIPPED_COMMANDS = ['autoconfig.md', 'autoconfig-update.md', 'continue.md', 'recover-context.md', 'gls.md'];
 
 const { test, assert, summary, makeClaudeShim, runCli } = require('./_harness');
@@ -133,9 +133,9 @@ test('DEV_ONLY_FILES are NOT installed', () => {
   assert(!fs.existsSync(path.join(fresh, '.claude', 'hooks', 'token-guard-liveness.js')), 'dev-only hook token-guard-liveness.js must not be installed');
 });
 
-test('deprecated aliases are pruned on a fresh install', () => {
-  for (const a of DEPRECATED_ALIASES) {
-    assert(!fs.existsSync(path.join(freshCmds, a)), `deprecated alias ${a} must not be introduced on a fresh install`);
+test('retired commands are never installed fresh', () => {
+  for (const a of RETIRED_COMMANDS) {
+    assert(!fs.existsSync(path.join(freshCmds, a)), `retired command ${a} must not be installed`);
   }
 });
 
@@ -232,6 +232,9 @@ writeFile(up, '.claude/settings.json', JSON.stringify({
 // upgrade must retract the files AND the settings entries above (see cli.js retraction).
 writeFile(up, '.claude/hooks/token-guard.js', '// un-gated 1.0.224 leftover — must be removed\n');
 writeFile(up, '.claude/commands/cost-control-details.md', '<!-- @description leftover -->\n');
+// Retired deprecated aliases left behind by an older install — the upgrade must delete them
+// (copyTree no longer writes them, but a stale .md is still a live slash command).
+for (const a of RETIRED_COMMANDS) writeFile(up, `.claude/commands/${a}`, '<!-- @description deprecated alias leftover -->\n');
 // The user has applied 001 + 003; bundled 004 is still PENDING. The upgrade's copyDir
 // overwrites this file with the shipped empty-@applied copy — the block must be preserved,
 // or the pre-mark pass refills it with ALL bundled ids and 004 never runs (BH-3).
@@ -263,6 +266,13 @@ test('managed hook (terminal-title.js) is refreshed to the shipped version', () 
 test("user's own hook is left untouched", () => {
   const installed = fs.readFileSync(path.join(upClaude, 'hooks', 'user-own.js'), 'utf8');
   assert(installed === '// USER HOOK — must be left untouched\n', "user's own hook must be preserved verbatim");
+});
+
+test('retired command aliases left by an older install are removed on upgrade', () => {
+  for (const a of RETIRED_COMMANDS) {
+    assert(!fs.existsSync(path.join(upClaude, 'commands', a)), `retired command ${a} must be removed on upgrade`);
+  }
+  assert(/Removed retired command/.test(upResult.out), 'the upgrade should report the removal');
 });
 
 test('settings.json is MERGED, not replaced (user env + hook kept; shipped contributions folded in)', () => {

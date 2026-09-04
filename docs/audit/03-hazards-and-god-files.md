@@ -283,9 +283,9 @@ serves installs that predate the `cca.config.json` migration — the restore reg
 placeholder; deleting this "unused" block strands old users' saved dirs.
 `arcade-beeps.js:8-11`: the legacy `arcade-beeps.enabled` flag is still honored and **the file
 keeps its `arcade-beeps.js` name forever** because every installed settings.json points at that
-literal path. `DEPRECATED_COMMAND_ALIASES` (`bin/cli.js:824`) must keep shipping the alias .md
-files (for upgraders) while pruning them on fresh installs.
-**Never**: never rename `arcade-beeps.js` or delete legacy-flag/alias/screenshotDir compat paths —
+literal path. (`DEPRECATED_COMMAND_ALIASES` shipped the alias .md files for upgraders until
+2026-09-03, when the pair was retired — `RETIRED_COMMANDS` in `bin/cli.js` now deletes them.)
+**Never**: never rename `arcade-beeps.js` or delete legacy-flag/screenshotDir compat paths —
 installed settings.json files and old installs reference them by literal string.
 
 ---

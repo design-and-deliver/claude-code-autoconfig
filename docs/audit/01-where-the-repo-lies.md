@@ -253,6 +253,8 @@ Live entry points traced: `package.json` bin (`bin/cli.js`, `bin/ccr.js`) and sc
   the arcade pair are **deliberate deprecated aliases** — labeled deprecated in frontmatter, they write the
   NEW flag (`status-beeps.enabled`), and `DEPRECATED_COMMAND_ALIASES` (`bin/cli.js:824-829`) removes them
   from fresh installs; `test/cli-install.test.js:184-214` guards the behavior. Consistent everywhere.
+  **Update 2026-09-03:** the alias pair was retired — the .md files are deleted and `RETIRED_COMMANDS`
+  (`bin/cli.js`) removes leftovers from upgraded installs.
 - `.claude/hooks/arcade-beeps.js` keeping its old filename: documented in its header (lines 8-11) — every
   installed settings.json points at that name.
 - `.claude/hooks/terminal-title.js` duplicated at `~/.claude` and in fleet repos: BY DESIGN — this repo's
