@@ -4,6 +4,11 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.231
+- feat(docs): The install walkthrough's subtitle now opens with a link to the key-features page
+- feat(docs): The install walkthrough now links to the key-features page
+- feat(commands): The old /enable-arcade-beeps and /disable-arcade-beeps commands are retired. Use /enable-status-beeps and /disable-status-beeps; the installer removes the old copies from your project on upgrade.
+
 ## v1.0.230
 - fix(installer): Clearer message when your Claude Code is older than autoconfig requires
 - feat(installer): Claude now uses Claude Code's built-in Concise output style in every configured project (a style you already chose is kept), and the installer asks you to update Claude Code if it is older than v2.1.237.
@@ -212,7 +217,4 @@
 
 ## v1.0.182
 - fix: tight column alignment in docs parameter tables
-
-## v1.0.181
-- fix: tighten td code padding in docs parameter tables
 
