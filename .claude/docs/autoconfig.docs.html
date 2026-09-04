@@ -109,37 +109,17 @@
             letter-spacing: 2px;
             margin-bottom: 12px;
         }
-        /* Slide top bar: section label at left, "key features" link at right */
-        .slide-topbar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            margin-bottom: 12px;
-        }
-
-        .slide-topbar .slide-number {
-            margin-bottom: 0;
-        }
-
+        /* "Here are the features" — the subtitle's lead-in link to the key-features page */
         .features-link {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 6px 14px;
-            border: 1px solid var(--accent-cyan);
-            border-radius: 999px;
             color: var(--accent-cyan);
-            font-size: 14px;
-            text-decoration: none;
-            white-space: nowrap;
-            transition: all 0.3s ease;
+            text-decoration: underline;
+            text-underline-offset: 4px;
+            text-decoration-thickness: 1px;
+            transition: color 0.3s ease;
         }
 
         .features-link:hover {
-            background: var(--bg-elevated);
             color: var(--accent-orange);
-            border-color: var(--accent-orange);
         }
 
         .slide h1 {
@@ -868,12 +848,9 @@
         <div class="slides-container">
             <!-- Slide 0: What Got Installed -->
             <div class="slide active" data-slide="0">
-                <div class="slide-topbar">
-                    <div class="slide-number">01 / Overview</div>
-                    <a href="https://proswitch.ai/claude-code-autoconfig" class="features-link" target="_blank" rel="noopener">See the key features &rarr;</a>
-                </div>
+                <div class="slide-number">01 / Overview</div>
                 <h1>✨ Autoconfig Complete</h1>
-                <h2 class="typewriter" data-text="Here's what got installed. Hover over any file or folder to learn what it does."></h2>
+                <h2><a href="https://proswitch.ai/claude-code-autoconfig" class="features-link" target="_blank" rel="noopener">Here are the features</a>. <span class="typewriter" data-text="Here's what got installed. Hover over any file or folder to learn what it does."></span></h2>
                 <div class="slide-content">
                     <div class="tree-panel">
                         <div class="tree-side">
