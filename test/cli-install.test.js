@@ -386,8 +386,14 @@ test('all shipped hooks appear in docs HTML file tree', () => {
 });
 
 test('all shipped agents appear in docs HTML file tree', () => {
+  const cliCode = fs.readFileSync(CLI_PATH, 'utf8');
+  const devOnlyMatch = cliCode.match(/const DEV_ONLY_FILES = \[([^\]]+)\]/);
+  const devOnly = devOnlyMatch
+    ? devOnlyMatch[1].match(/'([^']+)'/g).map(s => s.replace(/'/g, ''))
+    : [];
+
   const agentsDir = path.join(PACKAGE_CLAUDE_DIR, 'agents');
-  const agents = fs.readdirSync(agentsDir).filter(f => f.endsWith('.md'));
+  const agents = fs.readdirSync(agentsDir).filter(f => f.endsWith('.md') && !devOnly.includes(f));
 
   const docsHtml = fs.readFileSync(path.join(PACKAGE_CLAUDE_DIR, 'docs', 'autoconfig.docs.html'), 'utf8');
 

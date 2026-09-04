@@ -73,7 +73,7 @@ const PKG_VERSION = require(path.join(PKG_DIR, 'package.json')).version;
 
 // Kept in sync with bin/cli.js by substep 2.2's dev-gate-consistency test — here we only need
 // a representative subset to assert absence.
-const DEV_ONLY_COMMANDS = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-session.md', 'migrate-new-session.md'];
+const DEV_ONLY_COMMANDS = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-session.md', 'migrate-new-session.md', 'enable-retro.md'];
 const RETIRED_COMMANDS = ['enable-arcade-beeps.md', 'disable-arcade-beeps.md'];
 const SHIPPED_COMMANDS = ['autoconfig.md', 'autoconfig-update.md', 'continue.md', 'recover-context.md', 'gls.md'];
 
@@ -131,6 +131,7 @@ test('DEV_ONLY_FILES are NOT installed', () => {
   }
   assert(!fs.existsSync(path.join(fresh, '.claude', 'hooks', 'token-guard.js')), 'dev-only hook token-guard.js must not be installed');
   assert(!fs.existsSync(path.join(fresh, '.claude', 'hooks', 'token-guard-liveness.js')), 'dev-only hook token-guard-liveness.js must not be installed');
+  assert(!fs.existsSync(path.join(fresh, '.claude', 'agents', 'create-retro-item.md')), 'dev-only agent create-retro-item.md must not be installed');
 });
 
 test('retired commands are never installed fresh', () => {
@@ -235,6 +236,10 @@ writeFile(up, '.claude/commands/cost-control-details.md', '<!-- @description lef
 // Retired deprecated aliases left behind by an older install — the upgrade must delete them
 // (copyTree no longer writes them, but a stale .md is still a live slash command).
 for (const a of RETIRED_COMMANDS) writeFile(up, `.claude/commands/${a}`, '<!-- @description deprecated alias leftover -->\n');
+// Dev-gated (not retired) files an older install picked up while they still shipped — the
+// upgrade must leave them alone: gating stops NEW installs, it never deletes what a user has.
+writeFile(up, '.claude/commands/enable-retro.md', '<!-- @description older shipped copy -->\n');
+writeFile(up, '.claude/agents/create-retro-item.md', '<!-- @description older shipped copy -->\n');
 // The user has applied 001 + 003; bundled 004 is still PENDING. The upgrade's copyDir
 // overwrites this file with the shipped empty-@applied copy — the block must be preserved,
 // or the pre-mark pass refills it with ALL bundled ids and 004 never runs (BH-3).
@@ -273,6 +278,11 @@ test('retired command aliases left by an older install are removed on upgrade', 
     assert(!fs.existsSync(path.join(upClaude, 'commands', a)), `retired command ${a} must be removed on upgrade`);
   }
   assert(/Removed retired command/.test(upResult.out), 'the upgrade should report the removal');
+});
+
+test('dev-gated retro files an older install already holds survive the upgrade', () => {
+  assert(fs.existsSync(path.join(upClaude, 'commands', 'enable-retro.md')), 'existing enable-retro.md must be preserved');
+  assert(fs.existsSync(path.join(upClaude, 'agents', 'create-retro-item.md')), 'existing create-retro-item.md must be preserved');
 });
 
 test('settings.json is MERGED, not replaced (user env + hook kept; shipped contributions folded in)', () => {

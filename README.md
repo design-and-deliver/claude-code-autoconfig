@@ -53,7 +53,6 @@ your-project/
     │   ├── continue.md                #   /continue - resume the last session's work
     │   ├── enable-auto-mode.md        #   /enable-auto-mode - stop auto-guard prompts for a category
     │   ├── disable-auto-mode.md       #   /disable-auto-mode - restore a category's default guard
-    │   ├── enable-retro.md            #   /enable-retro - opt-in tech-debt log
     │   ├── enable-status-beeps.md     #   /enable-status-beeps - tab status beeps on
     │   ├── disable-status-beeps.md    #   /disable-status-beeps - tab status beeps off
     │   ├── extract-rules.md            #   /extract-rules - scan & extract rules
@@ -66,7 +65,6 @@ your-project/
     │   └── validate-cca-install.md   #   /validate-cca-install - verify installation
     ├── agents/                        # Custom subagents (add your own)
     │   ├── README.md                  #   How to define agents
-    │   ├── create-retro-item.md       #   Logs tech debt as story files (see /enable-retro)
     │   └── docs-refresh.md            #   Keeps interactive docs in sync with .claude/
     ├── feedback/                      # Team corrections for Claude
     │   └── FEEDBACK.md                #   Add entries when Claude errs
@@ -130,7 +128,6 @@ Autoconfig is **self-configuring**. Run `/autoconfig` and Claude:
 | `/extract-rules` | Scan Claude artifacts and extract structured rules |
 | `/check-commit` | Checks whether uncommitted work has piled up |
 | `/sync-claude-md` | Repairs CLAUDE.md markers and Discoveries section |
-| `/enable-retro` | Opt-in: Claude logs tech debt to `.claude/retro/` |
 | `/submit-claude-code-github-issue` | Files an upstream issue with duplicate-checking |
 | `/enable-auto-mode` | Stop auto-guard prompts for one category so auto mode can cover it |
 | `/disable-auto-mode` | Restore auto-guard's default prompting/blocking for a category |

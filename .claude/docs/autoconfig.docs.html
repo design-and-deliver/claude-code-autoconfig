@@ -903,11 +903,6 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">enable-auto-mode.md</span>
                             </div>
-                            <div class="tree-item indent-3 hidden" data-info="enable-retro" data-parent="commands">
-                                <span class="tree-spacer"></span>
-                                <span class="tree-file-icon">📄</span>
-                                <span class="file">enable-retro.md</span>
-                            </div>
                             <div class="tree-item indent-3 hidden" data-info="enable-status-beeps" data-parent="commands">
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
@@ -962,11 +957,6 @@
                                 <span class="tree-spacer"></span>
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">README.md</span>
-                            </div>
-                            <div class="tree-item indent-3 hidden" data-info="create-retro-item-agent" data-parent="agents">
-                                <span class="tree-spacer"></span>
-                                <span class="tree-file-icon">📄</span>
-                                <span class="file">create-retro-item.md</span>
                             </div>
                             <div class="tree-item indent-3 hidden" data-info="docs-refresh-agent" data-parent="agents">
                                 <span class="tree-spacer"></span>
@@ -1393,11 +1383,6 @@
                 desc: 'enable-auto-mode.md in commands/<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div>',
                 trigger: '/enable-auto-mode'
             },
-            'enable-retro': {
-                title: 'enable-retro.md',
-                desc: '(Experimental) Enable Claude to log tech debt it encounters into .claude/retro.<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Retro enabled — Claude will log tech debt to .claude/retro/ when encountered.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Creates .claude/retro/README.md, verifies shipped agent, updates CLAUDE.md</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/enable-retro</code> <span style="opacity: 0.6;">— Activate tech debt tracking</span></div></div></div>',
-                trigger: '/enable-retro'
-            },
             'enable-status-beeps': {
                 title: 'enable-status-beeps.md',
                 desc: 'enable-status-beeps.md in commands/<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div>',
@@ -1445,12 +1430,7 @@
             },
             'README-agent': {
                 title: 'README.md',
-                desc: 'Subagent definitions — two ship with autoconfig; add your project\'s own here too.',
-                trigger: 'Background agent'
-            },
-            'create-retro-item-agent': {
-                title: 'create-retro-item.md',
-                desc: 'Creates a formatted retro item when tech debt or improvements are spotted.',
+                desc: 'Subagent definitions — one ships with autoconfig; add your project\'s own here too.',
                 trigger: 'Background agent'
             },
             'docs-refresh-agent': {
@@ -1915,39 +1895,6 @@ node "\${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/auto-guard-set.js" <category> of
 
 Reply with the script's output verbatim as your whole response — no commentary. If it errors, show the error verbatim.`
             },
-            'enable-retro': {
-                filename: 'enable-retro.md',
-                content: `# Enable Retro
-
-Enable the experimental Retro feature, which lets Claude log tech debt and improvement opportunities as structured story files.
-
-## What This Does
-
-1. Creates \`.claude/retro/\` directory with a README
-2. Verifies the shipped \`.claude/agents/create-retro-item.md\` agent is present (it ships with autoconfig — this command never authors it)
-3. Adds Retro instructions to CLAUDE.md
-
-## Step 1: Create Retro Directory
-
-Create \`.claude/retro/README.md\` with:
-
-\`\`\`markdown
-# Retro Items
-
-Tech debt and improvement opportunities identified during development.
-
-Each item is a structured story file with:
-- Problem description
-- Acceptance criteria
-- Suggested approach
-- Priority & effort sizing
-- Files involved
-
-## Working with Retro Items
-
-- "Fix retro #001" — Work on a specific item
-- "What's in the retro backlog?" — List pending items`
-            },
             'enable-status-beeps': {
                 filename: 'enable-status-beeps.md',
                 content: `---
@@ -2204,43 +2151,10 @@ Store the extracted path as \`$PKG_DIR\`. This gives us the ground truth for wha
 
 This directory is where you define **subagents** — focused assistants Claude can delegate to during a task (e.g., a code reviewer, a test writer, a security auditor).
 
-claude-code-autoconfig ships two agents here — \`create-retro-item.md\` (used by \`/enable-retro\`) and \`docs-refresh.md\` — and you can add your own agents tuned to your project alongside them. Each agent is a single Markdown file with frontmatter describing its purpose, tools, and system prompt.
+claude-code-autoconfig ships one agent here — \`docs-refresh.md\` — and you can add your own agents tuned to your project alongside them. Each agent is a single Markdown file with frontmatter describing its purpose, tools, and system prompt.
 
 See Anthropic's subagents docs for the file format:
 https://docs.anthropic.com/en/docs/claude-code/sub-agents`
-            },
-            'create-retro-item-agent': {
-                filename: 'create-retro-item.md',
-                content: `# Create Retro Item Agent
-
-Create a fully-scoped story file in \`.claude/retro/\` when tech debt or improvement opportunities are identified.
-
-## When to Trigger
-
-Call this agent when you notice:
-- Tech debt that should be addressed later
-- Code that works but could be improved
-- Missing tests, documentation, or error handling
-- Architectural improvements worth tracking
-
-## Input
-
-Provide these details when calling:
-- **title**: Short descriptive name (used for filename)
-- **problem**: What's wrong or what friction was encountered
-- **criteria**: Specific, testable acceptance criteria
-- **approach**: How to fix it
-- **priority**: Critical | High | Medium | Low
-- **effort**: S | M | L | XL
-- **files**: List of files involved
-
-## Behavior
-
-1. Generate filename from title: \`kebab-case.md\`
-2. Create story file in \`.claude/retro/\` using this format:
-
-\`\`\`markdown
-# [Title]`
             },
             'docs-refresh-agent': {
                 filename: 'docs-refresh.md',

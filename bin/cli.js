@@ -515,8 +515,10 @@ function main() {
   // gated OUT of user installs until R6/R8/R9/R10 are live-baked — see CLAUDE.md "Invariants & Landmines".
   // THIS list (not package.json "files") is what gates installs — new dev-only commands/hooks
   // must be added here. Keep the literal on one line: tests parse it by regex.
+  // /enable-retro + its create-retro-item agent are experimental: kept in-repo, gated out of
+  // new installs since 2026-09-03. Projects that already hold them keep them (never retracted).
   const DEV_ONLY_FILES = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-session.md', 'migrate-new-session.md', 'token-guard.js', 'plan-progress.md', 'plan-progress.js', 'whats-happening.md', 'whats-happening.js', 'refactor.md', 'parallel-session-worktrees.md',
-    'fleet.md', 'fleet.js', 'sync-worktrees.md', 'sync-worktrees.js', 'session-close.js', 'restore-after-reboot.md', 'restore-after-reboot.js', 'worktree-gate.js', 'claim-registry.js', 'token-guard-liveness.js', 'statusline-cost.js', 'cost-compare.md', 'gimme-one-liner.md', 'create-wip-report.md', 'abort-plan.md', 'eod-report.md', 'token-saver-details.md', 'token-saver-rationale.md'];
+    'fleet.md', 'fleet.js', 'sync-worktrees.md', 'sync-worktrees.js', 'session-close.js', 'restore-after-reboot.md', 'restore-after-reboot.js', 'worktree-gate.js', 'claim-registry.js', 'token-guard-liveness.js', 'statusline-cost.js', 'cost-compare.md', 'gimme-one-liner.md', 'create-wip-report.md', 'abort-plan.md', 'eod-report.md', 'token-saver-details.md', 'token-saver-rationale.md', 'enable-retro.md', 'create-retro-item.md'];
 
   // Everything the installer ships to user projects passes this gate, at every depth.
   const shipsToUsers = (name) => !DEV_ONLY_FILES.includes(name);
