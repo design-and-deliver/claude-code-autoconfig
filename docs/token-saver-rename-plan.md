@@ -179,7 +179,7 @@ the two shim files.
 Repo `C:\CODE\claude-code-autoconfig`, worktree `token-saver-rename`, branch
 `plan/token-saver-rename` off `main`. Every commit: `Changelog: none`.
 
-### ☐ 2.1 · L · ~1.5h — Engine and shims in public CCA, same transform as 1.1 [opus]
+### ☑ 2.1 · L · ~1.5h — Engine and shims in public CCA, same transform as 1.1 [opus]
 
 ⛔ **Preconditions:** `git ls-files .claude/hooks/token-guard.js` non-empty (if the pending
 public delete has landed, skip 2.1 and 2.2 and Ledger it), and the main checkout's copy is clean
@@ -194,11 +194,11 @@ whole; `test/complexity-baseline.json` (the `.claude/hooks/token-guard.js` key);
 `git -C C:/CODE/cca-cost-control show <1.1 hash> -- .claude/hooks/token-saver.js
 .claude/hooks/token-saver-liveness.js .claude/hooks/token-guard.js`.
 
-- [ ] `git mv` both hooks; transplant 1.1's `main()` extraction, `resolveStateDir`,
+- [x] `git mv` both hooks; transplant 1.1's `main()` extraction, `resolveStateDir`,
       `homeStateDir`, reader alias, header doc and usage text — from the diff, verbatim; do not
       re-derive and do not touch any other line (the copies differ elsewhere by design).
-- [ ] Write both shims (1.1's text).
-- [ ] `complexity-baseline.json`: rename the key to `.claude/hooks/token-saver.js` (or add a
+- [x] Write both shims (1.1's text).
+- [x] `complexity-baseline.json`: rename the key to `.claude/hooks/token-saver.js` (or add a
       row, if the ratchet treats a missing key as a failure — read the test first).
 
 **Verify:** `node --check` ×4; the 1.1 synthetic-Stop loop through both names, exit 0;
@@ -436,3 +436,5 @@ Precondition: 1.1–4.2 Ledgered. In this order:
 - 2026-09-10 — **1.2 done** — private `358a597` on `plan/token-saver-rename`. 32 test files (23 hook + 9 repo — the plan's 29 undercounted) `git mv`'d and re-pointed; all suites green (0 failures across `.claude/hooks/tests/*.test.cjs` + `test/*.test.js`). `set-spend-gate.js` reads the resolved dir (new, else old) with an inline helper — the engine does NOT export `stateDir`, and 1.2 stayed out of the engine so 2.1's transplant of 1.1 stays exact. `recover-session.py` `POINTERS` fans out new-then-old; `test-token-saver.js` loads `token-saver.js` with `token-guard.js` fallback (CCA/JAE are still on the old name until 2.1/4.x). `.gitignore` fixed first; `.token-saver/` no longer untracked. Verify grep leaves ONE non-shim hit: `statusline-cost.js:236` (a console message naming `.claude/hooks/token-guard.js`) — fleet-managed file, left for 2.4, which lists `:65,:120,:200,:272` and must add `:236`. Fleet-synced commands `recover-context.md`/`continue.md` still say `token-guard` in prose and `.token-guard/` at `recover-context.md:28` — 2.5 + 4.2. `settings.local.json` (gitignored) now calls the new names directly.
 
 - 2026-09-10 — **2.1 prerequisites cleared** (from the private-repo session that closed 1.2, at the user's ask). The other session's dirty CCA main-checkout work landed as its own commits: `d98d297` (bomb-landing `RELAY_CARDS` + `persistCard`, budgets/quiet-card tests — all suites green: hook-tests 401/0, ratchet, bomb-gate) and `ef86f2f` (`.gitignore` `ARTICLE-CONCEPTS/`). 2.1's precondition now holds: `token-guard.js` tracked, main checkout clean on the engine + tests. Worktree `.claude/worktrees/token-saver-rename` created on branch `plan/token-saver-rename` at `ef86f2f`, bootstrapped (`hook-fleet.local.json` absent on this box — sync-hook-fleet dry runs in 2.4 need it). 2.1 itself NOT started — re-enter that worktree from a CCA-rooted session.
+
+- 2026-09-10 — **2.1 done** — public `2a4e3d0` on `plan/token-saver-rename` (worktree `.claude/worktrees/token-saver-rename`; run interactively from the private-repo session at the user's ask — the headless runner would have needed `--dangerous` for hook-file edits). 1.1's diff applied as a patch: 22/23 engine hunks landed (offsets up to ±90 lines from the bomb-landing commit `d98d297`; hunks 16 and 18 with fuzz, verified at `stateDir`/`homeStateDir` and `windowWarnsPath`); the exports hunk was re-done by hand (public list has no `driftVerdict`). Liveness patch applied clean. Shims are 1.1's text verbatim. Verify: `node --check` ×4; synthetic Stop + UserPromptSubmit through all four names exit 0; `.token-guard` → `.token-saver` migration confirmed through both shims on a UserPromptSubmit (a Stop with no transcript exits before touching state — expected); shims pass 90 engine exports + `main`; complexity ratchet green after the key rename PLUS a new `Function 'main'` row — the ratchet treats a missing key as all-new violations, and `main()` is the old top-level dispatch block now visible to the per-function lint (pre-existing debt, not new; the private repo has no ratchet, so 1.1 never met this). Same deviation as 1.1: `hook-tests` shows 10 failures, all `.token-guard` path pins in 10 suites (budgets, ccr, official-usage, quiet-card, r11, r19, r4b, r8, r9, shim) — 2.2 owns them, plus `test/token-guard-liveness.test.js` (path pin) and `test/token-guard-recovery.test.js:27` / `token-guard-session-gate.test.js:22`, which `readFileSync` the ENGINE SOURCE by the old path for source-order checks and now read the 7-line shim — 2.2 must point them at `token-saver.js`. `test/cli-install.test.js` fails 1: "all shipped hooks appear in docs HTML file tree" lists `token-saver*.js` because they are not yet in `DEV_ONLY_FILES` — 2.3 adds them (nothing ships mid-plan; 5.1 merges once). `dev-gate-consistency`, `hook-fleet-sync`, copy/divert/reread/bomb-gate all green. Ledger for 2.x now lives on the plan branch (the doc is tracked); `/continue` for 2.2 must re-enter the worktree, not read main's copy.
