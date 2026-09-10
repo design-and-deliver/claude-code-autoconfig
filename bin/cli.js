@@ -664,9 +664,15 @@ function main() {
   // see DEV_ONLY_FILES). Retract it from projects that picked it up: delete the orphaned
   // files here, and strip its hook entries inside the settings merge below. A project with
   // a paid activation key (tokenGuard.verdictServiceKey in cca.config.json) got these files
-  // from the licensed delivery path, not this installer — leave it untouched.
+  // from the licensed delivery path, not this installer — leave it untouched. Same for a
+  // dev-fleet repo (tokenGuard.devFleet: true): its copy arrives via scripts/sync-hook-fleet.js,
+  // and retracting it leaves four hook entries pointing at a missing file (job-agent-extension,
+  // 2026-09-10). Users never set devFleet; it is a maintainer-only marker.
   const retractCfg = readCcaConfig();
-  const paidTokenGuard = !!(retractCfg && retractCfg.tokenGuard && retractCfg.tokenGuard.verdictServiceKey);
+  const retractTokenGuardCfg = (retractCfg && retractCfg.tokenGuard) || {};
+  const paidTokenGuard = !!retractTokenGuardCfg.verdictServiceKey;
+  const devFleetTokenGuard = retractTokenGuardCfg.devFleet === true;
+  const keepTokenGuard = paidTokenGuard || devFleetTokenGuard;
   const TOKEN_GUARD_HOOK_ENTRY = { type: 'command', command: 'node "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/token-guard.js"' };
   const TOKEN_GUARD_SETTINGS_FRAGMENT = { hooks: {
     UserPromptSubmit: [{ matcher: '', hooks: [TOKEN_GUARD_HOOK_ENTRY] }],
@@ -674,7 +680,7 @@ function main() {
     PreToolUse: [{ matcher: '', hooks: [TOKEN_GUARD_HOOK_ENTRY] }],
     PostToolUse: [{ matcher: '', hooks: [TOKEN_GUARD_HOOK_ENTRY] }]
   } };
-  if (!paidTokenGuard) {
+  if (!keepTokenGuard) {
     let retracted = false;
     for (const rel of [path.join('hooks', 'token-guard.js'), path.join('commands', 'cost-control-details.md'), path.join('commands', 'token-saver-details.md'), path.join('commands', 'token-saver-rationale.md')]) {
       const p = path.join(claudeDest, rel);
@@ -715,7 +721,7 @@ function main() {
 
         // Strip the hook entries the un-gated 1.0.224 settings merge wired in (exact command
         // match per event — a user's own hooks survive; see the retraction block above).
-        if (!paidTokenGuard) unmergeSettingsFrom(userSettings, TOKEN_GUARD_SETTINGS_FRAGMENT);
+        if (!keepTokenGuard) unmergeSettingsFrom(userSettings, TOKEN_GUARD_SETTINGS_FRAGMENT);
 
         // Additively fold package hooks/env/permissions into the user's settings
         // (shared with the plugin installer — see mergeSettingsInto).

@@ -230,7 +230,11 @@ and a green feeling, then breaks something real:
 - **Dev-only gating lives in `DEV_ONLY_FILES` (bin/cli.js), NOT package.json `files`.** The
   npm `files` negations only shape the tarball; anything absent from `DEV_ONLY_FILES` is
   installed into every user project. token-guard + its commands are deliberately gated —
-  do not "fix" that by shipping them.
+  do not "fix" that by shipping them. The installer also RETRACTS the 1.0.224 leak (deletes
+  token-guard.js + its commands, strips its hook entries) unless `cca.config.json` carries
+  `tokenGuard.verdictServiceKey` (paid) or `tokenGuard.devFleet: true` (one of our own repos,
+  where the file arrives via `scripts/sync-hook-fleet.js`). Every fleet repo that holds
+  token-guard.js needs the devFleet flag, or its next `@latest` upgrade deletes the file.
 - **Commits about dev-gated work need a `Changelog: none` trailer.** feat/fix/perf/refactor
   bullets surface verbatim on users' upgrade screens (`bin/update-summary.js`) — announcing
   a feature users can't receive is a bug. Already-pushed leaks: add an OVERRIDES `null`.
