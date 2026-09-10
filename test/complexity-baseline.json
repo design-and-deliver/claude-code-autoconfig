@@ -28,7 +28,7 @@
       "Function 'setTitle'",
       "Function 'titleLog'"
     ],
-    ".claude/hooks/token-guard.js": [
+    ".claude/hooks/token-saver.js": [
       "Async function 'fetchOfficialUsage'",
       "Async function 'report'",
       "Function 'claimAdvisoryGuard'",
@@ -38,6 +38,7 @@
       "Function 'fanVerdict'",
       "Function 'firstContextOfHead'",
       "Function 'ledgerScopes'",
+      "Function 'main'",
       "Function 'meterSession'",
       "Function 'officialLines'",
       "Function 'onPostToolUse'",
