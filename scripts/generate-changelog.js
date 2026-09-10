@@ -13,6 +13,7 @@ const postversion = process.argv.includes('--postversion');
 // Wording overrides for ALREADY-PUSHED commits whose subjects predate the trailer
 // convention (keyed by commit-hash prefix). Value null drops the bullet entirely.
 // Do NOT add rows for new work — author a `Changelog:` trailer instead.
+// An explicit row also beats the dev-gate cross-check below (bulletForCommit).
 const OVERRIDES = {
   'cb60a64': "fix(cli): Installer no longer dies if a temporary file vanishes mid-copy",
   '82f27d6': "feat(terminal-title): More reliable 'awaiting your reply' tab indicator",
@@ -121,6 +122,100 @@ function bulletFor(hash, subject, body, overrides = OVERRIDES) {
   return subject;
 }
 
+// ---- Dev-gate cross-check ----------------------------------------------------------------
+// bin/cli.js's DEV_ONLY_FILES is the install gate: a file named there never reaches a user
+// project. So a commit whose only shipped-area files are gated describes work users cannot
+// receive, and its bullet must not surface on the upgrade screen — whatever its `Changelog:`
+// trailer says (the trailer is exactly where the past leaks came from: 0bf89e3, b514201).
+// bulletForCommit() applies that check on top of bulletFor():
+//   - gated-only commit → dropped, with a stderr note naming it
+//   - mixed commit (gated + shipped files) → bullet kept, stderr note asks you to verify it
+//   - an explicit OVERRIDES row still wins: it is the sanctioned reword, already looked at
+// Commits touching no gated file are left to the trailer convention as before.
+
+const CLI_PATH = path.join(__dirname, '..', 'bin', 'cli.js');
+const PKG_PATH = path.join(__dirname, '..', 'package.json');
+// Only these roots enter the npm tarball (package.json "files"); docs/, test/, scripts/ and
+// root files are maintainer-side and never decide a commit's verdict.
+const SHIPPED_ROOTS = ['bin/', '.claude/'];
+// Derived, regenerated files: sync-docs.js rebuilds the docs HTML from the shipped command
+// set, so a gated commit that also touches it is still gated — the regen carries no
+// user-facing substance of its own (29e723c: a token-guard fix whose only "shipped" file
+// was this regen, which the published changelog then announced).
+const DERIVED_PATHS = new Set(['.claude/docs/autoconfig.docs.html']);
+
+// Same regex as test/dev-gate-consistency.test.js and .claude/scripts/sync-docs.js (the
+// literal must stay single-quoted). Throws instead of returning an empty set — an empty set
+// would silently switch the gate off.
+function loadDevOnlyFiles(cliPath = CLI_PATH) {
+  const src = fs.readFileSync(cliPath, 'utf8');
+  const block = src.match(/const DEV_ONLY_FILES = \[([^\]]+)\]/);
+  if (!block) throw new Error(`DEV_ONLY_FILES literal not found in ${cliPath}`);
+  return new Set([...block[1].matchAll(/'([^']+)'/g)].map(m => m[1]));
+}
+
+// package.json "files" negations ("!.claude/hooks/tests/**" → ".claude/hooks/tests"): paths
+// under them never enter the tarball, so inside .claude/ they count as maintainer-side too.
+function loadTarballNegations(pkgPath = PKG_PATH) {
+  const files = JSON.parse(fs.readFileSync(pkgPath, 'utf8')).files || [];
+  return files.filter(f => f.startsWith('!')).map(f => f.slice(1).replace(/\/\*\*$/, ''));
+}
+
+// 'gated'   — basename is in DEV_ONLY_FILES: users never receive it (checked before the
+//             negations, since every gated command is negated in the tarball too)
+// 'shipped' — under bin/ or .claude/, in the tarball, not gated: users receive it
+// 'neutral' — everything else: maintainer-side paths, tarball-negated dirs, derived files
+function classifyPath(file, devOnly, negations) {
+  const p = String(file).replace(/\\/g, '/');
+  if (!SHIPPED_ROOTS.some(root => p.startsWith(root)) || DERIVED_PATHS.has(p)) return 'neutral';
+  if (devOnly.has(path.posix.basename(p))) return 'gated';
+  if (negations.some(n => p === n || p.startsWith(n + '/'))) return 'neutral';
+  return 'shipped';
+}
+
+// 'gated' — touches gated files and no shipped one; 'mixed' — both; 'clear' — no gated file.
+function gateVerdict(files, devOnly, negations) {
+  const kinds = new Set((files || []).map(f => classifyPath(f, devOnly, negations)));
+  if (!kinds.has('gated')) return 'clear';
+  return kinds.has('shipped') ? 'mixed' : 'gated';
+}
+
+function hasOverride(hash, overrides) {
+  return Object.keys(overrides).some(key => String(hash).startsWith(key));
+}
+
+// bulletFor() plus the dev-gate cross-check. `gate` is { devOnly, negations, warn }; pass
+// null to skip the check (the trailer/OVERRIDES layer alone).
+function bulletForCommit({ hash, subject, body, files }, gate, overrides = OVERRIDES) {
+  const bullet = bulletFor(hash, subject, body, overrides);
+  if (!gate || bullet === null || hasOverride(hash, overrides)) return bullet;
+  const verdict = gateVerdict(files, gate.devOnly, gate.negations);
+  if (verdict === 'clear') return bullet;
+  const short = String(hash).slice(0, 7);
+  if (verdict === 'mixed') {
+    gate.warn(`dev-gate: ${short} touches DEV_ONLY files alongside shipped ones — check the bullet describes only the shipped part: "${bullet}"`);
+    return bullet;
+  }
+  gate.warn(`dev-gate: ${short} dropped — touches only DEV_ONLY files, which users never receive: "${bullet}"`);
+  return null;
+}
+
+function loadGate() {
+  return { devOnly: loadDevOnlyFiles(), negations: loadTarballNegations(), warn: (m) => console.error(m) };
+}
+
+// One record per commit — \x1e HASH \x1f SUBJECT \x1f BODY \x1f FILES. Unit/record separators
+// because subjects and bodies are free text; `--name-only` appends the touched paths after
+// the body, one per line.
+const LOG_FORMAT = '%x1e%H%x1f%s%x1f%b%x1f';
+function parseLogRecords(raw) {
+  return String(raw).split('\x1e').map(r => r.trim()).filter(Boolean).map(r => {
+    const [hash, subject, body, fileBlob] = r.split('\x1f');
+    const files = String(fileBlob || '').split('\n').map(s => s.trim()).filter(Boolean);
+    return { hash, subject, body, files };
+  });
+}
+
 // Version-bump, chore, revert, plan, and merge commits never reach the changelog (BH-9).
 // `revert`/`chore`/`plan` are matched as conventional-commit types (`type:` or
 // `type(scope):`) — `plan:` subjects are plan-doc tick/ledger bookkeeping and are always
@@ -155,21 +250,13 @@ function main() {
     '',
   ];
 
+  const gate = loadGate();
   for (let i = 0; i < tags.length - 1 && i < 50; i++) {
     const newer = tags[i];
     const older = tags[i + 1];
-    // %x1f (unit sep) between fields, %x1e (record sep) between commits — subjects and
-    // bodies are free text, so newline-splitting would tear multi-line bodies apart.
-    const raw = run(`git log --no-merges --format="%H%x1f%s%x1f%b%x1e" ${older}..${newer}`);
-    const bullets = raw
-      .split('\x1e')
-      .map(r => r.trim())
-      .filter(Boolean)
-      .map(r => {
-        const [hash, subject, body] = r.split('\x1f');
-        if (!subject || isHousekeeping(subject)) return null;
-        return bulletFor(hash, subject, body);
-      })
+    const raw = run(`git log --no-merges --format="${LOG_FORMAT}" --name-only ${older}..${newer}`);
+    const bullets = parseLogRecords(raw)
+      .map(c => (!c.subject || isHousekeeping(c.subject)) ? null : bulletForCommit(c, gate))
       .filter(Boolean);
 
     if (bullets.length === 0) continue;
@@ -204,4 +291,7 @@ function main() {
 }
 
 if (require.main === module) main();
-module.exports = { bulletFor, isHousekeeping };
+module.exports = {
+  bulletFor, isHousekeeping, bulletForCommit, classifyPath, gateVerdict, parseLogRecords,
+  loadDevOnlyFiles, loadTarballNegations, LOG_FORMAT,
+};

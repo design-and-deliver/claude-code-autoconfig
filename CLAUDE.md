@@ -234,6 +234,10 @@ and a green feeling, then breaks something real:
 - **Commits about dev-gated work need a `Changelog: none` trailer.** feat/fix/perf/refactor
   bullets surface verbatim on users' upgrade screens (`bin/update-summary.js`) — announcing
   a feature users can't receive is a bug. Already-pushed leaks: add an OVERRIDES `null`.
+  `scripts/generate-changelog.js` also cross-checks each commit's touched paths against
+  `DEV_ONLY_FILES`: a commit whose only shipped-area files are gated is dropped whatever its
+  trailer says (stderr names it), a mixed commit keeps its bullet with a verify note, and an
+  explicit OVERRIDES row wins. The trailer still governs mixed and maintainer-only commits.
 - **token-guard's `--analyze` digest wording is a machine interface.** `/analyze-session`
   keys on the literal "live context at end" and the RENT/BOMBS/FLEETS/TTL headers. R6 scope
   data comes from terminal-title's per-title ledger (`.titles/{sid}.history.jsonl`: `ts`,

@@ -42,7 +42,6 @@
 - fix(status-beeps): When status beeps stay silent, the reason is now recorded so it can be diagnosed
 
 ## v1.0.221
-- fix(token-guard): - The session-size card no longer interrupts just to recommend approving — it
 - fix(continue): /continue no longer reports a plan's next step as your last activity if you'd already moved on to something else
 - docs(continue): v13 — last active use case wording
 - feat(continue): /continue no longer opens by asking why you interrupted the previous session — when the stop had no stated reason it reports the state and asks for the go-ahead to resume instead.
@@ -103,7 +102,6 @@
 
 ## v1.0.215
 - feat(commands): New /sync-claude-md repairs CLAUDE.md structure if markers go missing; /submit-claude-code-github-issue files an upstream Claude Code issue with duplicate-checking first; a new docs-refresh agent keeps the interactive docs current when .claude files change.
-- feat(retro): New opt-in /enable-retro — when enabled, Claude logs tech debt and improvement ideas it notices into .claude/retro as small structured story files you can pick up later.
 - feat(commit-guard): Claude now reminds you when a lot of uncommitted work piles up, and knows to stay quiet while you're actively committing in any terminal. New /check-commit command runs the check on demand.
 - feat(terminal-title): Terminal tabs for plan-driven work now lead with the plan's name, so parallel sessions from the same plan group together visually.
 - feat(terminal-title): Claude now answers yes/no questions with a numbered 1-yes/2-no
