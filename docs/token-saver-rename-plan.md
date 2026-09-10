@@ -148,7 +148,7 @@ for t in .claude/hooks/tests/*.test.cjs; do node "$t" >/dev/null 2>&1 || echo "F
 ```
 **Commit:** `refactor(token-saver): rename the engine and liveness hooks; shims keep the old names for one release` + `Changelog: none`.
 
-### ☐ 1.2 · M · ~45m — Private repo: tests, scripts, commands, dogfood wiring
+### ☑ 1.2 · M · ~45m — Private repo: tests, scripts, commands, dogfood wiring
 
 **Read list:** the `require` line of each `.claude/hooks/tests/token-guard-*.test.cjs` (20) and
 `test/token-guard-*.test.js` (9); `scripts/sync-token-saver-bundle.js` (whole, ~60 lines —
@@ -158,14 +158,14 @@ for t in .claude/hooks/tests/*.test.cjs; do node "$t" >/dev/null 2>&1 || echo "F
 token-saver-rationale,test-token-saver}.md` (grep windows); `.claude/settings.local.json:8-50`
 (entries `:10,:14,:25,:36,:47`); `.gitignore:1-5`; `README.md`, `CLAUDE.md` (grep windows).
 
-- [ ] `git mv` all 29 test files to `token-saver-*`; `sed` their `require('../token-guard…')`
+- [x] `git mv` all 29 test files to `token-saver-*`; `sed` their `require('../token-guard…')`
       → `token-saver…`; re-verify `rg "require\(.*token-guard" .claude test` = 0.
-- [ ] `sync-token-saver-bundle.js`: hook entry → `hooks/token-saver.js`; file map →
+- [x] `sync-token-saver-bundle.js`: hook entry → `hooks/token-saver.js`; file map →
       `hooks/token-saver.js`. The bundle ships NO shim — a fresh activation has no legacy
       entries. Do not RUN the sync here (it writes into proswitch-api; 3.1 runs it).
-- [ ] `set-spend-gate.js` writes via the resolved state dir; `recover-session.py` `POINTER_REL`
+- [x] `set-spend-gate.js` writes via the resolved state dir; `recover-session.py` `POINTER_REL`
       tries `.token-saver/recover.json` then `.token-guard/recover.json`; `test-token-saver.js`.
-- [ ] Commands' `allowed-tools` and bodies → `token-saver.js`; `.gitignore` adds
+- [x] Commands' `allowed-tools` and bodies → `token-saver.js`; `.gitignore` adds
       `.claude/hooks/.token-saver/` (keep the old line); `settings.local.json` five entries →
       new names; README / CLAUDE.md mentions.
 
@@ -432,3 +432,5 @@ Precondition: 1.1–4.2 Ledgered. In this order:
   exemption is committed at CCA `f930a88` but unpublished — 5.1's `@latest` run depends on it.
 
 - 2026-09-10 — **1.1 done** — private `0dfdaf1` on `plan/token-saver-rename`. Verify green: `node --check` ×4, synthetic Stop through both names exit 0, `.token-guard` → `.token-saver` migrated (505 entries), both shims export `main`. Nine `.claude/hooks/tests/token-guard-*.test.cjs` suites fail on `.token-guard` state-dir path pins (budgets, ccr, quiet-card, r11, r19, r4, r8, r9, shim) — 1.2 owns them. Hazard for 1.2: `.claude/hooks/.token-saver/` is UNTRACKED (`.gitignore` still names the old dir) — fix `.gitignore` before any `git add -A`. Session ended on an unexplained interrupt mid-diff-review; finished by the recovery session.
+
+- 2026-09-10 — **1.2 done** — private `358a597` on `plan/token-saver-rename`. 32 test files (23 hook + 9 repo — the plan's 29 undercounted) `git mv`'d and re-pointed; all suites green (0 failures across `.claude/hooks/tests/*.test.cjs` + `test/*.test.js`). `set-spend-gate.js` reads the resolved dir (new, else old) with an inline helper — the engine does NOT export `stateDir`, and 1.2 stayed out of the engine so 2.1's transplant of 1.1 stays exact. `recover-session.py` `POINTERS` fans out new-then-old; `test-token-saver.js` loads `token-saver.js` with `token-guard.js` fallback (CCA/JAE are still on the old name until 2.1/4.x). `.gitignore` fixed first; `.token-saver/` no longer untracked. Verify grep leaves ONE non-shim hit: `statusline-cost.js:236` (a console message naming `.claude/hooks/token-guard.js`) — fleet-managed file, left for 2.4, which lists `:65,:120,:200,:272` and must add `:236`. Fleet-synced commands `recover-context.md`/`continue.md` still say `token-guard` in prose and `.token-guard/` at `recover-context.md:28` — 2.5 + 4.2. `settings.local.json` (gitignored) now calls the new names directly.
