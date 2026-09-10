@@ -26,7 +26,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
-const { QUIET_CARDS, AUTO_RECEIPTS } = require(HOOK);
+const { QUIET_CARDS, AUTO_RECEIPTS, RELAY_CARDS } = require(HOOK);
 
 const MIGRATE_TAIL =
   '1. Select "No" below\n2. /clear to purge old context\n' +
@@ -191,6 +191,20 @@ test('every quiet card is header, trigger one-liner, numbered steps, and the rat
     }
     assert.ok(lines.some(l => /^1\. /.test(l)), code);
     assert.equal(lines[lines.length - 1], '~ Rationale → /token-saver-rationale', code);
+  }
+});
+
+test('relay cards share the card grammar, minus the dialog-only step', () => {
+  for (const [code, card] of Object.entries(RELAY_CARDS)) {
+    const lines = card.split('\n');
+    // every relay card so far ends in the restart remedy, so the header carries the verdict
+    assert.equal(lines[0], '⚠️ TokenSaver — /clear then /continue costs less', code);
+    assert.ok(lines[1] && lines[1].startsWith('~ '), code);
+    assert.ok(lines.some(l => /^1\. /.test(l)), code);
+    assert.equal(lines[lines.length - 1], '~ Rationale → /token-saver-rationale', code);
+    assert.doesNotMatch(card, /Select "No"/, `${code}: no dialog to answer on a relayed card`);
+    assert.doesNotMatch(card, /STANDALONE|VERBATIM|relay/i,
+      `${code}: user-facing text carries no relay instructions`);
   }
 });
 

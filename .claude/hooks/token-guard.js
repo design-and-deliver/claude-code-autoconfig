@@ -2866,11 +2866,14 @@ function bombLandingNote(ctx, jump) {
   const landed =
     `something just loaded +${fmtK(jump)} tokens into this conversation${culprit} — every ` +
     `future turn re-reads it: ${bombCost}`;
-  return bombNoteText(bombRestartVerdict(ctx, jump), landed);
+  return bombNoteText(ctx, bombRestartVerdict(ctx, jump), landed);
 }
 
-// Words the landing by verdict: stay -> silent steering, clear (or nothing priced) -> the card.
-function bombNoteText(rv, landed) {
+// Words the landing by verdict: stay -> silent steering, clear (or nothing priced) -> the card
+// (verbatim relay card with verdictDetail 'file', prose relay otherwise). Only the rendering
+// branches persist a family rationale — a silent-steer bomb must never shadow a rendered
+// card's entry in the ledger the rationale command reads newest-first.
+function bombNoteText(ctx, rv, landed) {
   if (rv && !rv.clear) {
     const trips = rv.payback
       ? ` — a fresh session would have to run ~${rv.payback} more round trips just to repay ` +
@@ -2882,6 +2885,18 @@ function bombNoteText(rv, landed) {
       `print NOTHING about this. Stay on task; from here on send one-shot references to a ` +
       `disposable subagent instead of loading them into this conversation, and do not ` +
       `suggest /clear or /continue.`
+    );
+  }
+  persistCard(ctx.projectDir, ctx.sid, 'bomb-landing',
+    `context-bomb: ${landed}. A one-time reference belongs in a disposable subagent; once ` +
+    `its useful part is extracted, /continue picks the thread back up in the fresh ` +
+    `session, nothing to prep.`);
+  if (ctx.cfg.verdictDetail === 'file') {
+    return (
+      `context-bomb: ${landed}. Print the card between the CARD markers to the user ` +
+      `VERBATIM as a STANDALONE warning block — every line exactly as written, nothing ` +
+      `added or rephrased, never woven into your answer — then a horizontal rule before ` +
+      `the answer itself.\nCARD>>>\n${withSidToken(RELAY_CARDS['bomb-landing'], ctx.sid)}\n<<<CARD`
     );
   }
   return (
@@ -3883,6 +3898,19 @@ const QUIET_CARDS = {
     '⚠️ TokenSaver\n' +
     '~ This workflow looks over-fanned for one task\n' +
     '1. Select "No" and cut the fan, or approve to launch as-is\n' + DETAILS_LINE,
+};
+
+// Model-relayed advisory cards (Andrew 2026-09-01: same card grammar as the dialogs, for
+// consistency). These surfaces have no permission dialog — the hook reaches the user only
+// through the model's reply — so the advisory note wraps the exact card text in a verbatim
+// relay contract instead of swapping a dialog reason, and no step says 'Select "No"'.
+// Persisted under their family like every card, so the rationale pointer answers the same.
+const RELAY_CARDS = {
+  'bomb-landing':                  // R3 — a bomb landed mid-turn, card relayed by the model
+    '⚠️ TokenSaver — /clear then /continue costs less\n' +
+    '~ A large payload just landed — every later turn re-pays to carry it\n' +
+    '1. /clear to purge old context\n' +
+    '2. /continue to restore the context for your last active use case\n' + DETAILS_LINE,
 };
 
 // Append the full card to the per-session ledger the details command reads (newest-last
@@ -5346,7 +5374,7 @@ if (require.main === module) {
 }
 
 module.exports = { meter, meterSession, priceFor, attributeJump, ledgerScopes, officialLines,
-  QUIET_CARDS, AUTO_RECEIPTS,                  // token-guard-quiet-card.test.cjs — card taxonomy + receipts copy contract
+  QUIET_CARDS, AUTO_RECEIPTS, RELAY_CARDS,     // token-guard-quiet-card.test.cjs — card taxonomy + receipts copy contract
   claudeCodeUA, fetchOfficialUsage,
   analyzeSession, renderAnalysis, payloadVerdict, fanVerdict, workflowSource, skillSizes, recordObservedSkill,
   payloadDivertCopy, readHead,                 // test/token-guard-divert.test.js — R8 door 2 divert

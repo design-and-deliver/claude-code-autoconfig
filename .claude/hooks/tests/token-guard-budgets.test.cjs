@@ -15,7 +15,7 @@ process.env.USERPROFILE = UNIT_HOME;
 process.env.HOME = UNIT_HOME;
 
 const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
-const { recordObservedSkill, skillSizes } = require(HOOK);
+const { recordObservedSkill, skillSizes, RELAY_CARDS } = require(HOOK);
 
 const CFG = { bombJumpTokens: 50000, skillBudgetWarnChars: 150000 };
 const SHARED_TABLE = path.join(UNIT_HOME, '.claude', '.token-guard', 'observed-skills.md');
@@ -238,6 +238,31 @@ test('E2E: R3 past the fat line still relays the /clear, then /continue card', (
   assert.match(out, /STANDALONE warning block/);
   assert.match(out, /\/clear, then \/continue to drop this weight/);
   assert.doesNotMatch(out, /context-bomb \(silent steering/);
+});
+
+test("E2E: R3 clear verdict relays the bomb-landing card verbatim under verdictDetail 'file'", () => {
+  const dir = mkProject();
+  fs.writeFileSync(path.join(dir, '.claude', 'cca.config.json'),
+    JSON.stringify({ tokenGuard: { showDollars: false, verdictDetail: 'file' } }));
+  const out = bombOut(dir, 'sid-card', 1000, 200000); // past the fat line -> clear verdict
+  const note = JSON.parse(out).hookSpecificOutput.additionalContext;
+  assert.match(note, /context-bomb/);
+  // the exact card face renders between the markers, fire-time sid token appended
+  assert.ok(note.includes('CARD>>>\n' + RELAY_CARDS['bomb-landing'] + ' sid-card\n<<<CARD'),
+    'card face verbatim + sid token');
+  assert.match(note, /VERBATIM as a STANDALONE warning block/);
+  assert.doesNotMatch(note, /⚠️ Hey —/, 'the prose relay is replaced by the card');
+  // the measured arithmetic moved to the family ledger the rationale command reads
+  const ledger = fs.readFileSync(
+    path.join(dir, '.claude', 'hooks', '.token-guard', 'sid-card.cards.jsonl'), 'utf8');
+  assert.match(ledger, /"family":"bomb-landing"/);
+  assert.match(ledger, /per cache-warm turn/);
+  // ...and the silent-steer branch never writes one (it renders nothing to shadow)
+  const silentDir = mkProject();
+  bombOut(silentDir, 'sid-shh', 1000, 61000);
+  assert.ok(!fs.existsSync(
+    path.join(silentDir, '.claude', 'hooks', '.token-guard', 'sid-shh.cards.jsonl')),
+    'no ledger entry for a silent note');
 });
 
 test('E2E: R3 quotes the payback trips only once a floor is actually measured', () => {
