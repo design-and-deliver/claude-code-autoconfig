@@ -98,7 +98,7 @@ path and read the same three slices. Abandoning is one `git branch -D` per repo 
 Repo `C:\CODE\cca-cost-control`, branch `plan/token-saver-rename` off `main` (clean at `4c8e30d`
 on 2026-09-10). No `package.json` here — tests run per file.
 
-### ☐ 1.1 · L · ~1.5h — Rename the engine and liveness hooks, add shims, migrate the state dir, alias the config key [opus]
+### ☑ 1.1 · L · ~1.5h — Rename the engine and liveness hooks, add shims, migrate the state dir, alias the config key [opus]
 
 **Read list** (Grep-then-window; the private copy's line numbers differ from the public ones
 quoted elsewhere — grep, never trust a number): `.claude/hooks/token-guard.js` — `function
@@ -108,24 +108,24 @@ the config key (~:82 public), the `require.main === module` block and the ~20 li
 `module.exports` (tail); `.claude/hooks/token-guard-liveness.js` whole (158 lines; `stateDir()`
 at `:33`); this doc: traps + this substep.
 
-- [ ] `git mv .claude/hooks/token-guard.js .claude/hooks/token-saver.js` and
+- [x] `git mv .claude/hooks/token-guard.js .claude/hooks/token-saver.js` and
       `git mv .claude/hooks/token-guard-liveness.js .claude/hooks/token-saver-liveness.js`.
-- [ ] In `token-saver.js`: move the body of the `if (require.main === module) { … }` block into
+- [x] In `token-saver.js`: move the body of the `if (require.main === module) { … }` block into
       `function main() { … }`, leave `if (require.main === module) main();`, add `main` to
       `module.exports`. Confirm nothing else at module level starts work.
-- [ ] Add `resolveStateDir(oldDir, newDir)`: if `newDir` exists → return it; else if `oldDir`
+- [x] Add `resolveStateDir(oldDir, newDir)`: if `newDir` exists → return it; else if `oldDir`
       exists → `try { fs.renameSync(oldDir, newDir); return newDir } catch { return oldDir }`;
       else return `newDir`. `stateDir(projectDir)` → `resolveStateDir(<…/.token-guard>,
       <…/.token-saver>)`. Add `homeStateDir()` the same way for `~/.claude/.token-guard` →
       `~/.claude/.token-saver`, and route the four home-tier literals through it.
-- [ ] Config reader: `const block = cfg && (cfg.tokenSaver || cfg.tokenGuard); return (block &&
+- [x] Config reader: `const block = cfg && (cfg.tokenSaver || cfg.tokenGuard); return (block &&
       typeof block === 'object') ? block : {};` — and document `tokenSaver` (read-alias
       `tokenGuard`) in the header comment. Update the file's own usage text
       (`node .claude/hooks/token-guard.js --report` etc.) to the new name.
-- [ ] Liveness: same `main()` export, same `resolveStateDir` (copied — the liveness hook
+- [x] Liveness: same `main()` export, same `resolveStateDir` (copied — the liveness hook
       deliberately never requires the engine, `:9`); canary wording "token-guard" →
       "TokenSaver".
-- [ ] Write the two shims, verbatim shape:
+- [x] Write the two shims, verbatim shape:
       ```js
       #!/usr/bin/env node
       // Compatibility shim — the engine moved to token-saver.js (TokenSaver rename, 2026-09).
@@ -430,3 +430,5 @@ Precondition: 1.1–4.2 Ledgered. In this order:
   main checkout dirty on `token-guard.js` + two of its tests (another session's work, do not
   touch); private repo clean at `4c8e30d`; API on `magic-url-deploy`; the installer's devFleet
   exemption is committed at CCA `f930a88` but unpublished — 5.1's `@latest` run depends on it.
+
+- 2026-09-10 — **1.1 done** — private `0dfdaf1` on `plan/token-saver-rename`. Verify green: `node --check` ×4, synthetic Stop through both names exit 0, `.token-guard` → `.token-saver` migrated (505 entries), both shims export `main`. Nine `.claude/hooks/tests/token-guard-*.test.cjs` suites fail on `.token-guard` state-dir path pins (budgets, ccr, quiet-card, r11, r19, r4, r8, r9, shim) — 1.2 owns them. Hazard for 1.2: `.claude/hooks/.token-saver/` is UNTRACKED (`.gitignore` still names the old dir) — fix `.gitignore` before any `git add -A`. Session ended on an unexplained interrupt mid-diff-review; finished by the recovery session.
