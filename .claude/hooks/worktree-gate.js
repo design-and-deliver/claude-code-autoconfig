@@ -9,7 +9,7 @@
  * `.claude/rules/parallel-session-worktrees.md` has said "call EnterWorktree first" since
  * 2026-07. On 2026-07-31 03:32 this repo had SIX live sessions and, per `git worktree list`,
  * ZERO worktrees; the same morning three sessions in claude-code-autoconfig interleaved
- * line-by-line edits into one `token-guard.js` and none of them could commit afterwards.
+ * line-by-line edits into one `token-saver.js` and none of them could commit afterwards.
  * Every one of those sessions had read the rule. The rule is not the problem — its TRIGGER is:
  * it asks a session to predict, at minute zero, whether it will later write. A session that
  * opens read-only (a /continue recovery, a log read) answers "no" honestly, then drifts into a
@@ -222,7 +222,7 @@ function headBranch(repoRoot) {
 }
 
 // Plan docs = docs/*.md or .claude/plans/*.md carrying a `## Ledger` section — the shape
-// plan-authoring.md requires, and the same one token-guard's plan-boundary advisory ranks.
+// plan-authoring.md requires, and the same one token-saver's plan-boundary advisory ranks.
 // Returns basenames. Capped because a docs/ dir is unbounded input on a hook path, even one
 // that runs at most once per session.
 function planDocs(repoRoot) {

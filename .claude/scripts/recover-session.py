@@ -26,7 +26,7 @@ commits). This script just makes all the evidence arrive in one round trip.
 
 Usage (from the project root):
     python3 .claude/scripts/recover-session.py             # auto mode
-    python3 .claude/scripts/recover-session.py --pid 3     # token-guard pointer
+    python3 .claude/scripts/recover-session.py --pid 3     # token-saver pointer
     python3 .claude/scripts/recover-session.py --minutes 60
     python3 .claude/scripts/recover-session.py --no-plan-probe
 
@@ -49,7 +49,10 @@ from datetime import datetime, timedelta, timezone
 
 PROJECTS = os.path.expanduser('~/.claude/projects')
 TITLES_REL = os.path.join('.claude', 'hooks', '.titles')
-POINTER_REL = os.path.join('.claude', 'hooks', '.token-guard', 'recover.json')
+# Pointer dirs, newest name first: the engine writes .token-saver/ since the 2026-09 rename;
+# a pre-rename hook still in the wild writes .token-guard/. First readable pointer wins.
+POINTER_RELS = [os.path.join('.claude', 'hooks', d, 'recover.json')
+                for d in ('.token-saver', '.token-guard')]
 PLAN_DIRS = ['docs', '.claude/plans']
 LIVENESS_SECS = 180        # same bar as the dupe-session guard
 HANDOFF_DRIFT = 180        # note is STALE if the transcript ran on past it
@@ -97,9 +100,9 @@ def git(*args):
 def search_roots():
     """CWD, then the MAIN checkout when CWD is a git worktree, then home.
 
-    `.titles/` and `.token-guard/` are gitignored, so a worktree has neither --
+    `.titles/` and `.token-saver/` are gitignored, so a worktree has neither --
     only the main checkout does. Resolving CWD alone (what the inline probes did)
-    silently loses lineage, title history and the token-guard pointer for every
+    silently loses lineage, title history and the token-saver pointer for every
     session run from a worktree, which is most of them in a parallel-session repo:
     auto mode then drops to the newest-other-transcript rung and the plan alias
     match sees an empty title. Measured 2026-08-07 in job-agent-extension.
@@ -124,8 +127,8 @@ def main_checkout():
 
 ROOTS = search_roots()
 TITLES_DIRS = [os.path.join(r, TITLES_REL) for r in ROOTS]
-# Home holds no per-project token-guard state, so the pointer stops at the repo tiers.
-POINTERS = [os.path.join(r, POINTER_REL) for r in ROOTS[:2]]
+# Home holds no per-project token-saver state, so the pointer stops at the repo tiers.
+POINTERS = [os.path.join(r, rel) for r in ROOTS[:2] for rel in POINTER_RELS]
 
 
 # --------------------------------------------------------------------------
@@ -320,7 +323,7 @@ def read_pointer():
 
 
 def compute_cutoff(sid, stamps, title_entry):
-    # a. token-guard pointer for this sid: frozen at idle-fire time.
+    # a. token-saver pointer for this sid: frozen at idle-fire time.
     rec = read_pointer()
     if rec:
         for e in [rec] + (rec.get('history') or []):
@@ -398,7 +401,7 @@ def pick_plan(cands):
     A session executing a substep necessarily OPENS its plan doc -- it reads the
     trap section and appends a Ledger entry -- so a file_path hit anywhere in the
     transcript is the signal that actually separates the two cases, and it beats
-    token overlap outright: two token-guard-* plans tie on {token, guard} while
+    token overlap outright: two token-saver-* plans tie on {token, saver} while
     only one of them was ever read.
     """
     opened = [c for c in cands if c['opened']]
@@ -662,7 +665,7 @@ def classify_stop(tail):
     A transcript records `[Request interrupted by user for tool use]` with NO
     reason attached, and the harness cannot tell an objection ("stop, that's
     wrong") from a mechanical stop (Escape, or a `/clear` the user had already
-    queued from a token-guard restart advisory). The recovering session then
+    queued from a token-saver restart advisory). The recovering session then
     guesses -- and the /continue doc's "session ended waiting on the user ->
     re-ask that question" rule makes it guess ACTIVELY WRONG: it replays the
     dead session's "what made you stop me?" at a user who has since moved on,

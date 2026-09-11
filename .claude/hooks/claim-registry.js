@@ -159,7 +159,7 @@ module.exports = {
   // Exported for the suite: the dir-listing and line-parsing seams are where readLiveClaims'
   // fail-open behavior lives, and getClaimsDir() is homedir-fixed — without these the missing /
   // unreadable-dir paths can only be exercised by moving the real claims dir out from under the
-  // live fleet. Not part of the hook contract; token-guard and fleet.js use neither.
+  // live fleet. Not part of the hook contract; token-saver and fleet.js use neither.
   listClaimFiles,
   parseClaimLines
 };

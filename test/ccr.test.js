@@ -4,7 +4,7 @@
 /**
  * Tests for bin/ccr.js ("claude code, recover").
  *
- * Unit: readPointer must accept only the shape token-guard actually writes (a plain
+ * Unit: readPointer must accept only the shape token-saver actually writes (a plain
  * slash command: letters/digits/space/=.:-_) and reject anything metacharacter-laden.
  * buildLaunch wraps the command in double quotes for a `shell: true` spawn, so the
  * "recoverCmd never contains double quotes" property must be ENFORCED in code, not
@@ -23,7 +23,7 @@ const { readPointer, buildLaunch } = require(CCR_PATH);
 const { test, assert, summary } = require('./_harness');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cca-ccr-'));
-const guardDir = path.join(tmp, '.claude', 'hooks', '.token-guard');
+const guardDir = path.join(tmp, '.claude', 'hooks', '.token-saver');
 fs.mkdirSync(guardDir, { recursive: true });
 const pointerPath = path.join(guardDir, 'recover.json');
 
@@ -36,7 +36,7 @@ console.log('CCR TESTS');
 console.log('============================================================');
 console.log();
 
-test('readPointer accepts the real token-guard pointer shape', () => {
+test('readPointer accepts the real token-saver pointer shape', () => {
   writePointer('/recover-context pid=12345 sid=abc123de');
   const rec = readPointer(tmp);
   assert(rec && rec.recoverCmd === '/recover-context pid=12345 sid=abc123de',
