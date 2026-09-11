@@ -1,7 +1,7 @@
 <!-- @description Compare this session's carryover cost against a fresh session's cold-start cost — the on-demand version of the statusline readout, shown even when the statusline is deliberately silent. -->
 <!-- @version 4 -->
 <!-- @response success | Prints the two per-turn cost bullets, then a verdict + rationale pair. -->
-<!-- @response no-meter | The repo has no .claude/hooks/token-guard.js — nothing to report. -->
+<!-- @response no-meter | The repo has no .claude/hooks/token-saver.js — nothing to report. -->
 <!-- @example /cost-compare | Compare continuing this session vs starting fresh -->
 
 # Cost Compare

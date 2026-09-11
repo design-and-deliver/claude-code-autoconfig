@@ -1,6 +1,6 @@
 ---
 description: Show the full rationale behind a TokenSaver verdict card
-allowed-tools: Bash(node .claude/hooks/token-guard.js --details:*)
+allowed-tools: Bash(node .claude/hooks/token-saver.js --details:*)
 ---
 <!-- @description Show the full rationale behind a TokenSaver verdict card — the arithmetic the consolidated card encapsulates. -->
 <!-- @version 3 -->
@@ -24,7 +24,7 @@ has already changed.
 1. Run (passing the token only if one was given):
 
    ```bash
-   node "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/token-guard.js" --details "${CLAUDE_PROJECT_DIR:-.}" $ARGUMENTS
+   node "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/token-saver.js" --details "${CLAUDE_PROJECT_DIR:-.}" $ARGUMENTS
    ```
 
 2. Relay the output **verbatim** in a fenced code block — do not paraphrase, reformat, or

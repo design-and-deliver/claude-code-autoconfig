@@ -3,7 +3,7 @@ description: Recover the previous session's last active use case, report where i
 argument-hint: [--show]
 ---
 <!-- @description Recovers where your previous session in this terminal left off — reports the state and the precise next action, then stops for your go-ahead. Plan-aware: if that session was executing a substep of a plan doc AND the transcript confirms nothing came after it, the report comes from the plan's Ledger instead of the transcript. -->
-<!-- @version 18 -->
+<!-- @version 19 -->
 <!-- @param --show | flag | optional | Opens the recovered transcript in your default editor (no-op on a fresh checkpoint handoff note — nothing is read there). -->
 <!-- @response success | Picking up where we left off — {what we were doing}. State summary + the one next action, then a go-ahead question. -->
 <!-- @response plan | Picking up where we left off — {plan alias}: substep {N.k} done ({hash}); next: {N.next}. Then a go-ahead question. -->
@@ -108,7 +108,7 @@ from `git log` if it matters. Under the cap (95% of recoveries) the payload is u
 Exactly one of these is the handoff. Take it and skip the others.
 
 - **`handoffState: FRESH`** → the checkpoint note IS the recovery. Read `handoff` (the note
-  token-guard's restart advisory asks a session to write before a `/clear`: ISO timestamp,
+  token-saver's restart advisory asks a session to write before a `/clear`: ISO timestamp,
   then `## Done` / `## In flight` / `## Next` / `## Pointers`). Do NOT also read `tempFile`
   — `readTempFile` is already `false`. Cross-check `git status --short` before acting.
   `STALE` is different: the note is the frame, the extract supplies the tail — read both.

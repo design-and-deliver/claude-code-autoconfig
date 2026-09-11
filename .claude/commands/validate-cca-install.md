@@ -1,5 +1,5 @@
 <!-- @description Validates your claude-code-autoconfig installation against the latest published version. -->
-<!-- @version 12 -->
+<!-- @version 13 -->
 <!-- @response valid | Install validated — all checks passed. -->
 <!-- @response issues | Validation found {N} issue(s) with fix suggestions. -->
 <!-- @sideeffect Read-only. Downloads latest package to temp dir for comparison, then cleans up. -->

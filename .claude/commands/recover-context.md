@@ -1,7 +1,7 @@
 <!-- @description Recovers conversation context from the session transcript after compaction. -->
-<!-- @version 9 -->
+<!-- @version 10 -->
 <!-- @param minutes | integer | optional | How far back to recover, in minutes. Leading dash optional. Min: 1. Bare invocation auto-recovers the last session instead. -->
-<!-- @param pid | integer | optional | Recovery-pointer id from token-guard's idle warning (e.g. pid=3). Resolves the exact session + cutoff from .claude/hooks/.token-guard/recover.json. -->
+<!-- @param pid | integer | optional | Recovery-pointer id from token-saver's idle warning (e.g. pid=3). Resolves the exact session + cutoff from .claude/hooks/.token-saver/recover.json. -->
 <!-- @param --show | flag | optional | Opens the extracted transcript in your default editor. -->
 <!-- @response success | ~{tokens} tokens recovered ({N} messages across {sessions} session(s)). -->
 <!-- @response no-transcript | No transcript files found. -->
@@ -12,20 +12,20 @@
 <!-- @sideeffect Reads .jsonl transcripts from ~/.claude/projects/, writes temp file -->
 <!-- @example /recover-context | Auto: last ~15 min of this project's previous session -->
 <!-- @example /recover-context -60 | Last 60 minutes of conversation -->
-<!-- @example /recover-context pid=3 | Recover exactly what token-guard's idle warning pointed at -->
+<!-- @example /recover-context pid=3 | Recover exactly what token-saver's idle warning pointed at -->
 <!-- @example /recover-context -60 --show | Last 60 min + open transcript file -->
 Recover recent conversation context from the raw session transcript on disk.
 
 Usage:
 - `/recover-context` — auto: recover the last session in this project (after a /clear or in a fresh terminal), no arguments needed
 - `/recover-context -60` — last 60 minutes of conversation (any recent session)
-- `/recover-context pid=3` — recover via a token-guard pointer: the exact stale session and cutoff its idle warning computed
+- `/recover-context pid=3` — recover via a token-saver pointer: the exact stale session and cutoff its idle warning computed
 - `/recover-context -60 --show` — same as minutes mode, but also opens the transcript in your editor
 
 Three modes:
-- **Auto mode** (no arguments): recovers the session that ran in THIS terminal before the current one. The terminal-title hook maintains a terminal-lineage registry: on every SessionStart (including /clear) it records which session this terminal held, and stamps the outgoing session as the incoming one's predecessor in `.claude/hooks/.titles/{sid}.lineage.json`. Auto mode reads its own lineage file (keyed by `$CLAUDE_CODE_SESSION_ID`), falling back to the newest-other-transcript heuristic when no lineage exists. The cutoff ladder: a matching token-guard pointer (frozen at fire time) → the start of the previous session's final use-case thread per its title history (`{sid}.history.jsonl`), floored at ~15 min of real interaction and capped at 60 wall-clock minutes → the plain ~15-min walk-back.
+- **Auto mode** (no arguments): recovers the session that ran in THIS terminal before the current one. The terminal-title hook maintains a terminal-lineage registry: on every SessionStart (including /clear) it records which session this terminal held, and stamps the outgoing session as the incoming one's predecessor in `.claude/hooks/.titles/{sid}.lineage.json`. Auto mode reads its own lineage file (keyed by `$CLAUDE_CODE_SESSION_ID`), falling back to the newest-other-transcript heuristic when no lineage exists. The cutoff ladder: a matching token-saver pointer (frozen at fire time) → the start of the previous session's final use-case thread per its title history (`{sid}.history.jsonl`), floored at ~15 min of real interaction and capped at 60 wall-clock minutes → the plain ~15-min walk-back.
 - **Minutes mode**: the number means "go back N minutes from now." The leading dash is optional.
-- **Pointer mode** (`pid=N`): token-guard's idle-return warning writes a numbered recovery pointer to `.claude/hooks/.token-guard/recover.json` in the project it fired in. The pid encapsulates the stale session's id and the recovery cutoff (frozen at fire time), so this mode recovers the right window no matter how long ago the warning fired — even if other sessions happened in between (which would fool auto mode).
+- **Pointer mode** (`pid=N`): token-saver's idle-return warning writes a numbered recovery pointer to `.claude/hooks/.token-saver/recover.json` in the project it fired in. The pid encapsulates the stale session's id and the recovery cutoff (frozen at fire time), so this mode recovers the right window no matter how long ago the warning fired — even if other sessions happened in between (which would fool auto mode).
 
 ## Step 1: Parse the arguments
 
@@ -68,7 +68,7 @@ Errors, each terminal — report and stop:
 
 - `NO_PREVIOUS_SESSION` → no previous session in this project (offer minutes mode if they
   meant a different project's work).
-- `NO_POINTER_FILE` → no recovery pointer exists here; token-guard writes it when its idle
+- `NO_POINTER_FILE` → no recovery pointer exists here; token-saver writes it when its idle
   warning fires.
 - `PID_NOT_FOUND` → that pid isn't in the pointer file; list the `available` pids.
 - `TRANSCRIPT_GONE` → that session's transcript no longer exists.
@@ -94,7 +94,7 @@ the OLDEST messages go first, then any survivors still too big are clipped head-
 as a **tail**, and say so in Step 4 rather than implying the whole window came back.
 
 **`readTempFile: false`** (a FRESH `handoff`) → read the handoff note at `handoff` INSTEAD,
-and do not open `tempFile`. That note is what token-guard's restart advisory asks a session
+and do not open `tempFile`. That note is what token-saver's restart advisory asks a session
 past the fat line to write before a `/clear` — an ISO timestamp, then `## Done` /
 `## In flight` / `## Next` / `## Pointers` — so it already states what the walk-back would
 be inferring. Cross-check it against reality before acting: `git status --short` and

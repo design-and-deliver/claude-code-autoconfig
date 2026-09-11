@@ -1,7 +1,7 @@
 ---
 description: Analyze one session's token spend — deterministic digest + efficiency read-out
 argument-hint: [sid8 | project/sid8 | transcript-path]
-allowed-tools: Bash(node .claude/hooks/token-guard.js --analyze:*)
+allowed-tools: Bash(node .claude/hooks/token-saver.js --analyze:*)
 ---
 <!-- @description Analyze one session's token spend — deterministic RENT/BOMBS/FLEETS/TTL digest plus an efficiency read-out: dominant cost category, named causes, and what to change in future sessions. -->
 <!-- @version 5 -->
@@ -20,7 +20,7 @@ Argument: `$ARGUMENTS` — a session-id prefix, the exact `project/sid8` label s
 
 ## Digest (injected at prompt time — zero model round trips)
 
-!`node .claude/hooks/token-guard.js --analyze $ARGUMENTS`
+!`node .claude/hooks/token-saver.js --analyze $ARGUMENTS`
 
 ## Step 1: check the injected digest
 
@@ -30,7 +30,7 @@ exists to save. Route on its first line:
 - Starts with `SESSION` → healthy; go straight to Step 2.
 - Says `usage:` → the command was invoked with no argument: derive the CURRENT session's
   transcript path (`~/.claude/projects/<project-slug>/<session-id>.jsonl`, same derivation
-  as `/usage-report`) and run `node .claude/hooks/token-guard.js --analyze <path>` via
+  as `/usage-report`) and run `node .claude/hooks/token-saver.js --analyze <path>` via
   Bash — the only case that needs a model-driven run.
 - Says `ambiguous` → show the candidate list and ask which one was meant.
 - Says `no transcript matches` → report that verbatim and point at `/usage-report`'s row
@@ -64,7 +64,7 @@ If the digest's "live context at end" is ≥ 150k tokens, close with ONE extra l
 zero-token path for next time (this run was already paid for; the tip is for the next one):
 
 > Tip: in a session this fat, you can skip the model entirely — run
-> `node .claude/hooks/token-guard.js --analyze <sid8>` in a terminal (or prefix with `!` in
+> `node .claude/hooks/token-saver.js --analyze <sid8>` in a terminal (or prefix with `!` in
 > the prompt) to read the digest for zero tokens, or run `/analyze-session <sid8>` from a
 > fresh session to get interpretation without this session's per-turn context rent.
 

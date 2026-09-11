@@ -17,7 +17,7 @@ this shows where the usage went.
 Run via Bash (the session transcript lives at `~/.claude/projects/<project-slug>/<session_id>.jsonl` — derive the path from the current project directory and session; if unsure, run without an argument and pass the transcript path only when known):
 
 ```bash
-node .claude/hooks/token-guard.js --report "$HOME/.claude/projects/<project-slug>/<session_id>.jsonl"
+node .claude/hooks/token-saver.js --report "$HOME/.claude/projects/<project-slug>/<session_id>.jsonl"
 ```
 
 ## Step 2: Display
