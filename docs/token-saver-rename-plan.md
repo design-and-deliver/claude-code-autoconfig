@@ -32,7 +32,7 @@ CCA substeps run in a worktree named `token-saver-rename` (`EnterWorktree` →
 `node scripts/bootstrap-worktree.js`); JAE's substep follows JAE's own worktree rule; the private
 repo and the API use a plain branch. Read this doc in slices — the ⛔ Standing traps section
 (lines 41–95), your own substep, and the Ledger tail — never whole. Refresh each
-plan branch from its base at every substep boundary; merge each repo ONCE, in 5.1. After each
+plan branch from its base at every substep boundary; merge each repo ONCE, in 5.1a. After each
 substep: Verify, commit, append a Ledger entry, then `/clear` + `/continue`. `/continue`'s plan
 probe finds this doc only from a CCA-rooted session — for 1.x, 3.1 and 4.x sessions, open it by
 path and read the same three slices. Abandoning is one `git branch -D` per repo at any point;
@@ -70,7 +70,7 @@ path and read the same three slices. Abandoning is one `git branch -D` per repo 
   (`:46-52`) gain the new names and keep the old.
 - **Config-key migration can strand an OLD engine.** 2.3's installer rewrites `tokenGuard` →
   `tokenSaver` in `cca.config.json`; a pre-rename engine reads only `tokenGuard` and would fall
-  to defaults. Fleet repos therefore rename their engine (4.x) BEFORE any `@latest` run (5.1).
+  to defaults. Fleet repos therefore rename their engine (4.x) BEFORE any `@latest` run (5.1b).
   Free installs have no `tokenGuard` block at all; paid customers do not exist yet.
 - **`tokenSaver` already exists as a nested boolean** (`tokenGuard.tokenSaver`, public `:294`,
   resolved `:411` with legacy `mode: 'token-saver'`). After the rename it reads
@@ -84,7 +84,7 @@ path and read the same three slices. Abandoning is one `git branch -D` per repo 
   "licensed" or pricing words into a public CCA commit subject or body (June leak, `8c57a49`).
 - **`terminal-title.js`, `plan-authoring.md` and `recover-session.py` are canonical-first and
   fleet-synced.** Edit the CCA copy; the live `~/.claude` copy and adopting repos receive it via
-  `scripts/sync-terminal-title.js --write` / `scripts/sync-hook-fleet.js --write` in 4.2 / 5.1 —
+  `scripts/sync-terminal-title.js --write` / `scripts/sync-hook-fleet.js --write` in 4.2c / 5.1b —
   never hand-edit a synced copy. ⛔ Do not `--write` the fleet if the dry run shows the
   private-vs-public engine drift; that is Deferred, not this plan.
 - **Output tag names stay.** `<token-guard>` / `<token-guard-liveness>` in hook stdout are
@@ -254,51 +254,97 @@ its shape), `:660-695` (retraction), `:720-726` (strip); `bin/lib/plugins.js:25-
 **Verify:** `node test/cli-behavior.test.js && node test/plugin-activation.test.js && node test/dev-gate-consistency.test.js && node test/cli-install.test.js && node test/complexity-ratchet.test.js`; `npx eslint bin/cli.js bin/lib/plugins.js bin/ccr.js`.
 **Commit:** `fix(installer): dev gate, retraction and plugin verify know both hook names; cca.config.json key migrates to tokenSaver`.
 
-### ☐ 2.4 · M · ~1h — Fleet manifest and sibling hooks
+### ☐ 2.4a · M · ~30m — Fleet manifest rows and the sync-script one-liners
 
 **Read list:** `scripts/sync-hook-fleet.js:60-100` (manifest rows `:73`, `:78`, `:83`),
 `:160-175`; `test/hook-fleet-sync.test.js` (grep `token-guard` → the manifest fixture windows
-only); `.claude/hooks/terminal-title.js:20-30,900-915,1000-1006,2278-2286` (gate `:911`);
-`.claude/hooks/statusline-cost.js:60-70,115-125,195-205,268-276`;
-`.claude/hooks/worktree-gate.js:10-14,222-228`; `.claude/hooks/claim-registry.js:160-164`;
-`.claude/scripts/recover-session.py:25-32,50-55,95-105,125-130,320-326,398-404,662-668`;
-`.claude/scripts/fleet.js:9`, `whats-happening.js:11`, `sync-worktrees.js:19`;
-`scripts/sync-terminal-title.js:14`; `test/live-twin-parity.test.js` (grep).
+only); one grep window each for `scripts/sync-terminal-title.js:14`, `.claude/scripts/fleet.js:9`,
+`whats-happening.js:11`, `sync-worktrees.js:19` (path/comment one-liners — ONE scripted
+replacement, reviewed in one `git diff`). Files touched: 4 (the four one-liners count as one).
 
 - [ ] Manifest: rows → `token-saver.js` (sourceKey `token-saver`), `token-saver-liveness.js`
       (`pairsWith`), plus rows for both shims so the fleet keeps them identical.
-- [ ] `terminal-title.js:911`: gate on `token-saver.js` OR `token-guard.js` existing.
+- [ ] `test/hook-fleet-sync.test.js` manifest fixtures follow the rows.
+- [ ] The four one-liners: `sed` in one pass, `node --check` each, review the diff.
+- [ ] Do NOT run `sync-hook-fleet.js --write` — 5.1b owns the actuation.
+
+**Verify:** `node test/hook-fleet-sync.test.js`; `node scripts/sync-hook-fleet.js` (dry run)
+lists the token-saver rows — `hook-fleet.local.json` is absent on this box: stub a minimal one in
+the scratchpad and point the script at it, or skip the dry run and say so in the Ledger.
+**Commit:** `chore(fleet): manifest rows and sync-script paths follow the token-saver rename`.
+
+### ☐ 2.4b · M · ~45m — terminal-title install gate and statusline-cost
+
+**Read list:** `.claude/hooks/terminal-title.js:20-30,900-915,1000-1006,2278-2286` (gate `:911`);
+`.claude/hooks/statusline-cost.js:60-70,115-125,195-205,232-240,268-276`;
+`test/terminal-title.test.js:316-318` and `.claude/hooks/tests/terminal-title-clear-advice.test.cjs:31-78`
+(the two pins on the `:911` gate); `test/live-twin-parity.test.js` (grep — edit only if it names
+the file). Files touched: 4–5. One file per trip, read-then-edit.
+
+- [ ] `terminal-title.js:911`: gate on `token-saver.js` OR `token-guard.js` existing; the two
+      test pins follow.
 - [ ] `statusline-cost.js`: `:65` home path via the new dir with old fallback; `:120`
       `.tokenSaver || .tokenGuard`; `:200`, `:272` require `token-saver.js`, fall back to
-      `token-guard.js`.
+      `token-guard.js`; **`:236`** console message names `token-saver.js` (1.2's Ledger catch —
+      the original 2.4 list missed it).
+- [ ] Do NOT run `sync-terminal-title.js --write` — 4.2c owns the actuation.
+
+**Verify:** `node test/terminal-title.test.js` (2m+, keep the machine awake — the watchdog tests
+are not sleep-safe; 2.2's Ledger) `&& node test/live-twin-parity.test.js`.
+**Commit:** `chore(hooks): terminal-title gate and statusline-cost follow the token-saver rename`.
+
+### ☐ 2.4c · M · ~45m — recover-session.py pointers, worktree-gate, claim-registry
+
+**Read list:** `.claude/scripts/recover-session.py:25-32,50-55,95-105,125-130,320-326,398-404,662-668`;
+`.claude/hooks/worktree-gate.js:10-14,222-228`; `.claude/hooks/claim-registry.js:160-164`;
+`test/ccr.test.js:7-39` (pointer shape). Files touched: 4. One file per trip, read-then-edit.
+
 - [ ] `recover-session.py`: `POINTER_REL` new-then-old; the other six mentions.
-      `worktree-gate.js`, `claim-registry.js`, `fleet.js`, `whats-happening.js`,
-      `sync-worktrees.js`, `sync-terminal-title.js`: paths and comments.
-- [ ] Do NOT run `sync-terminal-title.js --write` or `sync-hook-fleet.js --write` here — 4.2
-      and 5.1 own the live actuations.
+- [ ] `worktree-gate.js`, `claim-registry.js`: paths and comments.
+- [ ] `test/ccr.test.js`: pointer shape follows.
 
-**Verify:** `node test/hook-fleet-sync.test.js && node test/terminal-title.test.js && node test/live-twin-parity.test.js && node test/ccr.test.js && node test/recover-session-cap.test.js`; `node scripts/sync-hook-fleet.js` (dry run) lists the token-saver rows.
-**Commit:** `chore(fleet): manifest and sibling hooks follow the token-saver rename`.
+**Verify:** `node test/ccr.test.js && node test/recover-session-cap.test.js`.
+**Commit:** `chore(scripts): recover-session pointers and sibling hooks follow the token-saver rename`.
 
-### ☐ 2.5 · M · ~1h — Commands, rules, docs, dogfood settings
+### ☐ 2.5a · M · ~45m — Commands: scripted path sweep + the three shipped @version bumps
 
 **Read list (grep windows only):** `.claude/commands/{recover-context (7 hits), analyze-session
 (:4,:23), usage-report (:20), cost-compare, whats-happening, token-saver-rationale (:3,:27),
-validate-cca-install (:73), restore-after-reboot, create-wip-report, fleet, continue}.md`;
-`.claude/rules/parallel-session-worktrees.md:80-88,170-176`; `.claude/rules/plan-authoring.md:100-108`;
-`CLAUDE.md` (12 hits); `.claude/settings.local.json:160-215`.
+restore-after-reboot, create-wip-report, fleet, continue}.md` — ONE scripted replacement across
+all of them, reviewed in one `git diff`; then `recover-context.md`, `continue.md`,
+`validate-cca-install.md` headers for the version bump. Files touched: 4 (the sweep counts as one).
 
-- [ ] Replace `hooks/token-guard.js` command paths and `.token-guard/` paths in the commands;
-      `validate-cca-install.md:73` dev_only list adds the new names. `@version` bump +
-      `Changelog: none` for the three shipped commands (`recover-context`, `continue`,
-      `validate-cca-install`).
-- [ ] Rules (`plan-authoring.md` is canonical + byte-synced to adopting repos — 5.1's fleet
-      sync carries it), `CLAUDE.md`, the five dogfood entries in `settings.local.json`.
+- [ ] Scripted: `hooks/token-guard.js` → `hooks/token-saver.js` and `.token-guard/` →
+      `.token-saver/` across `.claude/commands/*.md`; review the diff line by line — prose that
+      NAMES the old file deliberately (retraction wording, shim notes) is reverted by hand.
+- [ ] `@version` bump + `Changelog: none` for the three shipped commands (`recover-context`,
+      `continue`, `validate-cca-install`). (`validate-cca-install.md:73`'s dev_only list already
+      carries the new names — 2.3 did it; nothing to add there.)
+
+**Verify:** `rg -n 'token-guard' .claude/commands` shows only the deliberate old-name survivors —
+paste the list into the Ledger; `node test/dev-gate-consistency.test.js && node test/contracts.test.js`.
+**Commit:** `chore(commands): command paths follow the token-saver rename`.
+
+### ☐ 2.5b · M · ~45m — Rules, CLAUDE.md, dogfood settings, docs regen
+
+**Read list (grep windows only):** `.claude/rules/parallel-session-worktrees.md:80-88,170-176`;
+`.claude/rules/plan-authoring.md:100-108`; `CLAUDE.md` (12 hits); `.claude/settings.local.json:160-215`.
+Files touched: 4 + the regenerated docs HTML (reviewed by `git diff --stat`).
+
+- [ ] Rules: `parallel-session-worktrees.md` and `plan-authoring.md` (canonical + byte-synced to
+      adopting repos — 5.1b's fleet sync carries them). ⚠ CCA **main** carries the 2026-09-11
+      substep-sizing edits to `plan-authoring.md` (size table, trip recipe, Ledger actuals); this
+      substep edits `:100-108` only, on the plan branch — different lines, so 5.1a's merge should
+      be clean; 5.1a checks that both survived.
+- [ ] `CLAUDE.md` (12 hits) and the five dogfood entries in `settings.local.json`.
 - [ ] `node .claude/scripts/sync-docs.js`. Leave `docs/` plans and audits and
       `scripts/generate-changelog.js` OVERRIDES untouched (history).
 
-**Verify:** `rg -n 'token-guard' .claude/commands .claude/rules CLAUDE.md bin scripts --glob '!scripts/generate-changelog.js'` shows only the deliberate old-name survivors (retraction, `DEV_ONLY_FILES`, shim manifest rows, alias fallbacks) — paste the list into the Ledger; `npm test` green.
-**Commit:** `chore(commands): hook paths follow the token-saver rename`.
+**Verify:** `rg -n 'token-guard' .claude/rules CLAUDE.md bin scripts --glob '!scripts/generate-changelog.js'`
+shows only the deliberate survivors (retraction, `DEV_ONLY_FILES`, shim manifest rows, alias
+fallbacks) — paste the list into the Ledger; `node test/contracts.test.js && node test/cli-install.test.js`
+(the two suites that read docs and commands — the full `npm test` runs once, in 5.1a).
+**Commit:** `docs(token-saver): rules, CLAUDE.md and dogfood settings follow the rename`.
 
 ## Phase 3 — Delivery bundle
 
@@ -324,78 +370,125 @@ Repo `C:\CODE\proswitch-api`, branch `plan/token-saver-rename` off `magic-url-de
 
 ## Phase 4 — Live wiring sites
 
-### ☐ 4.1 · M · ~1h — job-agent-extension
+### ☐ 4.1a · M · ~45m — job-agent-extension: hook files, shims, gitignore, quiet-card test
 
 Session rooted in `C:\CODE\job-agent-extension`. ⛔ `EnterWorktree` (`token-saver-rename`) +
 `node scripts/bootstrap-worktree.js` before the first write. The hooks that FIRE are the main
-checkout's — the rename takes effect there at merge; the shim keeps the interval safe.
+checkout's — the rename takes effect there at 4.1b's merge; the shim keeps the interval safe.
 
-**Read list:** `.claude/settings.local.json:570-630` (entries `:577,:581,:592,:603,:623`) and
-`:490-550` (allow literals `:494,:495,:497,:498,:505,:506,:518,:519,:546`);
-`.claude/cca.config.json`; `.claude/hooks/token-guard-liveness.js:30-36`; `.gitignore` (grep);
-`.claude/hooks/tests/token-guard-quiet-card.test.cjs` (require line).
+**Read list:** `.claude/hooks/token-guard-liveness.js:30-36`; `.gitignore` (grep);
+`.claude/hooks/tests/token-guard-quiet-card.test.cjs` (require line). Files touched: 3 (the
+four hook files arrive as one verbatim copy batch).
 
 - [ ] `git mv` `token-guard.js` → `token-saver.js` and the liveness hook, then overwrite
       content with the post-2.1 canonical files from
       `C:\CODE\claude-code-autoconfig\.claude\hooks\` on branch `plan/token-saver-rename`, and
-      copy both shims. (This moves JAE from its 5,202-line engine to CCA's — what the fleet sync
-      does anyway; note it in the Ledger.)
-- [ ] `settings.local.json`: five hook entries and nine allow literals → new paths.
-- [ ] `cca.config.json`: `tokenGuard` → `tokenSaver` (contents unchanged, `devFleet: true` stays).
+      copy both shims — one `cp` batch. (This moves JAE from its 5,202-line engine to CCA's —
+      what the fleet sync does anyway; note it in the Ledger.)
 - [ ] `.gitignore` adds `.claude/hooks/.token-saver/`; `git mv` the quiet-card test, fix its
       require.
 - [ ] Leave the CCA-managed commands (`token-saver-rationale`, `usage-report`, `recover-context`,
-      `continue`, `fleet`, `whats-happening`, `validate-cca-install`) — 5.1's installer run
+      `continue`, `fleet`, `whats-happening`, `validate-cca-install`) — 5.1b's installer run
       refreshes them; the shim keeps `node .claude/hooks/token-guard.js --details` working until
       then. Leave `docs/token-guard-*.md`, `.claude/plans/`, `.claude/board/` (history).
 
-**Verify:** the 1.1 synthetic-Stop loop through both names, exit 0; `ls .claude/hooks/.token-saver | wc -l` (≈1,395) and `.token-guard` gone or its fallback noted; `node .claude/hooks/token-saver.js --details` prints the rationale card; `pnpm test --run` green.
-**Commit** in the worktree; `ExitWorktree keep`, merge to `main` from the main checkout (autonomous — no approval gate), then `remove`.
+**Verify:** the 1.1 synthetic-Stop loop through both names, exit 0; `ls .claude/hooks/.token-saver | wc -l`
+(≈1,395) and `.token-guard` gone or its fallback noted; `node .claude/hooks/token-saver.js --details`
+prints the rationale card; `node .claude/hooks/tests/token-saver-quiet-card.test.cjs`.
+**Commit** in the worktree; **stay in the worktree** (no merge) — 4.1b finishes the repo.
 
-### ☐ 4.2 · M · ~1h — wifi-app, coldplay-bossa-nova, and the global tier
+### ☐ 4.1b · M · ~30m — job-agent-extension: settings and config wiring, merge
 
-**Read list:** wifi-app `.claude/settings.json:15-20,39-47,62-66,73-77,108-112` (six entries),
-`.claude/settings.local.json` (12 allow literals — grep), `.claude/cca.config.json` (`mode:
-"token-saver"` stays), the require line of the 7 `.claude/hooks/tests/token-guard-*.test.cjs`,
-`.gitignore`; coldplay `.claude/settings.json:33,58,101,121`, `.claude/cca.config.json` (may be
-absent); global `~/.claude/hooks/statusline-cost.js` (:65,:120,:200,:272),
-`~/.claude/commands/cost-compare.md:4,12,33`, `~/.claude/commands/restore-after-reboot.md:26`,
-`~/.claude/settings.json` (verify only — no token-guard entries on 2026-09-10).
+Same worktree as 4.1a (re-enter it; `EnterWorktree` finds it by name).
 
-- [ ] wifi-app: as 4.1 — `settings.json` is the carrier; `git mv` the 7 tests; `tokenGuard` →
-      `tokenSaver`; `.gitignore`.
-- [ ] coldplay-bossa-nova: canonical `token-saver.js` + shim in, four entries flipped, and write
+**Read list:** `.claude/settings.local.json:570-630` (entries `:577,:581,:592,:603,:623`) and
+`:490-550` (allow literals `:494,:495,:497,:498,:505,:506,:518,:519,:546`) — ONE scripted
+replacement, reviewed in one diff; `.claude/cca.config.json`. Files touched: 2.
+
+- [ ] `settings.local.json`: five hook entries and nine allow literals → new paths.
+- [ ] `cca.config.json`: `tokenGuard` → `tokenSaver` (contents unchanged, `devFleet: true` stays).
+
+**Verify:** the synthetic-Stop loop through the NEW names (the entries now call `token-saver.js`
+directly), exit 0; `pnpm test --run` green.
+**Commit** in the worktree; `ExitWorktree keep`, merge to `main` from the main checkout
+(autonomous — no approval gate), then `remove`.
+
+### ☐ 4.2a · L · ~1h — wifi-app
+
+**Read list:** `.claude/settings.json:15-20,39-47,62-66,73-77,108-112` (six entries — the
+carrier), `.claude/settings.local.json` (12 allow literals — grep; scripted), `.claude/cca.config.json`
+(`mode: "token-saver"` stays), the require line of the 7 `.claude/hooks/tests/token-guard-*.test.cjs`
+(git mv + one scripted require fix), `.gitignore`. Files touched: 6 (hook-file copy batch and
+the test batch count as one each) — L on the file column; trips ≈ 16.
+
+- [ ] Canonical `token-saver.js` + liveness + both shims in from CCA `plan/token-saver-rename`
+      (one `cp` batch); `.gitignore` adds `.claude/hooks/.token-saver/`.
+- [ ] `git mv` the 7 tests; fix their require lines in one pass.
+- [ ] `settings.json` six entries + `settings.local.json` 12 literals → new paths; `tokenGuard`
+      → `tokenSaver` in `cca.config.json`.
+
+**Verify:** the synthetic-Stop loop through both names exit 0 and the state dir migrated;
+`for t in .claude/hooks/tests/*.test.cjs; do node "$t" >/dev/null 2>&1 || echo "FAIL $t"; done`.
+**Commit** on `main` (single-session repo).
+
+### ☐ 4.2b · M · ~20m — coldplay-bossa-nova
+
+**Read list:** `.claude/settings.json:33,58,101,121`; `.claude/cca.config.json` (may be absent).
+Files touched: 3 (settings, config, the hook-file copy batch).
+
+- [ ] Canonical `token-saver.js` + shim in (one `cp` batch); four entries flipped; write
       `.claude/cca.config.json` `{ "tokenSaver": { "devFleet": true } }` (create if absent) so a
       future `@latest` there keeps the file.
-- [ ] Global: `node C:/CODE/claude-code-autoconfig/scripts/sync-terminal-title.js --write`
-      (canonical-first); `cp` `statusline-cost.js` from CCA (manual cp is the rule for that
-      file); edit the two global commands; `~/.claude/.token-guard` migrates on the first hook
-      run.
 
-**Verify:** per repo the synthetic-Stop loop through both names exit 0 and the state dir migrated; wifi-app `for t in .claude/hooks/tests/*.test.cjs; do node "$t" >/dev/null 2>&1 || echo "FAIL $t"; done`; `ls ~/.claude/.token-saver`.
-**Commit** in wifi-app and coldplay on their `main` (single-session repos); the global tier has no repo.
+**Verify:** the synthetic-Stop loop through both names exit 0; the state dir migrated.
+**Commit** on `main` (single-session repo).
+
+### ☐ 4.2c · M · ~30m — The global `~/.claude` tier
+
+**Read list:** `~/.claude/hooks/statusline-cost.js` (:65,:120,:200,:236,:272 — receives 2.4b's
+copy), `~/.claude/commands/cost-compare.md:4,12,33`, `~/.claude/commands/restore-after-reboot.md:26`,
+`~/.claude/settings.json` (verify only — no token-guard entries on 2026-09-10). Files touched: 4.
+
+- [ ] `node C:/CODE/claude-code-autoconfig/scripts/sync-terminal-title.js --write`
+      (canonical-first — run it from the plan-branch worktree so 2.4b's gate lands).
+- [ ] `cp` `statusline-cost.js` from CCA (manual cp is the rule for that file).
+- [ ] Edit the two global commands. `~/.claude/.token-guard` migrates on the first hook run.
+
+**Verify:** `ls ~/.claude/.token-saver`; the synthetic-Stop loop through both names exit 0 from any
+repo; the terminal title still renders on the next prompt.
+**Commit:** none — the global tier has no repo; Ledger it.
 
 ## Phase 5 — Release
 
-### ☐ 5.1 · M · ~1h — Merge every repo once, publish, refresh the fleet, deploy the bundle
+### ☐ 5.1a · L · ~1h — Merge every repo once, publish, deploy the bundle
 
-Precondition: 1.1–4.2 Ledgered. In this order:
+Precondition: 1.1–4.2c Ledgered. In this order:
 
 - [ ] Private repo: `git merge plan/token-saver-rename` → `main`, push.
 - [ ] Public CCA, from the MAIN checkout (never a worktree): `git merge plan/token-saver-rename`
-      → `main`; `npm test`; `/deploy-to-npmjs` (`npm version patch` → postversion changelog →
-      publish). Read the generated changelog bullets: no paid / pricing wording.
+      → `main`. ⚠ `plan-authoring.md` merges two edits — main's 2026-09-11 sizing changes and
+      2.5b's rename at `:100-108`; confirm both survived. `npm test` (33 `&&`-chained entries —
+      if it stops early, run the rest entry-by-entry; 2.2's Ledger); `/deploy-to-npmjs`
+      (`npm version patch` → postversion changelog → publish). Read the generated changelog
+      bullets: no paid / pricing wording.
 - [ ] proswitch-api: merge → `magic-url-deploy`, push, safe deploy per FEEDBACK.md "Deploying
       API Changes"; confirm the bundle endpoint serves `hooks/token-saver.js`.
+
+**Verify:** `npm view claude-code-autoconfig version` = the new version; the bundle endpoint
+check above.
+**Commit:** the merges are the commits.
+
+### ☐ 5.1b · M · ~45m — Fleet refresh and close the plan
+
 - [ ] Fleet refresh: in JAE and wifi-app run `npx claude-code-autoconfig@latest`; confirm
       `token-saver.js` SURVIVES (devFleet) and the managed commands now say `token-saver.js`.
-      `node scripts/sync-hook-fleet.js` dry run from CCA: token-saver rows in sync — ⛔ no
+- [ ] `node scripts/sync-hook-fleet.js` dry run from CCA main: token-saver rows in sync — ⛔ no
       `--write` if the dry run reports the private-vs-public engine drift.
 - [ ] Ledger the shim-removal condition (Deferred, first bullet) with the published version.
 
-**Verify:** `npm view claude-code-autoconfig version` = the new version;
-`rg -ln 'hooks/token-guard' C:/CODE/job-agent-extension/.claude C:/CODE/wifi-app/.claude C:/CODE/coldplay-bossa-nova/.claude --glob '!*.md'` lists only the shim files.
-**Commit:** the merges are the commits; the Ledger entry closes the plan.
+**Verify:** `rg -ln 'hooks/token-guard' C:/CODE/job-agent-extension/.claude C:/CODE/wifi-app/.claude C:/CODE/coldplay-bossa-nova/.claude --glob '!*.md'`
+lists only the shim files.
+**Commit:** none; the Ledger entry closes the plan.
 
 ## Deferred
 
@@ -439,4 +532,5 @@ Precondition: 1.1–4.2 Ledgered. In this order:
 
 - 2026-09-10 — **2.1 done** — public `2a4e3d0` on `plan/token-saver-rename` (worktree `.claude/worktrees/token-saver-rename`; run interactively from the private-repo session at the user's ask — the headless runner would have needed `--dangerous` for hook-file edits). 1.1's diff applied as a patch: 22/23 engine hunks landed (offsets up to ±90 lines from the bomb-landing commit `d98d297`; hunks 16 and 18 with fuzz, verified at `stateDir`/`homeStateDir` and `windowWarnsPath`); the exports hunk was re-done by hand (public list has no `driftVerdict`). Liveness patch applied clean. Shims are 1.1's text verbatim. Verify: `node --check` ×4; synthetic Stop + UserPromptSubmit through all four names exit 0; `.token-guard` → `.token-saver` migration confirmed through both shims on a UserPromptSubmit (a Stop with no transcript exits before touching state — expected); shims pass 90 engine exports + `main`; complexity ratchet green after the key rename PLUS a new `Function 'main'` row — the ratchet treats a missing key as all-new violations, and `main()` is the old top-level dispatch block now visible to the per-function lint (pre-existing debt, not new; the private repo has no ratchet, so 1.1 never met this). Same deviation as 1.1: `hook-tests` shows 10 failures, all `.token-guard` path pins in 10 suites (budgets, ccr, official-usage, quiet-card, r11, r19, r4b, r8, r9, shim) — 2.2 owns them, plus `test/token-guard-liveness.test.js` (path pin) and `test/token-guard-recovery.test.js:27` / `token-guard-session-gate.test.js:22`, which `readFileSync` the ENGINE SOURCE by the old path for source-order checks and now read the 7-line shim — 2.2 must point them at `token-saver.js`. `test/cli-install.test.js` fails 1: "all shipped hooks appear in docs HTML file tree" lists `token-saver*.js` because they are not yet in `DEV_ONLY_FILES` — 2.3 adds them (nothing ships mid-plan; 5.1 merges once). `dev-gate-consistency`, `hook-fleet-sync`, copy/divert/reread/bomb-gate all green. Ledger for 2.x now lives on the plan branch (the doc is tracked); `/continue` for 2.2 must re-enter the worktree, not read main's copy.
 - 2026-09-10 — **2.2 done** — public `d8bbed6` on `plan/token-saver-rename` (same worktree, interactive; the session that started it was interrupted at the pack check and finished by the recovery session). 29 files `git mv`'d (22 `.cjs` + 7 `test/*.js`), similarities 94–100%; `tokenGuard:` config keys in fixtures kept (the engine read-aliases them). `rg token-guard test .claude/hooks/tests` shows ZERO hits in the renamed 29; every remaining hit is a fixture another substep owns — 2.3: `cli-behavior.test.js` (fixtures 2/2b/2c, 18 hits), `plugin-activation.test.js` (10); 2.4: `hook-fleet-sync.test.js` (63, manifest fixtures), `terminal-title.test.js:316-318` + `tests/terminal-title-clear-advice.test.cjs:31-78` (the `:911` install gate), `ccr.test.js:7-39` (pointer shape); deliberate survivors nobody renames: `changelog-gen.test.js` (`token-guard.js` as a synthetic DEV_ONLY member — history), `contracts.test.js:107` (skip-set for the old state dir). Verify: `npm pack --dry-run | grep -i token-` prints nothing. `npm test` is `&&`-chained and stops at `cli-install` (entry 2 of 33), so the chain was run entry-by-entry: 28 green including all 7 renamed `test/token-saver-*.js`; the 3 reds are all 2.3's — `cli-install` 1 (docs tree lists `token-saver*.js`), `contracts` 1 (docs ratchet: `sync-docs.js` parses `DEV_ONLY_FILES` from `bin/cli.js`, so the same missing entries make the HTML stale — proved by regenerating: the diff is only the two new hook rows; HTML restored, not committed), `hook-tests` 2 (`token-saver-ccr`: `bin/ccr.js:33` still reads `.token-guard/recover.json`; 2.3 owns the new-then-old pointer). Hazard for the record: `terminal-title.test.js` failed 1 ("awaiting|Notification rolls the deadline") and took 3.5 h on the first run because the machine slept mid-suite — re-run awake, 134/134 in 2m11s; wall-clock watchdog tests are not sleep-safe. Ledger + doc edits live on the plan branch; `/continue` for 2.3 re-enters the worktree.
-- 2026-09-10 — **2.3 done** — public `20fbcf9` on `plan/token-saver-rename` (same worktree, interactive; the session that started it was interrupted mid-fixture-listing and finished by the recovery session). All five boxes as specified, plus one the plan missed: `.claude/commands/validate-cca-install.md:73` mirrors `DEV_ONLY_FILES` and `dev-gate-consistency` diffs the two — the mirror gets the same two new names. `migrateTokenSaverConfigKey` + `tokenSaverBlock` are exported from `plugins.js` and shared by `cli.js` (migration runs before the retraction read; the gray line prints only on a move). `ccr.js` `POINTER_DIRS = ['.token-saver', '.token-guard']`, first readable valid pointer wins. Fixtures: cli-behavior 1/2b/2c updated + 2d (new-name leftover, unpaid → retracted), 87 green; plugin-activation seeds `tokenGuard: { sessionWarnUSD: 5 }` and asserts the activate merge lands under `tokenSaver` with the old key gone, 14 green. Verify: cli-behavior, plugin-activation, dev-gate-consistency, cli-install (2.2's red cleared), complexity-ratchet, contracts (2.2's docs-ratchet red cleared — `sync-docs.js` regen is byte-identical, nothing to commit), `token-saver-ccr` hook suite 9/9 and `test/ccr.test.js` 6/6 (2.2's pointer red cleared); eslint clean on the three bin files. Remaining `token-guard` hits in `bin/` are all the intended shim/migration/comment lines. Next: 2.4 (fleet manifest + sibling hooks) — `hook-fleet.local.json` is absent on this box, so the sync-hook-fleet dry runs there need it created or the check skipped.
+- 2026-09-10 — **2.3 done** [3 sessions · 79 trips · peak 126k · was M → L+] — public `20fbcf9` on `plan/token-saver-rename` (same worktree, interactive; the session that started it was interrupted mid-fixture-listing and finished by the recovery session). All five boxes as specified, plus one the plan missed: `.claude/commands/validate-cca-install.md:73` mirrors `DEV_ONLY_FILES` and `dev-gate-consistency` diffs the two — the mirror gets the same two new names. `migrateTokenSaverConfigKey` + `tokenSaverBlock` are exported from `plugins.js` and shared by `cli.js` (migration runs before the retraction read; the gray line prints only on a move). `ccr.js` `POINTER_DIRS = ['.token-saver', '.token-guard']`, first readable valid pointer wins. Fixtures: cli-behavior 1/2b/2c updated + 2d (new-name leftover, unpaid → retracted), 87 green; plugin-activation seeds `tokenGuard: { sessionWarnUSD: 5 }` and asserts the activate merge lands under `tokenSaver` with the old key gone, 14 green. Verify: cli-behavior, plugin-activation, dev-gate-consistency, cli-install (2.2's red cleared), complexity-ratchet, contracts (2.2's docs-ratchet red cleared — `sync-docs.js` regen is byte-identical, nothing to commit), `token-saver-ccr` hook suite 9/9 and `test/ccr.test.js` 6/6 (2.2's pointer red cleared); eslint clean on the three bin files. Remaining `token-guard` hits in `bin/` are all the intended shim/migration/comment lines. Next: 2.4 (fleet manifest + sibling hooks) — `hook-fleet.local.json` is absent on this box, so the sync-hook-fleet dry runs there need it created or the check skipped.
+- 2026-09-11 — **plan re-cut under the files-touched / trip-estimate rule** (plan-authoring.md on CCA main, 2026-09-11 — not yet on this branch; 5.1a merges it). Evidence: 2.3 tagged M ran 79 tool calls over three sessions (35/24/20, peak 126k) and 2.4 tagged M spent its first session on 21 reads and zero edits before an R14 rent card ended it — both over L on the ≤25-trip cap, invisible to the lines-read budget because a rename sweep is small on lines and wide on files. Re-cut: 2.4 → 2.4a/b/c (manifest + one-liners; terminal-title + statusline-cost; recover-session + worktree-gate + claim-registry), 2.5 → 2.5a/b (scripted command sweep + 3 version bumps; rules + CLAUDE.md + dogfood + docs regen), 4.1 → 4.1a/b (JAE hook files; JAE wiring + merge — the shim makes the split safe), 4.2 → 4.2a/b/c (wifi-app L; coldplay; global tier), 5.1 → 5.1a/b (merges + publish + deploy; fleet refresh + close). 3.1 unchanged (4 files, ~12 trips). Splits follow verify seams so a red suite is one short fix loop; sweeps are written one-file-per-box, read-then-edit; scripted replacements and verbatim copy batches count as one file. Dropped: 2.5's `validate-cca-install.md:73` box (2.3 already did it). 18 substeps parse (engine + plan-progress accept `2.4a` ids); next: 2.4a.
