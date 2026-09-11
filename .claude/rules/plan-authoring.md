@@ -88,16 +88,38 @@ abandoning a plan is exactly one `git branch -D`, at any point in its life; and
    substep heading carries an **effort tag** — `### ☐ N.N · <S|M|L> · ~<time> — <title>` — so a
    fresh session (and the reader) knows the weight before opening it:
 
-   | Size | Shape | Read budget | Write budget | Round trips | Rough time |
-   |------|-------|-------------|--------------|-------------|-----------|
-   | **S** | one file, mechanical, no new tests, no trap surface | < 300 lines | 0 new files | ≤ 6 | ~10–20 min |
-   | **M** | a few files or one new test; bounded logic | < 800 lines | ≤ 2 new files, ≤ 1 test file | ≤ 15 | ~30–60 min |
-   | **L** | new test suite(s), several coordinated edits, **or** any edit inside a ⛔ trap surface | < 2,000 lines | ≤ 4 new files + 1 test suite | ≤ 25 | 1–2 hr |
+   | Size | Shape | Files touched | Read budget | Write budget | Round trips | Rough time |
+   |------|-------|---------------|-------------|--------------|-------------|-----------|
+   | **S** | one file, mechanical, no new tests, no trap surface | 1 | < 300 lines | 0 new files | ≤ 6 | ~10–20 min |
+   | **M** | a few files or one new test; bounded logic | ≤ 4 | < 800 lines | ≤ 2 new files, ≤ 1 test file | ≤ 15 | ~30–60 min |
+   | **L** | new test suite(s), several coordinated edits, **or** any edit inside a ⛔ trap surface | ≤ 8 | < 2,000 lines | ≤ 4 new files + 1 test suite | ≤ 25 | 1–2 hr |
 
-   **All four budgets bind — the largest one wins.** A substep with a 300-line Read list that
+   **All five budgets bind — the largest one wins.** A substep with a 300-line Read list that
    creates six modules and a jest suite is not an S; it is over L and must split. The read budget
    alone passed a substep that then burned 1.7M tokens in six minutes (2026-07-25), because the
    cost was in the write→test→fix loop, not the reading.
+
+   **Estimate the round trips before choosing the letter** — it is the budget that binds most
+   often and the only one the table gives no recipe for:
+
+   ```
+   trips ≈ files opened + files edited + verify commands + 3 × expected fix loops
+   ```
+
+   (a fix loop is read, edit, re-run.) **Files touched** — opened or edited BY HAND; a scripted
+   replacement or a verbatim copy batch across N files, reviewed in one `git diff`, counts as
+   ONE, because the column is a proxy for trips and that is one open and one edit — is the sweep
+   tripwire: a mechanical rename across twelve files is tiny on every volume budget (28 ten-line
+   windows is under 300 lines, no new files, no new suites) and still costs ≥ 30 trips, because
+   each file is an open and an edit at full resident context. 2026-09-10: two rename-sweep
+   substeps tagged M by lines-read ran 79 tool calls over three sessions (2.3) and 21 reads
+   before the first edit (2.4) — over L on the trip cap, and the size column never saw it.
+   **More than 8 files → split, however small each edit.** Split a sweep along its **verify
+   seams** — the files one test suite proves form one substep — so a red suite means one short
+   fix loop, not a five-suite re-run; a Verify chain longer than ~3 commands is itself the
+   split signal. And write a sweep's boxes **one file each, read-then-edit**, so the executor
+   interleaves opens with edits instead of loading every window first and carrying all of them
+   into every edit.
 
    **Rent ceiling — S ≈ 0.5M · M ≈ 1.5M · L ≈ 3M tokens.** This is the only budget you can
    *verify after the fact* — read it off the session's own token usage (or
@@ -190,7 +212,10 @@ and an edit invalidates the read so it often gets paid twice.
   verdict spelled out — e.g. *`background.ts` (4,581 lines): **Grep-then-Read-window only, never
   opened whole.*** A plan that says "the modal" instead of naming it has not budgeted the read.
 - **The Read list is part of the size tag** (see the table above). A substep whose Read list
-  totals more than ~2,000 lines sizes XL by definition — and there is no XL. Split it.
+  totals more than ~2,000 lines sizes XL by definition — and there is no XL. Split it. The
+  line total is the depth cap; the **files-touched** column is the breadth cap — a Read list
+  of 12 files × 10 lines passes the first and fails the second, and it is the second that
+  prices a sweep.
 - **Extract before you edit.** If a substep needs new logic to live inside a god file, write
   that logic as a **pure module in an EARLIER substep**, unit-tested there against its own
   small surface. The god-file substep then shrinks to a call site plus wiring — a thin diff
@@ -228,6 +253,13 @@ A `## Ledger` section, **appended to after each substep runs** — it is what a 
 reads instead of re-grepping:
 
 - date — step — outcome (+ commit hash)
+- **actuals + re-tag**, in brackets right after the step: `[N sessions · N trips · peak NNNk ·
+  was M → L]` — the trip count and peak context are the two numbers the size table is
+  calibrated against, and the corrected tag is the recalibration the table asks for. "Recheck
+  a done substep against its tag" was already the rule; nothing enforced it, so a substep that
+  ran 79 trips over three sessions stayed M in its doc (2026-09-10). Read trips off the
+  session's tool-call count and peak context off its usage; when the substep took more than
+  one session, say so — that IS the miscalibration.
 - deviations from the written plan
 - discoveries with `file:line` pointers
 - notes/dependencies a LATER step needs
