@@ -48,7 +48,7 @@ const repoRoot = () => process.env.CCA_CANONICAL_ROOT || path.join(__dirname, '.
 // The canonical fleet manifest. ADOPT-ONLY is the default and the important safety property:
 // a target that does not already have the file is SKIPPED, never created. Syncing must not be
 // how a repo acquires a hook — that is what the installer and a deliberate opt-in are for, and
-// silently dropping token-guard.js into a repo whose settings.json never wires it would leave
+// silently dropping token-saver.js into a repo whose settings.json never wires it would leave
 // an inert file that reads as adoption.
 const MANIFEST = [
   { file: 'terminal-title.js', global: true },
@@ -57,7 +57,7 @@ const MANIFEST = [
   // gap rather than an unadopted repo.
   { file: 'terminal-title.directive.md', global: true, pairsWith: 'terminal-title.js' },
   // Dev-only (DEV_ONLY_FILES in bin/cli.js) — never in a user install, and deliberately NOT
-  // synced to ~/.claude: the global hooks dir has no token-guard today, and putting one there
+  // synced to ~/.claude: the global hooks dir has no token-saver today, and putting one there
   // without a matching settings.json entry would be inert.
   //
   // Sourced OUT OF TREE since 2026-08-21. This checkout's copy is the installable baseline, which
@@ -70,28 +70,36 @@ const MANIFEST = [
   // local fleet file's `sources` map this entry is skipped everywhere, and check mode stops
   // reporting adopting copies as drifted (they are not behind — this tree is simply not their
   // source). Record a root only when the authority actually moves.
-  { file: 'token-guard.js', global: false, sourceKey: 'token-guard' },
-  // The guard's liveness canary. Paired: every token-guard handler is fail-open, so a repo
+  { file: 'token-saver.js', global: false, sourceKey: 'token-saver', legacySourceKey: 'token-guard' },
+  // The guard's liveness canary. Paired: every token-saver handler is fail-open, so a repo
   // with the guard and no canary is a fleet gap — a dead guard there is silent by design.
   // The canary never require()s its partner (a load-time throw must not kill them both),
   // and wiring (a UserPromptSubmit entry) stays a per-repo opt-in like the guard's own.
-  { file: 'token-guard-liveness.js', global: false, pairsWith: 'token-guard.js' },
-  // The cross-session write-claim registry. token-guard require()s it lazily and fails open, so a
+  { file: 'token-saver-liveness.js', global: false, pairsWith: 'token-saver.js' },
+  // One-release compatibility shims (TokenSaver rename, 2026-09): settings entries and commands
+  // that still name token-guard*.js reach the engine through these. Paired with the engine so
+  // the fleet keeps them byte-identical wherever it is adopted. ⚠ A repo still on the OLD name
+  // reads as drifted here — its token-guard.js is the full engine, not the shim — and a --write
+  // would replace a live engine with a shim pointing at a file that repo does not have. Rename
+  // the repo's engine first (the plan's 4.x); 5.1b owns the --write.
+  { file: 'token-guard.js', global: false, pairsWith: 'token-saver.js' },
+  { file: 'token-guard-liveness.js', global: false, pairsWith: 'token-saver.js' },
+  // The cross-session write-claim registry. token-saver require()s it lazily and fails open, so a
   // repo with the guard and a drifted registry is the same silent-gap shape as a missing canary —
   // and it WAS an unmanifested hand-copy until 2026-08-07 (job-agent-extension had a byte-identical
   // copy nobody was keeping honest), which is precisely how token-guard drifted 231 lines.
-  { file: 'claim-registry.js', global: false, pairsWith: 'token-guard.js' },
-  // The SessionEnd clean-exit marker. Global (unlike token-guard) because it IS wired in
+  { file: 'claim-registry.js', global: false, pairsWith: 'token-saver.js' },
+  // The SessionEnd clean-exit marker. Global (unlike token-saver) because it IS wired in
   // ~/.claude/settings.json — one user-level SessionEnd entry covers every repo, and the marker
   // resolves its own .titles dir per session, so a project copy would only write the same file
   // twice. Dev-only in bin/cli.js: user installs wire no SessionEnd.
   { file: 'session-close.js', global: true },
   // The statusLine session-cost readout. Global for the session-close.js reason: wired once in
-  // ~/.claude/settings.json (statusLine key), and it require()s the PROJECT's token-guard.js as
+  // ~/.claude/settings.json (statusLine key), and it require()s the PROJECT's token-saver.js as
   // a read-only library — so no per-repo copy exists to drift. Dev-only in bin/cli.js.
   { file: 'statusline-cost.js', global: true },
   // The PreToolUse worktree gate. Dev-only (DEV_ONLY_FILES in bin/cli.js) and per-repo for the
-  // same reason as token-guard: ~/.claude/settings.json wires no PreToolUse entry for it, so a
+  // same reason as token-saver: ~/.claude/settings.json wires no PreToolUse entry for it, so a
   // global copy would be an inert file that reads as adoption. It landed in two repos on
   // 2026-07-31 — built independently here and in job-agent-extension, then merged — which is
   // precisely the hand-port arrangement that let token-guard drift 231 lines behind.
@@ -150,8 +158,13 @@ const subdirOf = entry => entry.subdir || 'hooks';
 // real answer meaning "nobody here", which makes the entry skip rather than quietly fall back to
 // this tree. CCA_CANONICAL_ROOT deliberately does not reach these: it relocates THIS repo for the
 // suite's HEAD-tolerance cases, and an entry sourced elsewhere was never reading this repo.
-const sourceRootFor = entry =>
-  entry.sourceKey ? (readLocalConfig().sources[entry.sourceKey] || null) : repoRoot();
+// `legacySourceKey` reads a root recorded under an entry's pre-rename key, so a box whose fleet
+// file still says "token-guard" keeps sourcing the engine after the manifest row moved.
+const sourceRootFor = entry => {
+  if (!entry.sourceKey) return repoRoot();
+  const sources = readLocalConfig().sources;
+  return sources[entry.sourceKey] ?? sources[entry.legacySourceKey] ?? null;
+};
 
 const canonicalFor = entry => path.join(sourceRootFor(entry), '.claude', subdirOf(entry), entry.file);
 
@@ -165,7 +178,7 @@ const targetDirFor = (target, entry) =>
 // Per-machine fleet. Prefer the general name; fall back to the terminal-title-era one so an
 // existing box keeps working with no migration step.
 //   [{ "label": "my-repo", "dir": "C:\\path\\to\\repo\\.claude\\hooks" }, ...]
-//   { "targets": [ ...same... ], "sources": { "token-guard": "C:\\path\\to\\other\\repo" } }
+//   { "targets": [ ...same... ], "sources": { "token-saver": "C:\\path\\to\\other\\repo" } }
 // Both shapes are read. The bare array is the original and stays supported forever — every box
 // already has one, and a config migration is not worth a fleet outage. The object shape adds
 // `sources`: where the out-of-tree canonicals live on THIS machine (see sourceRootFor).
@@ -349,7 +362,7 @@ function noteNoop(kind, label, quiet, say, tally) {
 
 // A hook is a file Claude Code EXECUTES with a JSON payload on stdin; a library is one a hook
 // require()s. That read is the whole discriminator, and it is precise here — claim-registry.js
-// (require()d by token-guard.js, zero stdin reads) is correctly unwired and must never be
+// (require()d by token-saver.js, zero stdin reads) is correctly unwired and must never be
 // reported, or the audit becomes noise nobody reads.
 const readsStdin = text => text.includes('process.stdin');
 
@@ -427,7 +440,7 @@ function noopKind(verdict, entry, cur, mode) {
 }
 
 // Every target here is a file the OTHER live sessions are executing right now — the hooks read
-// token-guard.js fresh on each tool call. A plain writeFileSync truncates first, so a read landing
+// token-saver.js fresh on each tool call. A plain writeFileSync truncates first, so a read landing
 // inside that window gets a half file: it passes `node --check` often enough to look fine and then
 // throws mid-turn in somebody else's session (observed once, hence this). Same-directory temp plus
 // rename makes the swap atomic, so a concurrent reader sees the old file or the new one, never a

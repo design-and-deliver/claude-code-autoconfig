@@ -6,7 +6,7 @@
 // COLLIDE. Every signal already exists on disk; nothing joined them. This joins them.
 //
 // DEV-ONLY (gated out of user installs via DEV_ONLY_FILES in bin/cli.js) — dogfooded from the CCA
-// repo like token-guard and whats-happening.
+// repo like token-saver and whats-happening.
 //
 // ⛔ READ-ONLY, deliberately. It never merges, never moves a branch, never writes to a worktree.
 // Merging live branches is the one operation here that can destroy work, so it is not what the

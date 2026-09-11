@@ -11,7 +11,7 @@
  *   node scripts/sync-terminal-title.js --write   # WRITE: copy the canonical over every drifted target
  *
  * SINCE 2026-07-25 this is a thin front-end over scripts/sync-hook-fleet.js, which does the same
- * job for the whole canonical hooks manifest (terminal-title + token-guard). The behaviour and CLI
+ * job for the whole canonical hooks manifest (terminal-title + token-saver). The behaviour and CLI
  * here are unchanged — the many plan/audit docs that name this script stay correct — but the fleet
  * logic now lives in exactly ONE place. Keeping a second copy of it would have been the very
  * failure mode this pair of scripts exists to prevent.

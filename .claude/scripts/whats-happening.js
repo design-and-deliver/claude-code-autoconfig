@@ -8,7 +8,7 @@
 // each step has taken.
 //
 // DEV-ONLY (gated out of user installs via DEV_ONLY_FILES in bin/cli.js) —
-// dogfooded from the CCA repo like token-guard. See CLAUDE.md dev-gate trap.
+// dogfooded from the CCA repo like token-saver. See CLAUDE.md dev-gate trap.
 //
 // Scope (the two RELIABLE outputs only):
 //   (1) what the turn is doing right now, and

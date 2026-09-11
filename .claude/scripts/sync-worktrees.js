@@ -25,7 +25,7 @@
 // already exist in the object store.
 //
 // DEV-ONLY (gated out of user installs via DEV_ONLY_FILES in bin/cli.js) — dogfooded from the CCA
-// repo like fleet and token-guard.
+// repo like fleet and token-saver.
 //
 // ⛔ DRY-RUN BY DEFAULT. --write is the only thing that deletes. And it never merges: landing a
 // branch is the one operation here that can destroy work across sessions, so it stays a human verb
