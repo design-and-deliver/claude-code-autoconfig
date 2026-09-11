@@ -22,7 +22,7 @@
  *                       systemMessage when the topics buried behind the current one outweigh 2× the
  *                       session's fixed overhead — the point where a /clear pays for itself in a
  *                       handful of turns (see clearAdvice; dormant unless the project-tier
- *                       token-guard.js is installed beside this hook)
+ *                       token-saver.js is installed beside this hook)
  *   SessionStart     -> ✻ idle "Claude Code — New session" after a /clear (a /continue re-arms the
  *                       carry of the previous title); an existing/carried title on resume/compact/relaunch
  *                       + inject the FULL RULES block — once per session instead of every prompt
@@ -834,6 +834,9 @@ function readMarks(dir, sid) {
 // this code (clearAdvice reads that as "unknown"), while an empty list is a measured zero.
 const WRITES_PER_TOPIC = 25;
 const WRITE_TOPICS = 40;
+// The cost-control engine's file names beside the hooks dir: the canonical one first, then the
+// one-release shim a not-yet-renamed install still carries — either one arms clearAdvice.
+const TOKEN_SAVER_NAMES = ['token-saver.js', 'token-guard.js'];
 // The topic map and this topic's list, plus whether either had to be conjured — a map or a list
 // that did not exist is itself a change worth persisting, independent of any path being added.
 function topicSlot(m, topicTs) {
@@ -904,11 +907,12 @@ function readWriteLedger(dir, sid) {
 function clearAdvice(dir, sid, transcriptPath) {
   try {
     // Install gate: the advisory belongs to the cost-control tooling family and ships dormant —
-    // it speaks only where the project-tier token-guard.js sits beside the hooks dir (the same
-    // discriminator statusline-cost.js keys on; user installs never receive that file). The
-    // ledger/watermark writes elsewhere in this hook stay unconditional either way — R6 drift
-    // and /migrate-new-session read them regardless of whether the advisory may speak.
-    if (!fs.existsSync(path.join(dir, '..', 'token-guard.js'))) return '';
+    // it speaks only where the project-tier token-saver.js (or its one-release token-guard.js
+    // shim) sits beside the hooks dir (the same discriminator statusline-cost.js keys on; user
+    // installs never receive that file). The ledger/watermark writes elsewhere in this hook stay
+    // unconditional either way — R6 drift and /migrate-new-session read them regardless of
+    // whether the advisory may speak.
+    if (!TOKEN_SAVER_NAMES.some(n => fs.existsSync(path.join(dir, '..', n)))) return '';
     const ADVICE_FLOOR = 40000; // below this much dead history a /clear isn't worth a nudge in any repo
     const hf = path.join(dir, `${sid}.history.jsonl`);
     const all = fs.readFileSync(hf, 'utf8').trim().split('\n')
@@ -1000,7 +1004,7 @@ function clearAdvice(dir, sid, transcriptPath) {
       ? `earlier work still ride in context ${EMDASH} if that's behind you`
       : `${topics} earlier topic${topics === 1 ? '' : 's'} still ride in context `
         + `${EMDASH} if ${topics === 1 ? "it's" : "they're"} done`;
-    // "Hey ${EMDASH}" prefix is the house style for every guard line we author (token-guard's asks
+    // "Hey ${EMDASH}" prefix is the house style for every guard line we author (token-saver's asks
     // open the same way) — it marks the line as OURS rather than Claude Code's own output.
     // The /continue tail is not optional politeness: `topics` counts only the entries BEFORE the
     // live run, so the live goal is still IN FLIGHT whenever this fires — a bare /clear sheds the

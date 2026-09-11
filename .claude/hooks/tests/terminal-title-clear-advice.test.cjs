@@ -28,11 +28,11 @@ const { clearAdvice, recordMark, readTailWrites, recordWrites, readWriteLedger }
 
 const SID = 'test-sid';
 
-// Real shape: <hooks>/.titles with token-guard.js beside it — the advisory's install gate
-// checks for that sibling (dev/fleet boxes have it; user installs don't, see the gate test).
+// Real shape: <hooks>/.titles with token-saver.js beside it — the advisory's install gate
+// checks for that sibling (dev/fleet boxes have it; user installs don't, see the gate tests).
 function tmpTitles() {
   const hooks = fs.mkdtempSync(path.join(os.tmpdir(), 'tt-advice-'));
-  fs.writeFileSync(path.join(hooks, 'token-guard.js'), '// present = cost tooling installed\n');
+  fs.writeFileSync(path.join(hooks, 'token-saver.js'), '// present = cost tooling installed\n');
   const titles = path.join(hooks, '.titles');
   fs.mkdirSync(titles);
   return titles;
@@ -73,11 +73,20 @@ test('a single-topic fat session is advised at all (the starved case)', () => {
   assert.match(clearAdvice(dir, SID, transcript), /\/clear cuts per-turn input cost/);
 });
 
-test('without token-guard.js beside the hooks dir the advisory is silent (user installs)', () => {
+test('without token-saver.js beside the hooks dir the advisory is silent (user installs)', () => {
   const { dir, transcript } = singleTopicFatSession();
-  fs.rmSync(path.join(dir, '..', 'token-guard.js'));
+  fs.rmSync(path.join(dir, '..', 'token-saver.js'));
   assert.equal(clearAdvice(dir, SID, transcript), '',
     'the fat session that always advises on dev boxes must stay silent in a user install');
+});
+
+// One-release compatibility: a box that has not yet taken the rename still carries the engine
+// under its old name, and the gate must keep arming on it — otherwise every fleet repo goes
+// silent between the hook rename and its own settings rewire.
+test('the old token-guard.js name alone still arms the gate (pre-rename installs)', () => {
+  const { dir, transcript } = singleTopicFatSession();
+  fs.renameSync(path.join(dir, '..', 'token-saver.js'), path.join(dir, '..', 'token-guard.js'));
+  assert.match(clearAdvice(dir, SID, transcript), /\/clear cuts per-turn input cost/);
 });
 
 test('single-topic wording avoids the "N earlier topics" lie', () => {

@@ -7,13 +7,13 @@
  * cost — and a /clear + /continue remedy line. The rest of the time it is EMPTY: figures
  * with nothing to do about them are noise (Andrew, 2026-08-12). The statusline is the one
  * surface that can carry this without becoming wallpaper: it renders outside the
- * transcript, costs zero context tokens, and never repeats into scrollback. token-guard's
+ * transcript, costs zero context tokens, and never repeats into scrollback. token-saver's
  * cards stay the interrupts; this is the gauge between them.
  *
  * GLOBAL-tier like session-close.js: wired once in ~/.claude/settings.json (statusLine
- * key), covers every repo. All metering comes from the PROJECT's own token-guard.js,
+ * key), covers every repo. All metering comes from the PROJECT's own token-saver.js,
  * require()d read-only as a library — it exports its meter for tests, and require.main
- * guards its hook path. A repo without token-guard prints nothing: an empty statusline is
+ * guards its hook path. A repo without token-saver prints nothing: an empty statusline is
  * the correct rendering of "this repo doesn't meter".
  *
  * COST DISCIPLINE: Claude Code re-runs this command on every conversation update, but
@@ -24,7 +24,7 @@
  * hooks already pay.
  *
  * Fail-open EVERYWHERE: any throw prints the cached line or nothing. A statusline must
- * never be the reason a session stalls — and a mid-edit token-guard that fails to parse
+ * never be the reason a session stalls — and a mid-edit token-saver that fails to parse
  * must dim the gauge, not break the terminal.
  */
 'use strict';
@@ -61,8 +61,18 @@ function breakEven(ctx, cold) {
   return { savings, upfront, save1, turns, clear: savings > 0 && turns < BREAKEVEN_STAY_TURNS };
 }
 
+// The engine owns the ~/.claude/.token-guard -> .token-saver migration (TokenSaver rename,
+// 2026-09); this reader only follows it — the new dir when present, else the old one a
+// not-yet-renamed engine still writes, else the new one so a fresh box lands on the canonical
+// path. Never renames: six sessions may be mid-migration and the statusline must not race them.
+function homeStateDir() {
+  const home = path.join(os.homedir(), '.claude');
+  const dirs = [path.join(home, '.token-saver'), path.join(home, '.token-guard')];
+  return dirs.find(d => fs.existsSync(d)) || dirs[0];
+}
+
 function cachePath(sid) {
-  return path.join(os.homedir(), '.claude', '.token-guard', `statusline-${sid}.json`);
+  return path.join(homeStateDir(), `statusline-${sid}.json`);
 }
 
 function readJson(file) {
@@ -97,7 +107,7 @@ function bucketSum(per) {
   return t;
 }
 
-// Session total = every bucket of every model, main + agents — the same sum token-guard's
+// Session total = every bucket of every model, main + agents — the same sum token-saver's
 // sessionTokens() renders (not exported, so summed here from the tested perModel contract).
 function totalTokens(m) {
   return bucketSum((m.main || {}).perModel) + bucketSum((m.agents || {}).perModel);
@@ -105,7 +115,7 @@ function totalTokens(m) {
 
 // Mid-substep is the one moment the nudge must NOT show: a /clear there loses the substep
 // narrative and re-pays the plan read (plan-authoring.md). isBoundary === false is
-// token-guard's own mid-substep verdict; anything unreadable counts as "not mid-substep".
+// token-saver's own mid-substep verdict; anything unreadable counts as "not mid-substep".
 function midPlanSubstep(tg, projectDir) {
   try {
     const plans = tg.findActivePlan(projectDir);
@@ -117,7 +127,8 @@ function midPlanSubstep(tg, projectDir) {
 }
 
 function loadConfig(tg, projectDir) {
-  const user = (readJson(path.join(projectDir, '.claude', 'cca.config.json')) || {}).tokenGuard || {};
+  const raw = readJson(path.join(projectDir, '.claude', 'cca.config.json')) || {};
+  const user = raw.tokenSaver || raw.tokenGuard || {};   // old key: a config the installer has not migrated yet
   return tg.resolveConfig ? tg.resolveConfig(user) : user;
 }
 
@@ -138,7 +149,7 @@ function render(tg, data, projectDir) {
   if (!be.clear) return '';
   if (midPlanSubstep(tg, projectDir)) return '';
   // R21 provenance — past both gates this line is on screen telling the user to clear, so a
-  // recovery that follows is ours and must not come back as their habit (token-guard's
+  // recovery that follows is ours and must not come back as their habit (token-saver's
   // noteClearAdvice). Throttled inside that helper: the statusline repaints constantly while
   // the nudge stands, and one standing recommendation must not become a disk write per paint.
   if (tg.noteClearAdvice) tg.noteClearAdvice(projectDir, 'statusline', Date.now());
@@ -196,9 +207,15 @@ function resolveTranscript(projectDir, transcriptArg) {
   try { return newestTranscript(projectDir); } catch (_) { return null; }
 }
 
+// The engine's file names, canonical first: a repo that has not yet taken the rename still
+// carries it as token-guard.js (or as the one-release shim, which re-exports the engine).
+const GUARD_NAMES = ['token-saver.js', 'token-guard.js'];
+
 function requireGuard(projectDir) {
-  try { return require(path.join(projectDir, '.claude', 'hooks', 'token-guard.js')); }
-  catch (_) { return null; }
+  for (const name of GUARD_NAMES) {
+    try { return require(path.join(projectDir, '.claude', 'hooks', name)); } catch (_) { /* next */ }
+  }
+  return null;
 }
 
 // Both surfaces share breakEven(); the statusline only interrupts when the
@@ -233,7 +250,7 @@ function reportMain(transcriptArg) {
   const sid = path.basename(transcript, '.jsonl');
   const tg = requireGuard(projectDir);
   if (!tg) {
-    console.log('cost-compare: this repo has no token-guard meter (.claude/hooks/token-guard.js) — no figures to report.');
+    console.log('cost-compare: this repo has no token-saver meter (.claude/hooks/token-saver.js) — no figures to report.');
     return;
   }
   const cfg = loadConfig(tg, projectDir);
@@ -269,10 +286,11 @@ function cacheHit(cached, st) {
 
 function computeLine(data, projectDir, cached) {
   try {
-    const tg = require(path.join(projectDir, '.claude', 'hooks', 'token-guard.js'));
+    const tg = requireGuard(projectDir);
+    if (!tg) return (cached && cached.line) || '';
     return render(tg, data, projectDir) || '';
   } catch (_) {
-    return (cached && cached.line) || '';   // no token-guard here, or a mid-edit copy — stay dark,
+    return (cached && cached.line) || '';   // no token-saver here, or a mid-edit copy — stay dark,
   }                                          // but cache the miss so require isn't retried per refresh
 }
 
