@@ -81,7 +81,7 @@ section — e.g. `docs/agy-worktree-adoption-plan.md`), per `.claude/rules/plan-
 
 ## The loop
 
-1. `EnterWorktree` with a name describing the work (`token-guard-r16`, `box-widths`) — not a
+1. `EnterWorktree` with a name describing the work (`token-saver-r16`, `box-widths`) — not a
    random one. It lands in `.claude/worktrees/<name>/`, already excluded via `.git/info/exclude`.
    Plan-driven work uses the plan alias and re-enters the existing worktree instead (see above).
 2. `node scripts/bootstrap-worktree.js` — **mandatory, see below.**
@@ -170,7 +170,7 @@ npm registry, or its own git remote:
 - **`~/.claude` and the hook fleet.** `node scripts/sync-hook-fleet.js --write` copies THIS
   tree's `.claude/hooks/*` and `.claude/rules/plan-authoring.md` out to `~/.claude` and every
   repo in the fleet list. Run from a worktree, it publishes that worktree's possibly-older
-  copies over newer work everywhere — `token-guard.js` alone moved 795 lines in the unpushed
+  copies over newer work everywhere — `token-saver.js` alone moved 795 lines in the unpushed
   batch. **Main checkout only, after merging.** Check mode (no `--write`) is safe to run anywhere.
 - **The live twin.** `test/live-twin-parity.test.js` compares whatever tree you are in against
   the single `~/.claude/hooks/terminal-title.js`. Edit `terminal-title.js` in a worktree and

@@ -137,7 +137,7 @@ npm test
 This runs the FULL suite:
 box alignment, CLI install, update system, plugin system, terminal-title behavior,
 golden endings, live-twin parity, update summary, changelog generation, **and the hook
-suites** (`npm run test:hooks` fans out to `.claude/hooks/tests/*.test.cjs` — token-guard
+suites** (`npm run test:hooks` fans out to `.claude/hooks/tests/*.test.cjs` — token-saver
 lives there, and those tests do NOT run any other way).
 
 **DO NOT commit or present code changes if tests fail.** Fix the issues first.
@@ -150,8 +150,8 @@ cannot see: `live-twin-parity.test.js` skips on CI, so CI green never proves the
 sync (see trap 5 / T8 below). The hook blocks a push unless `npm test` passes AND
 `node scripts/sync-hook-fleet.js` (check mode) reports zero drift.
 
-Since 2026-07-25 it checks the whole manifest (terminal-title + token-guard), not just
-terminal-title — token-guard is the file that actually drifted 231 lines, precisely because
+Since 2026-07-25 it checks the whole manifest (terminal-title + token-saver), not just
+terminal-title — token-saver is the file that actually drifted 231 lines, precisely because
 nothing checked it. A blocked push means an adopting repo is stale: run
 `node scripts/sync-hook-fleet.js --write`, commit the target repo, push again.
 
@@ -163,7 +163,7 @@ as `in sync with HEAD (canonical has uncommitted edits)`. `--write` deliberately
 working tree, since edit → `--write` → commit is the normal authoring loop.
 
 `test/hook-fleet-sync.test.js` runs everywhere (it drives the actuator against throwaway dirs)
-and pins its semantics — adopt-only, the `~/.claude` token-guard carve-out, check-vs-write, the
+and pins its semantics — adopt-only, the `~/.claude` token-saver carve-out, check-vs-write, the
 exit codes this hook depends on. It does **not** replace the guard: it proves the actuator is
 correct, never that this machine's fleet is actually in sync. Only the check-mode run does that.
 
@@ -218,7 +218,7 @@ and a green feeling, then breaks something real:
   `node .claude/scripts/sync-docs.js`, which locates exact string markers inside that HTML —
   reformatting the file breaks the next sync.
 - **The `.claude/hooks` copies here are the canonical ones** — `terminal-title.js`,
-  `terminal-title.directive.md`, and `token-guard.js` (the manifest in
+  `terminal-title.directive.md`, and `token-saver.js` (the manifest in
   `scripts/sync-hook-fleet.js`). Edit only these, then run
   `node scripts/sync-hook-fleet.js --write` to push them to `~/.claude` and the fleet.
   Never edit a copy — the next sync clobbers it; drift fails `live-twin-parity.test.js` on
@@ -229,12 +229,14 @@ and a green feeling, then breaks something real:
   front-end over the same code, kept because plan and audit docs name it.
 - **Dev-only gating lives in `DEV_ONLY_FILES` (bin/cli.js), NOT package.json `files`.** The
   npm `files` negations only shape the tarball; anything absent from `DEV_ONLY_FILES` is
-  installed into every user project. token-guard + its commands are deliberately gated —
+  installed into every user project. token-saver + its commands are deliberately gated —
   do not "fix" that by shipping them. The installer also RETRACTS the 1.0.224 leak (deletes
-  token-guard.js + its commands, strips its hook entries) unless `cca.config.json` carries
-  `tokenGuard.verdictServiceKey` (paid) or `tokenGuard.devFleet: true` (one of our own repos,
-  where the file arrives via `scripts/sync-hook-fleet.js`). Every fleet repo that holds
-  token-guard.js needs the devFleet flag, or its next `@latest` upgrade deletes the file.
+  token-saver.js and the pre-rename token-guard.js, plus their commands, and strips both hook
+  entries) unless `cca.config.json` carries `tokenSaver.verdictServiceKey` (paid) or
+  `tokenSaver.devFleet: true` (one of our own repos, where the file arrives via
+  `scripts/sync-hook-fleet.js`; a legacy `tokenGuard` block is migrated to `tokenSaver` on
+  install). Every fleet repo that holds token-saver.js needs the devFleet flag, or its next
+  `@latest` upgrade deletes the file.
 - **Commits about dev-gated work need a `Changelog: none` trailer.** feat/fix/perf/refactor
   bullets surface verbatim on users' upgrade screens (`bin/update-summary.js`) — announcing
   a feature users can't receive is a bug. Already-pushed leaks: add an OVERRIDES `null`.
@@ -242,12 +244,12 @@ and a green feeling, then breaks something real:
   `DEV_ONLY_FILES`: a commit whose only shipped-area files are gated is dropped whatever its
   trailer says (stderr names it), a mixed commit keeps its bullet with a verify note, and an
   explicit OVERRIDES row wins. The trailer still governs mixed and maintainer-only commits.
-- **token-guard's `--analyze` digest wording is a machine interface.** `/analyze-session`
+- **token-saver's `--analyze` digest wording is a machine interface.** `/analyze-session`
   keys on the literal "live context at end" and the RENT/BOMBS/FLEETS/TTL headers. R6 scope
   data comes from terminal-title's per-title ledger (`.titles/{sid}.history.jsonl`: `ts`,
   `title`, optional `tokens`), parsed by `ledgerScopes()` and read by `/migrate-new-session`
   too. Renaming those ledger fields (they're written by terminal-title.js) silently breaks
-  token-guard drift + that command.
+  token-saver drift + that command.
 - **`.claude/updates/` numbers are append-only** — next is `005`; `002` is a retired
   tombstone (see `.claude/updates/README.md`). A reused number is silently skipped by
   installs that applied the original.
@@ -255,7 +257,7 @@ and a green feeling, then breaks something real:
   stays `"1"` (else Claude Code's own title writer races the hook), the `--idle-rescue` arg
   on the `idle_prompt` Notification entry selects a distinct code path (don't "dedupe" the
   two Notification entries), and hook commands stay `${CLAUDE_PROJECT_DIR:-.}`-anchored.
-- **Hooks fail silent by design** (token-guard, terminal-title swallow errors and exit 0).
+- **Hooks fail silent by design** (token-saver, terminal-title swallow errors and exit 0).
   A regression won't crash anything — it quietly stops warning/painting. Run the hook
   suites; "it didn't error" proves nothing.
 - **`test/golden-endings.json` is append-only** — never relabel or delete an entry without
