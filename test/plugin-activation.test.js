@@ -49,7 +49,7 @@ console.log();
 
 // --- Fixtures ---------------------------------------------------------------
 
-const GUARD_CMD = 'node "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/token-guard.js"';
+const GUARD_CMD = 'node "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/token-saver.js"';
 const GUARD_HOOK = { type: 'command', command: GUARD_CMD };
 const HOOK_EVENTS = ['UserPromptSubmit', 'Stop', 'PreToolUse', 'PostToolUse'];
 
@@ -66,7 +66,7 @@ function makeBundlePayload() {
       description: 'test bundle',
       settings: { hooks },
       files: [
-        { to: 'hooks/token-guard.js', content: '// token-guard body\n' },
+        { to: 'hooks/token-saver.js', content: '// token-saver body\n' },
         { to: 'commands/token-saver-rationale.md', content: '# rationale\n' }
       ]
     }
@@ -101,7 +101,8 @@ const deps = {
 };
 
 // A project that already ran autoconfig: its own Stop hook + env, and a cca.config.json
-// with a pin and an existing tokenGuard key — the MERGE must preserve all of it (trap 1).
+// with a pin and a cost-control block still under the pre-rename `tokenGuard` key — the MERGE
+// must preserve all of it (trap 1) and move the block to `tokenSaver` (the 2026-09 rename).
 const OTHER_CMD = 'node .claude/hooks/other.js';
 fs.mkdirSync(claudeDir, { recursive: true });
 fs.writeFileSync(path.join(claudeDir, 'settings.json'), JSON.stringify({
@@ -128,34 +129,35 @@ async function main() {
   });
 
   test('204: nothing was installed or written', () => {
-    assert(!fs.existsSync(path.join(claudeDir, 'hooks', 'token-guard.js')), 'no files should land');
+    assert(!fs.existsSync(path.join(claudeDir, 'hooks', 'token-saver.js')), 'no files should land');
     assert(!readPluginsLedger(claudeDir)['token-saver'], 'no ledger entry should exist');
     const cfg = readJson(path.join(claudeDir, 'cca.config.json'));
-    assert(!cfg.tokenGuard.verdictServiceKey, 'no key should be written');
+    assert(!cfg.tokenSaver && !cfg.tokenGuard.verdictServiceKey, 'no key should be written, no key migrated');
   });
 
   // --- Happy path -----------------------------------------------------------
   await pluginActivate(GOOD_KEY, claudeDir, deps);
 
   test('activate: bundle files land under .claude/', () => {
-    assert(fs.readFileSync(path.join(claudeDir, 'hooks', 'token-guard.js'), 'utf8') === '// token-guard body\n', 'token-guard.js content');
+    assert(fs.readFileSync(path.join(claudeDir, 'hooks', 'token-saver.js'), 'utf8') === '// token-saver body\n', 'token-saver.js content');
     assert(fs.existsSync(path.join(claudeDir, 'commands', 'token-saver-rationale.md')), 'token-saver-rationale.md exists');
   });
 
   test('activate: all four hook events merged into settings.json, user entries kept', () => {
     const settings = readJson(path.join(claudeDir, 'settings.json'));
     for (const ev of HOOK_EVENTS) {
-      assert(countCommand(settings, ev, GUARD_CMD) === 1, `${ev} has the token-guard hook once`);
+      assert(countCommand(settings, ev, GUARD_CMD) === 1, `${ev} has the token-saver hook once`);
     }
     assert(countCommand(settings, 'Stop', OTHER_CMD) === 1, 'user Stop hook preserved');
     assert(settings.env.EXISTING_VAR === 'keep', 'user env preserved');
   });
 
-  test('activate: cca.config.json MERGED — key nested under tokenGuard, other keys preserved', () => {
+  test('activate: cca.config.json MERGED — key nested under tokenSaver, old-key block migrated, other keys preserved', () => {
     const cfg = readJson(path.join(claudeDir, 'cca.config.json'));
-    assert(cfg.tokenGuard.verdictServiceKey === GOOD_KEY, 'verdictServiceKey written');
-    assert(cfg.tokenGuard.verdictService === API_BASE, 'verdictService written');
-    assert(cfg.tokenGuard.sessionWarnUSD === 5, 'existing tokenGuard key preserved');
+    assert(cfg.tokenSaver.verdictServiceKey === GOOD_KEY, 'verdictServiceKey written');
+    assert(cfg.tokenSaver.verdictService === API_BASE, 'verdictService written');
+    assert(cfg.tokenSaver.sessionWarnUSD === 5, 'existing block migrated from tokenGuard, its keys preserved');
+    assert(cfg.tokenGuard === undefined, 'old tokenGuard key removed (never two blocks)');
     assert(cfg.pinVersion === '1.0.200', 'existing top-level key preserved');
     assert(!cfg.verdictServiceKey, 'key must NOT sit at top level (dead key + retraction bug)');
   });
@@ -182,12 +184,12 @@ async function main() {
   test('re-activate: hooks not duplicated in settings.json', () => {
     const settings = readJson(path.join(claudeDir, 'settings.json'));
     for (const ev of HOOK_EVENTS) {
-      assert(countCommand(settings, ev, GUARD_CMD) === 1, `${ev} still has exactly one token-guard hook`);
+      assert(countCommand(settings, ev, GUARD_CMD) === 1, `${ev} still has exactly one token-saver hook`);
     }
   });
 
   // --- Verify matrix: missing file ------------------------------------------
-  fs.rmSync(path.join(claudeDir, 'hooks', 'token-guard.js'));
+  fs.rmSync(path.join(claudeDir, 'hooks', 'token-saver.js'));
   const missingFile = await verifyTokenSaver(claudeDir, deps);
   test('verify: fails when a bundle file is missing', () => {
     assert(missingFile === false, 'expected fail on missing file');
@@ -210,7 +212,7 @@ async function main() {
   const cfgPath = path.join(claudeDir, 'cca.config.json');
   const savedCfg = fs.readFileSync(cfgPath, 'utf8');
   const badCfg = JSON.parse(savedCfg);
-  badCfg.tokenGuard.verdictServiceKey = 'cca_live_revoked';
+  badCfg.tokenSaver.verdictServiceKey = 'cca_live_revoked';
   fs.writeFileSync(cfgPath, JSON.stringify(badCfg, null, 2));
   const rejectedKey = await verifyTokenSaver(claudeDir, deps);
   test('verify: fails when the licensing service rejects the key', () => {
@@ -222,16 +224,16 @@ async function main() {
   pluginRemove('token-saver', claudeDir, deps);
 
   test('remove: files deleted, hooks reverted, user entries + license key kept', () => {
-    assert(!fs.existsSync(path.join(claudeDir, 'hooks', 'token-guard.js')), 'token-guard.js removed');
+    assert(!fs.existsSync(path.join(claudeDir, 'hooks', 'token-saver.js')), 'token-saver.js removed');
     assert(!fs.existsSync(path.join(claudeDir, 'commands', 'token-saver-rationale.md')), 'rationale command removed');
     const settings = readJson(settingsPath);
     for (const ev of HOOK_EVENTS) {
-      assert(countCommand(settings, ev, GUARD_CMD) === 0, `${ev} token-guard hook reverted`);
+      assert(countCommand(settings, ev, GUARD_CMD) === 0, `${ev} token-saver hook reverted`);
     }
     assert(countCommand(settings, 'Stop', OTHER_CMD) === 1, 'user Stop hook survives removal');
     assert(!readPluginsLedger(claudeDir)['token-saver'], 'ledger entry dropped');
     const cfg = readJson(cfgPath);
-    assert(cfg.tokenGuard.verdictServiceKey === GOOD_KEY, 'license key deliberately kept in cca.config.json');
+    assert(cfg.tokenSaver.verdictServiceKey === GOOD_KEY, 'license key deliberately kept in cca.config.json');
   });
 
   const afterRemove = await verifyTokenSaver(claudeDir, deps);

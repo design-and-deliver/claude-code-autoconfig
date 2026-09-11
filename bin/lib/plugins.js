@@ -29,7 +29,7 @@ const path = require('path');
 
 const PLUGINS_LEDGER = '.autoconfig-plugins.json';
 
-// Licensed-delivery endpoint base. Matches token-guard.js's `verdictService` convention:
+// Licensed-delivery endpoint base. Matches token-saver.js's `verdictService` convention:
 // the base ends at /api/cca and each consumer appends its own route. Tests override via
 // deps.apiBase / deps.fetch in-process; the env var lets a manual run target a local or
 // staging service (the pre-deploy E2E path).
@@ -309,8 +309,27 @@ function readActivationConfig(claudeDir) {
   }
 }
 
+// The cost-control block in cca.config.json was keyed `tokenGuard` until the 2026-09 rename.
+// The engine read-aliases both keys; every writer (the installer, activation) moves the block
+// to `tokenSaver` first so the two never split — a key written under the old name next to a
+// block under the new one would be invisible to the engine's `tokenSaver || tokenGuard` read.
+// Moves only when the old key holds an object and the new key is absent (never clobbers a
+// newer value). Returns true when it moved the block (the caller writes the file).
+function migrateTokenSaverConfigKey(cfg) {
+  if (!cfg || cfg.tokenSaver !== undefined) return false;
+  if (!cfg.tokenGuard || typeof cfg.tokenGuard !== 'object') return false;
+  cfg.tokenSaver = cfg.tokenGuard;
+  delete cfg.tokenGuard;
+  return true;
+}
+
+// The cost-control block under either key (read-alias — see migrateTokenSaverConfigKey).
+function tokenSaverBlock(cfg) {
+  return (cfg && (cfg.tokenSaver || cfg.tokenGuard)) || {};
+}
+
 // MERGE the activation keys into .claude/cca.config.json — preserve every other key, and
-// nest under "tokenGuard" (top-level placement is a dead key AND makes cli.js's paid check
+// nest under "tokenSaver" (top-level placement is a dead key AND makes cli.js's paid check
 // treat the project as unpaid and retract its files — the exact bug fixed 2026-08-31).
 function writeActivationConfig(claudeDir, key, apiBase) {
   const p = path.join(claudeDir, 'cca.config.json');
@@ -322,13 +341,14 @@ function writeActivationConfig(claudeDir, key, apiBase) {
       throw new Error(`.claude/cca.config.json is not valid JSON (${e.message}) — refusing to overwrite it. Fix or delete it, then re-run activation.`);
     }
   }
-  cfg.tokenGuard = Object.assign({}, cfg.tokenGuard, {
+  migrateTokenSaverConfigKey(cfg);
+  cfg.tokenSaver = Object.assign({}, cfg.tokenSaver, {
     verdictService: apiBase,
     verdictServiceKey: key
   });
   fs.mkdirSync(claudeDir, { recursive: true });
   fs.writeFileSync(p, JSON.stringify(cfg, null, 2));
-  console.log('\x1b[90m%s\x1b[0m', '   ✎ wrote tokenGuard.verdictService + verdictServiceKey to .claude/cca.config.json');
+  console.log('\x1b[90m%s\x1b[0m', '   ✎ wrote tokenSaver.verdictService + verdictServiceKey to .claude/cca.config.json');
 }
 
 function collectHookCommands(hooksObj, event) {
@@ -360,7 +380,7 @@ function checkBundleFiles(claudeDir) {
   return { ok: true, msg: `bundle files present (${entry.files.map(f => '.claude/' + f).join(', ')})` };
 }
 
-// Check (b): the token-guard settings fragment the install recorded is merged into
+// Check (b): the token-saver settings fragment the install recorded is merged into
 // .claude/settings.json — all four hook events. The ledger entry is the source of truth
 // for WHAT should be merged (never a second copy of cli.js's fragment literal — trap 3).
 function checkSettingsFragment(claudeDir) {
@@ -375,14 +395,14 @@ function checkSettingsFragment(claudeDir) {
   }
   const missing = missingHookEvents(userSettings, fragmentHooks);
   if (missing.length > 0) return { ok: false, msg: `hook events not merged into settings.json: ${missing.join(', ')}` };
-  return { ok: true, msg: `token-guard hooks merged into settings.json (${Object.keys(fragmentHooks).join(', ')})` };
+  return { ok: true, msg: `token-saver hooks merged into settings.json (${Object.keys(fragmentHooks).join(', ')})` };
 }
 
 // Check (c): the configured key is still accepted by the licensing service.
 async function checkLicenseKey(claudeDir, deps) {
   const cfg = readActivationConfig(claudeDir);
-  const tg = (cfg && cfg.tokenGuard) || {};
-  if (!tg.verdictServiceKey) return { ok: false, msg: 'no license key in .claude/cca.config.json (tokenGuard.verdictServiceKey)' };
+  const tg = tokenSaverBlock(cfg);
+  if (!tg.verdictServiceKey) return { ok: false, msg: 'no license key in .claude/cca.config.json (tokenSaver.verdictServiceKey)' };
   const apiBase = deps.apiBase || tg.verdictService || CCA_API_BASE;
   try {
     const plugin = await fetchModuleBundle(apiBase, tg.verdictServiceKey, deps.fetch || global.fetch);
@@ -483,5 +503,7 @@ module.exports = {
   materializeBundle,
   writeActivationConfig,
   readActivationConfig,
+  migrateTokenSaverConfigKey,
+  tokenSaverBlock,
   runPluginCommand
 };

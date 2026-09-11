@@ -5,7 +5,7 @@ const path = require('path');
 const readline = require('readline');
 const { execSync, spawn } = require('child_process');
 const { formatUpdateSummary } = require('./update-summary.js');
-const { runPluginCommand } = require('./lib/plugins.js');
+const { runPluginCommand, migrateTokenSaverConfigKey } = require('./lib/plugins.js');
 const { migrateLegacyHookCommands, migrateRenamedToolMatchers, migrateRetiredPermissionRules, mergeSettingsInto, unmergeSettingsFrom } = require('./lib/settings-merge.js');
 const { MIN_CLAUDE_CODE_VERSION, checkClaudeVersion } = require('./lib/claude-version.js');
 const { pullUpdates } = require('./lib/updates.js');
@@ -511,14 +511,16 @@ function main() {
   const scriptsSrc = path.join(packageDir, '.claude', 'scripts');
 
   // Files that exist in the dev repo but should never be installed to user projects.
-  // token-guard.js + its commands are staged in-repo (dogfooded via settings.local.json) but
+  // token-saver.js + its commands are staged in-repo (dogfooded via settings.local.json) but
   // gated OUT of user installs until R6/R8/R9/R10 are live-baked — see CLAUDE.md "Invariants & Landmines".
+  // The engine was token-guard.js until 2026-09; both names stay gated (a one-release shim
+  // keeps the old file in-repo, and 1.0.224 leftovers in the wild still carry it).
   // THIS list (not package.json "files") is what gates installs — new dev-only commands/hooks
   // must be added here. Keep the literal on one line: tests parse it by regex.
   // /enable-retro + its create-retro-item agent are experimental: kept in-repo, gated out of
   // new installs since 2026-09-03. Projects that already hold them keep them (never retracted).
-  const DEV_ONLY_FILES = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-session.md', 'migrate-new-session.md', 'token-guard.js', 'plan-progress.md', 'plan-progress.js', 'whats-happening.md', 'whats-happening.js', 'refactor.md', 'parallel-session-worktrees.md',
-    'fleet.md', 'fleet.js', 'sync-worktrees.md', 'sync-worktrees.js', 'session-close.js', 'restore-after-reboot.md', 'restore-after-reboot.js', 'worktree-gate.js', 'claim-registry.js', 'token-guard-liveness.js', 'statusline-cost.js', 'cost-compare.md', 'gimme-one-liner.md', 'create-wip-report.md', 'abort-plan.md', 'eod-report.md', 'token-saver-details.md', 'token-saver-rationale.md', 'enable-retro.md', 'create-retro-item.md'];
+  const DEV_ONLY_FILES = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-session.md', 'migrate-new-session.md', 'token-guard.js', 'token-saver.js', 'plan-progress.md', 'plan-progress.js', 'whats-happening.md', 'whats-happening.js', 'refactor.md', 'parallel-session-worktrees.md',
+    'fleet.md', 'fleet.js', 'sync-worktrees.md', 'sync-worktrees.js', 'session-close.js', 'restore-after-reboot.md', 'restore-after-reboot.js', 'worktree-gate.js', 'claim-registry.js', 'token-guard-liveness.js', 'token-saver-liveness.js', 'statusline-cost.js', 'cost-compare.md', 'gimme-one-liner.md', 'create-wip-report.md', 'abort-plan.md', 'eod-report.md', 'token-saver-details.md', 'token-saver-rationale.md', 'enable-retro.md', 'create-retro-item.md'];
 
   // Everything the installer ships to user projects passes this gate, at every depth.
   const shipsToUsers = (name) => !DEV_ONLY_FILES.includes(name);
@@ -612,6 +614,20 @@ function main() {
     }
   }
 
+  // Migrate the cost-control block's key: `tokenGuard` → `tokenSaver` (the family was renamed
+  // 2026-09; the engine read-aliases both, the installer writes only the new one). Same shape as
+  // the gls migration above: never when the config is corrupt, never over an existing new key,
+  // round-tripped. Must run BEFORE the retraction below reads the config.
+  if (!ccaConfigCorrupt) {
+    const cfg = readCcaConfig();
+    if (migrateTokenSaverConfigKey(cfg)) {
+      try {
+        fs.writeFileSync(path.join(cwd, '.claude', 'cca.config.json'), JSON.stringify(cfg, null, 2));
+        console.log(paint('gray', '🔧 Renamed the tokenGuard block in cca.config.json to tokenSaver (same settings, new name).'));
+      } catch (_) { /* non-fatal — the engine still reads the old key */ }
+    }
+  }
+
   // Copy docs (only .html files — skip internal planning docs)
   if (fs.existsSync(docsSrc)) {
     copyTree(docsSrc, path.join(claudeDest, 'docs'), { filter: (name) => name.endsWith('.html') });
@@ -660,29 +676,38 @@ function main() {
   // On fresh install, all updates are pre-marked as applied and the content
   // is already baked into /autoconfig itself, so the files are unnecessary.
 
+  // The settings fragment the un-gated 1.0.224 merge wired in, for one hook file name: the
+  // exact command line on all four events, so unmergeSettingsFrom strips only that entry.
+  function tokenSaverSettingsFragment(hookFile) {
+    const entry = { type: 'command', command: 'node "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/' + hookFile + '"' };
+    return { hooks: {
+      UserPromptSubmit: [{ matcher: '', hooks: [entry] }],
+      Stop: [{ matcher: '', hooks: [entry] }],
+      PreToolUse: [{ matcher: '', hooks: [entry] }],
+      PostToolUse: [{ matcher: '', hooks: [entry] }]
+    } };
+  }
+
   // v1.0.224 briefly shipped the token-guard cost-control core un-gated (re-gated since —
   // see DEV_ONLY_FILES). Retract it from projects that picked it up: delete the orphaned
   // files here, and strip its hook entries inside the settings merge below. A project with
-  // a paid activation key (tokenGuard.verdictServiceKey in cca.config.json) got these files
+  // a paid activation key (tokenSaver.verdictServiceKey in cca.config.json) got these files
   // from the licensed delivery path, not this installer — leave it untouched. Same for a
-  // dev-fleet repo (tokenGuard.devFleet: true): its copy arrives via scripts/sync-hook-fleet.js,
+  // dev-fleet repo (tokenSaver.devFleet: true): its copy arrives via scripts/sync-hook-fleet.js,
   // and retracting it leaves four hook entries pointing at a missing file (job-agent-extension,
   // 2026-09-10). Users never set devFleet; it is a maintainer-only marker.
+  // The hook was token-guard.js until the 2026-09 rename: both file names and both settings
+  // fragments are covered, forever — leftovers in the wild carry the old name.
   const retractCfg = readCcaConfig();
-  const retractTokenGuardCfg = (retractCfg && retractCfg.tokenGuard) || {};
-  const paidTokenGuard = !!retractTokenGuardCfg.verdictServiceKey;
-  const devFleetTokenGuard = retractTokenGuardCfg.devFleet === true;
-  const keepTokenGuard = paidTokenGuard || devFleetTokenGuard;
-  const TOKEN_GUARD_HOOK_ENTRY = { type: 'command', command: 'node "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/token-guard.js"' };
-  const TOKEN_GUARD_SETTINGS_FRAGMENT = { hooks: {
-    UserPromptSubmit: [{ matcher: '', hooks: [TOKEN_GUARD_HOOK_ENTRY] }],
-    Stop: [{ matcher: '', hooks: [TOKEN_GUARD_HOOK_ENTRY] }],
-    PreToolUse: [{ matcher: '', hooks: [TOKEN_GUARD_HOOK_ENTRY] }],
-    PostToolUse: [{ matcher: '', hooks: [TOKEN_GUARD_HOOK_ENTRY] }]
-  } };
-  if (!keepTokenGuard) {
+  const retractTokenSaverCfg = (retractCfg && (retractCfg.tokenSaver || retractCfg.tokenGuard)) || {};
+  const paidTokenSaver = !!retractTokenSaverCfg.verdictServiceKey;
+  const devFleetTokenSaver = retractTokenSaverCfg.devFleet === true;
+  const keepTokenSaver = paidTokenSaver || devFleetTokenSaver;
+  const TOKEN_SAVER_SETTINGS_FRAGMENT = tokenSaverSettingsFragment('token-saver.js');
+  const TOKEN_GUARD_SETTINGS_FRAGMENT = tokenSaverSettingsFragment('token-guard.js');
+  if (!keepTokenSaver) {
     let retracted = false;
-    for (const rel of [path.join('hooks', 'token-guard.js'), path.join('commands', 'cost-control-details.md'), path.join('commands', 'token-saver-details.md'), path.join('commands', 'token-saver-rationale.md')]) {
+    for (const rel of [path.join('hooks', 'token-saver.js'), path.join('hooks', 'token-guard.js'), path.join('commands', 'cost-control-details.md'), path.join('commands', 'token-saver-details.md'), path.join('commands', 'token-saver-rationale.md')]) {
       const p = path.join(claudeDest, rel);
       if (fs.existsSync(p)) {
         try { fs.unlinkSync(p); retracted = true; } catch (_) { /* locked file — the settings strip below still disarms it */ }
@@ -721,7 +746,10 @@ function main() {
 
         // Strip the hook entries the un-gated 1.0.224 settings merge wired in (exact command
         // match per event — a user's own hooks survive; see the retraction block above).
-        if (!keepTokenGuard) unmergeSettingsFrom(userSettings, TOKEN_GUARD_SETTINGS_FRAGMENT);
+        if (!keepTokenSaver) {
+          unmergeSettingsFrom(userSettings, TOKEN_SAVER_SETTINGS_FRAGMENT);
+          unmergeSettingsFrom(userSettings, TOKEN_GUARD_SETTINGS_FRAGMENT);
+        }
 
         // Additively fold package hooks/env/permissions into the user's settings
         // (shared with the plugin installer — see mergeSettingsInto).
