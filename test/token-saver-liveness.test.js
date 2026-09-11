@@ -1,20 +1,20 @@
 /**
- * Liveness canary — the fail-open alarm for token-guard ITSELF (2026-08-05).
+ * Liveness canary — the fail-open alarm for token-saver ITSELF (2026-08-05).
  *
- * Every token-guard handler swallows exceptions and emits nothing, so a dead guard (partial-
+ * Every token-saver handler swallows exceptions and emits nothing, so a dead guard (partial-
  * clobber runtime throw, load-time SyntaxError, unreadable transcript) looks exactly like a
- * quiet session. token-guard-liveness.js is a separate, dependency-free hook that counts
+ * quiet session. token-saver-liveness.js is a separate, dependency-free hook that counts
  * consecutive prompts across which the guard's <sid>.json mtime never moved. These pin the
  * verdict's edges: fire only after N consecutive silent prompts, exactly once per outage,
  * re-arm on any sign of life, and stay silent when disabled — plus the note's copy contract.
- * The suite requires the CANARY module only: it must stay importable even if token-guard.js
+ * The suite requires the CANARY module only: it must stay importable even if token-saver.js
  * is broken (that independence is the whole design).
  */
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { test, assert, summary } = require('./_harness');
-const { livenessVerdict, livenessNote, livenessCheck } = require('../.claude/hooks/token-guard-liveness');
+const { livenessVerdict, livenessNote, livenessCheck } = require('../.claude/hooks/token-saver-liveness');
 
 const NOW = 1754300000000;
 const M = 1754300001234.5;   // an mtimeMs — fractional, as Windows/NTFS actually reports
@@ -143,7 +143,7 @@ test('livenessCheck: the Nth silent prompt emits the note, and only that one', (
 
 test('livenessCheck: a guard whose state file keeps moving never fires', () => {
   inProject(dir => {
-    const guardFile = path.join(dir, '.claude', 'hooks', '.token-guard', `${SID}.json`);
+    const guardFile = path.join(dir, '.claude', 'hooks', '.token-saver', `${SID}.json`);
     fs.mkdirSync(path.dirname(guardFile), { recursive: true });
     const notes = [];
     for (let i = 0; i < 5; i++) {
@@ -169,7 +169,7 @@ test('livenessCheck: a wrong event or a missing sid is ignored and writes no sta
       'a non-UserPromptSubmit event must be ignored');
     assert(livenessCheck({ hook_event_name: 'UserPromptSubmit' }) === '',
       'a payload with no session_id must be ignored');
-    assert(!fs.existsSync(path.join(dir, '.claude', 'hooks', '.token-guard')),
+    assert(!fs.existsSync(path.join(dir, '.claude', 'hooks', '.token-saver')),
       'an ignored event must not create the state dir');
   });
 });

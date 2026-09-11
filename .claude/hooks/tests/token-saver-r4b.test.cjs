@@ -9,7 +9,7 @@
 // request that WRITES six figures of context instead of reading them is definitionally a
 // full-price re-upload, whatever the clock says. Nothing can pre-empt that charge (no hook runs
 // before a task-notification re-invocation), so this is a receipt with an out, not a gate.
-// Run: node --test token-guard-r4b.test.cjs
+// Run: node --test token-saver-r4b.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -17,7 +17,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
+const HOOK = path.resolve(__dirname, '..', 'token-saver.js');
 
 let clock = Date.parse('2026-07-27T00:00:00Z');
 const stamp = () => new Date((clock += 60000)).toISOString();
@@ -51,7 +51,7 @@ function mkFixture(guardCfg) {
 const SID = 'sid-r4b';
 
 function writeState(fix, patch) {
-  const dir = path.join(fix.proj, '.claude', 'hooks', '.token-guard');
+  const dir = path.join(fix.proj, '.claude', 'hooks', '.token-saver');
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `${SID}.json`);
   let cur = {};

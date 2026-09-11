@@ -25,7 +25,7 @@ const { test, assert, summary } = require('./_harness');
 const {
   restartVerdict, choiceBullet, rentAskCopy, meterCanaryNote,
   coldStartTokens, firstContextOfHead, clearTail, restartBullet, restartPos,
-} = require('../.claude/hooks/token-guard');
+} = require('../.claude/hooks/token-saver');
 
 // R20's slots, verbatim from sessionTotalAsk — the same strings R14 wore when it shipped the
 // regression (R14's card renders rentVerdictLines since 2026-08-14; its condensed pins are below).

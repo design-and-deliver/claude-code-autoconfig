@@ -6,7 +6,7 @@
 // (every-prompt model-facing line asking Claude to gauge blast radius and propose a plan
 // before >3×-normal work). Copy contract: R13b is TOKEN-denominated on every billing kind —
 // task size is work volume, not price.
-// Run: node --test token-guard-r13.test.cjs
+// Run: node --test token-saver-r13.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -14,7 +14,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
+const HOOK = path.resolve(__dirname, '..', 'token-saver.js');
 
 const usageLine = (id, inp) => JSON.stringify({ type: 'assistant',
   message: { id, model: 'claude-fable-5', usage: { input_tokens: inp, output_tokens: 10 } } }) + '\n';

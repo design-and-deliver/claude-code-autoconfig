@@ -2,14 +2,14 @@
 // DERIVED from the running install (EXECPATH package.json → AI_AGENT stamp → dated pin),
 // no longer a hand-rotated literal — and the fetch itself degrades silently: any failure
 // (no credentials, network down, non-OK response) returns null/stale, never a throw.
-// Run: node --test token-guard-official-usage.test.cjs
+// Run: node --test token-saver-official-usage.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
+const HOOK = path.resolve(__dirname, '..', 'token-saver.js');
 const { claudeCodeUA, fetchOfficialUsage } = require(HOOK);
 
 function tmpDir(prefix) { return fs.mkdtempSync(path.join(os.tmpdir(), prefix)); }
@@ -102,7 +102,7 @@ test('fetchOfficialUsage non-OK response falls back to the stale cache', async (
   fs.writeFileSync(path.join(home, '.claude', '.credentials.json'),
     JSON.stringify({ claudeAiOauth: { accessToken: 'test-token-not-real' } }));
   const proj = tmpDir('tg-proj-');
-  const state = path.join(proj, '.claude', 'hooks', '.token-guard');
+  const state = path.join(proj, '.claude', 'hooks', '.token-saver');
   fs.mkdirSync(state, { recursive: true });
   fs.writeFileSync(path.join(state, 'official-usage.json'),
     JSON.stringify({ at: Date.now() - 10 * 60 * 1000, data: { marker: 'stale-cache' } }));
@@ -114,7 +114,7 @@ test('fetchOfficialUsage non-OK response falls back to the stale cache', async (
 
 test('fetchOfficialUsage serves a fresh cache without touching network or credentials', async () => {
   const proj = tmpDir('tg-proj-');
-  const state = path.join(proj, '.claude', 'hooks', '.token-guard');
+  const state = path.join(proj, '.claude', 'hooks', '.token-saver');
   fs.mkdirSync(state, { recursive: true });
   fs.writeFileSync(path.join(state, 'official-usage.json'),
     JSON.stringify({ at: Date.now(), data: { marker: 'fresh-cache' } }));

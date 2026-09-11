@@ -15,7 +15,7 @@
  */
 const { test, assert, summary } = require('./_harness');
 const { reReadVerdict, readWindow, windowCovered, windowTokens, reReadDivertCopy, reReadTarget,
-  resolveConfig, TOKEN_SAVER } = require('../.claude/hooks/token-guard');
+  resolveConfig, TOKEN_SAVER } = require('../.claude/hooks/token-saver');
 
 const CFG = resolveConfig({});
 const MTIME = 1754700000000;

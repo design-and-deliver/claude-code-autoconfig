@@ -1,7 +1,7 @@
 // Hard gate (hardGateUSD) — billing-aware copy. The gate itself fires on every billing kind
 // (it's a deliberate backstop), but its message must follow wantDollars(): $ figures for
 // API-billed sessions, token-denominated copy on a subscription (a $ there reads as a phantom
-// bill — the 2026-07-20 live sighting). Run: node --test token-guard-gate.test.cjs
+// bill — the 2026-07-20 live sighting). Run: node --test token-saver-gate.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -9,7 +9,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
+const HOOK = path.resolve(__dirname, '..', 'token-saver.js');
 
 // ~100k fable input tokens => a few $ of estimated spend, comfortably over the 0.01 gate.
 const usageLine = (id, inp) => JSON.stringify({ type: 'assistant',

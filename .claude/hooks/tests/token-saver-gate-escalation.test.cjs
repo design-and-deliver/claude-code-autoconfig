@@ -14,7 +14,7 @@
 // Every prompt resets the fire count — escalation is per-turn, never sticky across a turn
 // boundary (a fresh prompt is a fresh decision).
 //
-// Run: node --test token-guard-gate-escalation.test.cjs
+// Run: node --test token-saver-gate-escalation.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -22,7 +22,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
+const HOOK = path.resolve(__dirname, '..', 'token-saver.js');
 
 // A plain assistant turn: new input + output, no cache re-read. Drives the R13b WORK meter.
 const workLine = (id, inp) => JSON.stringify({ type: 'assistant',

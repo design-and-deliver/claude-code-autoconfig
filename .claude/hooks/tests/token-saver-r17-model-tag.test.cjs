@@ -1,13 +1,13 @@
 // R17 model-tag validation — a substep heading's `· [tag]` routing token checked against the
 // transcript's own model id. Generic by design: any bracketed tag, substring-matched, no enum.
-// Run: node --test token-guard-r17-model-tag.test.cjs
+// Run: node --test token-saver-r17-model-tag.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
+const HOOK = path.resolve(__dirname, '..', 'token-saver.js');
 const { meter, parsePlanSubsteps, parsePlanLedger, findCurrentSubstep,
   planBoundaryNote, planModelMismatchLine } = require(HOOK);
 

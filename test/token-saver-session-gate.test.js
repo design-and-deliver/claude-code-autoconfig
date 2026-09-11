@@ -15,11 +15,11 @@ const os = require('os');
 const path = require('path');
 const { test, assert, summary } = require('./_harness');
 const { r20SessionTotalGuard, r13bTurnSpendGuard, r14TurnRentGuard, resolveConfig } =
-  require('../.claude/hooks/token-guard');
+  require('../.claude/hooks/token-saver');
 
 const CFG = resolveConfig({});
 const HOOK_SRC = fs.readFileSync(
-  path.join(__dirname, '..', '.claude', 'hooks', 'token-guard.js'), 'utf8');
+  path.join(__dirname, '..', '.claude', 'hooks', 'token-saver.js'), 'utf8');
 
 // A meter shaped like meterSession's return. `tok` lands as unweighted processed tokens, which
 // is exactly what sessionTokens() sums — the same figure the check-in ladder and the backstop

@@ -1,5 +1,5 @@
 // R8 payload pre-gate — unit tests on the pure verdict + E2E against the live hook.
-// Run: node --test token-guard-r8.test.cjs
+// Run: node --test token-saver-r8.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
+const HOOK = path.resolve(__dirname, '..', 'token-saver.js');
 const { payloadVerdict } = require(HOOK);
 
 const CFG = { bombJumpTokens: 50000 };
@@ -88,7 +88,7 @@ test('E2E door 1: big skill asks; state arms R3 suppression', () => {
   assert.match(j.hookSpecificOutput.permissionDecisionReason, /at least ~77k tokens/);
   assert.match(j.hookSpecificOutput.permissionDecisionReason, /disposable subagent/);
   const st = JSON.parse(fs.readFileSync(
-    path.join(dir, '.claude', 'hooks', '.token-guard', 'sid-door1.json'), 'utf8'));
+    path.join(dir, '.claude', 'hooks', '.token-saver', 'sid-door1.json'), 'utf8'));
   assert.equal(st.approvedPayloadHop.est, 76923);
   assert.equal(st.approvedPayloadHop.ttl, 1);
   assert.equal(st.approvedPayloadHop.skill, 'tg8-big');
@@ -158,7 +158,7 @@ test('E2E door 3: oversized slash command blocks once, re-send passes', () => {
   assert.match(first.reason, /\/tg8-huge/);
   assert.match(first.reason, /↑ then Enter/);
   const st = JSON.parse(fs.readFileSync(
-    path.join(dir, '.claude', 'hooks', '.token-guard', 'sid-cmd.json'), 'utf8'));
+    path.join(dir, '.claude', 'hooks', '.token-saver', 'sid-cmd.json'), 'utf8'));
   assert.equal(st.payloadGateOkOnce, 'tg8-huge');
   assert.equal(st.approvedPayloadHop.ttl, 2);
   assert.equal(runHook(dir, data), ''); // one-shot consumed -> passes through

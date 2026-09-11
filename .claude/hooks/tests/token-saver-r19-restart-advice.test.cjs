@@ -7,7 +7,7 @@
 //
 // The counter is the thing under test, so these drive it through the real hook and read the
 // real usage.log — a unit call on an unexported helper would pass with the wiring cut.
-// Run: node --test token-guard-r19-restart-advice.test.cjs
+// Run: node --test token-saver-r19-restart-advice.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -15,7 +15,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
+const HOOK = path.resolve(__dirname, '..', 'token-saver.js');
 
 const usageLine = (id, inp) => JSON.stringify({ type: 'assistant',
   message: { id, model: 'claude-fable-5', usage: { input_tokens: inp, output_tokens: 10 } } }) + '\n';
@@ -49,7 +49,7 @@ const prompt = (fix, text) => runHook(fix, { hook_event_name: 'UserPromptSubmit'
 const gateOut = raw => (JSON.parse(raw || '{}').hookSpecificOutput || {});
 
 const adviceLines = (fix) => {
-  const log = path.join(fix.proj, '.claude', 'hooks', '.token-guard', 'usage.log');
+  const log = path.join(fix.proj, '.claude', 'hooks', '.token-saver', 'usage.log');
   const raw = fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : '';
   return raw.split('\n').filter(l => l.includes('restart-advice'));
 };

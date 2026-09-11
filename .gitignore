@@ -21,7 +21,9 @@ tmpclaude-*
 # Terminal-title per-session state (runtime scratch, never distributed)
 .claude/hooks/.titles/
 
-# token-guard runtime cache (official-usage fetch, per-session accumulators — runtime scratch)
+# token-saver runtime cache (official-usage fetch, per-session accumulators — runtime scratch);
+# the .token-guard/ line stays one release for checkouts the state-dir rename has not reached
+.claude/hooks/.token-saver/
 .claude/hooks/.token-guard/
 
 # Session handoff notes (migrate-new-session — local, never distributed)

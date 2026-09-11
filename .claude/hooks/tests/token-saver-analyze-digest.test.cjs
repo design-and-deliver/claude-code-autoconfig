@@ -1,11 +1,11 @@
-// token-guard --analyze digest snapshot — pins the machine-interface literals.
-// Run: node --test token-guard-analyze-digest.test.cjs
+// token-saver --analyze digest snapshot — pins the machine-interface literals.
+// Run: node --test token-saver-analyze-digest.test.cjs
 //
 // The `--analyze` digest is NOT just display text: /analyze-session (analyze-session.md)
 // parses ONLY this output and keys on the literal section headers RENT / BOMBS / FLEETS /
-// TTL plus the phrase "live context at end" (see token-guard.js renderAnalysis comment and
+// TTL plus the phrase "live context at end" (see token-saver.js renderAnalysis comment and
 // CLAUDE.md trap T2). Rewording any of them silently breaks /analyze-session — this test
-// makes that a loud failure, pinned before token-guard ever un-gates.
+// makes that a loud failure, pinned before token-saver ever un-gates.
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -13,7 +13,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
+const HOOK = path.resolve(__dirname, '..', 'token-saver.js');
 
 // A minimal but valid transcript: two assistant requests carrying `usage` (so the RENT
 // section — the only header gated on request count — renders) plus a user/tool_result

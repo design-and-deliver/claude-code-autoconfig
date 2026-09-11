@@ -5,7 +5,7 @@
 // design), failing open to the basic free-tier note when the service is dark. The cache
 // file shape asserted here is an interface: statusline-cost.js may read it, and shimHealth
 // is the canary's offline-vs-dead second axis.
-// Run: node --test token-guard-shim.test.cjs
+// Run: node --test token-saver-shim.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -14,7 +14,7 @@ const path = require('path');
 const http = require('http');
 const { spawnSync } = require('child_process');
 
-const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
+const HOOK = path.resolve(__dirname, '..', 'token-saver.js');
 const tg = require(HOOK);
 
 const SID = 'sid-shim';
@@ -47,7 +47,7 @@ function promptSubmit(fix) {
   return r.stdout || '';
 }
 
-const stateDirOf = fix => path.join(fix.proj, '.claude', 'hooks', '.token-guard');
+const stateDirOf = fix => path.join(fix.proj, '.claude', 'hooks', '.token-saver');
 const cacheFileOf = fix => path.join(stateDirOf(fix), `verdict-cache-${SID}.json`);
 const noteOf = raw => ((JSON.parse(raw || '{}').hookSpecificOutput || {}).additionalContext) || '';
 
@@ -249,7 +249,7 @@ test('without ctx only server-worded verdicts render — the statusline\'s hones
 
 test('the cache lives in the state dir under a pinned name — statusline may read it', () => {
   assert.equal(tg.verdictCachePath('/p', 's'),
-    path.join('/p', '.claude', 'hooks', '.token-guard', 'verdict-cache-s.json'));
+    path.join('/p', '.claude', 'hooks', '.token-saver', 'verdict-cache-s.json'));
 });
 
 // ── Prompt-path counter families (2026-08-18) ────────────────────────────────────────────────
@@ -336,7 +336,7 @@ function withHome(fix, fn) {
 }
 
 const homeJson = (fix, name) =>
-  JSON.parse(fs.readFileSync(path.join(fix.home, '.claude', '.token-guard', name), 'utf8'));
+  JSON.parse(fs.readFileSync(path.join(fix.home, '.claude', '.token-saver', name), 'utf8'));
 const projJson = (fix, name) => JSON.parse(fs.readFileSync(path.join(stateDirOf(fix), name), 'utf8'));
 
 const WARN = { name: '5-hour window', resetsAt: 'R', rung: 80 };
@@ -427,6 +427,6 @@ test('the library surface statusline-cost.js requires is intact, plus the shim a
     'shimActive', 'collectVerdictCounters', 'readVerdictCache', 'renderCachedVerdicts',
     'freeTierNote', 'shimHealth', 'remoteVerdictGuard', 'spendStepNote',
     'snapshotPriorGuardState', 'consumeCachedVerdicts', 'commitVerdictState']) {
-    assert.equal(typeof tg[k], 'function', `token-guard must export ${k}`);
+    assert.equal(typeof tg[k], 'function', `token-saver must export ${k}`);
   }
 });

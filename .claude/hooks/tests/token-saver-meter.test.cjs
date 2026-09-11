@@ -1,12 +1,12 @@
-// Characterization test for token-guard meter() function (substep 3.7a, 2026-07-31)
-// Run: node --test .claude/hooks/tests/token-guard-meter.test.cjs
+// Characterization test for token-saver meter() function (substep 3.7a, 2026-07-31)
+// Run: node --test .claude/hooks/tests/token-saver-meter.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
+const HOOK = path.resolve(__dirname, '..', 'token-saver.js');
 const { meter, priceFor } = require(HOOK);
 
 function tmpDir(prefix) { return fs.mkdtempSync(path.join(os.tmpdir(), prefix)); }

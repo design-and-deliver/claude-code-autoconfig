@@ -13,7 +13,7 @@
  * exactly how the asymmetry survived unnoticed.
  */
 const { test, assert, summary } = require('./_harness');
-const { bashVerdict } = require('../.claude/hooks/token-guard');
+const { bashVerdict } = require('../.claude/hooks/token-saver');
 
 const kind = (cmd) => (bashVerdict(cmd) || {}).kind || 'null';
 const why = (cmd) => (bashVerdict(cmd) || {}).why || '';

@@ -6,7 +6,7 @@
 # working file is the committed blob, byte for byte, on every platform.
 #
 # Deliberately scoped to the generator's inputs and its output rather than a repo-wide
-# `text=auto`. Nine tracked blobs already carry CRLF — including token-guard.js (fleet-
+# `text=auto`. Nine tracked blobs already carry CRLF — including token-saver.js (fleet-
 # synced canonical), this generated HTML, and two .wav files — and normalizing those is a
 # separate decision with a much larger blast radius than this bug.
 .claude/docs/autoconfig.docs.html -text

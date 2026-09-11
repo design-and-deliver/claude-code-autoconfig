@@ -18,7 +18,7 @@ const os = require('os');
 const path = require('path');
 const { test, assert, summary } = require('./_harness');
 const { payloadVerdict, payloadDivertCopy, readHead, resolveConfig, TOKEN_SAVER } =
-  require('../.claude/hooks/token-guard');
+  require('../.claude/hooks/token-saver');
 
 const CFG = resolveConfig({});
 const THE_READ = { fileChars: 53044, isImage: false };   // the 2026-08-07 settings.local.json

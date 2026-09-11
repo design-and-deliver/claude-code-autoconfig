@@ -20,11 +20,11 @@ const { test, assert, summary } = require('./_harness');
 const { isRecoveryTurn, r13bTurnSpendGuard, r14TurnRentGuard, resolveConfig,
   recordRecoverySpend, loadRecoverySpend, recoveryCostNote,
   noteClearAdvice, claimClearAdvice, loadClearAdvice } =
-  require('../.claude/hooks/token-guard');
+  require('../.claude/hooks/token-saver');
 
 const CFG = resolveConfig({});
 const HOOK_SRC = fs.readFileSync(
-  path.join(__dirname, '..', '.claude', 'hooks', 'token-guard.js'), 'utf8');
+  path.join(__dirname, '..', '.claude', 'hooks', 'token-saver.js'), 'utf8');
 
 // A meter shaped like meterSession's return, carrying only what the two guards read.
 function meter({ inp = 0, cr = 0, turns = 20, liveContext = 60000 } = {}) {
@@ -79,7 +79,7 @@ test('ordinary prompts and near-misses are NOT exempt', () => {
 test('R13b fires on a 1.5M-token turn when it is NOT a recovery', () => {
   const st = state();
   // liveContext rides fat: since 2026-08-27 R13b shares the status-quo silence (a lean window
-  // stays quiet — pinned in token-guard-session-gate.test.js), and this case is about the
+  // stays quiet — pinned in token-saver-session-gate.test.js), and this case is about the
   // recovery exemption, not the silence.
   const d = r13bTurnSpendGuard(ctxFor(st, meter({ inp: 1500000, liveContext: 180000 }), null));
   assert(d && d.kind === 'ask', `a 1.5M turn must still trip R13b, got: ${JSON.stringify(d)}`);

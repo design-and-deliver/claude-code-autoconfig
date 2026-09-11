@@ -31,7 +31,7 @@
 // 2026-08-14: R14's Choice bullet condensed into a verdict + rationale pair (rentVerdictLines) —
 // the side rides `• verdict — deny:`, the evidence (bomb why, fat reading, restart price) rides
 // `• rationale — `. The pins below read those two lines; the pivot logic is unchanged.
-// Run: node --test token-guard-gate-verdict.test.cjs
+// Run: node --test token-saver-gate-verdict.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -39,7 +39,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
+const HOOK = path.resolve(__dirname, '..', 'token-saver.js');
 
 const usageLine = (id, inp) => JSON.stringify({ type: 'assistant',
   message: { id, model: 'claude-fable-5', usage: { input_tokens: inp, output_tokens: 10 } } }) + '\n';
@@ -187,7 +187,7 @@ function lean() {
 // were already doing — wallpaper, on the branch that fires MOST. The card is worth an interruption
 // only when the losing option is live, so it speaks exactly when choiceBullet would say
 // `deny (recommended)`: a bomb CALL, or a fat window. The approve COPY is not gone and is still
-// pinned — R13b prints it, and test/token-guard-copy.test.js asserts it on choiceBullet directly;
+// pinned — R13b prints it, and test/token-saver-copy.test.js asserts it on choiceBullet directly;
 // what is gone is R14 spending an interruption to deliver it.
 test('an ordinary call on a LEAN window stays silent — its own advice was "push on"', () => {
   const fix = lean();
@@ -210,7 +210,7 @@ test('…and deny on a FAT window — clearing stops that rent from the next tri
   assert.match(lines[4], /^• rationale — .*past the ~150k fat line/);  // the fat READING, on its own line
   // The "Approving continues…" clause left the numbers branch with the 08-14 condensation:
   // the approve-does sentence survives only where approve has a concrete next step to name —
-  // the bomb branch (pinned above and in token-guard-copy.test.js).
+  // the bomb branch (pinned above and in token-saver-copy.test.js).
 });
 
 // Evidence and verdict used to be two bullets that could contradict each other; since the

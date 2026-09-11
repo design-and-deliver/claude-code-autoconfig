@@ -1,12 +1,12 @@
 // Cost Control — a single on/off toggle (`tokenSaver`), off by default. Off is the light
 // default posture; on overlays the TOKEN_SAVER preset (tighter thresholds + the opt-in blocks).
 // Pure unit tests on resolveConfig / TOKEN_SAVER — the static overlay layer.
-// Run: node --test token-guard-modes.test.cjs
+// Run: node --test token-saver-modes.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
 
-const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
+const HOOK = path.resolve(__dirname, '..', 'token-saver.js');
 const { resolveConfig, TOKEN_SAVER, spendStepsConfigured } = require(HOOK);
 
 // ---------- default: toggle OFF == the light shipped posture ----------

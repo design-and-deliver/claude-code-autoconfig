@@ -5,12 +5,12 @@
 //   R12b windowThresholdVerdict — the tightest live window crossed the high-water mark (one-shot/cycle).
 //          Its GATE turns the verdict into a synchronous block, so this one stays client-side.
 // Pure unit tests on the exported verdict/extractor/note functions.
-// Run: node --test token-guard-r12-window.test.cjs
+// Run: node --test token-saver-r12-window.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
 
-const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
+const HOOK = path.resolve(__dirname, '..', 'token-saver.js');
 const {
   resolveConfig, TOKEN_SAVER,
   fiveHourWindow, tightestWindow, windowThresholdVerdict, effectiveWarn,

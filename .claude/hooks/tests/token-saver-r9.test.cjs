@@ -1,5 +1,5 @@
 // R9 mini-bomb accumulator — E2E against the live hook (PostToolUse has no pure half:
-// the rule is one comparison; the mechanics are all state). Run: node --test token-guard-r9.test.cjs
+// the rule is one comparison; the mechanics are all state). Run: node --test token-saver-r9.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
+const HOOK = path.resolve(__dirname, '..', 'token-saver.js');
 
 function mkProject(cfg) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tg9-'));
@@ -39,7 +39,7 @@ function post(dir, sid, resp, transcript) {
 
 function state(dir, sid) {
   return JSON.parse(fs.readFileSync(
-    path.join(dir, '.claude', 'hooks', '.token-guard', `${sid}.json`), 'utf8'));
+    path.join(dir, '.claude', 'hooks', '.token-saver', `${sid}.json`), 'utf8'));
 }
 
 const BIG = 'x'.repeat(78000); // 30k tok at chars/2.6
@@ -115,7 +115,7 @@ test('UserPromptSubmit resets the accumulator', () => {
 test('approvedPayloadHop suppresses the whole turn (one decision, one surface)', () => {
   const dir = mkProject();
   post(dir, 's5', 'seed'); // create state file
-  const stPath = path.join(dir, '.claude', 'hooks', '.token-guard', 's5.json');
+  const stPath = path.join(dir, '.claude', 'hooks', '.token-saver', 's5.json');
   const st = JSON.parse(fs.readFileSync(stPath, 'utf8'));
   st.approvedPayloadHop = { est: 77000, ttl: 1 };
   fs.writeFileSync(stPath, JSON.stringify(st));

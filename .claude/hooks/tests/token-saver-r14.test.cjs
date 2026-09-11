@@ -6,7 +6,7 @@
 // trips × ~104k context = 2.5M of re-reads and $2.62 in ONE 22-minute plan-authoring turn,
 // while the work itself was 83k — under the ~100k normal-task bar. Copy contract: leads with
 // round trips × context (the lever is context size, not task length), never calls it a spiral.
-// Run: node --test token-guard-r14.test.cjs
+// Run: node --test token-saver-r14.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -14,7 +14,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
+const HOOK = path.resolve(__dirname, '..', 'token-saver.js');
 
 const usageLine = (id, inp) => JSON.stringify({ type: 'assistant',
   message: { id, model: 'claude-fable-5', usage: { input_tokens: inp, output_tokens: 10 } } }) + '\n';

@@ -1,5 +1,5 @@
 // R5 producer (--budgets) + observed-landing loop — unit tests on the table helpers + E2E
-// against the live hook. Run: node --test token-guard-budgets.test.cjs
+// against the live hook. Run: node --test token-saver-budgets.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -14,11 +14,11 @@ const UNIT_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'tgb-unit-home-'));
 process.env.USERPROFILE = UNIT_HOME;
 process.env.HOME = UNIT_HOME;
 
-const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
+const HOOK = path.resolve(__dirname, '..', 'token-saver.js');
 const { recordObservedSkill, skillSizes, RELAY_CARDS } = require(HOOK);
 
 const CFG = { bombJumpTokens: 50000, skillBudgetWarnChars: 150000 };
-const SHARED_TABLE = path.join(UNIT_HOME, '.claude', '.token-guard', 'observed-skills.md');
+const SHARED_TABLE = path.join(UNIT_HOME, '.claude', '.token-saver', 'observed-skills.md');
 
 function mkProject() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tgb-'));
@@ -164,7 +164,7 @@ test('E2E: approved skill hop landing records the measured jump, R3 stays silent
   const prompt = { hook_event_name: 'UserPromptSubmit', prompt: 'hello',
     session_id: 'sid-land', transcript_path: tp };
   runHook(dir, prompt); // seeds lastLiveContext = 1000
-  const stPath = path.join(dir, '.claude', 'hooks', '.token-guard', 'sid-land.json');
+  const stPath = path.join(dir, '.claude', 'hooks', '.token-saver', 'sid-land.json');
   const st = JSON.parse(fs.readFileSync(stPath, 'utf8'));
   st.approvedPayloadHop = { est: 77000, ttl: 1, skill: 'tg-obs' };
   fs.writeFileSync(stPath, JSON.stringify(st));
@@ -210,7 +210,7 @@ function bombOut(dir, sid, first, after, coldStarts) {
     session_id: sid, transcript_path: tp };
   runHook(dir, prompt); // seeds lastLiveContext
   if (coldStarts) {
-    const sd = path.join(dir, '.claude', 'hooks', '.token-guard');
+    const sd = path.join(dir, '.claude', 'hooks', '.token-saver');
     fs.mkdirSync(sd, { recursive: true });
     fs.writeFileSync(path.join(sd, 'cold-start.json'), JSON.stringify({ samples: coldStarts }));
   }
@@ -254,14 +254,14 @@ test("E2E: R3 clear verdict relays the bomb-landing card verbatim under verdictD
   assert.doesNotMatch(note, /⚠️ Hey —/, 'the prose relay is replaced by the card');
   // the measured arithmetic moved to the family ledger the rationale command reads
   const ledger = fs.readFileSync(
-    path.join(dir, '.claude', 'hooks', '.token-guard', 'sid-card.cards.jsonl'), 'utf8');
+    path.join(dir, '.claude', 'hooks', '.token-saver', 'sid-card.cards.jsonl'), 'utf8');
   assert.match(ledger, /"family":"bomb-landing"/);
   assert.match(ledger, /per cache-warm turn/);
   // ...and the silent-steer branch never writes one (it renders nothing to shadow)
   const silentDir = mkProject();
   bombOut(silentDir, 'sid-shh', 1000, 61000);
   assert.ok(!fs.existsSync(
-    path.join(silentDir, '.claude', 'hooks', '.token-guard', 'sid-shh.cards.jsonl')),
+    path.join(silentDir, '.claude', 'hooks', '.token-saver', 'sid-shh.cards.jsonl')),
     'no ledger entry for a silent note');
 });
 
@@ -298,6 +298,6 @@ test('E2E: R3 attribution Skill(name) records an observed row alongside the warn
   assert.match(table, /^tg-skill-x {2}\d+k chars ≈ 60k tok {2}⚠ {2}\(observed /m);
   // and the spawned hook mirrored the row machine-wide (into ITS isolated home)
   const shared = fs.readFileSync(
-    path.join(TMP_HOME, '.claude', '.token-guard', 'observed-skills.md'), 'utf8');
+    path.join(TMP_HOME, '.claude', '.token-saver', 'observed-skills.md'), 'utf8');
   assert.match(shared, /^tg-skill-x {2}\d+k chars ≈ 60k tok {2}⚠ {2}\(observed /m);
 });

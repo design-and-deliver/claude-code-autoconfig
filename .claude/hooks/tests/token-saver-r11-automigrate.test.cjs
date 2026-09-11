@@ -1,22 +1,22 @@
 // R11 drift migration: the /clear + /continue nudge + recover-pointer staging.
 // (The mothballed SessionStart-injection units and their tests were deleted 2026-07-24 —
 // git history is the museum.)
-// Run: node --test token-guard-r11-automigrate.test.cjs
+// Run: node --test token-saver-r11-automigrate.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
+const HOOK = path.resolve(__dirname, '..', 'token-saver.js');
 const { driftNote, recoverTail, writeRecoverPointer } = require(HOOK);
 
 function tmpProject() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tg-r11-'));
-  fs.mkdirSync(path.join(dir, '.claude', 'hooks', '.token-guard'), { recursive: true });
+  fs.mkdirSync(path.join(dir, '.claude', 'hooks', '.token-saver'), { recursive: true });
   return dir;
 }
-function markerDir(proj) { return path.join(proj, '.claude', 'hooks', '.token-guard'); }
+function markerDir(proj) { return path.join(proj, '.claude', 'hooks', '.token-saver'); }
 
 // ---------- driftNote(): the /clear + /continue one-liner, and the false-branch unchanged ----------
 

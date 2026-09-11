@@ -1,18 +1,18 @@
 // R6 scope-drift → keyword-migrate nudge. Pure unit tests on slug/driftNote/ledgerScopes.
 // Scope data comes from the terminal-title per-title ledger ({sid}.history.jsonl).
-// Run: node --test token-guard-r6.test.cjs
+// Run: node --test token-saver-r6.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
 
-const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
+const HOOK = path.resolve(__dirname, '..', 'token-saver.js');
 const { slug, driftNote, ledgerScopes, driftDeferralTick } = require(HOOK);
 
 // ---------- slug(): stable, filesystem/keyword-safe, capped ----------
 
 test('slug lowercases and hyphenates non-alnum runs', () => {
   assert.equal(slug('CCA distribution'), 'cca-distribution');
-  assert.equal(slug('token-guard nudge'), 'token-guard-nudge');
+  assert.equal(slug('token-saver nudge'), 'token-saver-nudge');
   assert.equal(slug('  Spaces  and--punct!! '), 'spaces-and-punct');
 });
 

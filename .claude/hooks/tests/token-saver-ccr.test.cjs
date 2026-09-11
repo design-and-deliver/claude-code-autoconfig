@@ -1,6 +1,6 @@
 // R4 idle-return recovery pointer: the hook writes a numbered pointer that
 // `/recover-context pid=N` resolves; the legacy ccr bin still round-trips it.
-// Run: node --test token-guard-ccr.test.cjs
+// Run: node --test token-saver-ccr.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -8,7 +8,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const { writeRecoverPointer, idleReturnNote } = require(path.resolve(__dirname, '..', 'token-guard.js'));
+const { writeRecoverPointer, idleReturnNote } = require(path.resolve(__dirname, '..', 'token-saver.js'));
 const CCR = path.resolve(__dirname, '..', '..', '..', 'bin', 'ccr.js');
 const { readPointer, buildLaunch } = require(CCR);
 
@@ -18,7 +18,7 @@ function tmpProject() {
 
 function readRec(proj) {
   return JSON.parse(fs.readFileSync(
-    path.join(proj, '.claude', 'hooks', '.token-guard', 'recover.json'), 'utf8'));
+    path.join(proj, '.claude', 'hooks', '.token-saver', 'recover.json'), 'utf8'));
 }
 
 // ---------- writeRecoverPointer (hook side) ----------
@@ -64,7 +64,7 @@ test('writeRecoverPointer returns null when the pointer cannot be written', () =
   // A file where the state DIR should be makes mkdirSync throw on every platform.
   const proj = tmpProject();
   fs.mkdirSync(path.join(proj, '.claude', 'hooks'), { recursive: true });
-  fs.writeFileSync(path.join(proj, '.claude', 'hooks', '.token-guard'), 'not a dir');
+  fs.writeFileSync(path.join(proj, '.claude', 'hooks', '.token-saver'), 'not a dir');
   assert.equal(writeRecoverPointer(proj, 'sid-x', 15), null);
 });
 
@@ -80,7 +80,7 @@ test('readPointer round-trips what the hook wrote', () => {
 test('readPointer rejects missing, malformed, and non-slash payloads', () => {
   const proj = tmpProject();
   assert.equal(readPointer(proj), null); // nothing written
-  const dir = path.join(proj, '.claude', 'hooks', '.token-guard');
+  const dir = path.join(proj, '.claude', 'hooks', '.token-saver');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'recover.json'), 'not json');
   assert.equal(readPointer(proj), null); // malformed

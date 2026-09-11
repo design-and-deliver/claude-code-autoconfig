@@ -2,7 +2,7 @@
 //
 // The ruling this pins: most users never want the arithmetic, so with verdictDetail 'file'
 // every family-tagged cost ask renders its family's consolidated two-line card, and the full
-// card is persisted to .token-guard/<sid>.cards.jsonl for `--details` (the
+// card is persisted to .token-saver/<sid>.cards.jsonl for `--details` (the
 // /token-saver-rationale command) to read back. "It's not a black box, it's encapsulation":
 // the rationale is one command away, never deleted. The taxonomy (2026-08-24, same ruling
 // thread): ten short codes in QUIET_CARDS, doubling as conversation references and the ledger's
@@ -17,7 +17,7 @@
 //
 // Default posture is UNCHANGED: verdictDetail 'console' renders the same verbose cards the
 // copy-contract tests pin, so nothing shifts under a live session until a config opts in.
-// Run: node --test token-guard-quiet-card.test.cjs
+// Run: node --test token-saver-quiet-card.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -25,7 +25,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
+const HOOK = path.resolve(__dirname, '..', 'token-saver.js');
 const { QUIET_CARDS, AUTO_RECEIPTS, RELAY_CARDS } = require(HOOK);
 
 const MIGRATE_TAIL =
@@ -87,7 +87,7 @@ function fired(guardCfg) {
 }
 
 const cardsPath = fix =>
-  path.join(fix.proj, '.claude', 'hooks', '.token-guard', 'sid-qc.cards.jsonl');
+  path.join(fix.proj, '.claude', 'hooks', '.token-saver', 'sid-qc.cards.jsonl');
 const details = (projectDir, token) =>
   (spawnSync('node', [HOOK, '--details', projectDir].concat(token ? [token] : []),
     { encoding: 'utf8', timeout: 20000 }).stdout || '');
@@ -132,7 +132,7 @@ test('--details reads the NEWEST card across sessions — it answers after the m
   const { fix } = fired({ verdictDetail: 'file' });
   // The post-migration session has a different sid; its (newer) card must win.
   fs.writeFileSync(
-    path.join(fix.proj, '.claude', 'hooks', '.token-guard', 'sid-next.cards.jsonl'),
+    path.join(fix.proj, '.claude', 'hooks', '.token-saver', 'sid-next.cards.jsonl'),
     JSON.stringify({ at: '2999-01-01T00:00:00.000Z', family: 'session-total', card: 'NEWEST-CARD' }) + '\n');
   const out = details(fix.proj);
   assert.match(out, /\(session-total, fired 2999-01-01/);
@@ -143,7 +143,7 @@ test('--details with the card-face token pins the firing session past a newer si
   const { fix } = fired({ verdictDetail: 'file' });
   // A parallel session lands a newer card; the token from sid-qc's card face must still win.
   fs.writeFileSync(
-    path.join(fix.proj, '.claude', 'hooks', '.token-guard', 'sid-other.cards.jsonl'),
+    path.join(fix.proj, '.claude', 'hooks', '.token-saver', 'sid-other.cards.jsonl'),
     JSON.stringify({ at: '2999-01-01T00:00:00.000Z', family: 'session-total', card: 'SIBLING-CARD' }) + '\n');
   const pinned = details(fix.proj, 'sid-qc');
   assert.match(pinned, /\(rent, fired /);

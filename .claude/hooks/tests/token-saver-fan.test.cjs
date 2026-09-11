@@ -1,5 +1,5 @@
 // Workflow fan-size guard — unit tests on the pure verdict + E2E against the live hook.
-// Run: node --test token-guard-fan.test.cjs
+// Run: node --test token-saver-fan.test.cjs
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const HOOK = path.resolve(__dirname, '..', 'token-guard.js');
+const HOOK = path.resolve(__dirname, '..', 'token-saver.js');
 const { fanVerdict, workflowSource } = require(HOOK);
 
 const CFG = { fanWarnAgents: 20 };
