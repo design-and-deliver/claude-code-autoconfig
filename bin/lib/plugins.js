@@ -35,6 +35,7 @@ const PLUGINS_LEDGER = '.autoconfig-plugins.json';
 // staging service (the pre-deploy E2E path).
 const CCA_API_BASE = process.env.CCA_API_BASE || 'https://api.proswitch.ai/api/cca';
 const TOKEN_SAVER = 'token-saver';
+const CREATE_VID = 'create-vid';
 
 // Build a fresh settings-delta accumulator (BH-1), seeded from a prior install's recorded
 // delta so a re-install UNIONS onto it rather than shrinking it to only what the second
@@ -309,10 +310,29 @@ function readActivationConfig(claudeDir) {
   }
 }
 
+// Where each plugin's activation keys live in cca.config.json. token-saver keeps its
+// historical tokenGuard.* placement (token-guard.js reads it); create-vid nests under
+// createVid; anything else goes under plugins.<name>. Never top-level (dead key + the
+// 2026-08-31 "unpaid → files retracted" bug). Returns a label for the log line.
+function placeActivationKeys(cfg, key, apiBase, pluginName) {
+  if (pluginName === TOKEN_SAVER) {
+    cfg.tokenGuard = Object.assign({}, cfg.tokenGuard, { verdictService: apiBase, verdictServiceKey: key });
+    return 'tokenGuard.verdictService + verdictServiceKey';
+  }
+  if (pluginName === CREATE_VID) {
+    cfg.createVid = Object.assign({}, cfg.createVid, { apiBase, key });
+    return 'createVid.apiBase + key';
+  }
+  const plugins = Object.assign({}, cfg.plugins);
+  plugins[pluginName] = Object.assign({}, plugins[pluginName], { apiBase, key });
+  cfg.plugins = plugins;
+  return `plugins.${pluginName}.apiBase + key`;
+}
+
 // MERGE the activation keys into .claude/cca.config.json — preserve every other key, and
-// nest under "tokenGuard" (top-level placement is a dead key AND makes cli.js's paid check
+// nest under the plugin's own section (top-level placement is a dead key AND makes cli.js's paid check
 // treat the project as unpaid and retract its files — the exact bug fixed 2026-08-31).
-function writeActivationConfig(claudeDir, key, apiBase) {
+function writeActivationConfig(claudeDir, key, apiBase, pluginName = TOKEN_SAVER) {
   const p = path.join(claudeDir, 'cca.config.json');
   let cfg = {};
   if (fs.existsSync(p)) {
@@ -322,13 +342,10 @@ function writeActivationConfig(claudeDir, key, apiBase) {
       throw new Error(`.claude/cca.config.json is not valid JSON (${e.message}) — refusing to overwrite it. Fix or delete it, then re-run activation.`);
     }
   }
-  cfg.tokenGuard = Object.assign({}, cfg.tokenGuard, {
-    verdictService: apiBase,
-    verdictServiceKey: key
-  });
+  const where = placeActivationKeys(cfg, key, apiBase, pluginName);
   fs.mkdirSync(claudeDir, { recursive: true });
   fs.writeFileSync(p, JSON.stringify(cfg, null, 2));
-  console.log('\x1b[90m%s\x1b[0m', '   ✎ wrote tokenGuard.verdictService + verdictServiceKey to .claude/cca.config.json');
+  console.log('\x1b[90m%s\x1b[0m', `   ✎ wrote ${where} to .claude/cca.config.json`);
 }
 
 function collectHookCommands(hooksObj, event) {
@@ -349,11 +366,11 @@ function missingHookEvents(userSettings, fragmentHooks) {
   return missing;
 }
 
-// Check (a): every file the plugins ledger says token-saver installed is on disk.
-function checkBundleFiles(claudeDir) {
-  const entry = readPluginsLedger(claudeDir)[TOKEN_SAVER];
+// Check (a): every file the plugins ledger says the plugin installed is on disk.
+function checkBundleFiles(claudeDir, name = TOKEN_SAVER) {
+  const entry = readPluginsLedger(claudeDir)[name];
   if (!entry || !Array.isArray(entry.files) || entry.files.length === 0) {
-    return { ok: false, msg: `${TOKEN_SAVER} is not installed (no ${PLUGINS_LEDGER} entry)` };
+    return { ok: false, msg: `${name} is not installed (no ${PLUGINS_LEDGER} entry)` };
   }
   const missing = entry.files.filter(rel => !fs.existsSync(path.join(claudeDir, rel)));
   if (missing.length > 0) return { ok: false, msg: `bundle files missing: ${missing.join(', ')}` };
@@ -396,14 +413,72 @@ async function checkLicenseKey(claudeDir, deps) {
 // Read-only three-check verification; prints one ✓/✗ line per check, returns overall pass.
 async function verifyTokenSaver(claudeDir, deps) {
   const checks = [checkBundleFiles(claudeDir), checkSettingsFragment(claudeDir), await checkLicenseKey(claudeDir, deps)];
+  return printChecks(checks);
+}
+
+function printChecks(checks) {
   for (const c of checks) {
     console.log(c.ok ? '\x1b[32m%s\x1b[0m' : '\x1b[31m%s\x1b[0m', `   ${c.ok ? '✓' : '✗'} ${c.msg}`);
   }
   return checks.every(c => c.ok);
 }
 
+// create-vid check (b): the configured key is accepted by the render service's quota
+// endpoint (POST <apiBase>/vid/quota → 200 { used, limit } | 401 { error: 'license' }).
+function createVidConfig(claudeDir, deps) {
+  const cfg = readActivationConfig(claudeDir);
+  const vid = (cfg && cfg.createVid) || {};
+  const apiBase = (deps.apiBase || vid.apiBase || CCA_API_BASE).replace(/\/+$/, '');
+  return { key: vid.key, apiBase };
+}
+
+async function quotaCheckResult(res) {
+  if (res.status === 401) return { ok: false, msg: 'key rejected by the render service (not a create-vid license?)' };
+  if (res.status !== 200) return { ok: false, msg: `render service returned HTTP ${res.status}` };
+  const q = await res.json();
+  return { ok: true, msg: `render service accepted the key (${q.used}/${q.limit} renders used this month)` };
+}
+
+async function checkVidQuota(claudeDir, deps) {
+  const { key, apiBase } = createVidConfig(claudeDir, deps);
+  if (!key) return { ok: false, msg: 'no license key in .claude/cca.config.json (createVid.key)' };
+  try {
+    const res = await (deps.fetch || global.fetch)(`${apiBase}/vid/quota`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ license: { key } })
+    });
+    return await quotaCheckResult(res);
+  } catch (e) {
+    return { ok: false, msg: `could not reach the render service (${e.message})` };
+  }
+}
+
+// Read-only two-check verification for create-vid: files present + key accepted. No
+// settings check — the bundle ships no hooks.
+async function verifyCreateVid(claudeDir, deps) {
+  const checks = [checkBundleFiles(claudeDir, CREATE_VID), await checkVidQuota(claudeDir, deps)];
+  return printChecks(checks);
+}
+
+// Any other bundle: files present is all we can check.
+async function verifyGeneric(name, claudeDir) {
+  return printChecks([checkBundleFiles(claudeDir, name)]);
+}
+
+const VERIFIERS = {
+  [TOKEN_SAVER]: verifyTokenSaver,
+  [CREATE_VID]: verifyCreateVid
+};
+
+function verifierFor(name) {
+  return VERIFIERS[name] || ((claudeDir) => verifyGeneric(name, claudeDir));
+}
+
+// The key selects the bundle server-side, so the plugin's name is only known once the
+// bundle arrives; every message, the config placement and the verify step key off it.
 async function pluginActivate(key, claudeDir, deps) {
-  console.log('\x1b[36m%s\x1b[0m', '🔑 Activating TokenSaver…');
+  console.log('\x1b[36m%s\x1b[0m', '🔑 Activating your plugin…');
   const plugin = await fetchModuleBundle(deps.apiBase || CCA_API_BASE, key, deps.fetch || global.fetch);
   if (!plugin) throw new Error('key not recognized — check the license key from your purchase email');
   const tempDir = materializeBundle(plugin);
@@ -412,12 +487,12 @@ async function pluginActivate(key, claudeDir, deps) {
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
-  writeActivationConfig(claudeDir, key, deps.apiBase || CCA_API_BASE);
-  console.log('\x1b[90m%s\x1b[0m', `   (later, "plugin remove ${TOKEN_SAVER}" reverts the files and hooks; it leaves the license key in cca.config.json, which is harmless)`);
+  writeActivationConfig(claudeDir, key, deps.apiBase || CCA_API_BASE, plugin.name);
+  console.log('\x1b[90m%s\x1b[0m', `   (later, "plugin remove ${plugin.name}" reverts the files and hooks; it leaves the license key in cca.config.json, which is harmless)`);
   console.log('\x1b[36m%s\x1b[0m', '🔎 Verifying the install:');
-  const ok = await verifyTokenSaver(claudeDir, deps);
+  const ok = await verifierFor(plugin.name)(claudeDir, deps);
   if (!ok) throw new Error('activation finished but verification failed — see the ✗ lines above');
-  console.log('\x1b[32m%s\x1b[0m', '✅ TokenSaver is activated and verified');
+  console.log('\x1b[32m%s\x1b[0m', `✅ ${plugin.name} is activated and verified`);
 }
 
 // ── Dispatch ─────────────────────────────────────────────────────────────────
@@ -428,8 +503,8 @@ function requireArg(arg, usage) {
 }
 
 async function runVerifyCommand(arg, claudeDir, deps) {
-  if (arg !== TOKEN_SAVER) throw new Error(`usage: claude-code-autoconfig plugin verify ${TOKEN_SAVER}`);
-  const ok = await verifyTokenSaver(claudeDir, deps);
+  if (!VERIFIERS[arg]) throw new Error(`usage: claude-code-autoconfig plugin verify <${Object.keys(VERIFIERS).join('|')}>`);
+  const ok = await VERIFIERS[arg](claudeDir, deps);
   if (!ok) {
     console.log('\x1b[33m%s\x1b[0m', '   Fix: npx claude-code-autoconfig@latest plugin activate <key>  (the key is in your purchase email)');
     process.exit(1);
@@ -479,6 +554,8 @@ module.exports = {
   pluginList,
   pluginActivate,
   verifyTokenSaver,
+  verifyCreateVid,
+  CREATE_VID,
   fetchModuleBundle,
   materializeBundle,
   writeActivationConfig,
