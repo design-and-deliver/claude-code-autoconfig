@@ -81,6 +81,7 @@
             top: 0;
             left: 0;
             width: 100%;
+            height: 100%; /* bound the slide so .slide-content can shrink instead of being clipped */
             opacity: 0;
             visibility: hidden;
             transform: translateX(100px);
@@ -139,6 +140,7 @@
 
         .slide-content {
             flex: 1;
+            min-height: 0;
             overflow-y: auto;
         }
 
@@ -390,7 +392,10 @@
             background: var(--bg-secondary);
             border-radius: 8px;
             overflow: hidden;
-            height: 480px;
+            /* Fill the slide, cap at 480px — a fixed 480px overflowed .slides-container (overflow: hidden)
+               on short viewports, clipping the bottom of both panes behind an unscrollable edge. */
+            height: 100%;
+            max-height: 480px;
             position: relative;
         }
 
