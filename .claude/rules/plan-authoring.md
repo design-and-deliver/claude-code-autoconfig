@@ -62,6 +62,14 @@ Two consequences worth stating in the plan's header, because they are why execut
 abandoning a plan is exactly one `git branch -D`, at any point in its life; and
 `git log main..plan/<alias>` is the plan's whole reviewable delta.
 
+**The base branch is the release branch, not necessarily the default.** Where a repo deploys
+from a branch other than its default, the plan branch is cut from and merged back to THAT
+branch, and the header names it — a merge to the default would ship nothing.
+**Multi-repo plans:** the doc lives in the repo taking most of the commits; every other repo
+gets a branch of the same name; each merges once, at the plan's end; and the header says
+which substeps commit where, because /continue's sibling and git probes see only the doc's
+own repo.
+
 ## Structure
 
 1. **Header**: goal, links to source audits/evidence, and "how to execute" (one substep per
@@ -81,6 +89,11 @@ abandoning a plan is exactly one `git branch -D`, at any point in its life; and
    assumption**. The ⛔ trap section covers hazards on the machine the plan is written on; this
    line covers the machine it must run on, and no other section prompts for it (2026-09-12: a
    take-home shipped assuming .NET 9 + Node ≥ 22.12 on an interview VM nobody had seen).
+   The header closes with a **Decisions** block: the choices made at authoring time that no
+   substep may reopen, each with its one-line reason (which primitive, which vendor, which
+   storage, sync or async). It is the Deferred section's complement — Deferred lists what was
+   NOT chosen, Decisions what WAS — and it is where the model-floor lint (below) gets
+   satisfied: a decision recorded here is one an executor cannot re-litigate mid-substep.
 2. **⛔ Standing trap warnings** section at the top: the "never do X" list a fresh session must
    read before ANY item — load-bearing conventions where an innocent refactor runs clean and
    breaks at runtime. Name this repo's god files here too (see Read budget below).
@@ -88,6 +101,11 @@ abandoning a plan is exactly one `git branch -D`, at any point in its life; and
    - Phase 1 — stop the repo from lying (dead code, wrong docs; cheap, no product logic)
    - Phase 2 — make wrong edits fail loudly (tests wired in, CI, lint/type gaps closed)
    - Phase 3 — shrink the god files (per-domain, incremental, each substep shippable)
+
+   That order is for maintainability plans. A **feature plan** orders by dependency instead —
+   pure modules (unit-tested against their own surface) → wiring into existing surfaces →
+   client / distribution → ship — which is the *extract before you edit* lever (Read budget,
+   below) applied at phase scale. Either way each substep is shippable on the plan branch.
 4. **Session-sized substeps** (N.1, N.2 …) with checkboxes: each executable start-to-finish in
    one fresh session, ending with a **Verify** step (actual commands, not "check it works") and
    a commit point (subject plus whatever trailer the repo's own changelog rules require). Every
@@ -126,6 +144,13 @@ abandoning a plan is exactly one `git branch -D`, at any point in its life; and
    split signal. And write a sweep's boxes **one file each, read-then-edit**, so the executor
    interleaves opens with edits instead of loading every window first and carrying all of them
    into every edit.
+
+   **Write the estimate down — a `**Budget:**` line under every substep heading:**
+   `files N · new N (+N test) · trips ≈ N`. An estimate that is not written is not made: on
+   2026-09-12 a plan authored with the formula in view still tagged five of ten substeps M by
+   lines-read — 5 files and 18 trips here, 3 new files plus 2 test suites there — and only
+   writing the numbers out exposed them; the review that added the line split each one. The
+   line is also what the Ledger's `[N trips · peak NNNk]` actual is later checked against.
 
    **Rent ceiling — S ≈ 0.5M · M ≈ 1.5M · L ≈ 3M tokens.** This is the only budget you can
    *verify after the fact* — read it off the session's own token usage (or
@@ -229,6 +254,10 @@ and an edit invalidates the read so it often gets paid twice.
   around the hit. Name the god files in the ⛔ trap section, with their line counts and the
   verdict spelled out — e.g. *`background.ts` (4,581 lines): **Grep-then-Read-window only, never
   opened whole.*** A plan that says "the modal" instead of naming it has not budgeted the read.
+  **Line count is not size — check `wc -c` too.** A file with one multi-KB line (embedded
+  JSON, base64, minified code) turns a ten-line `sed -n` window into a context bomb:
+  2026-09-12, a single 20 KB line cost an authoring session 53k tokens. Name such lines in
+  the ⛔ section with the exact line number and the `cut -c1-200` guard.
 - **The Read list is part of the size tag** (see the table above). A substep whose Read list
   totals more than ~2,000 lines sizes XL by definition — and there is no XL. Split it. The
   line total is the depth cap; the **files-touched** column is the breadth cap — a Read list
