@@ -74,7 +74,13 @@ abandoning a plan is exactly one `git branch -D`, at any point in its life; and
    section's line range and tell the session to read that range + its own substep + the Ledger
    tail, never the whole plan (see Read budget). It also names the plan's **branch**
    (`plan/<alias>`) — see Branch discipline; a header that omits it makes every executing
-   session guess, and the cheapest wrong guess is `main`.
+   session guess, and the cheapest wrong guess is `main`. And it names the **target
+   environment** whenever the deliverable runs anywhere but the authoring machine — a
+   reviewer's laptop, a provisioned VM, a deploy target: the runtime prerequisites the output
+   assumes (SDK / Node / DB versions) and whether the target was **verified or is an
+   assumption**. The ⛔ trap section covers hazards on the machine the plan is written on; this
+   line covers the machine it must run on, and no other section prompts for it (2026-09-12: a
+   take-home shipped assuming .NET 9 + Node ≥ 22.12 on an interview VM nobody had seen).
 2. **⛔ Standing trap warnings** section at the top: the "never do X" list a fresh session must
    read before ANY item — load-bearing conventions where an innocent refactor runs clean and
    breaks at runtime. Name this repo's god files here too (see Read budget below).
@@ -166,7 +172,8 @@ Token cost ≈ **round trips × resident context**. Finer numbering executed bac
 session saves nothing — the same files stay resident, they just get more headings. What actually
 cuts cost is the `/clear`: it drops the resident set to zero and sheds any bombs (large one-shot
 dumps) the session accumulated. So size substeps by *what one window can hold*, not by outline
-tidiness, and never merge two substeps "since they're both small."
+tidiness — and keep two units distinct: a **substep** is the commit + Verify + Ledger unit; a
+**session** is the context-reset unit. They need not be 1:1 (see the peak test below).
 
 **But splitting has a floor, so don't over-split either.** Every fresh session re-pays a fixed
 cold-start before any product code is touched — measured 2026-07-25 at **~84k tokens**: ~57k of
@@ -183,6 +190,17 @@ Extra splits only shrink the second term, and below roughly an hour of work they
 a session doing eight requests still pays the full floor. Two useful consequences — cut the
 number of round trips (batch tool calls, fewer test-fix cycles) before adding splits, and attack
 the floor itself (next section).
+
+**The peak test (2026-09-12).** A session boundary pays only when the context it sheds exceeds
+the ~84k it re-buys — so decide boundaries by projected **peak context**, not by substep count or
+wall-clock. Run consecutive substeps back-to-back in one session while the projected peak stays
+under **~2× the floor (~170k)**; insert a `/clear` only where the peak would pass it, or where a
+⛔ trap surface or an `[INTERACTIVE ONLY]` gate warrants a fresh start. Each substep still gets
+its own commit, Verify, and Ledger entry — the boundary being removed is the cold-start, not the
+checkpoint. Measured: a 6-substep greenfield plan ran 6 sessions whose Ledger peaks were all
+35–50k; every `/clear` re-bought ~84k to shed ≤ 50k, ~250k net over five boundaries, and three
+sessions would have carried the same six substeps. The Ledger's `peak NNNk` actual is the input
+for the next plan's projection — which is why the Ledger records it.
 
 ## Read budget (size a step by what it must OPEN, not just what it must write)
 
