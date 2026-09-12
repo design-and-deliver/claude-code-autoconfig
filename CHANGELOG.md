@@ -4,6 +4,15 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.232
+- feat(plugins): plugin activate now installs create-vid keys too
+- docs(plan-authoring): mandatory Budget line, release-branch base, multi-repo plans, Decisions block, feature-plan phase order
+- docs(plan-authoring): peak-context split test + target-environment header line
+- fix(docs): The install walkthrough's file tree no longer gets cut off on short browser windows
+- docs(plan-authoring): size substeps by files touched and a trip estimate, not lines alone
+- docs(plan): token-saver rename — Ledger: 2.1 prerequisites cleared, worktree created
+- docs(plan): token-saver rename — Ledger 1.2 done (private 358a597)
+
 ## v1.0.231
 - feat(docs): The install walkthrough's subtitle now opens with a link to the key-features page
 - feat(docs): The install walkthrough now links to the key-features page
@@ -212,7 +221,4 @@
 
 ## v1.0.183
 - fix: stop copying updates dir to user projects and clean up existing ones
-
-## v1.0.182
-- fix: tight column alignment in docs parameter tables
 
