@@ -4,6 +4,9 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.233
+- fix(gls): /gls now answers what you type after it — e.g. `/gls why is this misaligned?`
+
 ## v1.0.232
 - feat(plugins): plugin activate now installs create-vid keys too
 - docs(plan-authoring): mandatory Budget line, release-branch base, multi-repo plans, Decisions block, feature-plan phase order
@@ -218,7 +221,4 @@
 
 ## v1.0.186
 - fix: increase bottom padding in docs file tree
-
-## v1.0.183
-- fix: stop copying updates dir to user projects and clean up existing ones
 
