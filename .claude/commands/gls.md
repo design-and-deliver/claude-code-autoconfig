@@ -1,5 +1,5 @@
 <!-- @description Get the latest screenshot(s) and display them. -->
-<!-- @version 5 -->
+<!-- @version 6 -->
 <!-- @param count | integer | optional | Number of screenshots to display. Use /gls-N syntax. Default: 1. Min: 1. -->
 <!-- @param path | string | optional | Screenshot directory path. Saved for future use. Auto-detected if omitted. -->
 <!-- @response success | Displays requested screenshot(s) from newest to oldest. -->
@@ -9,6 +9,7 @@
 <!-- @example /gls | Display the most recent screenshot -->
 <!-- @example /gls-3 | Display the 3 most recent screenshots -->
 <!-- @example /gls /path/to/dir | Use a specific screenshot directory -->
+<!-- @example /gls why is this button misaligned? | Display the screenshot, then act on the question -->
 Get the latest screenshot(s) and display them.
 
 Usage:
@@ -17,6 +18,11 @@ Usage:
 - `/gls-3` - Get and display the 3 most recent screenshots
 - `/gls-N` - Get and display the N most recent screenshots
 - `/gls /path/to/dir` - Use a specific directory and save it
+- `/gls <anything else>` - Display the screenshot, then act on what you wrote
+
+## Step 0: Classify the argument
+
+An argument (after any `-N` count) is a **directory path** only if it names a directory that exists — check with `[ -d "<arg>" ] && echo DIR`. Anything else — a question, a description, an instruction — is the user's **message about the screenshot**: never use it as a path and never save it to config. Carry it to Step 6.
 
 ## Step 1: Check for saved path
 
@@ -28,7 +34,7 @@ If the file doesn't exist or the key is missing, continue to Step 2.
 
 ## Step 2: Detect screenshot directory
 
-If the user provides a path as an argument (e.g., `/gls /path/to/dir`), use that path and skip to Step 2b.
+If Step 0 classified the argument as a directory path (e.g., `/gls /path/to/dir`), use that path and skip to Step 2b.
 
 Otherwise, detect the OS and find the screenshot directory. Run this **single Bash command** which finds all candidate directories and reports the newest screenshot in each:
 
@@ -126,6 +132,8 @@ Use the **Read tool** to display each path from Step 4b (the downscaled copy whe
 
 IMPORTANT: Always use the Read tool — never use Bash cat/echo to display images.
 
-## Step 6: Wait
+## Step 6: Respond
 
-Wait for the user to tell you what to do with the screenshot(s). Do not make assumptions about what they want.
+If Step 0 found a message about the screenshot, act on it now — answer the question or do the task, using the screenshot(s) as context.
+
+Otherwise, wait for the user to tell you what to do with the screenshot(s). Do not make assumptions about what they want.

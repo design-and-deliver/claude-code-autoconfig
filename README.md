@@ -123,7 +123,7 @@ Autoconfig is **self-configuring**. Run `/autoconfig` and Claude:
 | `/commit-and-push` | Stages, commits with good message, and pushes |
 | `/recover-context` | Recovers conversation context after compaction |
 | `/continue` | Continues where the previous session in this terminal left off |
-| `/gls` | Views latest screenshot (auto-downscaled to save tokens) |
+| `/gls` | Views latest screenshot (auto-downscaled to save tokens); add a question after it and Claude answers it |
 | `/validate-cca-install` | Validates installation against latest published version |
 | `/extract-rules` | Scan Claude artifacts and extract structured rules |
 | `/check-commit` | Checks whether uncommitted work has piled up |
