@@ -23,6 +23,9 @@ const OVERRIDES = {
   // screenshots" — but that's token-guard, which is dev-gated (not installed/wired for users).
   // Trailer can't be reworded in the pushed commit, so correct it here to the /gls-only benefit.
   'ad2a136': "feat(gls): /gls screenshots now use up to ~60% fewer tokens — large captures are auto-downscaled before display",
+  // c0567f2's trailer claimed /gls "now answers" text after it — it always did; the change
+  // only stops that text being mistaken for a screenshot folder.
+  'c0567f2': "fix(gls): Scope refinement for text typed after /gls",
   // token-guard and /analyze-session are dev-gated (DEV_ONLY_FILES in bin/cli.js) — users
   // never receive them, so their features must not be announced on the upgrade screen.
   // These pushed commits predate that rule or lack a "Changelog: none" trailer:
