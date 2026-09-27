@@ -61,8 +61,7 @@ your-project/
     │   ├── show-docs.md               #   /show-docs - interactive walkthrough
     │   ├── submit-claude-code-github-issue.md # /submit-claude-code-github-issue - file upstream issue
     │   ├── sync-claude-md.md          #   /sync-claude-md - repair CLAUDE.md structure
-    │   ├── test.md                    #   /test - run tests
-    │   └── validate-cca-install.md   #   /validate-cca-install - verify installation
+    │   └── test.md                    #   /test - run tests
     ├── agents/                        # Custom subagents (add your own)
     │   ├── README.md                  #   How to define agents
     │   └── docs-refresh.md            #   Keeps interactive docs in sync with .claude/
@@ -124,7 +123,6 @@ Autoconfig is **self-configuring**. Run `/autoconfig` and Claude:
 | `/recover-context` | Recovers conversation context after compaction |
 | `/continue` | Continues where the previous session in this terminal left off |
 | `/gls` | Views latest screenshot (auto-downscaled to save tokens); add a question after it and Claude answers it |
-| `/validate-cca-install` | Validates installation against latest published version |
 | `/extract-rules` | Scan Claude artifacts and extract structured rules |
 | `/check-commit` | Checks whether uncommitted work has piled up |
 | `/sync-claude-md` | Repairs CLAUDE.md markers and Discoveries section |

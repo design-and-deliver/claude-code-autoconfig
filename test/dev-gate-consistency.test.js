@@ -12,10 +12,9 @@
  *       drifted at 1 vs 6, so users saw docs for commands they never received;
  *   (b) package.json "files" negations (tarball-shaping only, but any command
  *       file negated there must also be gated by DEV_ONLY_FILES);
- *   (c) validate-cca-install.md's `dev_only` list (else false "MISSING CMD").
  *
  * sync-docs.js now parses (a) straight from DEV_ONLY_FILES; this suite proves it
- * stayed parsed, and pins (b) and (c).
+ * stayed parsed, and pins (b).
  */
 
 const fs = require('fs');
@@ -25,7 +24,6 @@ const repoRoot = path.join(__dirname, '..');
 const cliPath = path.join(repoRoot, 'bin', 'cli.js');
 const docsPath = path.join(repoRoot, '.claude', 'docs', 'autoconfig.docs.html');
 const pkgPath = path.join(repoRoot, 'package.json');
-const validateMdPath = path.join(repoRoot, '.claude', 'commands', 'validate-cca-install.md');
 
 const { test, assert, summary } = require('./_harness');
 
@@ -150,17 +148,5 @@ test('package.json "files" negates every runtime-scratch path under .claude/', (
     `package.json "files" is missing runtime-scratch negation(s): ${missing.join(', ')} — a publish while that scratch exists would ship it (see (b3))`);
 });
 
-// (c) validate-cca-install.md's dev_only list must equal DEV_ONLY_FILES exactly,
-//     or the validator reports false "MISSING CMD" errors (substep 1.4).
-test('validate-cca-install.md dev_only list equals DEV_ONLY_FILES', () => {
-  const md = fs.readFileSync(validateMdPath, 'utf8');
-  const block = md.match(/dev_only = \[([^\]]+)\]/);
-  assert(block, 'could not find `dev_only = [...]` list in validate-cca-install.md');
-  const mdList = [...block[1].matchAll(/'([^']+)'/g)].map(m => m[1]);
-  const a = [...mdList].sort();
-  const b = [...DEV_ONLY_FILES].sort();
-  assert(JSON.stringify(a) === JSON.stringify(b),
-    `validate-cca-install.md dev_only [${a.join(', ')}] != DEV_ONLY_FILES [${b.join(', ')}] — keep them in sync`);
-});
 
 summary();

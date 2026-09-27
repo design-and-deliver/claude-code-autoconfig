@@ -77,7 +77,7 @@ const PKG_VERSION = require(path.join(PKG_DIR, 'package.json')).version;
 // Kept in sync with bin/cli.js by substep 2.2's dev-gate-consistency test — here we only need
 // a representative subset to assert absence.
 const DEV_ONLY_COMMANDS = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-session.md', 'migrate-new-session.md', 'enable-retro.md'];
-const RETIRED_COMMANDS = ['enable-arcade-beeps.md', 'disable-arcade-beeps.md'];
+const RETIRED_COMMANDS = ['enable-arcade-beeps.md', 'disable-arcade-beeps.md', 'validate-cca-install.md'];
 const SHIPPED_COMMANDS = ['autoconfig.md', 'autoconfig-update.md', 'continue.md', 'recover-context.md', 'gls.md'];
 
 const { test, assert, summary, makeClaudeShim, runCli } = require('./_harness');
@@ -236,7 +236,7 @@ writeFile(up, '.claude/settings.json', JSON.stringify({
 // upgrade must retract the files AND the settings entries above (see cli.js retraction).
 writeFile(up, '.claude/hooks/token-guard.js', '// un-gated 1.0.224 leftover — must be removed\n');
 writeFile(up, '.claude/commands/cost-control-details.md', '<!-- @description leftover -->\n');
-// Retired deprecated aliases left behind by an older install — the upgrade must delete them
+// Retired commands (deprecated aliases, /validate-cca-install) left behind by an older install — the upgrade must delete them
 // (copyTree no longer writes them, but a stale .md is still a live slash command).
 for (const a of RETIRED_COMMANDS) writeFile(up, `.claude/commands/${a}`, '<!-- @description deprecated alias leftover -->\n');
 // Dev-gated (not retired) files an older install picked up while they still shipped — the

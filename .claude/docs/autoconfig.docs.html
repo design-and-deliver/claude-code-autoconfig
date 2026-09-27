@@ -960,11 +960,6 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">test.md</span>
                             </div>
-                            <div class="tree-item indent-3 hidden" data-info="validate-cca-install" data-parent="commands">
-                                <span class="tree-spacer"></span>
-                                <span class="tree-file-icon">📄</span>
-                                <span class="file">validate-cca-install.md</span>
-                            </div>
                             <div class="tree-item indent-2 folder-row hidden collapsed" data-info="agents" data-folder="agents" data-parent="claude-dir">
                                 <span class="tree-chevron">›</span>
                                 <span class="tree-folder-icon">📁</span>
@@ -1439,11 +1434,6 @@
                 title: 'test.md',
                 desc: 'Runs your test suite. Auto-detects Jest, Vitest, Pytest, Go, RSpec, or falls back to npm test.<div style="margin-top: 12px;"><strong>Parameters</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Name</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Type</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>scope</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>string</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">File, directory, or pattern to limit test run. Runs full suite if omitted.</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Test suite passes.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>failure</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Test suite fails with non-zero exit code.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Executes detected test runner command</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/test</code> <span style="opacity: 0.6;">— Run full test suite</span></div><div><code>/test src/auth</code> <span style="opacity: 0.6;">— Run tests in src/auth directory</span></div><div><code>/test --coverage</code> <span style="opacity: 0.6;">— Run tests with coverage report</span></div></div></div>',
                 trigger: '/test'
-            },
-            'validate-cca-install': {
-                title: 'validate-cca-install.md',
-                desc: 'Validates your claude-code-autoconfig installation against the latest published version.<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>valid</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Install validated — all checks passed.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>issues</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Validation found {N} issue(s) with fix suggestions.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Read-only. Downloads latest package to temp dir for comparison, then cleans up.</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/validate-cca-install</code> <span style="opacity: 0.6;">— Run full installation validation</span></div></div></div>',
-                trigger: '/validate-cca-install'
             },
             'README-agent': {
                 title: 'README.md',
@@ -2128,39 +2118,6 @@ Run tests for this project.
 If no scope provided, run the full test suite. Otherwise run tests matching the scope (file, directory, or pattern).
 
 Detect the test command from project config (package.json scripts, pytest, go test, etc.) and execute it.`
-            },
-            'validate-cca-install': {
-                filename: 'validate-cca-install.md',
-                content: `Validate the current claude-code-autoconfig installation. Reports what's correct, what's outdated, and what's missing. **Does not modify anything.**
-
-Usage:
-- \`/validate-cca-install\` — run a full validation check
-
-## Step 1: Fetch the latest package metadata
-
-Query the npm registry for the latest published version and its file manifest:
-
-\`\`\`bash
-python3 -c "
-import json, urllib.request
-url = 'https://registry.npmjs.org/claude-code-autoconfig/latest'
-data = json.loads(urllib.request.urlopen(url, timeout=10).read())
-print(json.dumps({'version': data.get('version', 'unknown')}))
-"
-\`\`\`
-
-Store the latest version as \`$LATEST_VERSION\`.
-
-## Step 2: Download and extract the latest package to a temp directory
-
-\`\`\`bash
-TMPDIR=$(mktemp -d)
-npm pack claude-code-autoconfig@latest --pack-destination "$TMPDIR" 2>/dev/null
-tar -xzf "$TMPDIR"/*.tgz -C "$TMPDIR"
-echo "$TMPDIR/package"
-\`\`\`
-
-Store the extracted path as \`$PKG_DIR\`. This gives us the ground truth for what files and versions should be installed.`
             },
             'README-agent': {
                 filename: 'README.md',

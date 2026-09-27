@@ -18,8 +18,9 @@ const { cleanupNulFile } = require('./lib/nul-cleanup.js');
 // Commands that once shipped and were later retired. copyTree never writes them any more,
 // but an upgraded project still holds its old copy, so the installer deletes each one it
 // finds (the arcade-beeps pair were deprecated aliases of /enable-status-beeps and
-// /disable-status-beeps, retired 2026-09-03). Returns the files actually removed.
-const RETIRED_COMMANDS = ['enable-arcade-beeps.md', 'disable-arcade-beeps.md'];
+// /disable-status-beeps, retired 2026-09-03; /validate-cca-install retired 2026-09-27 — its
+// only remedy was re-running the installer). Returns the files actually removed.
+const RETIRED_COMMANDS = ['enable-arcade-beeps.md', 'disable-arcade-beeps.md', 'validate-cca-install.md'];
 function removeRetiredCommands(commandsDest, existingCommandContents) {
   const removed = [];
   for (const f of RETIRED_COMMANDS) {
