@@ -153,6 +153,7 @@ your-project/
     │   ├── gls-downscale.js           # Shrinks /gls screenshots
     │   └── sync-docs.js               # Regenerates the interactive docs
     ├── sounds/                        # Status-beep audio
+    ├── package.json                   # Keeps hooks CommonJS in "type": "module" repos
     └── settings.json                  # Permissions, hooks, Concise output style
 ```
 
