@@ -217,8 +217,3 @@
 ## v1.0.188
 - feat(plugins): add drop-in plugin system (plugin add/remove/list)
 
-## v1.0.187
-- refactor(terminal-title): reframe directive to use-case vocabulary (scope + infinitive goal)
-- docs: add TODO for deterministic settings.json deny list
-- feat(terminal-title): add question-awaiting state + AskUserQuestion refresh
-
