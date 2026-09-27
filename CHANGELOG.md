@@ -4,6 +4,9 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.238
+- fix(install): Hooks and auto-guard safety checks now work in projects whose package.json uses "type": "module" (they previously stopped silently)
+
 ## v1.0.234
 - feat(commands): /validate-cca-install is retired — re-running `npx claude-code-autoconfig@latest` already checks and repairs your install. Upgrades remove the old command.
 
@@ -213,7 +216,4 @@
 
 ## v1.0.189
 - fix: drop redundant nul cleanup that errored after the install finale
-
-## v1.0.188
-- feat(plugins): add drop-in plugin system (plugin add/remove/list)
 
