@@ -222,6 +222,3 @@
 - docs: add TODO for deterministic settings.json deny list
 - feat(terminal-title): add question-awaiting state + AskUserQuestion refresh
 
-## v1.0.186
-- fix: increase bottom padding in docs file tree
-
