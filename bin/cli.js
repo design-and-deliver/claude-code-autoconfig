@@ -10,6 +10,7 @@ const { migrateLegacyHookCommands, migrateRenamedToolMatchers, migrateRetiredPer
 const { MIN_CLAUDE_CODE_VERSION, checkClaudeVersion } = require('./lib/claude-version.js');
 const { pullUpdates } = require('./lib/updates.js');
 const { cleanupNulFile } = require('./lib/nul-cleanup.js');
+const { ensureCommonJsScope } = require('./lib/commonjs-scope.js');
 
 // ── main() ───────────────────────────────────────────────────────────────────
 // The entire install flow (and its helpers) lives inside main() — requiring this
@@ -654,6 +655,9 @@ function main() {
   if (fs.existsSync(soundsSrc)) {
     copyTree(soundsSrc, path.join(claudeDest, 'sounds'), { filter: shipsToUsers });
   }
+
+  // Keep .claude/ CommonJS inside an ESM host ("type": "module") — see bin/lib/commonjs-scope.js.
+  ensureCommonJsScope(claudeDest, (msg) => console.log(paint('yellow', msg)));
   mark('copy');
 
   // Note: updates directory is no longer copied to user projects.
