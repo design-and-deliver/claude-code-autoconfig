@@ -4,8 +4,11 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.234
+- feat(commands): /validate-cca-install is retired — re-running `npx claude-code-autoconfig@latest` already checks and repairs your install. Upgrades remove the old command.
+
 ## v1.0.233
-- fix(gls): /gls now answers what you type after it — e.g. `/gls why is this misaligned?`
+- fix(gls): Scope refinement for text typed after /gls
 
 ## v1.0.232
 - feat(plugins): plugin activate now installs create-vid keys too
