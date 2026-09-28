@@ -116,7 +116,7 @@ function installDeps(cwd, main_, report) {
   const reason = !fs.existsSync(mainNodeModules)
     ? 'no node_modules in main checkout'
     : process.env.CCA_UNSAFE_NODE_MODULES_JUNCTION !== '1'
-      ? 'junction is opt-in — see ⛔9 in parallel-session-worktrees.md'
+      ? 'junction is opt-in — see the junction section in parallel-session-worktrees.md'
       : 'package-lock.json differs from main checkout';
   report.push(`  – fallback npm install (${reason})`);
   // Node >= 18.20 / 20.12 refuses to spawn a .cmd without a shell (EINVAL, CVE-2024-27980),

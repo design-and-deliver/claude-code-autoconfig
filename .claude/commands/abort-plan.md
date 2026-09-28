@@ -1,5 +1,5 @@
 <!-- @description Kill a plan that isn't worth finishing — stamps the doc ABORTED so /continue stops resuming it, writes the post-mortem, tags and deletes the branch, and tables the idea for a future revisit. -->
-<!-- @version 1 -->
+<!-- @version 2 -->
 <!-- @param plan | string | optional | Plan alias, or a path to the plan doc. Omitted: infer from this session's plan work, and confirm before touching anything. -->
 <!-- @param reason | string | optional | Why it's being killed. Free text after the plan name. Inferred from the conversation if absent. -->
 <!-- @response success | Aborted {alias}: doc stamped, branch tagged aborted/{alias} and deleted, card tabled. Nothing to unwind from main. -->
@@ -68,7 +68,7 @@ belt to Step 1's braces. Write both.
 
 ## Step 3: Report what already reached `main` — never auto-revert
 
-Under the all-or-nothing merge rule (`.claude/rules/parallel-session-worktrees.md`) a live plan
+Under the all-or-nothing merge rule (the `plan-authoring` skill, Branch discipline) a live plan
 branch has merged nothing, so this is usually one line: *"nothing landed."*
 
 Legacy plans authored under the old phase-merge policy are the exception. Check:
