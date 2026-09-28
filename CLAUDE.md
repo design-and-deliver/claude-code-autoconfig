@@ -53,7 +53,7 @@ shows those bullets verbatim to users on upgrade (`bin/update-summary.js`). So:
 
 ## Team Feedback
 
-See `.claude/feedback/` for corrections and guidance from the team.
+@.claude/feedback/FEEDBACK.md
 
 <!-- END AUTO-GENERATED at 2026-01-14 19:54:27 UTC — Use .claude/feedback/ for corrections. -->
 

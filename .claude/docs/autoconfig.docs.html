@@ -2099,14 +2099,14 @@ Check that CLAUDE.md exists and has the required elements:
 2. **Team Feedback pointer** — between the markers:
    \`\`\`markdown
    ## Team Feedback
-   The contents of \`.claude/feedback/FEEDBACK.md\` are an extension of this file.
-   Read it at the start of every session before taking any action.
+   @.claude/feedback/FEEDBACK.md
    FEEDBACK.md is reserved for human-authored corrections only — do not write to it.
    \`\`\`
 
 3. **Discoveries section** — below the end marker:
    \`\`\`markdown
-   ## Discoveries`
+   ## Discoveries
+   <!-- Claude: append project-specific learnings, gotchas, and context below. This section persists across /autoconfig runs. -->`
             },
             'test': {
                 filename: 'test.md',

@@ -1,5 +1,5 @@
 <!-- @description Ensures CLAUDE.md has the required markers and Discoveries section. -->
-<!-- @version 4 -->
+<!-- @version 5 -->
 <!-- @response success | CLAUDE.md verified and updated if needed. -->
 <!-- @sideeffect May add markers or Discoveries section if missing, preserves all existing content -->
 <!-- @example /sync-claude-md | Verify CLAUDE.md structure -->
@@ -26,8 +26,7 @@ Check that CLAUDE.md exists and has the required elements:
 2. **Team Feedback pointer** — between the markers:
    ```markdown
    ## Team Feedback
-   The contents of `.claude/feedback/FEEDBACK.md` are an extension of this file.
-   Read it at the start of every session before taking any action.
+   @.claude/feedback/FEEDBACK.md
    FEEDBACK.md is reserved for human-authored corrections only — do not write to it.
    ```
 

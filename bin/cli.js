@@ -11,6 +11,7 @@ const { MIN_CLAUDE_CODE_VERSION, checkClaudeVersion } = require('./lib/claude-ve
 const { pullUpdates } = require('./lib/updates.js');
 const { cleanupNulFile } = require('./lib/nul-cleanup.js');
 const { ensureCommonJsScope } = require('./lib/commonjs-scope.js');
+const { ensureFeedbackImport } = require('./lib/feedback-import.js');
 
 // ── main() ───────────────────────────────────────────────────────────────────
 // The entire install flow (and its helpers) lives inside main() — requiring this
@@ -833,6 +834,11 @@ function main() {
   const userUpdatesDir = path.join(claudeDest, 'updates');
   if (fs.existsSync(userUpdatesDir)) {
     fs.rmSync(userUpdatesDir, { recursive: true });
+  }
+
+  // Turn an older run's prose pointer to FEEDBACK.md into an @ import, so it actually loads.
+  if (ensureFeedbackImport(cwd)) {
+    console.log(paint('cyan', '   📋 CLAUDE.md now loads .claude/feedback/FEEDBACK.md every session'));
   }
 
   // Migrate FEEDBACK.md content to CLAUDE.md Discoveries section (one-time, on upgrade)

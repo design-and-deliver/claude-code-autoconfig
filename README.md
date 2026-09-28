@@ -193,7 +193,7 @@ your-project/
 <details>
 <summary><b>Team feedback, rules &amp; memory</b></summary>
 
-**Feedback.** When Claude makes a mistake, add an entry to `.claude/feedback/FEEDBACK.md`; Claude reads it and it survives `/autoconfig` runs.
+**Feedback.** When Claude makes a mistake, add an entry to `.claude/feedback/FEEDBACK.md`; CLAUDE.md imports it, so Claude loads it every session, and it survives `/autoconfig` runs.
 
 ```markdown
 ## 2026-01-07: Don't use deprecated API

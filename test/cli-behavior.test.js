@@ -1092,6 +1092,56 @@ test('the version found is echoed on the detected line when readable', () => {
   assert(freshResult.out.includes('Claude Code v2.1.257 detected'), `expected the detected line to carry the probed version\n${freshResult.out}`);
 });
 
+// ── CLAUDE.md imports FEEDBACK.md instead of pointing at it ──────────────────
+// Claude Code never loads a file CLAUDE.md merely mentions; only an `@path` import is expanded
+// at launch. The installer rewrites the pointer lines older /autoconfig runs wrote.
+console.log();
+console.log('CLAUDE.md feedback pointer becomes an @ import:');
+
+const { ensureFeedbackImport, withFeedbackImport, FEEDBACK_IMPORT } = require('../bin/lib/feedback-import.js');
+
+const V2_POINTER = [
+  '## Team Feedback',
+  'The contents of `.claude/feedback/FEEDBACK.md` are an extension of this file.',
+  'Read it at the start of every session before taking any action.',
+  'FEEDBACK.md is reserved for human-authored corrections only — do not write to it.',
+].join('\n');
+
+test('the "extension of this file" pointer is rewritten to the import', () => {
+  const out = withFeedbackImport(V2_POINTER);
+  assert(out === `## Team Feedback\n${FEEDBACK_IMPORT}\nFEEDBACK.md is reserved for human-authored corrections only — do not write to it.`, `got:\n${out}`);
+});
+
+test('the pointer is rewritten in a CRLF file too', () => {
+  const out = withFeedbackImport(V2_POINTER.replace(/\n/g, '\r\n'));
+  assert(out && out.includes(`## Team Feedback\r\n${FEEDBACK_IMPORT}\r\nFEEDBACK.md`), `got:\n${JSON.stringify(out)}`);
+});
+
+test('the older "See .claude/feedback/" pointer is rewritten to the import', () => {
+  const out = withFeedbackImport('## Team Feedback\n\nSee `.claude/feedback/` for corrections and guidance from the team.\n');
+  assert(out === `## Team Feedback\n\n${FEEDBACK_IMPORT}\n`, `got:\n${out}`);
+});
+
+test('a CLAUDE.md that already imports it, or never pointed at it, is left alone', () => {
+  assert(withFeedbackImport(`## Team Feedback\n${FEEDBACK_IMPORT}\n`) === null, 'already imported → no change');
+  assert(withFeedbackImport('# My project\nSee the feedback folder for notes.\n') === null, 'user prose → no change');
+});
+
+test('ensureFeedbackImport rewrites CLAUDE.md only when FEEDBACK.md exists', () => {
+  const dir = makeProject('feedback-import');
+  cleanups.push(dir);
+  const claudeMd = path.join(dir, 'CLAUDE.md');
+  fs.writeFileSync(claudeMd, V2_POINTER);
+  const feedback = path.join(dir, '.claude', 'feedback', 'FEEDBACK.md');
+  if (fs.existsSync(feedback)) fs.unlinkSync(feedback);
+  assert(ensureFeedbackImport(dir) === false, 'no FEEDBACK.md → nothing to import');
+  fs.mkdirSync(path.dirname(feedback), { recursive: true });
+  fs.writeFileSync(feedback, '# Team Feedback\n\n---\n');
+  assert(ensureFeedbackImport(dir) === true, 'expected a rewrite');
+  assert(fs.readFileSync(claudeMd, 'utf8').includes(FEEDBACK_IMPORT), 'CLAUDE.md should now carry the import');
+  assert(ensureFeedbackImport(dir) === false, 'second run is a no-op');
+});
+
 // ── Cleanup ──────────────────────────────────────────────────────────────────
 for (const dir of cleanups) {
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
