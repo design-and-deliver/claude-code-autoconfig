@@ -136,7 +136,7 @@ the Ledger tail.
 
 ## Phase 2 — the worktree rule carries only what isn't enforced
 
-### ☐ 2.1 · M · ~45m — Cut parallel-session-worktrees.md to ≤ 80 lines
+### ☑ 2.1 · M · ~45m — Cut parallel-session-worktrees.md to ≤ 80 lines
 
 **Budget:** files 2 · new 0 · trips ≈ 10
 
@@ -157,8 +157,8 @@ For each section, keep or cut it as listed. Keep the imperative sentence and dro
 | 165–186 | not isolated | keep all 5 bullets, one line each |
 | 188–193 | conflicts | keep the "don't reach into another worktree" line |
 
-- [ ] Rewrite the file following the table. Target ≤ 80 lines, and keep every ⛔ heading that `bootstrap-worktree.js:119` names. If its number changes, update that string in the same commit.
-- [ ] `grep -n "parallel-session-worktrees" CLAUDE.md .claude/commands/abort-plan.md .claude/scripts/sync-worktrees.js scripts/bootstrap-worktree.js`: check that each pointer still lands on a section that exists.
+- [x] Rewrite the file following the table. Target ≤ 80 lines, and keep every ⛔ heading that `bootstrap-worktree.js:119` names. If its number changes, update that string in the same commit.
+- [x] `grep -n "parallel-session-worktrees" CLAUDE.md .claude/commands/abort-plan.md .claude/scripts/sync-worktrees.js scripts/bootstrap-worktree.js`: check that each pointer still lands on a section that exists.
 
 **Verify:** `wc -l .claude/rules/parallel-session-worktrees.md` ≤ 80 · `npm test` green
 
@@ -206,3 +206,11 @@ For each section, keep or cut it as listed. Keep the imperative sentence and dro
   - **Deviation:** `continue.md` left untouched (box marked `[~]`). It ships to every user (not in `DEV_ONLY_FILES`), while the skill is dev-only; "(invoke the `plan-authoring` skill)" would point users at a skill they don't have. Its two mentions never named the old path, so the sweep is clean without it.
   - Verify: old-path `git grep` sweep prints nothing · `sync-docs.js` ok · `npm test` exit 0.
   - Next: **2.1** (cut `parallel-session-worktrees.md` to ≤ 80 lines; mind the `bootstrap-worktree.js:119` "⛔9" string).
+
+- 2026-09-28 — **2.1** — done (`d608625`) [1 session · ~9 trips · peak ~75k · M]
+  - `parallel-session-worktrees.md` 193 → 65 lines, following the keep/cut table. All three `##` ⛔ headings kept verbatim (`bootstrap-worktree.js:99` quotes the junction one).
+  - **Deviation:** `bootstrap-worktree.js:119`'s "⛔9" matched no numbering in the rule (stale even before this cut). Now reads "see the junction section".
+  - **Deviation:** `abort-plan.md:71` cited this rule for the all-or-nothing merge, which now lives only in the skill. Repointed to "the `plan-authoring` skill, Branch discipline", @version 1→2 (dev-only command).
+  - Pointer check: CLAUDE.md:122, `worktree-gate.js:9`, `sync-worktrees.js:16` (junction ⛔), `bootstrap-worktree.js:18,100,151` all still land.
+  - Verify: `wc -l` = 65 · `sync-docs.js` ok · `npm test` exit 0.
+  - Next: **3.1** (merge once, sync the fleet, adopt in JAE + wifi-app).
