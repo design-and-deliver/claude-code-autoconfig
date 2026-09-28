@@ -166,17 +166,17 @@ For each section, keep or cut it as listed. Keep the imperative sentence and dro
 
 ## Phase 3 — land it
 
-### ☐ 3.1 · M · ~45m — Merge once, sync the fleet, adopt in JAE + wifi-app
+### ☑ 3.1 · M · ~45m — Merge once, sync the fleet, adopt in JAE + wifi-app
 
 **Budget:** files 4 (2 repos × git mv + commit) · new 0 · trips ≈ 14
 
 **Read:** this doc (⛔ + this substep) + Ledger tail
 
-- [ ] From the CCA **main checkout**: `git merge --ff-only plan/workflow-rules`. If it isn't a fast-forward, do a normal merge, and stop and ask if it conflicts.
-- [ ] In each of `C:\CODE\job-agent-extension` and `C:\CODE\wifi-app`: `git switch -c plan/workflow-rules`, then `mkdir -p .claude/skills/plan-authoring && git mv .claude/rules/plan-authoring.md .claude/skills/plan-authoring/SKILL.md`. Check `/fleet` first. If a live session is holding one of these repos, stop and ask.
-- [ ] From the CCA main checkout: `node scripts/sync-hook-fleet.js --write`. This overwrites both adopted copies with the canonical skill.
-- [ ] In JAE and wifi-app: commit (`chore: plan-authoring is now an on-demand skill (synced from CCA)`), merge to their `main`, delete the branch.
-- [ ] Manual check: in a fresh Claude session in CCA, `plan-authoring` appears in the available-skills list, and `.claude/rules/` no longer lists it.
+- [x] From the CCA **main checkout**: `git merge --ff-only plan/workflow-rules`. If it isn't a fast-forward, do a normal merge, and stop and ask if it conflicts.
+- [x] In each of `C:\CODE\job-agent-extension` and `C:\CODE\wifi-app`: `git switch -c plan/workflow-rules`, then `mkdir -p .claude/skills/plan-authoring && git mv .claude/rules/plan-authoring.md .claude/skills/plan-authoring/SKILL.md`. Check `/fleet` first. If a live session is holding one of these repos, stop and ask.
+- [x] From the CCA main checkout: `node scripts/sync-hook-fleet.js --write`. This overwrites both adopted copies with the canonical skill.
+- [x] In JAE and wifi-app: commit (`chore: plan-authoring is now an on-demand skill (synced from CCA)`), merge to their `main`, delete the branch.
+- [x] Manual check: in a fresh Claude session in CCA, `plan-authoring` appears in the available-skills list, and `.claude/rules/` no longer lists it.
 
 **Verify:** `node scripts/sync-hook-fleet.js` (check mode) reports zero drift · `npm test` green in CCA · `git branch --merged main | grep plan/workflow-rules` in all three repos
 
@@ -214,3 +214,13 @@ For each section, keep or cut it as listed. Keep the imperative sentence and dro
   - Pointer check: CLAUDE.md:122, `worktree-gate.js:9`, `sync-worktrees.js:16` (junction ⛔), `bootstrap-worktree.js:18,100,151` all still land.
   - Verify: `wc -l` = 65 · `sync-docs.js` ok · `npm test` exit 0.
   - Next: **3.1** (merge once, sync the fleet, adopt in JAE + wifi-app).
+
+- 2026-09-28 — **3.1** — done (CCA ff `2a65435..def9b13` · JAE `a24aad7` · wifi-app `2cd63c7` + `e3757ac`) [1 session · ~10 trips · M]
+  - CCA `main` fast-forwarded cleanly. JAE and wifi-app each branched, `git mv`'d, took `--write`, committed, ff-merged to `main`, and deleted the branch.
+  - **Deviation:** wifi-app's `main` held uncommitted residue from an earlier fleet sync: `continue.md`, `terminal-title.js`, `recover-session.py`, plus `plan-authoring.md` at CCA's pre-move canonical. All were byte-identical to CCA, so they got their own commit (`2cd63c7 chore: sync fleet files from CCA`) before the move.
+  - `--write` also refreshed `worktree-gate.js` (both repos) and `abort-plan.md` (JAE only; wifi-app has no copy). These are 1.2's and 2.1's pointer edits, folded into the adoption commit.
+  - The session had to `ExitWorktree keep` first. The worktree-isolation guard refuses git aimed outside the worktree, so a plan's landing substep can't run from inside its own worktree. The skill's branch discipline should say so.
+  - A live JAE session (`0000f5d4`) was working in a JAE worktree, not its main checkout, so the two didn't collide.
+  - Manual check: after the exit, this session's skill list shows unscoped `plan-authoring` in the CCA main checkout.
+  - Verify: fleet check mode shows no drift · `npm test` exit 0 · `plan/workflow-rules` merged in CCA and deleted in JAE and wifi-app.
+  - Plan complete. The worktree `.claude/worktrees/workflow-rules` (branch `plan/workflow-rules`) is still on disk; remove or keep it.
