@@ -192,3 +192,11 @@ For each section, keep or cut it as listed. Keep the imperative sentence and dro
 - **Editing token-guard.js** to name the skill. Its string already names the concept, not the path.
 
 ## Ledger
+
+- 2026-09-28 — **1.1 + 1.3** — done (`53db665`) [1 session · ~22 trips · peak ~90k · 1.1 was M, combined stays M]
+  - **Deviation:** 1.3 folded into 1.1. Moving the file breaks `sync-hook-fleet.js`'s canonical lookup (the manifest named `rules/plan-authoring.md`), so 12 tests in `hook-fleet-sync.test.js` go red. 1.1 can't be green on its own. Authoring gap: the two substeps were never separable.
+  - **Deviation:** `dev-gate-consistency.test.js:79-112` matches negations by EXACT path, so `!.claude/skills/` alone doesn't satisfy it. Added `!.claude/skills`, `!.claude/skills/**`, and the exact `!.claude/skills/plan-authoring/SKILL.md`.
+  - `subdir: 'skills/plan-authoring'` works unchanged: `path.join` handles the nested segment (`sync-hook-fleet.js:156,163`), so nothing had to be generalized.
+  - Fleet check mode is clean. JAE and wifi-app now read `[miss]` for SKILL.md, not drift; 3.1's `git mv` there is still required before `--write`.
+  - ⚠ `'SKILL.md'` in `DEV_ONLY_FILES` gates EVERY file named SKILL.md. Harmless today (CCA ships no skills), but the first shipped skill needs a path-aware gate.
+  - Next: **1.2** (repoint references). `test/plan-progress.test.js:10` also names the old path; add it to 1.2's sweep.
