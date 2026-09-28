@@ -111,11 +111,11 @@ the Ledger tail.
 `scripts/run-plan.js:9,82` · `.claude/rules/parallel-session-worktrees.md:80,171` ·
 `.claude/hooks/worktree-gate.js:35,201,225` (comments only) · `.claude/commands/continue.md:38,133`
 
-- [ ] `plan-progress.md:14`: change the path to `.claude/skills/plan-authoring/SKILL.md`, and bump `@version`.
-- [ ] `plan-progress.js:12,217` and `run-plan.js:9,82`: change the path in comments and in the error string. Don't change any logic.
-- [ ] `worktree-gate.js` comments (35, 201, 225): "plan-authoring rule" → "plan-authoring skill".
-- [ ] `parallel-session-worktrees.md:80,171`: point at the skill path. (2.1 rewrites this file anyway, so keep the edit minimal.)
-- [ ] `continue.md:38,133`: where it says "the plan-authoring pattern", add "(invoke the `plan-authoring` skill)", and bump `@version`.
+- [x] `plan-progress.md:14`: change the path to `.claude/skills/plan-authoring/SKILL.md`, and bump `@version`.
+- [x] `plan-progress.js:12,217` and `run-plan.js:9,82`: change the path in comments and in the error string. Don't change any logic.
+- [x] `worktree-gate.js` comments (35, 201, 225): "plan-authoring rule" → "plan-authoring skill".
+- [x] `parallel-session-worktrees.md:80,171`: point at the skill path. (2.1 rewrites this file anyway, so keep the edit minimal.)
+- [~] `continue.md:38,133`: where it says "the plan-authoring pattern", add "(invoke the `plan-authoring` skill)", and bump `@version`.
 
 **Verify:** `git grep -n "rules/plan-authoring" -- ':!docs/' ':!CHANGELOG.md' ':!ARTICLES/'` prints nothing · `node .claude/scripts/sync-docs.js` · `npm test` green
 
@@ -200,3 +200,9 @@ For each section, keep or cut it as listed. Keep the imperative sentence and dro
   - Fleet check mode is clean. JAE and wifi-app now read `[miss]` for SKILL.md, not drift; 3.1's `git mv` there is still required before `--write`.
   - ⚠ `'SKILL.md'` in `DEV_ONLY_FILES` gates EVERY file named SKILL.md. Harmless today (CCA ships no skills), but the first shipped skill needs a path-aware gate.
   - Next: **1.2** (repoint references). `test/plan-progress.test.js:10` also names the old path; add it to 1.2's sweep.
+
+- 2026-09-28 — **1.2** — done (`9516db9`) [1 session · ~10 trips · peak ~60k · L was generous, ran as S/M]
+  - Repointed `plan-progress.md` (@version 1→2), `plan-progress.js:12`, `run-plan.js:9`, `test/plan-progress.test.js:10`, `parallel-session-worktrees.md:80,171` to `.claude/skills/plan-authoring/SKILL.md`; `worktree-gate.js:35,201,225` comments now say "skill". `plan-progress.js:217` and `run-plan.js:82` never named the path ("plan-authoring format/grammar"), so they're unchanged.
+  - **Deviation:** `continue.md` left untouched (box marked `[~]`). It ships to every user (not in `DEV_ONLY_FILES`), while the skill is dev-only; "(invoke the `plan-authoring` skill)" would point users at a skill they don't have. Its two mentions never named the old path, so the sweep is clean without it.
+  - Verify: old-path `git grep` sweep prints nothing · `sync-docs.js` ok · `npm test` exit 0.
+  - Next: **2.1** (cut `parallel-session-worktrees.md` to ≤ 80 lines; mind the `bootstrap-worktree.js:119` "⛔9" string).
