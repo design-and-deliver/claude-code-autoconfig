@@ -78,24 +78,24 @@ the Ledger tail.
 
 ## Phase 1 — the skill exists and everything points at it
 
-### ☐ 1.1 · M · ~40m — Move plan-authoring into a dev-only skill
+### ☑ 1.1 · M · ~40m — Move plan-authoring into a dev-only skill
 
 **Budget:** files 3 · new 0 (1 moved) · trips ≈ 11
 
 **Read:** this doc (⛔ section + this substep) · `.claude/rules/plan-authoring.md:1-12` (header) ·
 `bin/cli.js` Grep `DEV_ONLY_FILES = ` (~529) · `package.json:54-98` (`files`)
 
-- [ ] `mkdir -p .claude/skills/plan-authoring && git mv .claude/rules/plan-authoring.md .claude/skills/plan-authoring/SKILL.md`
-- [ ] Prepend this frontmatter to SKILL.md (the description is the trigger, so keep every clause):
+- [x] `mkdir -p .claude/skills/plan-authoring && git mv .claude/rules/plan-authoring.md .claude/skills/plan-authoring/SKILL.md`
+- [x] Prepend this frontmatter to SKILL.md (the description is the trigger, so keep every clause):
   ```
   ---
   name: plan-authoring
   description: Plan-doc grammar for multi-session work. Use BEFORE authoring, reviewing, sizing, or re-tagging a plan doc (docs/*.md or .claude/plans/*.md with a "## Ledger"), when a task is beyond small (~100k tokens, multi-file, multi-repo) and needs a plan first, and when executing or landing a plan substep (branch discipline, Verify, Ledger entry format).
   ---
   ```
-- [ ] Change the body's self-reference "Adopting repos hold a byte-identical copy at
+- [x] Change the body's self-reference "Adopting repos hold a byte-identical copy at
   `.claude/rules/plan-authoring.md`" to `.claude/skills/plan-authoring/SKILL.md`.
-- [ ] `bin/cli.js`: append `'SKILL.md'` to `DEV_ONLY_FILES`. Add
+- [x] `bin/cli.js`: append `'SKILL.md'` to `DEV_ONLY_FILES`. Add
   `"!.claude/skills/"` to package.json `files`, next to line 98.
 
 **Verify:** `npm test` green · `test -f .claude/skills/plan-authoring/SKILL.md && ! test -e .claude/rules/plan-authoring.md` · `npm pack --dry-run 2>&1 | grep -c skills` prints `0`
@@ -121,14 +121,14 @@ the Ledger tail.
 
 **Commit:** `chore(plans): point plan tooling at the plan-authoring skill` + `Changelog: none`
 
-### ☐ 1.3 · M · ~40m — Fleet sync manifest: rules → skills
+### ☑ 1.3 · M · ~40m — Fleet sync manifest: rules → skills
 
 **Budget:** files 2 · new 0 · trips ≈ 10
 
 **Read:** this doc (⛔ + this substep) · `scripts/sync-hook-fleet.js:40-140` (the adopt-only rule at 46–51, the manifest at 99–105) · `test/hook-fleet-sync.test.js:195-225`
 
-- [ ] Manifest entry at 99–105: `{ file: 'SKILL.md', global: false, subdir: 'skills/plan-authoring' }`. Check that the path join handles a nested subdir. If it assumes a single segment, generalize it to `path.join(...subdir.split('/'))`. Don't change anything else.
-- [ ] Tests at 200–222: point `canonRule` and both cases at `.claude/skills/plan-authoring/SKILL.md`. Keep both assertions: the file syncs into the skills dir, and a target without it is skipped.
+- [x] Manifest entry at 99–105: `{ file: 'SKILL.md', global: false, subdir: 'skills/plan-authoring' }`. Check that the path join handles a nested subdir. If it assumes a single segment, generalize it to `path.join(...subdir.split('/'))`. Don't change anything else.
+- [x] Tests at 200–222: point `canonRule` and both cases at `.claude/skills/plan-authoring/SKILL.md`. Keep both assertions: the file syncs into the skills dir, and a target without it is skipped.
 
 **Verify:** `node test/hook-fleet-sync.test.js` green · `node scripts/sync-hook-fleet.js` (check mode) runs without crashing. Drift *is* expected here, because JAE and wifi-app still hold the old rule until 3.1 · `npm test` green
 

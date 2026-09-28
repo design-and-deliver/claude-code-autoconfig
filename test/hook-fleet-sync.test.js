@@ -197,28 +197,28 @@ function repoTarget(tree, opts) {
 const readIn = (t, sub, f) => {
   try { return fs.readFileSync(path.join(t.root, sub, f), 'utf8'); } catch (_) { return null; }
 };
-const canonRule = f => fs.readFileSync(path.join(__dirname, '..', '.claude', 'rules', f), 'utf8');
+const canonRule = f => fs.readFileSync(path.join(__dirname, '..', '.claude', 'skills', 'plan-authoring', f), 'utf8');
 const canonIn = (sub, f) => fs.readFileSync(path.join(__dirname, '..', '.claude', sub, f), 'utf8');
 
-test('a rules entry syncs into .claude/rules — NOT into the hooks dir the fleet points at', () => {
-  const t = repoTarget({ rules: { 'plan-authoring.md': STALE } });
-  const r = syncFleet({ write: true, files: ['plan-authoring.md'], targets: [t] });
-  assert(r.wrote === 1, `the adopted rule must sync, wrote ${r.wrote}`);
-  assert(norm(readIn(t, 'rules', 'plan-authoring.md') || '') === norm(canonRule('plan-authoring.md')),
-    '.claude/rules/plan-authoring.md must end up byte-identical to canonical');
-  assert(readIn(t, 'hooks', 'plan-authoring.md') === null,
+test('a skill entry syncs into .claude/skills/plan-authoring — NOT into the hooks dir the fleet points at', () => {
+  const t = repoTarget({ 'skills/plan-authoring': { 'SKILL.md': STALE } });
+  const r = syncFleet({ write: true, files: ['SKILL.md'], targets: [t] });
+  assert(r.wrote === 1, `the adopted skill must sync, wrote ${r.wrote}`);
+  assert(norm(readIn(t, 'skills/plan-authoring', 'SKILL.md') || '') === norm(canonRule('SKILL.md')),
+    '.claude/skills/plan-authoring/SKILL.md must end up byte-identical to canonical');
+  assert(readIn(t, 'hooks', 'SKILL.md') === null,
     'it must NOT be written into .claude/hooks (the dir the fleet file records)');
-  assert(syncFleet({ files: ['plan-authoring.md'], targets: [t] }).drifted === 0,
-    're-check must read the rule back from the same place it wrote it');
+  assert(syncFleet({ files: ['SKILL.md'], targets: [t] }).drifted === 0,
+    're-check must read the skill back from the same place it wrote it');
 });
 
-test('ADOPT-ONLY holds across the subdir: hooks adoption does not pull in the rule', () => {
-  const t = repoTarget({ hooks: { 'token-guard.js': STALE }, rules: {} });
+test('ADOPT-ONLY holds across the subdir: hooks adoption does not pull in the skill', () => {
+  const t = repoTarget({ hooks: { 'token-guard.js': STALE }, skills: {} });
   syncFleet({ write: true, targets: [t] });
   assert(norm(readIn(t, 'hooks', 'token-guard.js') || '') === norm(canonOf('token-guard.js')),
     'the adopted hook must still sync');
-  assert(readIn(t, 'rules', 'plan-authoring.md') === null,
-    'an existing-but-empty rules dir is not adoption — the rule must NOT be created');
+  assert(readIn(t, 'skills/plan-authoring', 'SKILL.md') === null,
+    'an existing-but-empty skills dir is not adoption — the skill must NOT be created');
 });
 
 test('a pairsSubdir partner is followed ACROSS directories, and still adopt-only', () => {

@@ -101,8 +101,8 @@ const MANIFEST = [
   // with NEITHER a superset (the rule's own header says so); a doc drifts exactly like a hook
   // does, so it gets the same actuator rather than another "remember to port it" note. Not
   // global: ~/.claude has no rules dir, and ADOPT-ONLY means a repo without the file keeps not
-  // having it.
-  { file: 'plan-authoring.md', global: false, subdir: 'rules' },
+  // having it. Since 2026-09-28 it is an on-demand skill rather than an always-loaded rule.
+  { file: 'SKILL.md', global: false, subdir: 'skills/plan-authoring' },
   // Dev-only commands and their scripts. They were hand-copied between repos before this — the
   // same "remember to port it" arrangement that let token-guard.js drift 231 lines behind, just
   // one directory over. A command drifts exactly like a hook does, so it gets the same actuator.

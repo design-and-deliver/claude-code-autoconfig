@@ -1,3 +1,8 @@
+---
+name: plan-authoring
+description: Plan-doc grammar for multi-session work. Use BEFORE authoring, reviewing, sizing, or re-tagging a plan doc (docs/*.md or .claude/plans/*.md with a "## Ledger"), when a task is beyond small (~100k tokens, multi-file, multi-repo) and needs a plan first, and when executing or landing a plan substep (branch discipline, Verify, Ledger entry format).
+---
+
 # Plan authoring — session-sized steps + handoff ledger
 
 Applies whenever authoring a multi-phase plan/spec doc that will be executed across more than
@@ -5,7 +10,7 @@ one session (e.g. by /up-to-snuff). The plan is a self-contained doc a fresh ses
 with zero prior conversation context.
 
 **This file is CANONICAL and repo-agnostic — keep it that way.** Adopting repos hold a
-byte-identical copy at `.claude/rules/plan-authoring.md`, kept in sync by
+byte-identical copy at `.claude/skills/plan-authoring/SKILL.md`, kept in sync by
 `scripts/sync-hook-fleet.js` (CCA is the source; a repo without the file is not adopting it and
 is never given one). So: edit THIS copy, then run the actuator — a hand-edit in an adopting repo
 is reverted by the next `--write`. Repo-specific facts (which files are the god files, what the
