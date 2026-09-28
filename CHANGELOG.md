@@ -4,6 +4,9 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.239
+- feat(feedback): Team feedback you commit is now automatically turned into targeted rules, leaving a link to each new rule in FEEDBACK.md
+
 ## v1.0.238
 - fix(install): Hooks and auto-guard safety checks now work in projects whose package.json uses "type": "module" (they previously stopped silently)
 
@@ -213,7 +216,4 @@
 ## v1.0.190
 - docs(readme): document the bundled terminal-title hook
 - feat(terminal-title): bundle the terminal-title hook into core
-
-## v1.0.189
-- fix: drop redundant nul cleanup that errored after the install finale
 
