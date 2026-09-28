@@ -31,6 +31,12 @@ function removeRetiredCommands(commandsDest, existingCommandContents) {
   return removed;
 }
 
+// Hook wiring CCA once shipped and has since moved; the settings merge strips it by exact
+// command per event (feedback-rule-check.js became a PreToolUse(Bash) commit check, 2026-09-28).
+const RETIRED_FEEDBACK_EDIT_HOOK = { hooks: {
+  PostToolUse: [{ matcher: 'Edit|Write', hooks: [{ type: 'command', command: 'node "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/feedback-rule-check.js"' }] }]
+} };
+
 function main() {
   const cwd = process.cwd();
   const packageDir = path.dirname(__dirname);
@@ -728,6 +734,10 @@ function main() {
         // match per event — a user's own hooks survive; see the retraction block above).
         if (!keepTokenGuard) unmergeSettingsFrom(userSettings, TOKEN_GUARD_SETTINGS_FRAGMENT);
 
+        // feedback-rule-check.js moved from PostToolUse(Edit|Write) to a PreToolUse(Bash) commit
+        // gate; the additive merge below would otherwise leave the old wiring spawning it per edit.
+        unmergeSettingsFrom(userSettings, RETIRED_FEEDBACK_EDIT_HOOK);
+
         // Additively fold package hooks/env/permissions into the user's settings
         // (shared with the plugin installer — see mergeSettingsInto).
         mergeSettingsInto(userSettings, pkgSettings);
@@ -856,7 +866,7 @@ function main() {
           fs.writeFileSync(claudeMdPath, claudeMdContent + discoveriesSection);
 
           // Reset FEEDBACK.md to clean template
-          const cleanTemplate = `<!-- @description Human-authored corrections and guidance for Claude. Reserved for team feedback only — Claude must not write here. This directory persists across /autoconfig runs. -->\n\n# Team Feedback\n\n**This file is for human-authored corrections and guidance only.**\nClaude reads this file but must never write to it. When Claude discovers project context, gotchas, or learnings, it should append to the \`## Discoveries\` section in CLAUDE.md instead.\n\n---\n\n`;
+          const cleanTemplate = `<!-- @description Human-authored corrections and guidance for Claude. Reserved for team feedback only — Claude must not write here. This directory persists across /autoconfig runs. -->\n\n# Team Feedback\n\n**This file is for human-authored corrections and guidance only.**\nClaude reads this file but must never write to it, except to replace an entry /extract-rules turned into a rule with a pointer line to that rule. When Claude discovers project context, gotchas, or learnings, it should append to the \`## Discoveries\` section in CLAUDE.md instead.\n\n---\n\n`;
           fs.writeFileSync(feedbackPath, cleanTemplate);
 
           // Count migrated sections

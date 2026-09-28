@@ -1402,7 +1402,7 @@
             },
             'extract-rules': {
                 title: 'extract-rules.md',
-                desc: 'Scan Claude artifacts and extract structured rules into .claude/rules/<div style="margin-top: 12px;"><strong>Parameters</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Name</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Type</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>select</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>string</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Write only specific rules by number: "1,3,5". Default: all.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>keep-sources</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>boolean</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Write rules but skip source cleanup (Step 8)</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Rules extracted, written, and sources cleaned up.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-rules</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">No extractable rules found in scanned sources.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Creates .claude/rules/ files and removes extracted content from source files</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/extract-rules</code> <span style="opacity: 0.6;">— Scan, propose, prompt for approval, write, and clean up</span></div><div><code>/extract-rules --keep-sources</code> <span style="opacity: 0.6;">— Write rules without modifying source files</span></div><div><code>/extract-rules --select 1,3</code> <span style="opacity: 0.6;">— Write only rules #1 and #3</span></div></div></div>',
+                desc: 'Scan Claude artifacts and extract structured rules into .claude/rules/<div style="margin-top: 12px;"><strong>Parameters</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Name</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Type</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>select</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>string</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Write only specific rules by number: "1,3,5". Default: all.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>keep-sources</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>boolean</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Write rules but skip source cleanup (Step 8)</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>source</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>string</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Scan only this file instead of every source: ".claude/feedback/FEEDBACK.md"</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>staged</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>boolean</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">With --source: consider only the lines the pending commit adds to it</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Rules extracted, written, and sources cleaned up.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-rules</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">No extractable rules found in scanned sources.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Creates .claude/rules/ files and removes extracted content from source files</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/extract-rules</code> <span style="opacity: 0.6;">— Scan, propose, prompt for approval, write, and clean up</span></div><div><code>/extract-rules --keep-sources</code> <span style="opacity: 0.6;">— Write rules without modifying source files</span></div><div><code>/extract-rules --select 1,3</code> <span style="opacity: 0.6;">— Write only rules #1 and #3</span></div><div><code>/extract-rules --source .claude/feedback/FEEDBACK.md --staged</code> <span style="opacity: 0.6;">— Convert just the feedback a commit is adding (run by the commit check)</span></div></div></div>',
                 trigger: '/extract-rules'
             },
             'gls': {
@@ -1457,8 +1457,8 @@
             },
             'feedback-rule-check-hook': {
                 title: 'feedback-rule-check.js',
-                desc: 'After FEEDBACK.md is edited, notifies Claude to evaluate',
-                trigger: 'PostToolUse on Write|Edit'
+                desc: 'On commit, holds new FEEDBACK.md entries once so /extract-rules can turn them into rules.',
+                trigger: 'PreToolUse on Bash (git commit)'
             },
             'format-hook': {
                 title: 'format.js',
@@ -1938,6 +1938,8 @@ If there are uncommitted changes, show this warning and wait for confirmation:
 
 If the working tree is clean, proceed silently.
 
+**Skip this step when \`--staged\` is passed** — you are mid-commit, and the staged changes are the input.
+
 ## Step 1: Discover sources
 
 Scan these locations for \`.md\` files containing potential rules. **Skip any that don't exist** — not all projects have all of these:
@@ -1945,8 +1947,7 @@ Scan these locations for \`.md\` files containing potential rules. **Skip any th
 1. \`CLAUDE.md\` (project root)
 2. \`CLAUDE.local.md\` (project root, if present)
 3. All \`.md\` files in \`.claude/\` recursively (feedback, commands, etc.) — **excluding** \`.claude/rules/\` and \`.claude/commands/extract-rules.md\`
-4. Any nested \`CLAUDE.md\` files in subdirectories (e.g., \`src/CLAUDE.md\`)
-5. Auto memory files — memory often contains misplaced imperatives that should be promoted to rules. To find the memory directory, list \`~/.claude/projects/\` and fuzzy-match against the current project path. The directory name encodes the path with dashes replacing separators, but encoding varies by platform and may not be consistent for paths with spaces, special characters, or deep nesting. **Discovery strategy**: list all directories under \`~/.claude/projects/\`, then find the one whose name best matches the current working directory (check if the directory name contains key path segments like the project folder name). Read \`MEMORY.md\` in that directory, then each \`.md\` file it links to. If no match is found or the memory directory can't be read, skip this source silently.`
+4. Any nested \`CLAUDE.md\` files in subdirectories (e.g., \`src/CLAUDE.md\`)`
             },
             'gls': {
                 filename: 'gls.md',
@@ -2223,33 +2224,33 @@ function installTarget(cmd) {`
                 content: `#!/usr/bin/env node
 
 /**
- * @name Feedback Rule Migration Check
- * @description After FEEDBACK.md is edited, notifies Claude to evaluate
- *              whether any entries would be more reliably delivered as
- *              .claude/rules/ files with glob patterns.
- * @trigger PostToolUse on Write|Edit
+ * @name Feedback Rule Check
+ * @description On commit, holds new FEEDBACK.md entries once so /extract-rules can turn them into rules.
+ *              The new lines go through /extract-rules --source <FEEDBACK.md> --staged. Entries
+ *              that convert become .claude/rules/ files (leaving a pointer line behind); the
+ *              rest stay as feedback, and the retried commit goes through.
+ * @trigger PreToolUse on Bash (git commit)
  */
 
-// Read hook input from stdin
-let input = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', chunk => input += chunk);
-process.stdin.on('end', () => {
-  try {
-    const data = JSON.parse(input);
-    const filePath = data?.tool_input?.file_path || '';
+// Why a commit gate and not PostToolUse(Edit|Write): FEEDBACK.md is human-authored, so
+// Claude's own edits almost never touch it. A commit is where a teammate's new feedback
+// actually passes through Claude — and converting it there lands the rules in that same commit.
+//
+// "Once" is tracked in <git-dir>/cca-feedback-evaluated.json: every added line the gate has
+// already sent through /extract-rules. A retry whose remaining new lines are all in that set is
+// let through — otherwise feedback that is not rule material would block the commit forever.
 
-    // Only fire for FEEDBACK.md edits
-    if (!filePath.endsWith('FEEDBACK.md')) {
-      process.exit(0);
-    }
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
 
-    console.log([
-      'FEEDBACK.md was just modified.',
-      'Review the changes and evaluate whether any entries are tied to specific file types,',
-      'frameworks, or patterns that could be scoped with a glob (e.g., *.py, *.tsx, src/api/**).',
-      '',
-      'If any entries qualify, ask the user:',`
+const FEEDBACK_REL = '.claude/feedback/FEEDBACK.md';
+const LEDGER_NAME = 'cca-feedback-evaluated.json';
+// git, optionally with leading global flags (-C dir, --no-pager, …), then \`commit\`.
+const COMMIT_RE = /\\bgit\\b(?:\\s+-[^\\s]+(?:\\s+[^\\s]+)?)*\\s+commit\\b/;
+// The same command also stages files (\`git add … && git commit\`, \`git commit -a/-am/--all\`),
+// so the diff to judge is against HEAD, not just the index.
+const STAGES_TOO_RE = /\\bgit\\b(?:\\s+-[^\\s]+(?:\\s+[^\\s]+)?)*\\s+add\\b|\\bcommit\\b[^;&|]*\\s(?:-[a-zA-Z]*a[a-zA-Z]*|--all)\\b/;`
             },
             'format-hook': {
                 filename: 'format.js',
@@ -2421,7 +2422,7 @@ Maintain it across the session:
                 content: `# Team Feedback
 
 **This file is for human-authored corrections and guidance only.**
-Claude reads this file but must never write to it. When Claude discovers project context, gotchas, or learnings, it should append to the \`## Discoveries\` section in CLAUDE.md instead.
+Claude reads this file but must never write to it, except to replace an entry /extract-rules turned into a rule with a pointer line to that rule. When Claude discovers project context, gotchas, or learnings, it should append to the \`## Discoveries\` section in CLAUDE.md instead.
 
 ---`
             },
@@ -2547,18 +2548,18 @@ Claude reads this file but must never write to it. When Claude discovers project
             "command": "node \\"\${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/auto-guard.js\\""
           }
         ]
-      }
-    ],
-    "PostToolUse": [
+      },
       {
-        "matcher": "Edit|Write",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
             "command": "node \\"\${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/feedback-rule-check.js\\""
           }
         ]
-      },
+      }
+    ],
+    "PostToolUse": [
       {
         "matcher": "Bash",
         "hooks": [

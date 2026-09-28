@@ -144,7 +144,7 @@ your-project/
     │   ├── terminal-title.directive.md # Title directive (tunable wording)
     │   ├── arcade-beeps.js            # Status beeps (opt-in)
     │   ├── auto-guard.js              # Guardrails under auto mode (opt-in)
-    │   ├── feedback-rule-check.js     # Nudges FEEDBACK.md entries toward .claude/rules/
+    │   ├── feedback-rule-check.js     # On commit, turns new FEEDBACK.md entries into .claude/rules/
     │   ├── mark-commit-active.js      # Quiets the uncommitted-work reminder mid-commit
     │   └── migrate-feedback.js        # One-time FEEDBACK.md → Discoveries migration
     ├── docs/autoconfig.docs.html      # Interactive docs (/show-docs)
