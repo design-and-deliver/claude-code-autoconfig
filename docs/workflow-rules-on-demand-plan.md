@@ -102,7 +102,7 @@ the Ledger tail.
 
 **Commit:** `refactor(plans): move plan-authoring from an always-loaded rule to an on-demand skill` + `Changelog: none`
 
-### ☐ 1.2 · L · ~1h — Repoint every reference at the skill
+### ☑ 1.2 · L · ~1h — Repoint every reference at the skill
 
 **Budget:** files 6 · new 0 · trips ≈ 18
 

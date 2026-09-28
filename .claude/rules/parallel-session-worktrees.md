@@ -77,7 +77,7 @@ Consequences worth knowing:
   `node_modules` (see the junction section below). Pay the `npm install` once.
 
 The plan docs this governs are CCA's own (`docs/*.md` and `.claude/plans/*.md` with a `## Ledger`
-section — e.g. `docs/agy-worktree-adoption-plan.md`), per `.claude/rules/plan-authoring.md`.
+section — e.g. `docs/agy-worktree-adoption-plan.md`), per `.claude/skills/plan-authoring/SKILL.md`.
 
 ## The loop
 
@@ -168,7 +168,7 @@ Worktrees give each session its own files. They do not give it its own `~/.claud
 npm registry, or its own git remote:
 
 - **`~/.claude` and the hook fleet.** `node scripts/sync-hook-fleet.js --write` copies THIS
-  tree's `.claude/hooks/*` and `.claude/rules/plan-authoring.md` out to `~/.claude` and every
+  tree's `.claude/hooks/*` and `.claude/skills/plan-authoring/SKILL.md` out to `~/.claude` and every
   repo in the fleet list. Run from a worktree, it publishes that worktree's possibly-older
   copies over newer work everywhere — `token-guard.js` alone moved 795 lines in the unpushed
   batch. **Main checkout only, after merging.** Check mode (no `--write`) is safe to run anywhere.

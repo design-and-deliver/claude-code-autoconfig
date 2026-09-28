@@ -9,7 +9,7 @@
  * Read-only twin of /continue: /continue *runs* the next unchecked substep; this
  * just shows where every in-flight plan stands.
  *
- * Parses the plan-authoring format (.claude/rules/plan-authoring.md):
+ * Parses the plan-authoring format (.claude/skills/plan-authoring/SKILL.md):
  *   - phases:   `## Phase N — title`
  *   - substeps: `### ☑|☐ N.k · S|M|L · ~<time> — title`  (effort tag optional)
  *   - a `## Ledger` section marks a doc as an executable plan (vs a design doc).

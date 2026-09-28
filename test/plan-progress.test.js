@@ -7,7 +7,7 @@
  * 3.10 (decompose render, CC 32) gets: the "full render, byte-exact" test below is the
  * refactor guard — if 3.10 changes that block, the refactor changed behavior.
  *
- * Contracts pinned here (from .claude/rules/plan-authoring.md):
+ * Contracts pinned here (from .claude/skills/plan-authoring/SKILL.md):
  *   - a doc is an executable plan ONLY with a `## Ledger` section AND >=1 parseable substep;
  *   - the substep grammar is `### ☑|☐ N.k · S|M|L · ~<N>m|~<N>h — title` — `~45 min` style
  *     tags make the whole doc INVISIBLE (the 2026-07-24 discovery that nearly orphaned the
