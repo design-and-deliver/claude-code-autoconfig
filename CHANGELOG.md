@@ -4,6 +4,9 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.240
+- fix(feedback): Team feedback in FEEDBACK.md is now reliably loaded into every session (previously Claude only read it when it chose to)
+
 ## v1.0.239
 - feat(feedback): Team feedback you commit is now automatically turned into targeted rules, leaving a link to each new rule in FEEDBACK.md
 
@@ -212,8 +215,4 @@
 ## v1.0.191
 - docs(readme): list terminal-title.directive.md in the hooks tree
 - feat(terminal-title): add opt-in CLAUDE_TITLE_DEBUG forensic logging
-
-## v1.0.190
-- docs(readme): document the bundled terminal-title hook
-- feat(terminal-title): bundle the terminal-title hook into core
 
