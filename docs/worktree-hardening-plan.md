@@ -131,7 +131,7 @@ worktree of both repos, and `git bundle verify` passes on both bundles
 
 **Commit:** `feat(worktrees): snapshot every worktree before removals` + `Changelog: none`
 
-### ☐ 1.1 · S · ~20m — Guard the dev-box worktree wiring with a test
+### ☑ 1.1 · S · ~20m — Guard the dev-box worktree wiring with a test
 
 **Budget:** files 3 · new 0 (+1 test) · trips ≈ 8
 
@@ -539,3 +539,10 @@ worktree belonging to a live session was removed
   - Old `_worktree-backups` folders are deleted by hand; there is no automatic retention.
   - Running the script needs the session out of the worktree (`ExitWorktree keep`, run it by the
     worktree's path to the script, then `EnterWorktree path=…`).
+- 2026-09-29 — **1.1** — done (`91b04bf`) [same session as 1.0 · ~12 trips · peak ~120k · stays S]
+  - The new test failed first on the real gap (`worktree-gate matcher is missing MultiEdit`),
+    then passed after the local fix. Skip path checked by renaming the file.
+  - The main checkout's `settings.local.json` got the same one-line matcher edit rather than a
+    whole-file copy. Diffing showed that line was the only difference, and an in-place edit can't
+    overwrite another session's local changes.
+  - Next: 2.1. Refresh with `git merge main` first.
