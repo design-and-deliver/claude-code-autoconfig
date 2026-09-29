@@ -478,23 +478,23 @@ CCA · `git branch --merged main | grep plan/worktree-hardening` is empty in bot
 
 **Commit:** none of its own in CCA (the landing merges the plan). JAE gets the commit above.
 
-### ☐ 7.2 · S · ~20m — Clear the worktree backlog in CCA and JAE
+### ☑ 7.2 · S · ~20m — Clear the worktree backlog in CCA and JAE
 
 **Budget:** files 0 · new 0 · trips ≈ 8
 
 **Read:** this doc (⛔ + 7.2) · Ledger tail
 
-- [ ] Run `node scripts/snapshot-worktrees.js C:\CODE\claude-code-autoconfig C:\CODE\job-agent-extension` and record the backup folder in the Ledger.
-- [ ] CCA: run `node .claude/scripts/sync-worktrees.js`, show the user the list, and run it with
+- [x] Run `node scripts/snapshot-worktrees.js C:\CODE\claude-code-autoconfig C:\CODE\job-agent-extension` and record the backup folder in the Ledger.
+- [x] CCA: run `node .claude/scripts/sync-worktrees.js`, show the user the list, and run it with
   `--write` only after they approve.
   Expected results: 5 empty orphan folders reaped; the merged `worktree-agent-matcher` and
   `worktree-quiet-verdict-cards` reclaimed; and this plan's worktree reclaimed, since it is now
   merged. Use `git worktree prune` for the stray `pub226` registration from the
   `cca-cost-control` scratchpad if its path is gone. If the path exists, ask first.
-- [ ] JAE: run fleet first, then `sync-worktrees.js --project-dir C:\CODE\job-agent-extension`
+- [x] JAE: run fleet first, then `sync-worktrees.js --project-dir C:\CODE\job-agent-extension`
   (dry run), get the user's yes on the list, then `--write`. Expected: most of the 19 merged worktrees reclaimed, and any live
   session's worktree kept, with its guard named.
-- [ ] Report JAE's unmerged branches with their behind counts (`worktree-anon-cap`,
+- [x] Report JAE's unmerged branches with their behind counts (`worktree-anon-cap`,
   `plan/autonomous-scan`, `worktree-bounce-once`, `plan/synced-prefs`,
   `plan/token-saver-rename`). Land, refresh or abandon is the user's decision; don't act on
   them.
@@ -725,3 +725,22 @@ worktree belonging to a live session was removed
   - Verify deviation: both `plan/worktree-hardening` branches still exist (`--keep-worktree` keeps
     the checked-out branch). 7.2 removes the worktrees and deletes the branches.
   - Next: 7.2. Snapshot again first.
+- 2026-09-29 — **7.2** — done, plan complete (Ledger only) [1 session · ~14 trips · stays S]
+  - Snapshot: `C:\CODE\_worktree-backups\2026-09-29_023731` (fresh this session). Dry runs shown
+    to the user, who approved both, plus removing CCA's own plan worktree by hand.
+  - CCA: `git worktree list` 6 → 2 (main + token-saver-rename). `--write` deleted 5 empty orphan
+    folders, reclaimed agent-matcher and quiet-verdict-cards, pruned the stale `pub226`
+    registration (its path was gone), and deleted 3 merged branches (incl. `plan/create-vid-api`).
+    worktree-hardening was KEEP (last write 19m ago, under the 30m idle guard). It had no junction
+    and a clean tree, so it was removed with plain `git worktree remove` + `branch -d`.
+    Gotcha: the first try failed with "Permission denied" because this shell's cwd was inside it.
+  - JAE: fleet showed 0 live sessions. `git worktree list` 27 → 6. Reclaimed 21 merged worktrees
+    and deleted their 21 branches (incl. `plan/worktree-hardening`). 7 left files behind; they
+    went to `.trash/`, and the same run's sweep emptied it. The run took over 10 minutes (deleting
+    node_modules). No live session's worktree was touched.
+  - JAE unmerged, reported to the user and not touched: worktree-anon-cap (3 commits, 8 behind,
+    1 uncommitted, overlaps autonomous-scan on 2 files), plan/autonomous-scan (20, 268 behind),
+    worktree-bounce-once (1, 204 behind, 1 uncommitted), plan/synced-prefs (1, 267 behind,
+    2 uncommitted), plan/token-saver-rename (1, 198 behind), dev/andrew (9, 1220 behind, no
+    worktree, tip 311d old).
+  - Plan complete. Deferred items remain as listed.
