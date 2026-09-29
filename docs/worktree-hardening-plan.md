@@ -107,7 +107,7 @@ dev box. The facts a substep needs are copied into it.
 
 ## Phase 1 — Stop the repo lying
 
-### ☐ 1.0 · M · ~30m — Back up every worktree before anything removes one
+### ☑ 1.0 · M · ~30m — Back up every worktree before anything removes one
 
 **Budget:** files 3 · new 1 (+1 test) · trips ≈ 12
 
@@ -527,3 +527,15 @@ worktree belonging to a live session was removed
   code. Revisit after 6.2.
 
 ## Ledger
+
+- 2026-09-29 — **1.0** — done (`0b5ab5f`) [1 session · ~30 trips · peak ~110k · stays M]
+  - **Added mid-plan at the user's request:** a backup before anything is removed, plus a
+    "snapshot → dry run → user approves" rule now written into the Decisions, the ⛔ traps, and
+    3.1, 4.1, 4.2, 7.1, 7.2. The trap section moved to lines 71–106.
+  - Baseline snapshot: `C:\CODE\_worktree-backups\2026-09-29_003631` (73 MB). CCA: 6 worktrees
+    (`pub226` is missing on disk; its commits are in the bundle). JAE: 25 worktrees, most with 1
+    uncommitted file (probably local-settings drift; check in 4.1/4.2). JAE main has 26.
+    `git bundle verify` passed on both bundles.
+  - Old `_worktree-backups` folders are deleted by hand; there is no automatic retention.
+  - Running the script needs the session out of the worktree (`ExitWorktree keep`, run it by the
+    worktree's path to the script, then `EnterWorktree path=…`).
