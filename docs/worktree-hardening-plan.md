@@ -404,24 +404,24 @@ shows `STALE` on `plan/autonomous-scan` (263 behind) · `npm test` exit 0
 
 ## Phase 6 — Let Claude Code do what it now does
 
-### ☐ 6.1 · M · ~40m — .worktreeinclude for the files bootstrap copies
+### ☑ 6.1 · M · ~40m — .worktreeinclude for the files bootstrap copies
 
 **Budget:** files 3 · new 1 · trips ≈ 12
 
 **Read:** this doc (⛔ + 6.1) · `scripts/bootstrap-worktree.js:27-38,79-152`
 
-- [ ] Create a tracked `.worktreeinclude` listing bootstrap's `COPY_FILES` (`:27-33`) and
+- [x] Create a tracked `.worktreeinclude` listing bootstrap's `COPY_FILES` (`:27-33`) and
   `COPY_MATCHING` (`:36-38`) in gitignore syntax.
-- [ ] Test it empirically on 2.1.280. Merge this branch into a scratch branch, run
+- [x] Test it empirically on 2.1.280. Merge this branch into a scratch branch, run
   `EnterWorktree name=wti-probe` from the main checkout, and check whether
   `.claude/settings.local.json` and `scripts/hook-fleet.local.json` arrived. Then `ExitWorktree
   remove`. Record the result in the Ledger.
-- [ ] **If the files arrived:** bootstrap skips any file that already exists and says so. Its job
+- [x] **If the files arrived:** bootstrap skips any file that already exists and says so. Its job
   shrinks to `installDeps` plus a fallback copy. The rule's bootstrap section says
   `.worktreeinclude` copies the files and bootstrap installs dependencies.
   **If they did not arrive:** keep `.worktreeinclude`, since `claude -w` and subagent worktrees
   honor it per the docs, and leave bootstrap unchanged.
-- [ ] Confirm `.worktreeinclude` is not in package.json `files`. It must not ship.
+- [x] Confirm `.worktreeinclude` is not in package.json `files`. It must not ship.
 
 **Verify:** the probe result is in the Ledger · `node scripts/bootstrap-worktree.js` in the
 worktree prints the skip lines when the files are already present · `npm test` exit 0
@@ -668,3 +668,20 @@ worktree belonging to a live session was removed
     13/13, fleet 8/8, `npm test` exit 0.
   - No snapshot: nothing was removed.
   - Next: 6.1. Refresh from main first.
+- 2026-09-29 — **6.1** — done (`120d993`) [1 session · ~14 trips · stays M]
+  - Probe on 2.1.280: **the files arrived.** `EnterWorktree` can't create a worktree from inside
+    one, so: `ExitWorktree keep` → an untracked copy of `.worktreeinclude` in the main checkout
+    (instead of a scratch-branch merge, so the main checkout's branch never moved) →
+    `EnterWorktree name=wti-probe`. Arrived: `settings.local.json`, `cca.config.json`,
+    `deploy-to-npmjs.md`, `terminal-title-fleet.local.json`, `sounds/status-beeps.enabled`.
+    `hook-fleet.local.json` didn't arrive because the main checkout doesn't have it either.
+    `.worktreeinclude` is read from the source checkout's working tree, and an untracked copy works.
+  - Cleanup: `ExitWorktree remove` (the probe had no `node_modules`, so no junction risk), temp
+    file deleted, branch `worktree-wti-probe` gone, re-entered this worktree by `path`.
+  - Bootstrap's `copyOne` skips a file already at the destination (never overwrites) and prints
+    `already present — .worktreeinclude`. The rule's bootstrap section now says
+    `.worktreeinclude` copies the files and bootstrap installs deps (+ fallback copy).
+  - The root `.worktreeinclude` doesn't ship: package.json `files` is `bin` + `.claude` only.
+  - Only live on the main checkout after 7.1's merge. Until then new worktrees rely on bootstrap.
+  - `npm test` exit 0. No snapshot: the only removal was the empty probe this session made.
+  - Next: 6.2 [opus]. Refresh from main first.
