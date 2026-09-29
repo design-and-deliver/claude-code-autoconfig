@@ -161,6 +161,11 @@ const stateOf = (s) => {
   return 'idle';
 };
 
+// A branch this far behind its base is flagged STALE on the board, and more registered worktrees
+// than PILEUP_TREES gets one nudge toward /sync-worktrees. Both are prompts, never actions.
+const STALE_BEHIND = 50;
+const PILEUP_TREES = 12;
+
 // ---- 2. worktrees + git state ----------------------------------------
 // The FIRST entry of `git worktree list --porcelain` is always the main checkout; its branch is
 // the base every other branch is measured against. Detecting it beats hardcoding 'main' — a repo
@@ -209,6 +214,11 @@ function enrich(trees, baseBranch, baseDir) {
     t.unlanded = log ? log.split(/\r?\n/).filter(Boolean) : [];
     const names = git(t.dir, ['diff', '--name-only', `${baseBranch}...HEAD`]);
     t.files = names ? names.split(/\r?\n/).filter(Boolean) : [];
+    // How far the base has moved on since this branch forked. The unlanded count says how much
+    // work is waiting; this says how stale it has grown — a branch hundreds of commits behind is a
+    // merge nobody wants to do, and the board is the only place that number surfaces unasked.
+    t.behind = Number(git(t.dir, ['rev-list', '--count', `HEAD..${baseBranch}`])) || 0;
+    t.stale = t.behind > STALE_BEHIND;
   }
   return trees;
 }
@@ -292,6 +302,7 @@ if (opts.json) {
     sameTree: sameTreeCollisions(mine, trees),
     duplicates: duplicateTitles(mine),
     overlaps: fileOverlaps(trees),
+    pileUp: trees.length - 1 > PILEUP_TREES,
   }, null, 2));
   process.exit(0);
 }
@@ -416,16 +427,23 @@ if (landable.length) {
     const ov = overlapCount.get(t.branch) || 0;
     const flags = [
       `${t.unlanded.length} commit${t.unlanded.length === 1 ? '' : 's'}`,
+      `${t.behind} behind`,
       ov ? `${ov} overlapping file${ov === 1 ? '' : 's'}` : 'no overlap',
       t.dirty.length ? `${t.dirty.length} uncommitted` : 'clean',
       busy ? '⚠ session still active' : 'session idle',
     ];
-    L.push(`  ${t.branch}`);
+    L.push(`  ${t.branch}${t.stale ? `  ⚠ STALE (${t.behind} behind ${baseBranch})` : ''}`);
     L.push(`    ${flags.join(' · ')}`);
   }
   L.push('');
   L.push(`  merge from ${baseDir} (never from inside a worktree):`);
   L.push(`    git merge ${ordered[0].branch}`);
+}
+
+// Pile-up is a hygiene nudge, so it trails the board rather than competing with the hazards.
+if (wtN > PILEUP_TREES) {
+  L.push('');
+  L.push(`${wtN} worktrees registered — run /sync-worktrees`);
 }
 
 // LAND: the second verb lives here when it is built — it would consume this same ordering, refuse

@@ -105,6 +105,53 @@ test('a clean tree reports no dirty files at all', () => {
   }
 });
 
+// ---- behind counts, STALE, pile-up ------------------------------------
+// A second repo, so the porcelain fixture above stays exactly two rows. One branch carries an
+// unlanded commit and then falls 60 commits behind main; twelve more empty worktrees make 13
+// registered — one over the pile-up threshold.
+const repo2 = path.join(tmp, 'repo2');
+fs.mkdirSync(repo2, { recursive: true });
+const git2 = (...args) =>
+  execFileSync('git', args, { cwd: repo2, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+git2('init', '--initial-branch=main');
+git2('config', 'user.email', 'test@example.com');
+git2('config', 'user.name', 'Fleet Test');
+git2('config', 'commit.gpgsign', 'false');
+git2('commit', '--allow-empty', '-m', 'seed');
+const staleDir = path.join(tmp, 'wt-stale');
+git2('worktree', 'add', '-b', 'old-work', staleDir);
+execFileSync('git', ['commit', '--allow-empty', '-m', 'unlanded'], { cwd: staleDir, stdio: 'ignore' });
+for (let i = 0; i < 60; i++) git2('commit', '--allow-empty', '-m', `main ${i}`);
+for (let i = 0; i < 12; i++) git2('worktree', 'add', '-b', `idle-${i}`, path.join(tmp, `wt-${i}`));
+
+const run2 = (...extra) => execFileSync('node', [SCRIPT, '--project-dir', repo2, ...extra], {
+  encoding: 'utf8',
+  env: { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_CODE_SESSION_ID: '' },
+});
+
+test('--json carries behind and stale for a branch 60 commits behind', () => {
+  const t = JSON.parse(run2('--json')).trees.find((x) => x.branch === 'old-work');
+  assert(t && t.behind === 60, `expected behind 60, got ${t && t.behind}`);
+  assert(t.stale === true, 'a branch 60 behind must be stale');
+});
+
+test('the UNLANDED row prints the behind count and a STALE marker', () => {
+  const out = run2();
+  assert(/old-work\s+⚠ STALE \(60 behind main\)/.test(out), `no STALE marker:\n${out}`);
+  assert(out.includes('60 behind'), `no behind count in the flags:\n${out}`);
+});
+
+test('13 registered worktrees print the pile-up line', () => {
+  const out = run2();
+  assert(out.includes('13 worktrees registered — run /sync-worktrees'), `no pile-up line:\n${out}`);
+  assert(JSON.parse(run2('--json')).pileUp === true, '--json pileUp must be true');
+});
+
+test('12 or fewer worktrees print no pile-up line', () => {
+  git2('worktree', 'remove', path.join(tmp, 'wt-0'));
+  assert(!run2().includes('worktrees registered'), 'pile-up line must not show at 12');
+});
+
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
 
 summary();
