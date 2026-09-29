@@ -1142,6 +1142,51 @@ test('ensureFeedbackImport rewrites CLAUDE.md only when FEEDBACK.md exists', () 
   assert(ensureFeedbackImport(dir) === false, 'second run is a no-op');
 });
 
+// ── Rule pointers leave FEEDBACK.md for EXTRACTED.md ─────────────────────────
+// CLAUDE.md imports FEEDBACK.md, so pointers /extract-rules used to leave there cost context every
+// session. Upgrades move them to EXTRACTED.md (never imported) and rewrite the header sentence.
+console.log();
+console.log('FEEDBACK.md rule pointers move to EXTRACTED.md:');
+
+const { migrateFeedbackPointers, splitPointers, OLD_HEADER, NEW_HEADER } = require('../bin/lib/feedback-extracted.js');
+
+const OLD_FEEDBACK = [
+  '# Team Feedback',
+  '',
+  `Claude reads this file but must never write to it, ${OLD_HEADER}`,
+  '',
+  '---',
+  '',
+  '- → Moved to rule [api.md](../rules/api.md) (2026-09-28)',
+  '- Be terse in PR titles.',
+  '',
+].join('\n');
+
+test('splitPointers pulls pointers below the separator and rewrites the header', () => {
+  const out = splitPointers(OLD_FEEDBACK);
+  assert(out.pointers.length === 1 && out.pointers[0].startsWith('- → Moved to rule [api.md]'), `got ${JSON.stringify(out.pointers)}`);
+  assert(!out.feedback.includes('Moved to rule'), 'pointer should be gone from FEEDBACK.md');
+  assert(out.feedback.includes(NEW_HEADER) && !out.feedback.includes(OLD_HEADER), 'header should be rewritten');
+  assert(out.feedback.includes('- Be terse in PR titles.'), 'real feedback must stay');
+});
+
+test('splitPointers leaves a current FEEDBACK.md alone', () => {
+  assert(splitPointers(`# Team Feedback\n\n${NEW_HEADER}\n\n---\n\n- Be terse.\n`) === null, 'expected no change');
+});
+
+test('migrateFeedbackPointers appends to EXTRACTED.md and is idempotent', () => {
+  const dir = makeProject('feedback-extracted');
+  cleanups.push(dir);
+  const feedbackDir = path.join(dir, '.claude', 'feedback');
+  fs.mkdirSync(feedbackDir, { recursive: true });
+  fs.writeFileSync(path.join(feedbackDir, 'FEEDBACK.md'), OLD_FEEDBACK);
+  assert(migrateFeedbackPointers(dir) === 1, 'expected one pointer moved');
+  const extracted = fs.readFileSync(path.join(feedbackDir, 'EXTRACTED.md'), 'utf8');
+  assert(extracted.startsWith('<!-- @description') && extracted.includes('- → Moved to rule [api.md]'), `got:\n${extracted}`);
+  assert(migrateFeedbackPointers(dir) === 0, 'second run is a no-op');
+  assert(fs.readFileSync(path.join(feedbackDir, 'EXTRACTED.md'), 'utf8') === extracted, 'EXTRACTED.md unchanged on rerun');
+});
+
 // ── Cleanup ──────────────────────────────────────────────────────────────────
 for (const dir of cleanups) {
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }

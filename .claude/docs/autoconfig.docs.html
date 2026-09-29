@@ -1946,7 +1946,7 @@ Scan these locations for \`.md\` files containing potential rules. **Skip any th
 
 1. \`CLAUDE.md\` (project root)
 2. \`CLAUDE.local.md\` (project root, if present)
-3. All \`.md\` files in \`.claude/\` recursively (feedback, commands, etc.) — **excluding** \`.claude/rules/\` and \`.claude/commands/extract-rules.md\`
+3. All \`.md\` files in \`.claude/\` recursively (feedback, commands, etc.) — **excluding** \`.claude/rules/\`, \`.claude/commands/extract-rules.md\`, and \`.claude/feedback/EXTRACTED.md\`
 4. Any nested \`CLAUDE.md\` files in subdirectories (e.g., \`src/CLAUDE.md\`)`
             },
             'gls': {
@@ -2227,7 +2227,7 @@ function installTarget(cmd) {`
  * @name Feedback Rule Check
  * @description On commit, holds new FEEDBACK.md entries once so /extract-rules can turn them into rules.
  *              The new lines go through /extract-rules --source <FEEDBACK.md> --staged. Entries
- *              that convert become .claude/rules/ files (leaving a pointer line behind); the
+ *              that convert become .claude/rules/ files (logged in EXTRACTED.md, not FEEDBACK.md); the
  *              rest stay as feedback, and the retried commit goes through.
  * @trigger PreToolUse on Bash (git commit)
  */
@@ -2422,7 +2422,7 @@ Maintain it across the session:
                 content: `# Team Feedback
 
 **This file is for human-authored corrections and guidance only.**
-Claude reads this file but must never write to it, except to replace an entry /extract-rules turned into a rule with a pointer line to that rule. When Claude discovers project context, gotchas, or learnings, it should append to the \`## Discoveries\` section in CLAUDE.md instead.
+Claude reads this file but must never write to it, except to remove an entry /extract-rules turned into a rule (EXTRACTED.md, next to this file, logs where each one went). When Claude discovers project context, gotchas, or learnings, it should append to the \`## Discoveries\` section in CLAUDE.md instead.
 
 ---`
             },

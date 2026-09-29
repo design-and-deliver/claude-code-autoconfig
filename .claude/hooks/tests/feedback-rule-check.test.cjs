@@ -77,7 +77,16 @@ test('lets the retry through once the same lines were evaluated', () => {
   assert.strictEqual(run(dir, 'git commit -m "feedback"'), null);
 });
 
-test('a retry after conversion (pointer line replaces the entry) goes through', () => {
+test('a retry after conversion (entry removed, logged in EXTRACTED.md) goes through', () => {
+  const dir = tmpRepo();
+  writeFeedback(dir, '- Always run the api tests after touching src/api/.\n- Be terse in PR titles.\n');
+  reasonOf(run(dir, 'git commit -m "feedback"'));
+  fs.writeFileSync(path.join(dir, '.claude', 'feedback', 'EXTRACTED.md'), '- → Moved to rule [api-tests.md](../rules/api-tests.md) (2026-09-29)\n');
+  writeFeedback(dir, '- Be terse in PR titles.\n');
+  assert.strictEqual(run(dir, 'git commit -m "feedback"'), null);
+});
+
+test('a retry after conversion by an older version (pointer line replaces the entry) goes through', () => {
   const dir = tmpRepo();
   writeFeedback(dir, '- Always run the api tests after touching src/api/.\n- Be terse in PR titles.\n');
   reasonOf(run(dir, 'git commit -m "feedback"'));
