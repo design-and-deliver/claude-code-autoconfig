@@ -451,25 +451,25 @@ better on CCA · `npm test` exit 0
 
 ## Phase 7 — Land and adopt
 
-### ☐ 7.1 · M · ~50m — Merge once with /land, sync the fleet, adopt in JAE
+### ☑ 7.1 · M · ~50m — Merge once with /land, sync the fleet, adopt in JAE
 
 **Budget:** files 4 · new 0 · trips ≈ 15
 
 **Read:** this doc (⛔ + 7.1) · Ledger tail
 
-- [ ] `ExitWorktree keep`, then run `node scripts/snapshot-worktrees.js C:\CODE\claude-code-autoconfig C:\CODE\job-agent-extension` and record the backup folder in the Ledger.
-- [ ] Use the plan's own command to land it: `ExitWorktree keep`, then from the CCA main checkout
+- [x] `ExitWorktree keep`, then run `node scripts/snapshot-worktrees.js C:\CODE\claude-code-autoconfig C:\CODE\job-agent-extension` and record the backup folder in the Ledger.
+- [x] Use the plan's own command to land it: `ExitWorktree keep`, then from the CCA main checkout
   run `node .claude/scripts/land.js plan/worktree-hardening --keep-worktree`. Keep the worktree
   until 7.2 is done. If it exits 2 or 3, stop and ask.
-- [ ] Check fleet for live sessions in JAE. In JAE's main checkout, switch to
+- [x] Check fleet for live sessions in JAE. In JAE's main checkout, switch to
   `plan/worktree-hardening` (4.1 may have created it) and copy in the files that are new to it:
   `land.js`, `land-core.js`, `worktree-safety.js`, `land.md`. Sync is adopt-only and skips files
   a target doesn't already have.
-- [ ] From the CCA main checkout, run `node scripts/sync-hook-fleet.js --write`. This overwrites
+- [x] From the CCA main checkout, run `node scripts/sync-hook-fleet.js --write`. This overwrites
   the new JAE copies and JAE's diverged `sync-worktrees.js`/`.md` with the canonical versions.
-- [ ] JAE rule: replace the body of the "merge is REFUSED because main's tree is dirty" section
+- [x] JAE rule: replace the body of the "merge is REFUSED because main's tree is dirty" section
   (`:187-208`) with a pointer to `/land`, which now does that check.
-- [ ] In JAE, commit `chore: adopt /land and canonical sync-worktrees (synced from CCA)`, then
+- [x] In JAE, commit `chore: adopt /land and canonical sync-worktrees (synced from CCA)`, then
   land JAE's branch with JAE's new `land.js`.
 
 **Verify:** `node scripts/sync-hook-fleet.js` (check mode) shows no drift · `npm test` passes in
@@ -704,3 +704,24 @@ worktree belonging to a live session was removed
     because of the lookup.
   - `npm test` exit 0. No snapshot: nothing was removed.
   - Next: 7.1. Refresh from main first.
+- 2026-09-29 — **7.1** — done (CCA ff to `5427524`, JAE `defc989`) [1 session · ~25 trips · stays M]
+  - Refreshed from main first (merge `5427524`, 1 commit behind). `npm test` exit 0 before landing.
+  - Snapshot: `C:\CODE\_worktree-backups\2026-09-29_022334`. No removal in this substep (both
+    landings used `--keep-worktree`), so the dry runs showed nothing to remove.
+  - Bootstrap problem: `land.js` and `snapshot-worktrees.js` weren't on main yet, so both ran from
+    the worktree's copy against the main checkout. That works because land.js uses the cwd.
+  - CCA: `land.js --keep-worktree --no-push` fast-forwarded main (25 commits). Pushed separately in
+    the background, because the pre-push suite takes ~4m.
+  - JAE: couldn't switch main to `plan/worktree-hardening`, because JAE's worktree has it checked
+    out. Copied the 10 canonical files into that worktree instead (land.js, land-core.js,
+    worktree-safety.js, land.md, fleet.js, fleet.md, claim-registry.js, sync-worktrees.js,
+    sync-worktrees.md, plan-authoring SKILL.md) and replaced the refused-merge rule body with a
+    /land pointer. Committed `defc989`, landed it with JAE's new land.js (fast-forward, 2 commits),
+    and pushed. JAE fleet check: all in sync.
+  - 4.1's trash fallback (`315e4c3`) is in `reclaim-merged-worktrees.js`, which isn't synced, so it
+    survives.
+  - `sync-hook-fleet --write`: only wifi-app drifted (claim-registry, SKILL.md, fleet.md, fleet.js).
+    Those changes are uncommitted in wifi-app. Check mode exit 0.
+  - Verify deviation: both `plan/worktree-hardening` branches still exist (`--keep-worktree` keeps
+    the checked-out branch). 7.2 removes the worktrees and deletes the branches.
+  - Next: 7.2. Snapshot again first.
