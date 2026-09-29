@@ -291,7 +291,7 @@ all three files · `npm test` exit 0
 
 ## Phase 4 — Cleanup that actually runs
 
-### ☐ 4.1 · M · ~45m — Find why JAE's reclaim hook fails with "Directory not empty" [opus]
+### ☑ 4.1 · M · ~45m — Find why JAE's reclaim hook fails with "Directory not empty" [opus]
 
 **Budget:** files 2 (read) · new 0 · trips ≈ 12
 
@@ -300,17 +300,17 @@ all three files · `npm test` exit 0
 This substep gathers evidence first (per CLAUDE.md, Debugging Methodology). Don't write a fix
 until the cause is shown.
 
-- [ ] Read the log's 4 failure lines. For each worktree it names, check whether the folder still
+- [x] Read the log's 4 failure lines. For each worktree it names, check whether the folder still
   exists and what is in it: `ls -la`, and the `node_modules` junction check.
-- [ ] Pick one merged, clean JAE worktree that is **not** a live session's working directory
+- [x] Pick one merged, clean JAE worktree that is **not** a live session's working directory
   (check fleet first). Run `node .claude/hooks/reclaim-merged-worktrees.js --dry-run`, then
   run `node scripts/snapshot-worktrees.js C:\CODE\claude-code-autoconfig C:\CODE\job-agent-extension`, get the user's yes on the one worktree you'll remove, and reproduce the removal by hand with `git worktree remove <path>`, and record the exact error.
   If the folder is left behind, list its contents and check which process holds it open
   (`handle.exe` if installed; otherwise note that it's unknown).
-- [ ] Write the cause in the Ledger with evidence. Typical suspects are gitignored files left in
+- [x] Write the cause in the Ledger with evidence. Typical suspects are gitignored files left in
   the folder, a locked file, or a junction. State which fallback fixes it:
   `worktree-safety.safeRemoveWorktree`'s trash fallback, or something else.
-- [ ] If the fix is a call to `safeRemoveWorktree`, or a small (≤ 10-line) change to
+- [x] If the fix is a call to `safeRemoveWorktree`, or a small (≤ 10-line) change to
   `reclaim()`, make it in JAE on branch `plan/worktree-hardening` (create it) and commit. Don't
   merge; 7.1 merges it. If the fix is bigger, record it for 4.2.
 
@@ -582,3 +582,33 @@ worktree belonging to a live session was removed
     elsewhere (e.g. `~/.claude/skills`) still lacks the `/land` sentence.
   - Main had nothing new; the refresh was a no-op.
   - Next: 4.1 [opus]. Refresh from main first.
+- 2026-09-29 — **4.1** — done (JAE `315e4c3` on `plan/worktree-hardening`, unmerged) [1 session · ~30 trips · stays M]
+  - **Cause, reproduced 3/3 in a scratch repo:** a process still writing inside the worktree
+    during `git worktree remove` → `error: failed to delete '<wt>': Directory not empty`, folder
+    left behind (`node_modules/`). Git **de-registers before deleting**, so the leftover is an
+    unregistered orphan the hook never retries. The hook's header said the opposite; corrected.
+  - The 4 logged failures (settings-browser-verify, zr-company-fallback, zr-title-cleanup,
+    search-order) no longer exist on disk or in `git worktree list`, so their contents couldn't
+    be inspected. search-order's last transcript write was ~52 min before its failure, past the
+    30m idle guard, which fits an idle-but-open session or a watcher. Which process held each one
+    is unknown, and `handle.exe` can't be used after the fact.
+  - Ruled out as the logged error: open file handle (removed cleanly, POSIX delete semantics);
+    process cwd inside the tree → `Permission denied`, folder left; paths > 260 chars (JAE has
+    12, max 279, `core.longpaths` unset) → `Filename too long`, folder left. The last two are
+    real failure modes and leave the same orphan, and the same fallback handles them.
+  - **Fix:** a new `trashLeftover()` in the JAE hook runs when git fails, the tree is no longer
+    registered, and the leftover folder can be renamed to `%TEMP%/claude-worktree-trash`. Then
+    it prunes, and `branch -d` still runs. It is its own hook-local helper, not
+    `worktree-safety.safeRemoveWorktree`: JAE has no copy of that file. The change is 13 lines,
+    3 over the plan's 10-line cap; the user approved it. It was checked by running the patched
+    hook against a live writer: reclaimed, leftover in trash, branch deleted. The JAE dry run is
+    clean.
+  - **Second bug, deliberately NOT fixed (user call):** `gitTry()` `.trim()`s porcelain output,
+    so the first line `" M .claude/settings.local.json"` loses its leading space and `slice(3)`
+    yields `claude/settings.local.json`, which misses `CHURN`. That's why 21 of 26 JAE worktrees
+    read "has uncommitted changes". The fix is one line (don't trim status output), but it would
+    make roughly 17 worktrees auto-reclaimable on the next JAE session, with no snapshot or dry
+    run. It belongs in 4.2 and has to be sequenced with 7.2's approved backlog clear.
+  - No snapshot: no real worktree was removed (scratch repo only). JAE worktree
+    `.claude/worktrees/worktree-hardening` was created for the branch.
+  - Next: 4.2. Refresh from main first.
