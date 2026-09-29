@@ -268,7 +268,7 @@ and passing) · `npm test` exit 0
 
 **Commit:** `feat(worktrees): /land — conflict-checked merge, safe removal, push` + `Changelog: none`
 
-### ☐ 3.2 · M · ~30m — Point the rule, the skill and /fleet at /land
+### ☑ 3.2 · M · ~30m — Point the rule, the skill and /fleet at /land
 
 **Budget:** files 3 · new 0 · trips ≈ 9
 
@@ -575,3 +575,10 @@ worktree belonging to a live session was removed
     pins `core.autocrlf false`, because a system-level `true` turned merged files into CRLF.
   - No snapshot this substep: nothing real was removed (tests use throwaway repos only).
   - Next: 3.2. Refresh from main first.
+- 2026-09-29 — **3.2** — done (`e54b853`) [1 session · ~8 trips · peak ~40k · stays M]
+  - Rule step 5 now says a live plan branch isn't landed until the plan is done, replacing the
+    old `remove` vs `keep` prompt, which `/land` answers itself. Rule is 66 lines.
+  - Only this repo's copy of the plan-authoring skill was edited. Any hand-ported copy
+    elsewhere (e.g. `~/.claude/skills`) still lacks the `/land` sentence.
+  - Main had nothing new; the refresh was a no-op.
+  - Next: 4.1 [opus]. Refresh from main first.
