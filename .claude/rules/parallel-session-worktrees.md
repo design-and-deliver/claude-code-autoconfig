@@ -30,11 +30,13 @@ See the `plan-authoring` skill, Branch discipline.
 
 ## ⛔ Bootstrap is not optional
 
-A worktree has every tracked file and no gitignored one. Bootstrap copies these from the main
-checkout and runs `npm install`: `.claude/settings.local.json` (else every Bash call re-prompts),
-`node_modules/` (`complexity-ratchet.test.js` loads eslint), `scripts/hook-fleet.local.json`
-(the fleet list), `.claude/cca.config.json`, `.claude/commands/deploy-to-npmjs.md`.
-Run it before the first edit.
+A worktree has every tracked file and no gitignored one. The tracked `.worktreeinclude` makes
+`EnterWorktree` (and `claude -w`, subagent worktrees) copy the gitignored dev-box files:
+`.claude/settings.local.json` (else every Bash call re-prompts), `scripts/hook-fleet.local.json`
+(the fleet list), `.claude/cca.config.json`, `.claude/commands/deploy-to-npmjs.md`. Bootstrap
+installs dependencies — `node_modules/` (`complexity-ratchet.test.js` loads eslint) — and copies
+any listed file that is still missing, e.g. after a plain `git worktree add`. Run it before the
+first edit.
 
 ## ⛔ node_modules junction is opt-in, not automatic
 

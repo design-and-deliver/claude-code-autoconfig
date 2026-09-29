@@ -23,7 +23,9 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 // Gitignored files copied from the main checkout. Each is optional — a box that never made
-// one just skips it. Order is cosmetic (it is the report order).
+// one just skips it. Order is cosmetic (it is the report order). Mirrored in the tracked
+// `.worktreeinclude`, which makes Claude Code copy them itself; this copy is the fallback
+// for worktrees made by plain `git worktree add`. Keep the two lists in step.
 const COPY_FILES = [
   '.claude/settings.local.json',              // permissions — without it every Bash call re-prompts
   '.claude/cca.config.json',                  // this repo's own CCA config (e.g. /gls screenshot dir)
@@ -52,9 +54,12 @@ function mainCheckout(cwd) {
 }
 
 function copyOne(relPath, from, to, report) {
+  const dest = path.join(to, relPath);
+  // Claude Code copies `.worktreeinclude` entries on EnterWorktree (verified on 2.1.280), so
+  // usually these are already here — never overwrite; a worktree may have edited its copy.
+  if (fs.existsSync(dest)) return report.push(`  – skipped  ${relPath} (already present — .worktreeinclude)`);
   const src = path.join(from, relPath);
   if (!fs.existsSync(src)) return report.push(`  – skipped  ${relPath} (not on the main checkout)`);
-  const dest = path.join(to, relPath);
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   fs.copyFileSync(src, dest);
   report.push(`  ✓ copied   ${relPath}`);
