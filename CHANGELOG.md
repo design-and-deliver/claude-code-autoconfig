@@ -4,6 +4,9 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.241
+- feat(feedback): Feedback turned into rules is now logged in a separate EXTRACTED.md, keeping FEEDBACK.md lean for Claude
+
 ## v1.0.240
 - fix(feedback): Team feedback in FEEDBACK.md is now reliably loaded into every session (previously Claude only read it when it chose to)
 
@@ -211,8 +214,4 @@
 
 ## v1.0.192
 - fix(pkg): exclude runtime .titles/ from published tarball
-
-## v1.0.191
-- docs(readme): list terminal-title.directive.md in the hooks tree
-- feat(terminal-title): add opt-in CLAUDE_TITLE_DEBUG forensic logging
 
