@@ -428,20 +428,20 @@ worktree prints the skip lines when the files are already present · `npm test` 
 
 **Commit:** `chore(worktrees): .worktreeinclude for dev-box files` + `Changelog: none`
 
-### ☐ 6.2 · M · ~40m — /fleet reads `claude agents --json` when it is safe [opus]
+### ☑ 6.2 · M · ~40m — /fleet reads `claude agents --json` when it is safe [opus]
 
 **Budget:** files 2 · new 0 (+1 fixture) · trips ≈ 12
 
 **Read:** this doc (⛔ + 6.2) · `.claude/scripts/fleet.js:108-153`
 
-- [ ] Probe before building anything. Run `claude agents --help` and read what `--json` does.
+- [x] Probe before building anything. Run `claude agents --help` and read what `--json` does.
   If listing starts the supervisor daemon, opens a UI, or takes more than 3 seconds, **stop**:
   record that in the Ledger, move this item to Deferred, and commit the Ledger entry only.
-- [ ] If it's safe, save one real output to `test/fixtures/claude-agents.json` with sids and paths
+- [x] If it's safe, save one real output to `test/fixtures/claude-agents.json` with sids and paths
   replaced by placeholders. In `readSessions`/`locate` (`:108-153`), prefer each agent's reported
   cwd when the command is available, with a 3-second timeout. Fall back to the transcript-folder
   mapping (`:148`) on any error.
-- [ ] Extend `test/fleet.test.js` to use the fixture: a session whose cwd is outside its
+- [x] Extend `test/fleet.test.js` to use the fixture: a session whose cwd is outside its
   transcript folder's tree is placed correctly.
 
 **Verify:** `node test/fleet.test.js` · `node .claude/scripts/fleet.js` output unchanged or
@@ -685,3 +685,22 @@ worktree belonging to a live session was removed
   - Only live on the main checkout after 7.1's merge. Until then new worktrees rely on bootstrap.
   - `npm test` exit 0. No snapshot: the only removal was the empty probe this session made.
   - Next: 6.2 [opus]. Refresh from main first.
+- 2026-09-29 — **6.2** — done (`4ef9077`) [1 session · ~20 trips · stays M]
+  - Probe on 2.1.280: **safe.** `claude agents --json` prints a JSON array (pid, cwd, kind,
+    startedAt, sessionId, name, status) and exits in ~0.4–0.5s, needs no TTY, and started no new
+    claude process (7 before, 7 after). Help: `--json` = "print active sessions … and exit".
+  - Windows: `claude` is an npm `.cmd` shim, so `spawnSync` needs `shell: true` there (plain
+    execFile → ENOENT). Checked that a shell spawn's timeout still returns on time (1.0s at a 1s
+    timeout).
+  - fleet.js: `readAgentCwds` → `placeByCwd` runs after `locate`. It picks the **deepest** tree
+    containing the cwd (worktrees nest under the main checkout's `.claude/worktrees/`). A reported cwd
+    overrides the slug join, including to null (a session now in another repo leaves the board).
+    Any error → empty map → the slug join stands. `CCA_FLEET_AGENTS_JSON` is the test seam (file
+    path, or `off`). The existing fleet tests set it to `off` so they never spawn the real CLI.
+  - Fixture `test/fixtures/claude-agents.json` uses `{{WORKTREE}}`/`{{OTHER_REPO}}` placeholders and
+    zero sids. 4 new tests. fleet 12/12.
+  - CCA board: the same with and without the lookup (every live session's cwd matches its transcript
+    folder today). One RECENT row dropped between the two runs because it aged past 30m, not
+    because of the lookup.
+  - `npm test` exit 0. No snapshot: nothing was removed.
+  - Next: 7.1. Refresh from main first.
