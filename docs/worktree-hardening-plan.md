@@ -215,7 +215,7 @@ and passing) · `npm test` exit 0
 
 ## Phase 3 — The landing command
 
-### ☐ 3.1 · L · ~1.5h — land.js CLI and the /land command
+### ☑ 3.1 · L · ~1.5h — land.js CLI and the /land command
 
 **Budget:** files 6 · new 2 (test extended, not new) · trips ≈ 22
 
@@ -561,3 +561,17 @@ worktree belonging to a live session was removed
   - `conflictCheck` throws on any merge-tree exit other than 0/1 (bad ref, old git) rather than
     reporting "clean". Needs git ≥ 2.38; the dev box has 2.49.
   - Next: 3.1. Refresh from main first.
+- 2026-09-29 — **3.1** — done (`ebd974a`) [1 session · ~30 trips · peak ~118k · stays L]
+  - Exit codes beyond the plan: **1** for usage, a failed preflight (no branch, main not on
+    `--base`) or an unexpected error; **6** for a failed push (the merge landed locally). A
+    failed `git branch -d` also exits 5, like a failed removal.
+  - A dirty worktree, or `--keep-worktree`, also keeps the branch: `branch -d` would fail on a
+    checked-out branch, so it reports "kept" instead. Exit stays 0.
+  - `merge --abort` runs only when `MERGE_HEAD` exists, so a refused merge never resets anything.
+  - The push sends git's stdout to stderr, so `--json` stays one parseable object.
+  - `/land` also checks `/fleet` for a live session in the worktree and adds `--keep-worktree`
+    if it finds one.
+  - `hook-fleet-sync.test.js` needed no change: it counts `MANIFEST.length`. The test fixture
+    pins `core.autocrlf false`, because a system-level `true` turned merged files into CRLF.
+  - No snapshot this substep: nothing real was removed (tests use throwaway repos only).
+  - Next: 3.2. Refresh from main first.
