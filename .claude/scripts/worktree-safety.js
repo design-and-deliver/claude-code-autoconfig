@@ -1,7 +1,7 @@
 // worktree-safety.js — the only safe way this repo removes a worktree directory.
 //
-// Shared by sync-worktrees.js (reaping orphans) and, from plan substep 2.2 on, the landing
-// tooling. Every removal path here gets the same two protections:
+// Shared by sync-worktrees.js (reaping orphans, reclaiming merged worktrees) and the landing
+// tooling. reclaimVerdict() below is the gate for removing a REGISTERED worktree unasked. Every removal path here gets the same two protections:
 //
 //   1. ⛔ A junction/symlink node_modules is unlinked on its own BEFORE any recursive delete.
 //      `git worktree remove --force` and a naive recursive delete both follow the link and empty
@@ -118,4 +118,76 @@ function safeRemoveWorktree(mainDir, wtPath, trashRoot) {
   return { ok: true, how: 'trash' };
 }
 
-module.exports = { unlinkNodeModulesLink, trashOrphan, rmTree, removeDir, safeRemoveWorktree };
+// ---- reclaim: is a REGISTERED worktree finished with? -----------------
+// Long enough that a plan session idling while the user reads isn't mistaken for a finished one.
+const RECLAIM_IDLE_MS = 30 * 60_000;
+// bootstrap-worktree.js copies settings.local.json into every worktree and Claude Code rewrites it
+// as permissions are granted — in a repo that tracks it, a changed copy is churn, not work.
+const CHURN_RE = /(^|\/)\.claude\/settings\.local\.json$/;
+
+function gitOut(cwd, args) {
+  const r = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8' });
+  return r.status === 0 ? r.stdout : null;
+}
+
+// Porcelain "XY path" lines. ⛔ Never trim the whole output first: the first line's leading space
+// IS its X column, and losing it shifts that path by one char (the JAE reclaim bug, Ledger 4.1).
+// --untracked-files=all, or a new .claude/ folder collapses to "?? .claude/" and hides the churn.
+function statusLines(dir) {
+  const out = gitOut(dir, ['status', '--porcelain', '--untracked-files=all']);
+  if (out == null) return null;
+  return out.split('\n').filter(Boolean).map((l) => ({ xy: l.slice(0, 2), file: l.slice(3) }));
+}
+
+function isInside(child, parent) {
+  const norm = (p) => (process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p));
+  const rel = path.relative(norm(parent), norm(child));
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+function mergedGuard(mainDir, tree, baseBranch) {
+  if (!tree.branch) return { guard: 'merged', ok: false, why: 'detached HEAD' };
+  const r = spawnSync('git', ['-C', mainDir, 'merge-base', '--is-ancestor', tree.branch, baseBranch]);
+  return { guard: 'merged', ok: r.status === 0, why: `${tree.branch} not in ${baseBranch}` };
+}
+
+function cleanGuard(dir) {
+  const lines = statusLines(dir);
+  if (lines == null) return { guard: 'clean', ok: false, why: 'git status failed' };
+  const real = lines.filter((l) => !CHURN_RE.test(l.file));
+  return { guard: 'clean', ok: real.length === 0, why: `${real.length} changed path(s)` };
+}
+
+function idleGuard(newestMs, now) {
+  const idleMs = newestMs == null ? Infinity : now - newestMs;
+  return { guard: 'idle', ok: idleMs >= RECLAIM_IDLE_MS, why: `session wrote ${Math.round(idleMs / 60_000)}m ago` };
+}
+
+// Every guard is evaluated, never short-circuited, so a dry run can say which one kept a worktree.
+//   tree: { dir, branch, locked }   ctx: { baseBranch, newestMs, now, cwd }
+function reclaimVerdict(mainDir, tree, ctx) {
+  const guards = [
+    mergedGuard(mainDir, tree, ctx.baseBranch),
+    cleanGuard(tree.dir),
+    { guard: 'unlocked', ok: !tree.locked, why: 'locked' },
+    idleGuard(ctx.newestMs, ctx.now),
+    { guard: 'not-cwd', ok: !isInside(ctx.cwd, tree.dir), why: 'this process runs inside it' },
+  ];
+  const failed = guards.filter((g) => !g.ok).map((g) => ({ guard: g.guard, why: g.why }));
+  return { verdict: failed.length ? 'KEEP' : 'RECLAIM', passed: guards.filter((g) => g.ok).map((g) => g.guard), failed };
+}
+
+// git refuses to remove a worktree with modified or untracked files, and the clean guard let the
+// settings.local.json churn through — so put that one file back before asking git.
+function discardChurn(dir) {
+  for (const l of statusLines(dir) || []) {
+    if (!CHURN_RE.test(l.file)) continue;
+    if (l.xy === '??') fs.rmSync(path.join(dir, l.file), { force: true });
+    else gitOut(dir, ['checkout', 'HEAD', '--', l.file]);
+  }
+}
+
+module.exports = {
+  unlinkNodeModulesLink, trashOrphan, rmTree, removeDir, safeRemoveWorktree,
+  reclaimVerdict, discardChurn, RECLAIM_IDLE_MS,
+};

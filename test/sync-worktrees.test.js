@@ -248,6 +248,86 @@ test('a junctioned node_modules is unlinked, not recursed into, on --write', () 
   }
 });
 
+// ---- RECLAIM: registered worktrees whose work already landed ----------------------------------
+// Removing a REGISTERED worktree unasked is the most dangerous thing this script does, so every
+// guard gets a fixture that fails exactly that one guard, and must be kept naming it.
+const wtPath = (name) => path.join(WT, name);
+function addWorktree(name, { ownCommit = false } = {}) {
+  git('worktree', 'add', '-q', '-b', `rc-${name}`, wtPath(name));
+  if (!ownCommit) return;
+  fs.writeFileSync(path.join(wtPath(name), 'src', `${name}.ts`), 'export const x = 1;\n');
+  execFileSync('git', ['-C', wtPath(name), 'add', '-A'], { stdio: 'ignore' });
+  execFileSync('git', ['-C', wtPath(name), 'commit', '-q', '-m', 'unmerged'], { stdio: 'ignore' });
+}
+// A transcript written just now under the fake home = a session sitting in that worktree.
+function touchTranscript(name) {
+  const slug = fs.realpathSync(wtPath(name)).replace(/[^a-zA-Z0-9]/g, '-');
+  const dir = path.join(home, '.claude', 'projects', slug);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'sid.jsonl'), '{}\n');
+}
+const reclaimNamed = (r, name) => r.reclaim.find((w) => w.name === name);
+function assertKept(r, name, guard) {
+  const w = reclaimNamed(r, name);
+  assert(w, `${name} was not evaluated at all`);
+  assert(w.verdict === 'KEEP', `${name} must be kept, got ${w.verdict} — this removes a live desk`);
+  const names = w.failed.map((f) => f.guard);
+  assert(names.length === 1 && names[0] === guard,
+    `${name} must be kept by exactly the '${guard}' guard; got ${JSON.stringify(names)}`);
+}
+
+addWorktree('rc-done');
+// bootstrap copies settings.local.json in; that churn alone must not block the reclaim.
+fs.mkdirSync(path.join(wtPath('rc-done'), '.claude'), { recursive: true });
+fs.writeFileSync(path.join(wtPath('rc-done'), '.claude', 'settings.local.json'), '{}\n');
+addWorktree('rc-dirty');
+fs.writeFileSync(path.join(wtPath('rc-dirty'), 'src', 'a.ts'), 'export const a = 99;\n');
+addWorktree('rc-locked');
+git('worktree', 'lock', wtPath('rc-locked'));
+addWorktree('rc-unmerged', { ownCommit: true });
+addWorktree('rc-busy');
+touchTranscript('rc-busy');
+addWorktree('rc-cwd');
+
+function runFrom(cwd, ...extra) {
+  const out = execFileSync('node', [SCRIPT, '--json', '--project-dir', repo, ...extra], {
+    cwd, encoding: 'utf8',
+    env: { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_CODE_SESSION_ID: '' },
+  });
+  return JSON.parse(out);
+}
+
+test('a merged, clean, idle worktree is offered for RECLAIM (settings.local.json churn ignored)', () => {
+  const w = reclaimNamed(run(), 'rc-done');
+  assert(w && w.verdict === 'RECLAIM', `expected RECLAIM, got ${JSON.stringify(w)}`);
+});
+
+test('each failing guard keeps its worktree and names itself', () => {
+  const r = runFrom(wtPath('rc-cwd'));
+  assertKept(r, 'rc-dirty', 'clean');
+  assertKept(r, 'rc-locked', 'unlocked');
+  assertKept(r, 'rc-unmerged', 'merged');
+  assertKept(r, 'rc-busy', 'idle');
+  assertKept(r, 'rc-cwd', 'not-cwd');
+});
+
+test('--write removes only the RECLAIM worktree and its branch', () => {
+  const r = runFrom(wtPath('rc-cwd'), '--write');
+  assert(!fs.existsSync(wtPath('rc-done')), `rc-done should be gone; actions: ${JSON.stringify(r.actions)}`);
+  const branches = git('branch', '--format=%(refname:short)').split('\n').map((s) => s.trim());
+  assert(!branches.includes('rc-rc-done'), 'the reclaimed worktree\'s branch should be deleted');
+  for (const kept of ['rc-dirty', 'rc-locked', 'rc-unmerged', 'rc-busy', 'rc-cwd']) {
+    assert(fs.existsSync(wtPath(kept)), `${kept} must survive --write`);
+    assert(branches.includes(`rc-${kept}`), `${kept}'s branch must survive --write`);
+  }
+});
+
+git('worktree', 'unlock', wtPath('rc-locked'));
+for (const n of ['rc-dirty', 'rc-locked', 'rc-unmerged', 'rc-busy', 'rc-cwd']) {
+  git('worktree', 'remove', '--force', wtPath(n));
+  git('branch', '-D', `rc-${n}`);
+}
+
 test('a second run is a clean no-op', () => {
   const r = run();
   assert(r.orphans.length === 0, `expected no orphans left; got ${JSON.stringify(r.orphans.map((o) => o.name))}`);

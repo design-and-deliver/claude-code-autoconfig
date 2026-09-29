@@ -1,5 +1,5 @@
-<!-- @description Reap what the worktree loop leaves behind: orphaned directories, stale registrations, merged branches. -->
-<!-- @version 2 -->
+<!-- @description Reap what the worktree loop leaves behind: orphaned directories, merged worktrees, stale registrations, merged branches. -->
+<!-- @version 3 -->
 <!-- @param write | flag | optional | Actually delete. Without it this is a dry run. -->
 <!-- @param keep-branches | flag | optional | Reap directories only; leave merged branches alone. -->
 <!-- @response report | Orphan directories with a per-directory verdict, then stale registrations, merged branches, and (under --write) what was actually removed. -->
@@ -32,9 +32,19 @@ git still knows about.
 node "${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/sync-worktrees.js"
 ```
 
-Append `--write` if `$ARGUMENTS` contains `write`, and `--keep-branches` if it contains
-`keep-branches`. **Default is a dry run** — run the bare form first whenever the user hasn't
-explicitly asked to delete.
+**Default is a dry run.** Always run the bare form first, even when `$ARGUMENTS` contains `write`.
+
+⛔ **Before any `--write`**, in this order:
+
+1. Snapshot every worktree:
+   `node scripts/snapshot-worktrees.js C:\CODE\claude-code-autoconfig C:\CODE\job-agent-extension`
+   (from the CCA checkout). Note the backup folder it prints.
+2. Run the dry run and show the user its output, **the REGISTERED WORKTREES list above all**:
+   each `RECLAIM` row there is a registered worktree `--write` will remove.
+3. Run `--write` only after the user says yes to that list. An approval from an earlier run
+   doesn't count, because other sessions keep working in between.
+
+Then append `--write`, plus `--keep-branches` if `$ARGUMENTS` contains `keep-branches`.
 
 ## Step 2 — report it
 
@@ -52,6 +62,10 @@ Add interpretation only when a directory is not `REAP`:
   name — renaming a locked directory succeeds on Windows even when deleting it doesn't. It no
   longer shows as an orphan; every later `--write` run retries deleting it from `.trash/` until
   whatever held it lets go. Say that it's parked, not gone, and that no action is needed.
+- **KEEP** (registered worktrees): a registered worktree is reclaimed only if **every** guard
+  passes: branch merged into base, `git status` clean apart from `.claude/settings.local.json`,
+  not locked, no session transcript write in the last 30 minutes, and not the directory this
+  process runs in. A KEEP row names each guard that failed; pass that along as-is.
 - **PARTIAL** — even the rename into `.trash/` failed. Rare — say that a process still holds a
   handle (usually a dev server or an editor with the folder open) and that re-running finishes it.
 
@@ -78,7 +92,7 @@ something, say that and point at `/fleet` for the roster.
 | Content proof | Every non-ignored file is hashed and looked up in the object store. One miss → `BLOCKED`, directory untouched. |
 | Gitignored files | Filtered out first — `crx-key.ts`, `.env`, `dev-build-number.json` are never in the object store, and counting them would make every orphan permanently undeletable. |
 | Liveness | A tree whose session transcript was written in the last 3 min is `HELD`. |
-| Registered worktrees | Anything in `git worktree list` is skipped entirely. |
+| Registered worktrees | Never treated as orphans. Reclaimed only when all five guards pass (merged, clean, unlocked, idle 30m+, not cwd); removal goes through plain `git worktree remove`, never `--force`, with a junctioned `node_modules` unlinked first. |
 | Undeletable dirs | A `REAP` directory `--write` can't fully delete is renamed into `.trash/` (`TRASHED`) and retried every later run, instead of left in place forever. |
 | Branches | `git branch -d`, never `-D` — if the merge math is wrong, git refuses. `main`/`master` are protected outright, as is any branch checked out in a worktree. |
 | Default | Dry run. `--write` is the only thing that deletes. |

@@ -35,8 +35,10 @@
 //   1. orphan dirs        — git has forgotten them; we prove-then-delete
 //   2. stale registrations — git knows, dir is gone; `git worktree prune`
 //   3. merged branches    — fully contained in base; `git branch -d` (refuses if we're wrong)
-// And a fourth is REPORTED, never reaped:
-//   4. unlanded branches  — not in base AND no worktree; see §5. Deleting one can destroy the
+//   4. merged worktrees   — still registered, but merged, clean, unlocked, idle 30m+ and not
+//                           our cwd; every guard must pass (worktree-safety.reclaimVerdict)
+// And a fifth is REPORTED, never reaped:
+//   5. unlanded branches  — not in base AND no worktree; see §5. Deleting one can destroy the
 //                           only copy of another session's work, so it stays a human's call.
 //
 // Usage:
@@ -46,7 +48,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
-const { rmTree, removeDir } = require('./worktree-safety');
+const {
+  rmTree, removeDir, safeRemoveWorktree, reclaimVerdict, discardChurn,
+} = require('./worktree-safety');
 
 // ---- args -------------------------------------------------------------
 const opts = {
@@ -96,19 +100,23 @@ const baseBranch = gitTry(['rev-parse', '--abbrev-ref', 'HEAD']) || 'HEAD';
 
 // ---- 1. what git still knows about ------------------------------------
 // --porcelain gives one "worktree <path>" line per registration, base checkout included.
+// Attribute lines that follow a "worktree <path>" line, keyed by prefix.
+const TREE_ATTRS = [
+  ['branch ', (t, rest) => { t.branch = rest.replace('refs/heads/', '').trim(); }],
+  ['prunable', (t) => { t.prunable = true; }],
+  ['locked', (t) => { t.locked = true; }],
+];
 function registeredTrees() {
   const out = gitTry(['worktree', 'list', '--porcelain']) || '';
   const trees = [];
-  let cur = null;
   for (const line of out.split('\n')) {
     if (line.startsWith('worktree ')) {
-      cur = { dir: line.slice(9).trim(), branch: null, prunable: false };
-      trees.push(cur);
-    } else if (cur && line.startsWith('branch ')) {
-      cur.branch = line.slice(7).replace('refs/heads/', '').trim();
-    } else if (cur && line.startsWith('prunable')) {
-      cur.prunable = true;
+      trees.push({ dir: line.slice(9).trim(), branch: null, prunable: false, locked: false });
+      continue;
     }
+    const cur = trees[trees.length - 1];
+    const attr = cur && TREE_ATTRS.find(([p]) => line.startsWith(p));
+    if (attr) attr[1](cur, line.slice(attr[0].length));
   }
   return trees;
 }
@@ -273,6 +281,20 @@ try {
   }
 } catch { /* no .trash yet — fine */ }
 
+// ---- 4.6. reclaim — registered worktrees whose work already landed ------------
+// The other leftover: a worktree nobody removed at all. Its branch merged, its session is long
+// gone, and it is still registered, so every step above skips it. registered[0] is always the main
+// checkout; the tree this script was pointed at is never a candidate either.
+function realOf(dir) {
+  try { return fs.realpathSync(dir); } catch { return path.resolve(dir); }
+}
+const reclaim = registered.slice(1)
+  .filter((t) => !t.prunable && realOf(t.dir) !== baseDir)
+  .map((t) => {
+    const ctx = { baseBranch, newestMs: newestTranscriptMs(realOf(t.dir)), now: NOW, cwd: process.cwd() };
+    return { name: path.basename(t.dir), dir: t.dir, branch: t.branch, ...reclaimVerdict(baseDir, t, ctx) };
+  });
+
 // ---- 5. stale registrations + merged branches -------------------------
 const prunable = registered.filter((t) => t.prunable).map((t) => t.dir);
 
@@ -354,8 +376,24 @@ function sweepTrash(t) {
     : `still locked .trash/${t.name} — left for next sweep`);
 }
 
+// Never forced: safeRemoveWorktree hands git a plain `worktree remove`, so a tree that changed
+// between the guard check and now is refused, not destroyed. Its branch joins the -d pass below.
+const reclaimedBranches = [];
+function reclaimWorktree(w) {
+  discardChurn(w.dir);
+  const r = safeRemoveWorktree(baseDir, w.dir, trashDir);
+  w.removed = r.ok;
+  if (!r.ok) {
+    actions.push(`kept worktree ${w.name} — removal failed (${r.error})`);
+    return;
+  }
+  actions.push(`reclaimed worktree ${w.name}${r.how === 'trash' ? ' (leftover moved to .trash/)' : ''}`);
+  if (w.branch && !opts.keepBranches) reclaimedBranches.push(w.branch);
+}
+
 if (opts.write) {
   for (const o of orphans.filter((x) => x.verdict === 'REAP')) reapOrphan(o);
+  for (const w of reclaim.filter((x) => x.verdict === 'RECLAIM')) reclaimWorktree(w);
   // Same unlink-then-rmSync protection (⛔5 — remove a junction link, never recurse through it)
   // applied to whatever previous runs already parked in .trash/. No trash fallback here.
   for (const t of trashItems) sweepTrash(t);
@@ -363,7 +401,7 @@ if (opts.write) {
     gitTry(['worktree', 'prune']);
     actions.push(`pruned ${prunable.length} stale registration(s)`);
   }
-  for (const b of mergedBranches) {
+  for (const b of [...mergedBranches, ...reclaimedBranches]) {
     // -d, never -D: if our merge math is wrong, git refuses and we learn about it here.
     const r = spawnSync('git', ['branch', '-d', b], { cwd: opts.projectDir, encoding: 'utf8' });
     actions.push(r.status === 0
@@ -377,7 +415,7 @@ if (opts.json) {
   console.log(JSON.stringify({
     base: { dir: baseDir, branch: baseBranch },
     mode: opts.write ? 'write' : 'dry-run',
-    orphans, prunable, mergedBranches, unlandedBranches, trashItems, actions,
+    orphans, reclaim, prunable, mergedBranches, unlandedBranches, trashItems, actions,
   }, null, 2));
   process.exit(0);
 }
@@ -393,7 +431,7 @@ function fmtAgo(ms) {
 const L = [];
 const reapN = orphans.filter((o) => o.verdict === 'REAP').length;
 L.push(`SYNC-WORKTREES — ${opts.write ? 'WRITE' : 'dry run'} · ${orphans.length} orphan dir` +
-       `${orphans.length === 1 ? '' : 's'} · ${trashItems.length} in .trash · ` +
+       `${orphans.length === 1 ? '' : 's'} · ${reclaim.length} registered · ${trashItems.length} in .trash · ` +
        `${prunable.length} stale reg · ` +
        `${mergedBranches.length} merged branch${mergedBranches.length === 1 ? '' : 'es'} · ` +
        `${unlandedBranches.length} unlanded`);
@@ -420,6 +458,17 @@ if (trashItems.length) {
   L.push('TRASH  (.trash/ — survivors of a failed delete; retried on every --write run)');
   for (const t of trashItems) {
     L.push(`  ${(t.deleted ? '✓ swept  ' : '● waiting')}  ${t.name.padEnd(24)} parked ${fmtAgo(t.ageMs)}`);
+  }
+  L.push('');
+}
+
+const reclaimN = reclaim.filter((w) => w.verdict === 'RECLAIM').length;
+if (reclaim.length) {
+  L.push('REGISTERED WORKTREES  (reclaimed only when merged, clean, unlocked, idle 30m+ and not our cwd)');
+  for (const w of reclaim) {
+    const tag = w.verdict === 'RECLAIM' ? '✓ RECLAIM' : '· KEEP   ';
+    const why = w.failed.length ? w.failed.map((f) => `${f.guard}: ${f.why}`).join('; ') : 'all guards pass';
+    L.push(`  ${tag}  ${w.name.padEnd(24)} ${why}`);
   }
   L.push('');
 }
@@ -451,7 +500,7 @@ if (actions.length) {
   L.push('');
 }
 
-if (!orphans.length && !prunable.length && !mergedBranches.length && !trashItems.length) {
+if (!orphans.length && !reclaimN && !prunable.length && !mergedBranches.length && !trashItems.length) {
   // Unlanded branches deliberately do NOT make the tree "unclean" — nothing here will ever act on
   // them, so claiming work is pending would be a lie. They are named, and that is the whole job.
   L.push(unlandedBranches.length
@@ -460,6 +509,7 @@ if (!orphans.length && !prunable.length && !mergedBranches.length && !trashItems
 } else if (!opts.write) {
   const bits = [];
   if (reapN) bits.push(`${reapN} director${reapN === 1 ? 'y' : 'ies'}`);
+  if (reclaimN) bits.push(`${reclaimN} merged worktree(s)`);
   if (trashItems.length) bits.push(`${trashItems.length} .trash retr${trashItems.length === 1 ? 'y' : 'ies'}`);
   if (prunable.length) bits.push(`${prunable.length} registration(s)`);
   if (mergedBranches.length) bits.push(`${mergedBranches.length} branch(es)`);

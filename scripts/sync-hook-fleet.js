@@ -145,6 +145,10 @@ const MANIFEST = [
   { file: 'land.js', global: false, subdir: 'scripts' },
   { file: 'land-core.js', global: false, subdir: 'scripts' },
   { file: 'worktree-safety.js', global: false, subdir: 'scripts' },
+  // /sync-worktrees requires worktree-safety.js too (reclaimVerdict + safe removal). JAE's copy
+  // was a hand port that diverged; adopt-only means it is replaced here, never created.
+  { file: 'sync-worktrees.md', global: false, subdir: 'commands' },
+  { file: 'sync-worktrees.js', global: false, subdir: 'scripts' },
 ];
 
 const PAD = 46;                                               // report column for the target label
