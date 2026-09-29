@@ -184,13 +184,13 @@ and passing) · `npm test` exit 0
 
 **Commit:** `refactor(worktrees): extract junction-safe removal into worktree-safety.js` + `Changelog: none`
 
-### ☐ 2.2 · M · ~45m — land-core.js: conflict check, dirty overlap, worktree lookup
+### ☑ 2.2 · M · ~45m — land-core.js: conflict check, dirty overlap, worktree lookup
 
 **Budget:** files 3 · new 1 (+1 test) · trips ≈ 14
 
 **Read:** this doc (⛔ + 2.2) · `.claude/scripts/sync-worktrees.js:80-121` (its git helpers and worktree listing) · `C:\CODE\job-agent-extension\.claude\rules\parallel-session-worktrees.md:187-208` (the dirty-tree procedure this implements)
 
-- [ ] Create `.claude/scripts/land-core.js`. Every function takes an explicit `mainDir` and runs
+- [x] Create `.claude/scripts/land-core.js`. Every function takes an explicit `mainDir` and runs
   git with `-C mainDir`. Export:
   - `mainCheckoutOf(dir)`: return
     `path.dirname(git rev-parse --path-format=absolute --git-common-dir)`.
@@ -203,11 +203,11 @@ and passing) · `npm test` exit 0
     intersect them with `git diff --name-only <base>...<branch>`. Return the sorted overlap.
   - `worktreeFor(mainDir, branch)`: parse `git worktree list --porcelain` and return the path
     whose `branch refs/heads/<branch>` matches, or null.
-- [ ] Create `test/land-core.test.js` (throwaway repos, like 2.1). Cover: a clean merge; a real
+- [x] Create `test/land-core.test.js` (throwaway repos, like 2.1). Cover: a clean merge; a real
   conflict on one file, which is reported by name; dirty main with no overlap (empty) and with
   overlap (the file is named); `worktreeFor` found and not found; `isLinkedWorktree` from both
   sides. Add it to `package.json:38`.
-- [ ] Add `land-core.js` to `DEV_ONLY_FILES` and its exact path to the `files` negations.
+- [x] Add `land-core.js` to `DEV_ONLY_FILES` and its exact path to the `files` negations.
 
 **Verify:** `node test/land-core.test.js` · `npm test` exit 0
 
@@ -554,3 +554,10 @@ worktree belonging to a live session was removed
   - The exports also include `rmTree` (unlink + delete, no trash) for the `.trash/` sweep.
     `trashOrphan` now returns the new path; `sync-worktrees.js` keeps its verdicts and messages.
   - Next: 2.2. Refresh from main first.
+- 2026-09-29 — **2.2** — done (`b96b86f`) [1 session · ~12 trips · peak ~45k · stays M]
+  - `dirtyOverlap` reads `git status --porcelain -z --untracked-files=all`, so an untracked file
+    the branch adds counts as overlap (the merge would refuse to overwrite it), and both sides of
+    a rename are checked.
+  - `conflictCheck` throws on any merge-tree exit other than 0/1 (bad ref, old git) rather than
+    reporting "clean". Needs git ≥ 2.38; the dev box has 2.49.
+  - Next: 3.1. Refresh from main first.
