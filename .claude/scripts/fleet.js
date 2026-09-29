@@ -29,7 +29,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 
 // ---- args -------------------------------------------------------------
 const opts = {
@@ -149,6 +149,68 @@ function locate(sess, treeSlugs) {
     try { sess.writeMs = fs.statSync(p).mtimeMs; } catch { sess.writeMs = null; }
     break;
   }
+  return sess;
+}
+
+// ---- 1b. live cwd from `claude agents --json` --------------------------
+// The transcript folder records where a session STARTED. A session that entered a worktree
+// afterwards still writes to its launch folder's transcript, so the slug join above places it in
+// the wrong tree. `claude agents --json` reports each running session's current cwd. Probed on
+// 2.1.280: prints and exits in ~0.5s, starts no daemon, opens no UI. Any failure (older Claude
+// Code, no binary, timeout, bad JSON) returns an empty map, and the slug join stands.
+const AGENTS_TIMEOUT_MS = 3000;
+
+function readAgentCwds() {
+  const src = process.env.CCA_FLEET_AGENTS_JSON;   // test seam: a JSON file to read instead, or 'off'
+  if (src === 'off') return new Map();
+  if (src) {
+    try { return parseAgentCwds(fs.readFileSync(src, 'utf8')); } catch { return new Map(); }
+  }
+  // shell on Windows: `claude` is an npm .cmd shim that execFile can't resolve without one.
+  const r = spawnSync('claude', ['agents', '--json'], {
+    encoding: 'utf8', timeout: AGENTS_TIMEOUT_MS, windowsHide: true,
+    shell: process.platform === 'win32', stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  return r.status === 0 ? parseAgentCwds(r.stdout) : new Map();
+}
+
+function parseAgentCwds(raw) {
+  const out = new Map();
+  let list;
+  try { list = JSON.parse(raw); } catch { return out; }
+  if (!Array.isArray(list)) return out;
+  for (const a of list) {
+    if (a?.sessionId && a.cwd) out.set(a.sessionId, a.cwd);
+  }
+  return out;
+}
+
+const normDir = (p) => {
+  const r = path.resolve(p);
+  return process.platform === 'win32' ? r.toLowerCase() : r;
+};
+
+// The DEEPEST tree containing cwd: worktrees live under the main checkout's .claude/worktrees/,
+// so the main checkout contains every one of them and a first-match would always pick it.
+function treeForCwd(cwd, trees) {
+  const c = normDir(cwd);
+  let best = null;
+  let bestLen = -1;
+  for (const t of trees) {
+    const d = normDir(t.dir);
+    const inside = c === d || c.startsWith(d + path.sep);
+    if (inside && d.length > bestLen) { best = t; bestLen = d.length; }
+  }
+  return best;
+}
+
+// A reported cwd overrides the slug join, including to null: a session now working in another
+// repo is not on this board, whatever folder its transcript sits in.
+function placeByCwd(sess, trees, agentCwds) {
+  const cwd = agentCwds.get(sess.sid);
+  if (!cwd) return sess;
+  sess.cwd = cwd;
+  sess.tree = treeForCwd(cwd, trees);
   return sess;
 }
 
@@ -285,8 +347,9 @@ const baseBranch = trees[0].branch || 'HEAD';
 enrich(trees, baseBranch, baseDir);
 
 const treeSlugs = new Map(trees.map((t) => [t.slug, t]));
+const agentCwds = readAgentCwds();
 const sessions = readSessions()
-  .map((s) => locate(s, treeSlugs))
+  .map((s) => placeByCwd(locate(s, treeSlugs), trees, agentCwds))
   .filter((s) => opts.all || s.tree || s.writeMs != null)
   .sort((a, b) => (b.writeMs || b.titleMs || 0) - (a.writeMs || a.titleMs || 0));
 
