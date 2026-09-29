@@ -357,8 +357,10 @@ function inFlightClaimOverlaps() {
   const claims = claimRegistryMod.readLiveClaims({ now: Date.now() });
   const byPath = new Map();
   for (const c of claims) {
-    if (!byPath.has(c.normPath)) byPath.set(c.normPath, []);
-    byPath.get(c.normPath).push(c);
+    // key is repo + relative path, so two worktrees of one repo editing the same file group.
+    const k = c.key || c.normPath;
+    if (!byPath.has(k)) byPath.set(k, []);
+    byPath.get(k).push(c);
   }
   const overlaps = [];
   for (const [, group] of byPath) {
