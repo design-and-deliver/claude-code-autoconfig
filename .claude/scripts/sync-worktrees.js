@@ -12,7 +12,7 @@
 // junction recurses THROUGH it and deletes the real target's contents — the directory itself
 // survives, everything inside it is gone. Nothing here can patch git's own removal, so the reap
 // step below unlinks a junctioned node_modules on its own BEFORE the recursive delete ever reaches
-// it (see unlinkNodeModulesLink). `git worktree remove` / `ExitWorktree remove` get no such
+// it (see unlinkNodeModulesLink in worktree-safety.js). `git worktree remove` / `ExitWorktree remove` get no such
 // protection — see the ⛔ trap section in parallel-session-worktrees.md.
 //
 //   git worktree list      → only the base checkout
@@ -46,6 +46,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
+const { rmTree, removeDir } = require('./worktree-safety');
 
 // ---- args -------------------------------------------------------------
 const opts = {
@@ -308,24 +309,6 @@ const unlandedBranches = (gitTry(['branch', '--no-merged', baseBranch, '--format
   .filter((b) => !PROTECTED.has(b) && b !== baseBranch && !checkedOut.has(b))
   .map(describeUnlanded);
 
-// A junction/symlink node_modules must be unlinked on its own BEFORE any recursive delete of the
-// worktree that contains it. Unlinking the link itself never touches the target — rmdir on
-// Windows removes just the reparse point, unlink on POSIX removes just the symlink — but a
-// recursive walk that doesn't special-case reparse points follows it and deletes the real
-// content on the other end (proved 2026-08-15 against the main checkout's real node_modules).
-function unlinkNodeModulesLink(dir) {
-  const nm = path.join(dir, 'node_modules');
-  let st;
-  try {
-    st = fs.lstatSync(nm);
-  } catch {
-    return; // no node_modules here — nothing to protect
-  }
-  if (!st.isSymbolicLink()) return; // a real directory is safe to recurse into normally
-  if (process.platform === 'win32') fs.rmdirSync(nm);
-  else fs.unlinkSync(nm);
-}
-
 // ---- 6. act (only under --write) --------------------------------------
 const actions = [];
 
@@ -334,52 +317,48 @@ const actions = [];
 // (agy §8), which covers the ordinary Node/esbuild-style locks this exists for. It is not
 // universal: a handle opened without FILE_SHARE_DELETE also blocks the rename, in which case
 // this falls through to PARTIAL below — a strict superset of the old delete-only behavior,
-// never a regression.
-function trashOrphan(o, reason) {
-  try {
-    fs.mkdirSync(trashDir, { recursive: true });
-    const dest = path.join(trashDir, `${o.name}-${Date.now()}`);
-    fs.renameSync(o.dir, dest);
+// never a regression. The unlink-then-delete mechanics live in worktree-safety.js.
+function reapOrphan(o) {
+  const rd = removeDir(o.dir, trashDir, o.name);
+  if (rd.how === 'deleted') {
+    o.deleted = true;
+    actions.push(`deleted ${o.name}`);
+    return;
+  }
+  if (rd.rmError) o.error = rd.rmError;
+  else o.deleted = false;
+  const reason = rd.rmError
+    ? `delete failed (${rd.rmError})`
+    : 'some files survived the delete (still locked)';
+  if (rd.how === 'trashed') {
     o.verdict = 'TRASHED';
-    o.trashPath = dest;
+    o.trashPath = rd.trashPath;
     actions.push(`TRASHED ${o.name} — ${reason}, moved to .trash/ for retry`);
-  } catch (e2) {
+  } else {
     o.verdict = 'PARTIAL';
-    o.error = String(e2.message || e2);
+    o.error = rd.trashError;
     actions.push(`PARTIAL ${o.name} — rename to .trash/ also failed (${o.error})`);
   }
 }
 
+function sweepTrash(t) {
+  const rm = rmTree(t.dir);
+  if (rm.error) {
+    t.error = rm.error;
+    actions.push(`still locked .trash/${t.name} — ${t.error}`);
+    return;
+  }
+  t.deleted = rm.deleted;
+  actions.push(t.deleted
+    ? `swept .trash/${t.name}`
+    : `still locked .trash/${t.name} — left for next sweep`);
+}
+
 if (opts.write) {
-  for (const o of orphans.filter((x) => x.verdict === 'REAP')) {
-    try {
-      unlinkNodeModulesLink(o.dir);
-      // maxRetries/retryDelay is the whole point on Windows: EBUSY from a watcher that is on its
-      // way out succeeds on the second or third swing.
-      fs.rmSync(o.dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
-      o.deleted = !fs.existsSync(o.dir);
-      if (o.deleted) actions.push(`deleted ${o.name}`);
-      else trashOrphan(o, 'some files survived the delete (still locked)');
-    } catch (e) {
-      o.error = String(e.message || e);
-      trashOrphan(o, `delete failed (${o.error})`);
-    }
-  }
-  // Same unlink-then-rmSync protection as above (⛔5 — remove a junction link, never recurse
-  // through it) applied to whatever previous runs already parked in .trash/.
-  for (const t of trashItems) {
-    try {
-      unlinkNodeModulesLink(t.dir);
-      fs.rmSync(t.dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
-      t.deleted = !fs.existsSync(t.dir);
-      actions.push(t.deleted
-        ? `swept .trash/${t.name}`
-        : `still locked .trash/${t.name} — left for next sweep`);
-    } catch (e) {
-      t.error = String(e.message || e);
-      actions.push(`still locked .trash/${t.name} — ${t.error}`);
-    }
-  }
+  for (const o of orphans.filter((x) => x.verdict === 'REAP')) reapOrphan(o);
+  // Same unlink-then-rmSync protection (⛔5 — remove a junction link, never recurse through it)
+  // applied to whatever previous runs already parked in .trash/. No trash fallback here.
+  for (const t of trashItems) sweepTrash(t);
   if (prunable.length) {
     gitTry(['worktree', 'prune']);
     actions.push(`pruned ${prunable.length} stale registration(s)`);
