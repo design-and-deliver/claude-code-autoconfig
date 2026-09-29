@@ -85,6 +85,8 @@
     "!.claude/scripts/sync-worktrees.js",
     "!.claude/scripts/worktree-safety.js",
     "!.claude/scripts/land-core.js",
+    "!.claude/scripts/land.js",
+    "!.claude/commands/land.md",
     "!.claude/commands/restore-after-reboot.md",
     "!.claude/scripts/restore-after-reboot.js",
     "!.claude/commands/refactor.md",

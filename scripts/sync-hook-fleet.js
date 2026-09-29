@@ -138,6 +138,13 @@ const MANIFEST = [
   // an unmanifested hand-copy is exactly how continue.md reached v16 here while a CCA install
   // silently reverted that repo to v15.
   { file: 'abort-plan.md', global: false, subdir: 'commands' },
+  // /land and its script chain (land.js → land-core.js + worktree-safety.js). Dev-only, per-repo:
+  // landing is about one repo's main checkout. Each file is adopted on its own like fleet.md/.js;
+  // a repo that adopts land.js must hold the other two, or it fails at require() time.
+  { file: 'land.md', global: false, subdir: 'commands' },
+  { file: 'land.js', global: false, subdir: 'scripts' },
+  { file: 'land-core.js', global: false, subdir: 'scripts' },
+  { file: 'worktree-safety.js', global: false, subdir: 'scripts' },
 ];
 
 const PAD = 46;                                               // report column for the target label

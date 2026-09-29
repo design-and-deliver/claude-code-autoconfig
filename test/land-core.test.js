@@ -8,7 +8,9 @@
  *   - conflictCheck: a clean merge, and a real conflict reported by file name;
  *   - dirtyOverlap: dirty main that doesn't touch the branch's files (empty), and one that does;
  *   - worktreeFor: found and not found;
- *   - isLinkedWorktree / mainCheckoutOf from the main checkout and from a linked worktree.
+ *   - isLinkedWorktree / mainCheckoutOf from the main checkout and from a linked worktree;
+ *   - land.js end to end (--no-push): happy path, conflict (2), dirty overlap (3), run from
+ *     inside the worktree (4), --dry-run, and a dirty worktree left in place.
  */
 
 const fs = require('fs');
@@ -103,6 +105,109 @@ test('isLinkedWorktree is false in main and true in a worktree', () => {
 test('mainCheckoutOf resolves to the main checkout from both sides', () => {
   assert(same(mainCheckoutOf(repo), repo), `from main: ${mainCheckoutOf(repo)}`);
   assert(same(mainCheckoutOf(wt), repo), `from worktree: ${mainCheckoutOf(wt)}`);
+});
+
+// ---- land.js end to end: a fresh repo + worktree per scenario, always --no-push ----
+
+const { spawnSync } = require('child_process');
+const LAND = path.join(__dirname, '..', '.claude', 'scripts', 'land.js');
+let fixtureN = 0;
+
+// main with a.txt/b.txt; branch `feat` checked out in its own worktree with one commit on b.txt.
+function landFixture() {
+  const root = path.join(tmp, `land-${++fixtureN}`);
+  const main = path.join(root, 'main');
+  const wtDir = path.join(root, 'wt', 'feat');
+  fs.mkdirSync(main, { recursive: true });
+  const g = (dir, ...args) =>
+    execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  g(main, 'init', '--initial-branch=main');
+  g(main, 'config', 'user.email', 'test@example.com');
+  g(main, 'config', 'user.name', 'Land Test');
+  g(main, 'config', 'commit.gpgsign', 'false');
+  g(main, 'config', 'core.autocrlf', 'false'); // a system-level `true` would rewrite merged files as CRLF
+  fs.writeFileSync(path.join(main, 'a.txt'), 'a\n');
+  fs.writeFileSync(path.join(main, 'b.txt'), 'b\n');
+  g(main, 'add', '-A');
+  g(main, 'commit', '-m', 'seed');
+  g(main, 'worktree', 'add', '-b', 'feat', wtDir);
+  fs.writeFileSync(path.join(wtDir, 'b.txt'), 'b from feat\n');
+  g(wtDir, 'commit', '-am', 'feat edits b');
+  return { main, wtDir, g, head: () => g(main, 'rev-parse', 'HEAD') };
+}
+
+function runLand(cwd, ...args) {
+  const r = spawnSync(process.execPath, [LAND, 'feat', '--no-push', ...args], { cwd, encoding: 'utf8' });
+  return { code: r.status, out: r.stdout || '', err: r.stderr || '' };
+}
+
+const branchExists = (f) => f.g(f.main, 'branch', '--list', 'feat') !== '';
+
+test('land.js happy path: merged, worktree gone, branch deleted, exit 0', () => {
+  const f = landFixture();
+  const r = runLand(f.main);
+  assert(r.code === 0, `exit ${r.code}\n${r.out}${r.err}`);
+  assert(fs.readFileSync(path.join(f.main, 'b.txt'), 'utf8') === 'b from feat\n', 'b.txt not merged into main');
+  assert(!fs.existsSync(f.wtDir), 'worktree directory still exists');
+  assert(!branchExists(f), 'branch feat was not deleted');
+});
+
+test('land.js exits 2 on a conflict and leaves main unchanged', () => {
+  const f = landFixture();
+  fs.writeFileSync(path.join(f.main, 'b.txt'), 'b from main\n');
+  f.g(f.main, 'commit', '-am', 'main edits b');
+  const before = f.head();
+  const r = runLand(f.main);
+  assert(r.code === 2, `expected exit 2, got ${r.code}\n${r.out}${r.err}`);
+  assert(/b\.txt/.test(r.out), `conflict file not named:\n${r.out}`);
+  assert(f.head() === before, 'main HEAD moved');
+  assert(f.g(f.main, 'status', '--porcelain') === '', 'main working tree dirtied');
+  assert(fs.existsSync(f.wtDir) && branchExists(f), 'worktree or branch touched');
+});
+
+test('land.js exits 3 on a dirty overlap and leaves the uncommitted edit alone', () => {
+  const f = landFixture();
+  fs.writeFileSync(path.join(f.main, 'b.txt'), 'in-progress edit\n');
+  const before = f.head();
+  const r = runLand(f.main);
+  assert(r.code === 3, `expected exit 3, got ${r.code}\n${r.out}${r.err}`);
+  assert(/not touching it/.test(r.out) && /b\.txt/.test(r.out), `overlap not reported:\n${r.out}`);
+  assert(fs.readFileSync(path.join(f.main, 'b.txt'), 'utf8') === 'in-progress edit\n', 'uncommitted edit lost');
+  assert(f.head() === before, 'main HEAD moved');
+});
+
+test('land.js exits 4 when run from inside the worktree', () => {
+  const f = landFixture();
+  const r = runLand(f.wtDir);
+  assert(r.code === 4, `expected exit 4, got ${r.code}\n${r.out}${r.err}`);
+  assert(/ExitWorktree keep/.test(r.out), `missing the ExitWorktree hint:\n${r.out}`);
+  assert(fs.existsSync(f.wtDir) && branchExists(f), 'worktree or branch touched');
+});
+
+test('land.js --dry-run changes nothing and reports the plan as JSON', () => {
+  const f = landFixture();
+  const before = f.head();
+  const r = runLand(f.main, '--dry-run', '--json');
+  assert(r.code === 0, `exit ${r.code}\n${r.out}${r.err}`);
+  const j = JSON.parse(r.out);
+  assert(j.branch === 'feat' && j.base === 'main', `bad header: ${r.out}`);
+  const steps = j.steps.map((s) => s.step).join(',');
+  assert(steps === 'preflight,conflicts,overlap,dry-run', `unexpected steps: ${steps}`);
+  assert(j.steps.every((s) => s.ok), `a step failed: ${r.out}`);
+  assert(/fast-forward/.test(j.steps[3].detail) && /remove worktree/.test(j.steps[3].detail),
+    `dry-run detail: ${j.steps[3].detail}`);
+  assert(f.head() === before, 'main HEAD moved');
+  assert(fs.existsSync(f.wtDir) && branchExists(f), 'worktree or branch touched');
+});
+
+test('land.js keeps a dirty worktree and the branch it holds, still exit 0', () => {
+  const f = landFixture();
+  fs.writeFileSync(path.join(f.wtDir, 'scratch.txt'), 'unsaved\n');
+  const r = runLand(f.main);
+  assert(r.code === 0, `exit ${r.code}\n${r.out}${r.err}`);
+  assert(fs.readFileSync(path.join(f.main, 'b.txt'), 'utf8') === 'b from feat\n', 'not merged');
+  assert(fs.existsSync(path.join(f.wtDir, 'scratch.txt')), 'dirty worktree was removed');
+  assert(branchExists(f), 'branch deleted while a worktree still holds it');
 });
 
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* temp cleanup is best effort */ }
