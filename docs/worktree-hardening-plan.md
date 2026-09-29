@@ -372,7 +372,7 @@ shows `STALE` on `plan/autonomous-scan` (263 behind) · `npm test` exit 0
 
 ## Phase 5 — Claims that match across worktrees
 
-### ☐ 5.1 · M · ~50m — Key claims by repo and relative path
+### ☑ 5.1 · M · ~50m — Key claims by repo and relative path
 
 **Budget:** files 3 · new 0 · trips ≈ 14
 
@@ -395,8 +395,8 @@ shows `STALE` on `plan/autonomous-scan` (263 behind) · `npm test` exit 0
   - different repos don't match;
   - an old claim record with no `repo` field still matches by path;
   - a claim with no glyph and a 31-minute-old file is stale.
-- [ ] `fleet.js:344-364` uses `claimantsOf`. Confirm it picks up the fix with no edit, and
-  record that in the Ledger.
+- [x] `fleet.js:344-364` uses `claimantsOf`. Confirm it picks up the fix with no edit, and
+  record that in the Ledger. (It didn't: fleet groups by `normPath` itself — see Ledger 5.1.)
 
 **Verify:** `node .claude/hooks/tests/claim-registry.test.cjs` · `node test/fleet.test.js` · `npm test` exit 0
 
@@ -651,3 +651,20 @@ worktree belonging to a live session was removed
     repos and dead sessions — the noise 5.1 (key claims by repo + path) removes.
   - No snapshot: nothing was removed.
   - Next: 5.1. Refresh from main first.
+- 2026-09-29 — **5.1** — done (`9b440ac`) [1 session · ~16 trips · stays M]
+  - `repoKeyOf` walks up to `.git`; a `.git` file resolves `gitdir` → `commondir` → parent. No
+    `commondir` (a submodule) → the dir holding the `.git` file. Real check: this worktree's and
+    the main checkout's `bin/cli.js` both give `{repo: 'c:/CODE/claude-code-autoconfig', rel: 'bin/cli.js'}`.
+  - Parsed claims gain `repo`, `rel` and `key` (`repo|rel` lower-cased, else `normPath`). The
+    per-session dedupe and `claimantsOf` key on it; old records fall back to the path.
+  - Plan was wrong about fleet: `inFlightClaimOverlaps` never called `claimantsOf`, it grouped by
+    `normPath`. One-line edit: it groups by `c.key || c.normPath`.
+  - token-guard's claim advisory (`:3303`) is untouched (never edit token-guard). It still warns
+    on a sibling claim in ANY repo — the cross-repo noise seen in 4.3 is only removed from
+    `/fleet`, not from the advisory. Candidate follow-up, not in this plan.
+  - `isStaleSid(sid, now, claimFile)`: with no glyph, stale once the claim file is > 30 min old
+    (`GLYPHLESS_STALE_MS`).
+  - 4 new tests with a hand-built main + linked-worktree fixture (no git binary). claim-registry
+    13/13, fleet 8/8, `npm test` exit 0.
+  - No snapshot: nothing was removed.
+  - Next: 6.1. Refresh from main first.
