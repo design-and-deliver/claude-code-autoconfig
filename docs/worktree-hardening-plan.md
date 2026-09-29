@@ -21,7 +21,7 @@ dev box. The facts a substep needs are copied into it.
 - **One substep per fresh session.** For each substep: do the work, run its Verify, commit, and
   append its Ledger entry. Then `/clear` and `/continue`, which reads the Ledger and names the
   next substep.
-- **Read this doc in slices, never whole:** the ⛔ trap section (lines 67–98), your own substep,
+- **Read this doc in slices, never whole:** the ⛔ trap section (lines 71–106), your own substep,
   and the Ledger tail.
 - **Branch:** `plan/worktree-hardening`, in the worktree `.claude/worktrees/worktree-hardening`.
   Re-enter it with `EnterWorktree path=.claude/worktrees/worktree-hardening`. The base branch is
@@ -51,6 +51,10 @@ dev box. The facts a substep needs are copied into it.
 - **When the main checkout has uncommitted files, use JAE's rule:** compare those files with the
   files the merge changes. If none overlap, merge. If any do, report them and stop. Never stash,
   check out, or restore another session's files.
+- **Back up, then dry-run, then ask — before anything is removed.** Every substep and command that
+  removes a worktree or deletes a branch first runs `node scripts/snapshot-worktrees.js C:\CODE\claude-code-autoconfig C:\CODE\job-agent-extension` (from outside any worktree), then shows
+  the dry-run list of what it would remove, and removes nothing until the user approves that list.
+  Code bugs can be fixed forward; a removed worktree's uncommitted files cannot.
 - **Worktree removal never uses `--force`.** Unlink a `node_modules` junction first. On Windows,
   if the folder won't delete, move it to `.claude/worktrees/.trash/` (the logic
   `sync-worktrees.js` already has) and run `git worktree prune`.
@@ -84,6 +88,10 @@ dev box. The facts a substep needs are copied into it.
   first checking `node_modules` for a junction:
   `node -e "console.log(require('fs').lstatSync('node_modules').isSymbolicLink())"`. A junction
   once emptied the main checkout's `node_modules` (2026-08-15).
+- **⛔ No removal without a fresh snapshot and an approved dry run.** Before removing any worktree
+  or deleting any branch (by hand, `land.js`, `sync-worktrees --write`), run `node scripts/snapshot-worktrees.js C:\CODE\claude-code-autoconfig C:\CODE\job-agent-extension` and note
+  the backup folder in the Ledger. Then show the user the dry-run list and wait for a yes. A
+  snapshot from an earlier session doesn't count — other sessions keep working in between.
 - **Never use bare `git stash`.** The stash stack is shared by every worktree and session.
 - **JAE usually has live sessions.** Run `node .claude/scripts/fleet.js --project-dir
   C:\CODE\job-agent-extension` before touching any JAE worktree. Never remove a worktree that is a
@@ -98,6 +106,30 @@ dev box. The facts a substep needs are copied into it.
   timeout.
 
 ## Phase 1 — Stop the repo lying
+
+### ☐ 1.0 · M · ~30m — Back up every worktree before anything removes one
+
+**Budget:** files 3 · new 1 (+1 test) · trips ≈ 12
+
+**Read:** this doc (⛔ + 1.0) · `package.json:38` · `test/_harness.js:1-20`
+
+- [ ] Create `scripts/snapshot-worktrees.js` (`scripts/` never ships). Per repo it writes, to
+  `C:\CODE\_worktree-backups\<YYYY-MM-DD_HHMMSS>\<repo>\`: `all.bundle` (`git bundle create
+  --all`), and per worktree a `files/` copy of every staged, modified or untracked non-ignored
+  file plus a `manifest.json` (branch, HEAD, raw status). Read-only on the repos: status runs
+  with `--no-optional-locks`.
+- [ ] Create `test/snapshot-worktrees.test.js` (throwaway repo + worktree: bundle has every
+  branch, uncommitted files copied byte-for-byte, ignored/deleted not copied, status unchanged)
+  and add it to the `package.json:38` chain before the hook-tests entry.
+- [ ] Add the "Back up, then dry-run, then ask" Decision and ⛔ trap, and the snapshot step to
+  3.1, 4.1, 4.2, 7.1 and 7.2.
+- [ ] `ExitWorktree keep`, run `node scripts/snapshot-worktrees.js C:\CODE\claude-code-autoconfig C:\CODE\job-agent-extension` from the CCA main checkout (by the worktree's path to the
+  script), re-enter the worktree, and record the backup folder and sizes in the Ledger.
+
+**Verify:** `node test/snapshot-worktrees.test.js` · `npm test` exit 0 · the real run lists every
+worktree of both repos, and `git bundle verify` passes on both bundles
+
+**Commit:** `feat(worktrees): snapshot every worktree before removals` + `Changelog: none`
 
 ### ☐ 1.1 · S · ~20m — Guard the dev-box worktree wiring with a test
 
@@ -212,6 +244,8 @@ and passing) · `npm test` exit 0
 - [ ] Create `.claude/commands/land.md` with `@description`, `@version 1`, `@param`
   lines for each flag, and `@example`. Its body tells the agent:
   - If the session is in a worktree, call `ExitWorktree keep` first.
+  - Run `node scripts/snapshot-worktrees.js C:\CODE\claude-code-autoconfig C:\CODE\job-agent-extension`, then `land.js <branch> --dry-run`. Show the user what would be merged and
+    removed, and run the real `land.js` only after they approve.
   - Run `land.js` **in the background** with a timeout of at least 10 minutes, because of the push.
   - Report each step's result.
   - Exit 2 or 3: stop and show the files. Never resolve by stashing or checking out.
@@ -270,7 +304,7 @@ until the cause is shown.
   exists and what is in it: `ls -la`, and the `node_modules` junction check.
 - [ ] Pick one merged, clean JAE worktree that is **not** a live session's working directory
   (check fleet first). Run `node .claude/hooks/reclaim-merged-worktrees.js --dry-run`, then
-  reproduce the removal by hand with `git worktree remove <path>`, and record the exact error.
+  run `node scripts/snapshot-worktrees.js C:\CODE\claude-code-autoconfig C:\CODE\job-agent-extension`, get the user's yes on the one worktree you'll remove, and reproduce the removal by hand with `git worktree remove <path>`, and record the exact error.
   If the folder is left behind, list its contents and check which process holds it open
   (`handle.exe` if installed; otherwise note that it's unknown).
 - [ ] Write the cause in the Ledger with evidence. Typical suspects are gitignored files left in
@@ -304,6 +338,8 @@ until the cause is shown.
   passed or failed.
 - [ ] Unlanded report (`:296-309`, printed at `:460-467`): print `N behind` next to ahead. The
   `rev-list --left-right --count` output is already computed at `:300`.
+- [ ] `sync-worktrees.md`: before any `--write`, run `node scripts/snapshot-worktrees.js C:\CODE\claude-code-autoconfig C:\CODE\job-agent-extension` and the dry run, show the user the
+  RECLAIM list, and run `--write` only after they approve it.
 - [ ] Add `sync-worktrees.js` and `sync-worktrees.md` to the fleet manifest (`subdir:'scripts'`
   / `'commands'`). JAE's copy is a 365-line hand copy that has diverged; 7.1 replaces it.
 - [ ] Extend `test/sync-worktrees.test.js`: a merged, clean, idle worktree is reclaimed; a dirty
@@ -421,6 +457,7 @@ better on CCA · `npm test` exit 0
 
 **Read:** this doc (⛔ + 7.1) · Ledger tail
 
+- [ ] `ExitWorktree keep`, then run `node scripts/snapshot-worktrees.js C:\CODE\claude-code-autoconfig C:\CODE\job-agent-extension` and record the backup folder in the Ledger.
 - [ ] Use the plan's own command to land it: `ExitWorktree keep`, then from the CCA main checkout
   run `node .claude/scripts/land.js plan/worktree-hardening --keep-worktree`. Keep the worktree
   until 7.2 is done. If it exits 2 or 3, stop and ask.
@@ -447,13 +484,15 @@ CCA · `git branch --merged main | grep plan/worktree-hardening` is empty in bot
 
 **Read:** this doc (⛔ + 7.2) · Ledger tail
 
-- [ ] CCA: run `node .claude/scripts/sync-worktrees.js`, review it, then run it with `--write`.
+- [ ] Run `node scripts/snapshot-worktrees.js C:\CODE\claude-code-autoconfig C:\CODE\job-agent-extension` and record the backup folder in the Ledger.
+- [ ] CCA: run `node .claude/scripts/sync-worktrees.js`, show the user the list, and run it with
+  `--write` only after they approve.
   Expected results: 5 empty orphan folders reaped; the merged `worktree-agent-matcher` and
   `worktree-quiet-verdict-cards` reclaimed; and this plan's worktree reclaimed, since it is now
   merged. Use `git worktree prune` for the stray `pub226` registration from the
   `cca-cost-control` scratchpad if its path is gone. If the path exists, ask first.
 - [ ] JAE: run fleet first, then `sync-worktrees.js --project-dir C:\CODE\job-agent-extension`
-  (dry run), then `--write`. Expected: most of the 19 merged worktrees reclaimed, and any live
+  (dry run), get the user's yes on the list, then `--write`. Expected: most of the 19 merged worktrees reclaimed, and any live
   session's worktree kept, with its guard named.
 - [ ] Report JAE's unmerged branches with their behind counts (`worktree-anon-cap`,
   `plan/autonomous-scan`, `worktree-bounce-once`, `plan/synced-prefs`,
