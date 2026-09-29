@@ -155,13 +155,13 @@ confirm it prints the skip, then rename it back · `npm test` exit 0
 
 ## Phase 2 — Pure modules (extract before building the command)
 
-### ☐ 2.1 · M · ~40m — Extract worktree-safety.js out of sync-worktrees.js
+### ☑ 2.1 · M · ~40m — Extract worktree-safety.js out of sync-worktrees.js
 
 **Budget:** files 4 · new 1 (+1 test) · trips ≈ 13
 
 **Read:** this doc (⛔ + 2.1) · `.claude/scripts/sync-worktrees.js:316-382` (junction unlink, trash, retries) · `test/sync-worktrees.test.js` (first 60 lines, for its throwaway-repo helpers)
 
-- [ ] Create `.claude/scripts/worktree-safety.js` and export:
+- [x] Create `.claude/scripts/worktree-safety.js` and export:
   - `unlinkNodeModulesLink(dir)`, moved from `sync-worktrees.js:316-327`.
   - `trashOrphan(dir, trashRoot)`, moved from `:338-351`.
   - `removeDir(dir, trashRoot)`: the rmSync with `maxRetries: 8` plus the trash fallback, from
@@ -170,13 +170,13 @@ confirm it prints the skip, then rename it back · `npm test` exit 0
     `git -C mainDir worktree remove <wtPath>` (never `--force`). If that fails and the folder
     still exists, call `removeDir` and then `git worktree prune`. Return
     `{ok, how: 'git'|'trash'|'failed', error}`.
-- [ ] Change `sync-worktrees.js` to `require('./worktree-safety')` and delete the moved bodies.
+- [x] Change `sync-worktrees.js` to `require('./worktree-safety')` and delete the moved bodies.
   Its behavior must not change.
-- [ ] Create `test/worktree-safety.test.js` using throwaway repos from `os.tmpdir()`. Cover: a
+- [x] Create `test/worktree-safety.test.js` using throwaway repos from `os.tmpdir()`. Cover: a
   clean worktree is removed by git; a worktree whose `node_modules` is a junction to a sibling
   folder loses only the link, and the target keeps its files; a dirty worktree returns
   `ok:false` and stays in place. Add it to the `package.json:38` chain.
-- [ ] Add `worktree-safety.js` to `DEV_ONLY_FILES` (`bin/cli.js:529-530`) and add its exact path
+- [x] Add `worktree-safety.js` to `DEV_ONLY_FILES` (`bin/cli.js:529-530`) and add its exact path
   to the package.json `files` negations.
 
 **Verify:** `node test/worktree-safety.test.js` · `node test/sync-worktrees.test.js` (unchanged
@@ -546,3 +546,11 @@ worktree belonging to a live session was removed
     whole-file copy. Diffing showed that line was the only difference, and an in-place edit can't
     overwrite another session's local changes.
   - Next: 2.1. Refresh with `git merge main` first.
+- 2026-09-29 — **2.1** — done (`015c8a3`) [1 session · ~14 trips · peak ~60k · stays M]
+  - **Changed from the plan:** `safeRemoveWorktree` only deletes a leftover folder when git has
+    already de-registered the worktree. The plan said "if remove fails and the folder exists,
+    call removeDir", but that would delete a dirty worktree git had just refused. On a refusal
+    it now returns `ok:false` and puts the node_modules junction back.
+  - The exports also include `rmTree` (unlink + delete, no trash) for the `.trash/` sweep.
+    `trashOrphan` now returns the new path; `sync-worktrees.js` keeps its verdicts and messages.
+  - Next: 2.2. Refresh from main first.
