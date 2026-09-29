@@ -21,11 +21,12 @@ See the `plan-authoring` skill, Branch discipline.
    re-enters the plan's existing worktree.
 2. `node scripts/bootstrap-worktree.js` — mandatory, see below.
 3. Work, test, commit inside the worktree.
-4. Merge back from the main checkout (`C:\CODE\claude-code-autoconfig`), never from inside the
-   worktree. Merge automatically when it's a clean fast-forward or conflict-free; stop and ask
-   only on a real conflict — the user picks the winning side.
-5. Once merged, name the worktree and ask `remove` vs `keep` (on a live plan branch: `keep`).
-   `/fleet` shows every session/worktree; `/sync-worktrees` reaps orphans.
+4. `ExitWorktree keep`, then `/land <branch>` from the main checkout
+   (`C:\CODE\claude-code-autoconfig`). It checks for conflicts, won't touch another session's
+   uncommitted files, merges, removes the worktree, deletes the branch and pushes. Stop and ask
+   only when it exits 2 or 3 — on a conflict the user picks the winning side.
+5. A live plan branch isn't landed until the plan is done. `/fleet` shows every
+   session/worktree; `/sync-worktrees` reaps orphans.
 
 ## ⛔ Bootstrap is not optional
 

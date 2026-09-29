@@ -53,7 +53,9 @@ place is a branch, never the default branch.
 - ⛔ **Merge to the default branch ONCE, when the whole plan is done — never a phase, never a
   substep.** Merging phase 1 of 3 puts half a feature in `main`: an extracted module nothing
   calls yet, a migration for a table nothing reads, a flag no UI sets. If the plan then dies,
-  that junk is indistinguishable from live code and stays forever.
+  that junk is indistinguishable from live code and stays forever. The final substep lands
+  with the repo's landing command, where one exists (CCA: `/land`), run from the main
+  checkout, because the isolation guard refuses landing from inside the plan's own worktree.
 - **If a phase is worth merging on its own, it was never a phase — it was a separate plan.**
   That is the escape valve, and it belongs at *authoring* time: split it into its own plan doc
   with its own branch. The only mid-plan exception is a genuine hotfix that happens to live on
