@@ -351,18 +351,18 @@ worktrees (`worktree-agent-matcher`, `worktree-quiet-verdict-cards`) · `npm tes
 
 **Commit:** `feat(worktrees): reclaim merged registered worktrees; show behind counts` + `Changelog: none`
 
-### ☐ 4.3 · M · ~35m — /fleet flags stale branches and worktree pile-up
+### ☑ 4.3 · M · ~35m — /fleet flags stale branches and worktree pile-up
 
 **Budget:** files 2 · new 0 · trips ≈ 10
 
 **Read:** this doc (⛔ + 4.3) · `.claude/scripts/fleet.js:169-214,288-297,403-429` · `test/fleet.test.js` (the fixture setup)
 
-- [ ] In `enrich` (`:187-214`), add `behind` (`git rev-list --count HEAD..<base>`) beside the
+- [x] In `enrich` (`:187-214`), add `behind` (`git rev-list --count HEAD..<base>`) beside the
   existing unlanded count. Include it in `--json` (`:288-297`).
-- [ ] UNLANDED rows (`:403-429`): print `N behind`, and add a `STALE` marker when behind > 50.
-- [ ] After the board: when registered worktrees > 12, print one line: *"N worktrees registered
+- [x] UNLANDED rows (`:403-429`): print `N behind`, and add a `STALE` marker when behind > 50.
+- [x] After the board: when registered worktrees > 12, print one line: *"N worktrees registered
   — run /sync-worktrees"*.
-- [ ] Extend `test/fleet.test.js`: a branch 60 commits behind shows `STALE`, and 13 worktrees
+- [x] Extend `test/fleet.test.js`: a branch 60 commits behind shows `STALE`, and 13 worktrees
   show the pile-up line.
 
 **Verify:** `node test/fleet.test.js` · `node .claude/scripts/fleet.js --project-dir C:\CODE\job-agent-extension`
@@ -636,3 +636,18 @@ worktree belonging to a live session was removed
   - No snapshot: nothing real was removed. The fixtures are throwaway repos, and the CCA run was
     a dry run only.
   - Next: 4.3. Refresh from main first.
+- 2026-09-29 — **4.3** — done (`3fc7510`) [1 session · ~12 trips · stays M]
+  - `enrich` adds `behind` (`rev-list --count HEAD..<base>`) and `stale` (> 50) per branch;
+    `--json` carries both on each tree plus a top-level `pileUp`. Thresholds are module constants
+    `STALE_BEHIND`/`PILEUP_TREES`.
+  - UNLANDED rows print `N behind` in the flags and `⚠ STALE (N behind main)` on the branch line.
+    The pile-up line trails the board, after UNLANDED.
+  - Tests use a second temp repo so the porcelain fixture stays two rows: 60-behind branch →
+    STALE, 13 worktrees → pile-up line, 12 → none. fleet 8/8, `npm test` exit 0.
+  - Verify on JAE (read-only): `plan/autonomous-scan  ⚠ STALE (266 behind main)` (263 when
+    planned), three more branches STALE at 196–265, and
+    `26 worktrees registered — run /sync-worktrees`.
+  - Seen, not fixed: the JAE board leads with dozens of IN-FLIGHT rows from claims in other
+    repos and dead sessions — the noise 5.1 (key claims by repo + path) removes.
+  - No snapshot: nothing was removed.
+  - Next: 5.1. Refresh from main first.
