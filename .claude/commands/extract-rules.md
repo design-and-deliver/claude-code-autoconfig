@@ -1,5 +1,5 @@
 <!-- @description Scan Claude artifacts and extract structured rules into .claude/rules/ -->
-<!-- @version 4 -->
+<!-- @version 5 -->
 <!-- @param select | string | optional | Write only specific rules by number: "1,3,5". Default: all. -->
 <!-- @param keep-sources | boolean | optional | Write rules but skip source cleanup (Step 8) -->
 <!-- @param source | string | optional | Scan only this file instead of every source: ".claude/feedback/FEEDBACK.md" -->
@@ -40,7 +40,7 @@ Scan these locations for `.md` files containing potential rules. **Skip any that
 
 1. `CLAUDE.md` (project root)
 2. `CLAUDE.local.md` (project root, if present)
-3. All `.md` files in `.claude/` recursively (feedback, commands, etc.) — **excluding** `.claude/rules/` and `.claude/commands/extract-rules.md`
+3. All `.md` files in `.claude/` recursively (feedback, commands, etc.) — **excluding** `.claude/rules/`, `.claude/commands/extract-rules.md`, and `.claude/feedback/EXTRACTED.md`
 4. Any nested `CLAUDE.md` files in subdirectories (e.g., `src/CLAUDE.md`)
 5. Auto memory files — memory often contains misplaced imperatives that should be promoted to rules. To find the memory directory, list `~/.claude/projects/` and fuzzy-match against the current project path. The directory name encodes the path with dashes replacing separators, but encoding varies by platform and may not be consistent for paths with spaces, special characters, or deep nesting. **Discovery strategy**: list all directories under `~/.claude/projects/`, then find the one whose name best matches the current working directory (check if the directory name contains key path segments like the project folder name). Read `MEMORY.md` in that directory, then each `.md` file it links to. If no match is found or the memory directory can't be read, skip this source silently.
 
@@ -70,7 +70,7 @@ A rule is a **deterministic behavioral instruction** that Claude should follow w
 - Slash command definitions → stay in `commands/`
 - Session-specific debugging notes → stay in memory
 - Deployment / operational procedures → stay in their source doc
-- **Pointer lines** (`- → Moved to rule [...](...)`) — they record an earlier extraction; never extract them again
+- **Pointer lines** (`- → Moved to rule [...](...)`) left in FEEDBACK.md by an older version — they record an earlier extraction; never extract them again
 - **Unscoped behavioral imperatives** (e.g., "always use conventional commits", "ask before deleting files") → stay in CLAUDE.md. The value of `.claude/rules/` is path-scoped loading — a rule without a meaningful file scope loads identically to CLAUDE.md, so extracting it is just moving it sideways. Only extract if you can identify a real file pattern.
 
 ## Step 3: Deduplicate
@@ -227,11 +227,22 @@ Write all proposed rules directly. No prompt needed — the user committed their
 After writing rules, remove the extracted content from the original source files:
 
 1. For each written rule, locate the original text in the source file(s)
-2. Remove the extracted lines from the source — do not leave comments or placeholders. **Exception — `.claude/feedback/FEEDBACK.md`:** replace each extracted entry with one pointer line, so the team can see where their feedback went:
+2. Remove the extracted lines from the source — do not leave comments or placeholders, **not even in `.claude/feedback/FEEDBACK.md`**: CLAUDE.md imports it, so every line there costs context every session. Instead, so the team can see where their feedback went, append one line per extracted FEEDBACK.md entry to `.claude/feedback/EXTRACTED.md` (nothing imports it). If that file doesn't exist, create it with this header first:
    ```markdown
-   - → Moved to rule [build-rules.md](../rules/build-rules.md) (2026-09-28)
+   <!-- @description Log of FEEDBACK.md entries /extract-rules turned into .claude/rules/ files. Not imported by CLAUDE.md, so it never costs context. -->
+
+   # Extracted Feedback
+
+   Team feedback that became a path-scoped rule. Each line links the rule that now carries it.
+
+   ---
+
    ```
-   Use today's date. With `--staged`, `git add` FEEDBACK.md afterwards.
+   Then append, with today's date and the entry's original text:
+   ```markdown
+   - → Moved to rule [build-rules.md](../rules/build-rules.md) (2026-09-28) — "Run API tests with --runInBand."
+   ```
+   With `--staged`, `git add` both FEEDBACK.md and EXTRACTED.md afterwards.
 3. If removing content leaves an empty section (e.g., a `## Discoveries` section with no remaining entries), remove the section heading too
 4. Preserve all non-extracted content in the source file
 5. **Memory files**: Do NOT edit memory files (`~/.claude/projects/.../memory/`). These are outside the project directory and managed by Claude's auto-memory system. Extracted imperatives from memory will naturally be pruned by autodream once the rule takes over.
@@ -241,7 +252,7 @@ Show what was cleaned:
 ```
 Cleaned sources:
   CLAUDE.md — removed 3 lines (2 rules extracted)
-  .claude/feedback/FEEDBACK.md — 1 entry replaced with a pointer (1 rule extracted)
+  .claude/feedback/FEEDBACK.md — 1 entry removed, logged in EXTRACTED.md (1 rule extracted)
 ```
 
 **With `--staged`, finish by retrying the commit the check held** — the same `git commit` command. The check lets it through now that the new lines have been evaluated.

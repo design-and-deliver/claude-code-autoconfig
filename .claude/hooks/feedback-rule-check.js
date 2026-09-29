@@ -4,7 +4,7 @@
  * @name Feedback Rule Check
  * @description On commit, holds new FEEDBACK.md entries once so /extract-rules can turn them into rules.
  *              The new lines go through /extract-rules --source <FEEDBACK.md> --staged. Entries
- *              that convert become .claude/rules/ files (leaving a pointer line behind); the
+ *              that convert become .claude/rules/ files (logged in EXTRACTED.md, not FEEDBACK.md); the
  *              rest stay as feedback, and the retried commit goes through.
  * @trigger PreToolUse on Bash (git commit)
  */
@@ -28,6 +28,7 @@ const COMMIT_RE = /\bgit\b(?:\s+-[^\s]+(?:\s+[^\s]+)?)*\s+commit\b/;
 // The same command also stages files (`git add … && git commit`, `git commit -a/-am/--all`),
 // so the diff to judge is against HEAD, not just the index.
 const STAGES_TOO_RE = /\bgit\b(?:\s+-[^\s]+(?:\s+[^\s]+)?)*\s+add\b|\bcommit\b[^;&|]*\s(?:-[a-zA-Z]*a[a-zA-Z]*|--all)\b/;
+// Pointer lines older /extract-rules runs wrote into FEEDBACK.md (upgrades move them to EXTRACTED.md).
 const POINTER_RE = /^-\s*→\s*Moved to rule\b/;
 const HUNK_RE = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
 const MAX_LISTED = 20;
@@ -86,8 +87,8 @@ function denyReason(lines) {
     ...listed,
     '',
     `Before committing, run /extract-rules --source ${FEEDBACK_REL} --staged.`,
-    'It turns any entry that targets specific files into a .claude/rules/ file, replaces that entry',
-    'with a pointer line, and stages both. Then retry the same commit — it goes through once these',
+    'It turns any entry that targets specific files into a .claude/rules/ file, moves that entry out',
+    'to .claude/feedback/EXTRACTED.md, and stages all three. Then retry the same commit — it goes through once these',
     'lines have been evaluated, even if none of them became a rule.',
   ].join('\n');
 }

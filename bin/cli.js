@@ -12,6 +12,7 @@ const { pullUpdates } = require('./lib/updates.js');
 const { cleanupNulFile } = require('./lib/nul-cleanup.js');
 const { ensureCommonJsScope } = require('./lib/commonjs-scope.js');
 const { ensureFeedbackImport } = require('./lib/feedback-import.js');
+const { migrateFeedbackPointers } = require('./lib/feedback-extracted.js');
 
 // ── main() ───────────────────────────────────────────────────────────────────
 // The entire install flow (and its helpers) lives inside main() — requiring this
@@ -841,6 +842,12 @@ function main() {
     console.log(paint('cyan', '   📋 CLAUDE.md now loads .claude/feedback/FEEDBACK.md every session'));
   }
 
+  // Move rule pointers an earlier /extract-rules left in FEEDBACK.md out to EXTRACTED.md.
+  const movedPointers = migrateFeedbackPointers(cwd);
+  if (movedPointers > 0) {
+    console.log(paint('cyan', `   📋 Moved ${movedPointers} rule pointer${movedPointers > 1 ? 's' : ''} from FEEDBACK.md → EXTRACTED.md`));
+  }
+
   // Migrate FEEDBACK.md content to CLAUDE.md Discoveries section (one-time, on upgrade)
   if (isUpgrade) {
     const claudeMdPath = path.join(cwd, 'CLAUDE.md');
@@ -872,7 +879,7 @@ function main() {
           fs.writeFileSync(claudeMdPath, claudeMdContent + discoveriesSection);
 
           // Reset FEEDBACK.md to clean template
-          const cleanTemplate = `<!-- @description Human-authored corrections and guidance for Claude. Reserved for team feedback only — Claude must not write here. This directory persists across /autoconfig runs. -->\n\n# Team Feedback\n\n**This file is for human-authored corrections and guidance only.**\nClaude reads this file but must never write to it, except to replace an entry /extract-rules turned into a rule with a pointer line to that rule. When Claude discovers project context, gotchas, or learnings, it should append to the \`## Discoveries\` section in CLAUDE.md instead.\n\n---\n\n`;
+          const cleanTemplate = `<!-- @description Human-authored corrections and guidance for Claude. Reserved for team feedback only — Claude must not write here. This directory persists across /autoconfig runs. -->\n\n# Team Feedback\n\n**This file is for human-authored corrections and guidance only.**\nClaude reads this file but must never write to it, except to remove an entry /extract-rules turned into a rule (EXTRACTED.md, next to this file, logs where each one went). When Claude discovers project context, gotchas, or learnings, it should append to the \`## Discoveries\` section in CLAUDE.md instead.\n\n---\n\n`;
           fs.writeFileSync(feedbackPath, cleanTemplate);
 
           // Count migrated sections

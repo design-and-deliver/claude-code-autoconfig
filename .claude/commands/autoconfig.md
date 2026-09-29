@@ -1,5 +1,5 @@
 <!-- @description Configures Claude Code scaffolding for your project. Sets up settings, permissions, hooks, commands, and docs. -->
-<!-- @version 20 -->
+<!-- @version 21 -->
 <!-- @response success | Scaffolding configured, CLAUDE.md initialized, docs opened in browser. -->
 <!-- @response no-project | No project detected — asks user to confirm directory. -->
 <!-- @sideeffect Initializes CLAUDE.md, settings.json, hooks, commands, and MEMORY.md -->
@@ -42,7 +42,7 @@ Read `.claude/feedback/FEEDBACK.md`. If it contains custom content beyond the de
    # Team Feedback
 
    **This file is for human-authored corrections and guidance only.**
-   Claude reads this file but must never write to it, except to replace an entry /extract-rules turned into a rule with a pointer line to that rule. When Claude discovers project context, gotchas, or learnings, it should append to the `## Discoveries` section in CLAUDE.md instead.
+   Claude reads this file but must never write to it, except to remove an entry /extract-rules turned into a rule (EXTRACTED.md, next to this file, logs where each one went). When Claude discovers project context, gotchas, or learnings, it should append to the `## Discoveries` section in CLAUDE.md instead.
 
    ---
 
