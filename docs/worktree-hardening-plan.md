@@ -319,13 +319,13 @@ until the cause is shown.
 
 **Commit:** JAE only, and only if edited: `fix(worktrees): reclaim falls back to trash when Windows won't delete` + `Changelog: none`
 
-### ☐ 4.2 · M · ~50m — sync-worktrees reaps merged worktrees that are still registered
+### ☑ 4.2 · M · ~50m — sync-worktrees reaps merged worktrees that are still registered
 
 **Budget:** files 3 · new 0 · trips ≈ 15
 
 **Read:** this doc (⛔ + 4.2) · the 4.1 Ledger entry · `.claude/scripts/sync-worktrees.js:98-140,229-309,383-404` · `C:\CODE\job-agent-extension\.claude\hooks\reclaim-merged-worktrees.js:152-201` (its guard list is the spec)
 
-- [ ] Add a RECLAIM class to `sync-worktrees.js`: a registered worktree (today it is always
+- [x] Add a RECLAIM class to `sync-worktrees.js`: a registered worktree (today it is always
   skipped at `:233`) qualifies only when **all** of these hold:
   - its branch is merged into base (`git merge-base --is-ancestor`);
   - `git status --porcelain` is empty, apart from a modified `settings.local.json`, which is
@@ -333,16 +333,16 @@ until the cause is shown.
   - it isn't locked (no `locked` line in the porcelain list);
   - its newest transcript is more than 30 minutes old (reuse `newestTranscriptMs` at `:126`);
   - it isn't the cwd of the process running the script.
-- [ ] Under `--write`, remove each RECLAIM worktree with `worktree-safety.safeRemoveWorktree`,
+- [x] Under `--write`, remove each RECLAIM worktree with `worktree-safety.safeRemoveWorktree`,
   then run `branch -d` as today. The dry run lists the candidates, each with the guard that
   passed or failed.
-- [ ] Unlanded report (`:296-309`, printed at `:460-467`): print `N behind` next to ahead. The
+- [x] Unlanded report (`:296-309`, printed at `:460-467`): print `N behind` next to ahead. The
   `rev-list --left-right --count` output is already computed at `:300`.
-- [ ] `sync-worktrees.md`: before any `--write`, run `node scripts/snapshot-worktrees.js C:\CODE\claude-code-autoconfig C:\CODE\job-agent-extension` and the dry run, show the user the
+- [x] `sync-worktrees.md`: before any `--write`, run `node scripts/snapshot-worktrees.js C:\CODE\claude-code-autoconfig C:\CODE\job-agent-extension` and the dry run, show the user the
   RECLAIM list, and run `--write` only after they approve it.
-- [ ] Add `sync-worktrees.js` and `sync-worktrees.md` to the fleet manifest (`subdir:'scripts'`
+- [x] Add `sync-worktrees.js` and `sync-worktrees.md` to the fleet manifest (`subdir:'scripts'`
   / `'commands'`). JAE's copy is a 365-line hand copy that has diverged; 7.1 replaces it.
-- [ ] Extend `test/sync-worktrees.test.js`: a merged, clean, idle worktree is reclaimed; a dirty
+- [x] Extend `test/sync-worktrees.test.js`: a merged, clean, idle worktree is reclaimed; a dirty
   one, a locked one and an unmerged one are each kept, and the kept one names its guard.
 
 **Verify:** `node test/sync-worktrees.test.js` · `node test/hook-fleet-sync.test.js` ·
@@ -612,3 +612,27 @@ worktree belonging to a live session was removed
   - No snapshot: no real worktree was removed (scratch repo only). JAE worktree
     `.claude/worktrees/worktree-hardening` was created for the branch.
   - Next: 4.2. Refresh from main first.
+- 2026-09-29 — **4.2** — done (`8cceb56`) [1 session · ~25 trips · stays M]
+  - RECLAIM guards live in `worktree-safety.reclaimVerdict` (+ `discardChurn`), not in
+    `sync-worktrees.js`: that file is now 523 lines, over the 500 bar, and the guard logic is the
+    removal-safety concern that module already owns. All five guards are evaluated every time, so
+    a KEEP row names every guard that failed.
+  - Porcelain is read with `--untracked-files=all` and never trimmed. Without the flag, a new
+    `.claude/settings.local.json` collapses to `?? .claude/` and slips past the churn filter (the
+    first test run caught it). This is the same class of bug as the JAE trim bug.
+  - Before `git worktree remove`, `discardChurn` restores a modified `settings.local.json` or
+    deletes an untracked one. Otherwise git refuses the churn the clean guard allowed (JAE
+    tracks the file). Removal stays unforced.
+  - The behind-count checkbox needed no code: the unlanded report already printed
+    `N unlanded · N behind` (plan line refs predate it).
+  - `registeredTrees` hit CC 10 with the `locked` branch; it now uses a prefix table.
+  - Verify: CCA dry run → RECLAIM `agent-matcher`, `quiet-verdict-cards`; this worktree is KEEP
+    (merged, clean, idle, not-cwd all fail). sync-worktrees 15/15, hook-fleet-sync 24/24,
+    `npm test` exit 0.
+  - Fleet manifest gains `sync-worktrees.md`/`.js`. JAE's diverged hand copy now reads as drift
+    in check mode (so pushes from main will be blocked by the pre-push guard) until 7.1 runs `--write`.
+  - Not done here (still open from 4.1): JAE hook's `gitTry().trim()` porcelain bug, sequenced
+    with 7.2.
+  - No snapshot: nothing real was removed. The fixtures are throwaway repos, and the CCA run was
+    a dry run only.
+  - Next: 4.3. Refresh from main first.
