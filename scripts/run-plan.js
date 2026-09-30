@@ -21,12 +21,18 @@
  *   --model <m>            passed to claude -p (e.g. opus — spend a different usage pool)
  *   --iter-timeout <min>   kill a hung iteration after N minutes (default 90)
  *   --dry-run              show what would run, spawn nothing
+ *   --human-done           the next substep is a 👤 human step you just did: tick it + log it
  *
  * Circuit breakers (stop without burning allocation):
  *   - substep count didn't decrease after an iteration  -> stop "no progress"
  *   - new Ledger tail contains "BLOCKED:"               -> stop and print it
  *   - iteration timeout                                  -> kill child, stop
  *   - plan has zero parseable ☐/☑ substeps              -> refuse to start
+ *
+ * Human steps: a substep whose title carries 👤 (e.g. "### ☐ 3.2 · S · ~5m — 👤 Reload the
+ * extension") is work only a person can do. No session is ever spawned for it: when it is
+ * next, the runner prints its body and stops (exit 5). Do the step, then rerun with
+ * --human-done, which ticks it, appends a Ledger line, and carries on.
  *
  * Logs: ~/.claude/run-plan-logs/<plan-slug>/iter<N>-<ts>.log (full child output).
  */
@@ -51,6 +57,7 @@ const permissionMode = opt('--permission-mode', 'acceptEdits');
 const dangerous = flag('--dangerous');
 const childModel = opt('--model', '');
 const dryRun = flag('--dry-run');
+const humanDone = flag('--human-done');
 const iterTimeoutMs = parseFloat(opt('--iter-timeout', '90')) * 60 * 1000;
 
 function findRepoRoot(from) {
@@ -76,6 +83,54 @@ function readPlan() {
   return { text, unchecked, checked, ledger };
 }
 
+// ---------- human steps (👤) ----------
+const HUMAN = '👤';
+function nextSubstep(text) {
+  const m = /^###\s*☐.*$/m.exec(text);
+  if (!m) return null;
+  const rest = text.slice(m.index + m[0].length);
+  const end = rest.search(/^#{1,3}\s/m);
+  return { index: m.index, heading: m[0], body: (end >= 0 ? rest.slice(0, end) : rest).trim() };
+}
+function isHumanStep(step) { return Boolean(step) && step.heading.includes(HUMAN); }
+
+// Appends `line` as the last entry of the ## Ledger section (which may not be last in the doc).
+function appendToLedger(text, line) {
+  const at = text.search(/^##\s+Ledger/m);
+  if (at < 0) return text;
+  const next = text.slice(at + 1).search(/^##\s/m);
+  const cut = next >= 0 ? at + 1 + next : text.length;
+  const tail = cut < text.length ? `\n${text.slice(cut)}` : '';
+  return `${text.slice(0, cut).trimEnd()}\n${line}\n${tail}`;
+}
+
+function markHumanDone() {
+  const text = fs.readFileSync(planPath, 'utf8');
+  const step = nextSubstep(text);
+  if (!isHumanStep(step)) {
+    console.error(`run-plan: --human-done, but the next substep is not a ${HUMAN} human step:`);
+    console.error(`  ${step ? step.heading : '(none left)'}`);
+    process.exit(1);
+  }
+  const ticked = text.slice(0, step.index) + step.heading.replace('☐', '☑') +
+    text.slice(step.index + step.heading.length);
+  const id = (/☐\s*(\S+)/.exec(step.heading) || [])[1];
+  const date = new Date().toISOString().slice(0, 10);
+  fs.writeFileSync(planPath, appendToLedger(ticked, `- ${date} — ${id} — ${HUMAN} done by hand (run-plan --human-done)`));
+  console.log(`run-plan: ticked human step ${id}.`);
+}
+
+// Stops the run before a 👤 substep: no session is spawned for work only a person can do.
+function stopAtHumanStep(text) {
+  const step = nextSubstep(text);
+  if (!isHumanStep(step)) return;
+  console.log(`\nrun-plan: next substep needs a human — stopping.\n\n${step.heading}`);
+  if (step.body) console.log(`\n${step.body}`);
+  console.log('\nDo it, then rerun with --human-done to tick it and continue.');
+  process.exit(5);
+}
+
+if (humanDone) markHumanDone();
 const first = readPlan();
 if (first.unchecked + first.checked === 0) {
   console.error('run-plan: no "### ☐ / ### ☑" substep headings found — plan does not follow');
@@ -162,6 +217,7 @@ function runIteration(n) {
   console.log(`run-plan: cwd=${cwd}  substeps: ${first.checked} done / ${first.unchecked} remaining`);
   console.log(`run-plan: max ${maxIter} iteration(s), ${dangerous ? 'DANGEROUS (no permission prompts)' : `permission-mode=${permissionMode}`}`);
   if (dryRun) {
+    stopAtHumanStep(first.text);
     console.log('\n--- dry run: child prompt would be ---\n');
     console.log(childPrompt());
     process.exit(0);
@@ -169,6 +225,7 @@ function runIteration(n) {
 
   let before = first;
   for (let n = 1; n <= maxIter; n++) {
+    stopAtHumanStep(before.text);
     const { timedOut } = await runIteration(n);
     if (timedOut) { console.error('run-plan: stopped on timeout.'); process.exit(2); }
 

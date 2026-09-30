@@ -152,6 +152,13 @@ own repo.
    interleaves opens with edits instead of loading every window first and carrying all of them
    into every edit.
 
+   **Mark human-only substeps with 👤 in the title** — `### ☐ 3.2 · S · ~5m — 👤 Reload the
+   extension` — for work no session can do (reloading an unpacked extension, a portal login,
+   anything behind a person's hands). Make it its own substep with the exact instructions as its
+   body. `scripts/run-plan.js` never spawns a session for one: it stops there (exit 5) and prints
+   the body; `--human-done` ticks it and continues. Put it in the title, not the tag slots, so
+   the heading grammar above still parses.
+
    **Write the estimate down — a `**Budget:**` line under every substep heading:**
    `files N · new N (+N test) · trips ≈ N`. An estimate that is not written is not made: on
    2026-09-12 a plan authored with the formula in view still tagged five of ten substeps M by
