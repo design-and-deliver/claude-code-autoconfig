@@ -277,7 +277,7 @@ string/template values, so a brace in those hand-authored entries mis-locates th
 
 ## Phase 5 — Hook correctness (title / lineage / beeps)
 
-### ☐ 5.1 · L · ~1.5h — terminal-title lineage + watchdog correctness (BH-5, BH-16)
+### ☑ 5.1 · L · ~1.5h — terminal-title lineage + watchdog correctness (BH-5, BH-16)
 
 Both edit the canonical fleet copy `.claude/hooks/terminal-title.js` (trap 2 — sync + parity once
 covers both). BH-5 (`:834`) — a flaked ancestry walk returns early **before** writing the terminal
@@ -286,14 +286,14 @@ wrong session. BH-16 (`:1338/1344`, **low-confidence — repro first**) — befo
 the find-needle is the bare folder name, so with two tabs on one repo the watchdog may latch the
 sibling's pid and paint/probe the wrong console.
 
-- [ ] BH-5: refresh (or invalidate) the terminal-occupant record even when the ancestry walk
+- [x] BH-5: refresh (or invalidate) the terminal-occupant record even when the ancestry walk
       misses, so a transient flake can't poison the next session's lineage. ⚠ Trap 1 (lineage/occupant
       files are serialized — additive/behavioral fix, no field rename).
-- [ ] BH-16 (verify-first): reproduce the two-tab, pre-title needle collision; if real, add a
+- [x] BH-16 (verify-first): reproduce the two-tab, pre-title needle collision; if real, add a
       uniqueness/"block-not-act" safeguard to the paint/liveness path (mirror the kill decision's
       block-don't-act). If not reproducible, record in the Ledger and skip.
-- [ ] After editing: `node scripts/sync-terminal-title.js --write`, then `npm test` (parity).
-- [ ] Fail-first test (extend `.claude/hooks/tests/` terminal-title suites): simulate a walk-miss →
+- [x] After editing: `node scripts/sync-terminal-title.js --write`, then `npm test` (parity).
+- [x] Fail-first test (extend `.claude/hooks/tests/` terminal-title suites): simulate a walk-miss →
       assert the occupant record is not left stale (predecessor resolves correctly). Red on HEAD,
       green after.
 
@@ -618,3 +618,26 @@ Append one entry after each substep, newest last. Format:
   Regenerated HTML byte-identical to HEAD (two runs, same sha1) — nothing to commit there.
 - Discoveries: `${…}` inside a template literal is treated as opaque text; fine for the kept
   entries (hand-authored, no interpolation), would need nesting support if that ever changes.
+
+### 2026-09-29 — substep 5.1 — done
+- Commit: 5bf768f fix(terminal-title): a flaked ancestry walk no longer corrupts session lineage
+- Fail-first: proven RED→GREEN for both. BH-5: new test in
+  `.claude/hooks/tests/terminal-title-lineage.test.cjs` stubs `child_process.spawnSync` to force a
+  walk miss for session B between A and C in one tab; RED on HEAD (C's lineage named A), green
+  after. A control test (miss older than the occupant) keeps real rotations intact. BH-16: new
+  `.claude/hooks/tests/terminal-title-bind.test.cjs` on the exported `pickConsole()`; RED on HEAD
+  (helper absent — first-hit-wins inline), green after.
+- BH-16 reproduced from field evidence rather than a live two-tab run: `_alarms.log` holds 4
+  `ambiguousMatch=1` binds (e.g. 2026-08-15 `placeholder=1 matched=[29728 23964]`). Fix: bind only
+  on a unique match (`why=ambiguous-match`), retry next poll.
+- Deviations: BH-5 can't refresh the occupant (a missed walk has no tid to name it), so it
+  invalidates instead — `resolveTid()` retries the walk once; a still-missed session appends to
+  `terminals/.unanchored.json` (capped 20); a rotation whose occupant `updatedAt` predates any
+  note from another sid writes NO lineage (recovery falls back to its heuristic) rather than a
+  wrong one. Additive only — no existing field renamed. Cost: a miss in one tab can drop one
+  lineage link in each other tab of that project.
+- Verify: full suite green except `live-twin-parity` pre-sync (expected — the chain stops there, so
+  the remaining suites were run individually: all exit 0). After landing on main:
+  `sync-hook-fleet.js --write`, check mode reports no drift, `live-twin-parity` passes. Fleet
+  repos committed (job-agent-extension, wifi-app, worksource-oregon, image-editor,
+  hedge-glasses — unpushed); movie-maker's copy is untracked there, left as is.
