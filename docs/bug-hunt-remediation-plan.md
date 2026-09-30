@@ -256,17 +256,17 @@ docs `<script>` block.
 **Commit:** `fix(docs): preview content containing }; or </script> can no longer break the docs page` +
 body `Changelog: none` (internal docs generator; no user-visible docs change).
 
-### ☐ 4.2 · M · ~45m — Make the brace-walker ignore braces inside kept structural entries (BH-14)
+### ☑ 4.2 · M · ~45m — Make the brace-walker ignore braces inside kept structural entries (BH-14)
 
 `sync-docs.js:657-666` (treeInfo) and `:703-712` (fileContents) — the brace-depth walker that finds
 the end of the kept `claude-md`/`claude-dir` entry counts every literal `{`/`}` including those in
 string/template values, so a brace in those hand-authored entries mis-locates the boundary. LATENT
 (kept entries are brace-free today; the `rules` static desc already ships inline `<div style=…>`).
 
-- [ ] Make the boundary detection value-aware (skip braces inside strings/template literals) or
+- [x] Make the boundary detection value-aware (skip braces inside strings/template literals) or
       anchor the kept-entry end on a marker rather than raw brace-counting. ⚠ Trap 3.
-- [ ] Regenerate twice → byte-identical; commit HTML if changed.
-- [ ] Fail-first test (extend `test/contracts.test.js`): temporarily give a kept-entry desc a `{` in
+- [x] Regenerate twice → byte-identical; commit HTML if changed.
+- [x] Fail-first test (extend `test/contracts.test.js`): temporarily give a kept-entry desc a `{` in
       a fixture → assert the splice still finds the right boundary. Red on HEAD, green after.
 
 **Verify:** fail-first proven; idempotent; `npm test` green.
@@ -602,3 +602,19 @@ Append one entry after each substep, newest last. Format:
   `makeSyncFixture()` / `runSyncDocs()` so both tests share it.
 - Discoveries: 4.2 (BH-14) can reuse `makeSyncFixture()`; its fixture needs to edit a KEPT
   entry (`claude-dir`/`claude-md`) in the fixture's copied HTML, not add a scanned file.
+
+### 2026-09-29 — substep 4.2 — done
+- Commit: 8e920fc fix(docs): sync-docs boundary detection ignores braces inside entry values
+- Fail-first: proven RED→GREEN. New test in `test/contracts.test.js` (reuses
+  `makeSyncFixture()`) edits the fixture's copied HTML so the kept `claude-dir` treeInfo desc
+  gains a lone `{` and the kept `claude-md` fileContents preview a lone `}`, syncs twice, and
+  asserts the output equals the edited input exactly (only the generated sections may be
+  rewritten), both runs match, and every `<script>` block compiles. RED on HEAD: sync-docs
+  exited 1 "Could not find fileContents" — the unbalanced `{` let the treeInfo splice overrun
+  and delete the fileContents section. Green after. Full suite green (npm test exit 0).
+- Deviations: none — took the value-aware option. Both inline walkers replaced by
+  `findEntryEnd()` + `skipQuoted()` (sync-docs.js, beside `countOccurrences`), which skip `'`,
+  `"` and backtick literals with backslash escapes. `MARKERS`/`assertMarkersUnique` untouched.
+  Regenerated HTML byte-identical to HEAD (two runs, same sha1) — nothing to commit there.
+- Discoveries: `${…}` inside a template literal is treated as opaque text; fine for the kept
+  entries (hand-authored, no interpolation), would need nesting support if that ever changes.
