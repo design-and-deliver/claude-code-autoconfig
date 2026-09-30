@@ -234,13 +234,28 @@ function generatePreview(content, _ext) {
 }
 
 /**
+ * Neutralize text that is ordinary content but reads as STRUCTURE to the page, using escapes
+ * that evaluate back to the same characters inside any JS string or template literal:
+ *   `};`       → `};`   the splice finds the end of treeInfo/fileContents with
+ *                            indexOf('};'), so a `};` in content mis-anchors the next sync (BH-2)
+ *   `</script` → `<\/script` the whole page lives in one <script>; an HTML parser ends it at
+ *                            the first `</script`, wherever it sits (BH-15)
+ * Runs AFTER backslash doubling, so the backslashes it adds are never re-escaped.
+ */
+function neutralizeStructure(str) {
+  return str
+    .replace(/\};/g, '\\u007d;')
+    .replace(/<\/(script)/gi, '<\\/$1');
+}
+
+/**
  * Escape a string for use inside a JS template literal.
  */
 function escapeTemplateLiteral(str) {
-  return str
+  return neutralizeStructure(str
     .replace(/\\/g, '\\\\')
     .replace(/`/g, '\\`')
-    .replace(/\$\{/g, '\\${');
+    .replace(/\$\{/g, '\\${'));
 }
 
 /**
@@ -248,11 +263,11 @@ function escapeTemplateLiteral(str) {
  * Backslash goes first so the escapes added below aren't themselves re-escaped.
  */
 function jsEscape(str) {
-  return str
+  return neutralizeStructure(str
     .replace(/\\/g, '\\\\')
     .replace(/'/g, "\\'")
     .replace(/\r/g, '\\r')
-    .replace(/\n/g, '\\n');
+    .replace(/\n/g, '\\n'));
 }
 
 /**
