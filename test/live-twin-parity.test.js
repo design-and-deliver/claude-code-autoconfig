@@ -50,15 +50,7 @@ function normalize(src) {
 // No allowed divergence: the live copy is a byte-derived artifact of the twin. The old
 // .titles-dir fork is now a runtime branch (isUserLevel ? os.homedir() : ownerDir) that lives
 // identically in both files, so nothing is whitelisted anymore.
-//
-// TEMPORARY (TokenSaver rename, 2.4b -> 4.2c): the twin's install gate now accepts token-saver.js
-// OR token-guard.js (TOKEN_SAVER_NAMES); the live copy still carries the single-name gate until
-// 4.2c runs `sync-terminal-title.js --write`. 4.2c empties this list again -- a whitelist row
-// outliving that substep is drift, not intent.
-const WHITELIST = [
-  /TOKEN_SAVER_NAMES/,
-  /'token-guard.js'/,
-];
+const WHITELIST = [];
 
 const live = normalize(fs.readFileSync(LIVE, 'utf8'));
 const twin = normalize(fs.readFileSync(TWIN, 'utf8'));
