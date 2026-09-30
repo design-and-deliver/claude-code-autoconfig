@@ -369,7 +369,7 @@ body `Changelog: none`.
 
 ## Phase 7 — Narrow mop-up (low severity / confidence)
 
-### ☐ 7.1 · M · ~45m — Backup correctness: timestamp collision + nested-name exclusion (BH-18, BH-19)
+### ☑ 7.1 · M · ~45m — Backup correctness: timestamp collision + nested-name exclusion (BH-18, BH-19)
 
 `bin/cli.js:317` (BH-18) — two installs in the same clock minute reuse `migration/<timestamp>/`
 (no seconds) and the second copy overwrites the first backup. `:281` (BH-19) — `copyDirForBackup`
@@ -377,10 +377,10 @@ applies the top-level `AUTOCONFIG_FILES` name filter at every recursion depth, s
 `.claude/mynotes/scripts/build.sh` is skipped and an all-such-names folder yields an empty backup
 that still prints "Backup triggered by user content."
 
-- [ ] BH-18: make the backup folder unique (append seconds or a counter) before `mkdirSync`.
-- [ ] BH-19: apply the `AUTOCONFIG_FILES` exclusion only at the top level of the walk, not at depth.
+- [x] BH-18: make the backup folder unique (append seconds or a counter) before `mkdirSync`.
+- [x] BH-19: apply the `AUTOCONFIG_FILES` exclusion only at the top level of the walk, not at depth.
       ⚠ Trap 8 (no top-level reorder in cli.js).
-- [ ] Fail-first test (extend `test/cli-behavior.test.js`): a nested `scripts/` under a user folder
+- [x] Fail-first test (extend `test/cli-behavior.test.js`): a nested `scripts/` under a user folder
       → assert it's included in the backup. Red on HEAD, green after. (Collision is timing — assert
       via the naming helper.)
 
@@ -697,3 +697,20 @@ Append one entry after each substep, newest last. Format:
 - Verify: `npm test` exit 0 (hook suites included).
 - Resolved after landing: `-text` pin committed in job-agent-extension (5ca8250, unpushed; blobs were
   already canonical bytes, only checkout conversion drifted), fleet `--write` run, check clean, pushed.
+
+### 2026-09-29 — substep 7.1 — done
+- Commit: 765cd6c fix(cli): backups are unique-per-run and include nested user files
+- Fail-first: proven RED→GREEN in `test/cli-behavior.test.js` fixture 15. It pre-seeds the current
+  AND next minute's `migration/<stamp>/` folders so the collision is deterministic, not
+  timing-based (the plan suggested asserting via the naming helper, but `formatTimestamp` is a
+  closure inside `main()`, so the test is behavioral). RED on HEAD: the earlier backup was
+  written into, and `mynotes/` never appeared in a new folder. Green after.
+- Shape: BH-18 → `uniqueBackupStamp()` suffixes `-2`, `-3`, ... until the folder is free (README
+  and latest.json carry the suffixed stamp). BH-19 → `copyTree`'s filter now gets
+  `(name, depth)`; the backup applies `AUTOCONFIG_FILES` only at depth 0, while `SKIP_BACKUP`
+  (migration, worktrees, node_modules, .git) still applies at every depth. Other copyTree
+  callers ignore the extra argument.
+- Deviation: the extra default parameter pushed `copyTree` to CC 10 (the complexity ratchet
+  failed), so the skip checks moved to an `isCopyable()` helper. The plan's line refs were stale
+  (`copyDirForBackup` is now `copyTree`).
+- Verify: `npm test` exit 0 (hook suites included). No `~/.claude` twin — nothing to sync.
