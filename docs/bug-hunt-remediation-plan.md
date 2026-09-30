@@ -231,7 +231,7 @@ All in `.claude/scripts/sync-docs.js`. Generated file (trap 3): fix the generato
 keep the byte-for-byte ratchet green. The shared test surface is `test/contracts.test.js`'s docs
 ratchet — extend it with adversarial-preview fixtures.
 
-### ☐ 4.1 · L · ~1.5h — Escape preview content so a `};` or `</script>` can't break the docs page (BH-2, BH-15)
+### ☑ 4.1 · L · ~1.5h — Escape preview content so a `};` or `</script>` can't break the docs page (BH-2, BH-15)
 
 `sync-docs.js:721/678` — the object-end anchor `indexOf('};', …)` mis-anchors on a `};` inside a
 discarded entry's template literal (`escapeTemplateLiteral` at :237-242 doesn't escape `}`), so any
@@ -239,14 +239,14 @@ documented JS preview containing `};` silently blanks the docs page on the next 
 the same escaping never neutralizes an HTML `</script>` inside a preview, which would terminate the
 docs `<script>` block.
 
-- [ ] Fix the anchoring/escaping so preview content can't be mistaken for structure: escape `}` (or
+- [x] Fix the anchoring/escaping so preview content can't be mistaken for structure: escape `}` (or
       anchor the object end on a marker that cannot appear in content), and neutralize `</script>`
       (e.g. `<\/script>`) in `escapeTemplateLiteral` since output is injected into HTML.
-- [ ] Keep `MARKERS` + `assertMarkersUnique` intact (trap 3); if the end-anchor changes, update
+- [x] Keep `MARKERS` + `assertMarkersUnique` intact (trap 3); if the end-anchor changes, update
       `assertOnceInSection`/`assertMarkersUnique` to match in the same substep.
-- [ ] Regenerate: `node .claude/scripts/sync-docs.js` twice — output must stay **byte-identical**
+- [x] Regenerate: `node .claude/scripts/sync-docs.js` twice — output must stay **byte-identical**
       (idempotency from maintainability-plan 3.5 must hold), commit the regenerated HTML if changed.
-- [ ] Fail-first test (extend `test/contracts.test.js`): a temp fixture command/hook whose preview
+- [x] Fail-first test (extend `test/contracts.test.js`): a temp fixture command/hook whose preview
       contains `};` and `</script>` → run sync-docs → assert the produced HTML still parses/round-
       trips (object closes at the real terminator; no early break). Red on HEAD, green after.
 
@@ -580,3 +580,25 @@ Append one entry after each substep, newest last. Format:
   copy — it reads the file copyDir overwrites); no existing top-level statement moved. One
   full-suite run timed out at 10min (exit 143, output lost to a pipe); the identical rerun was
   green in ~3min — transient, no repro, nothing committed between the two.
+
+### 2026-09-29 — substep 4.1 — done
+- Commit: b2c13e6 fix(docs): preview content containing }; or </script> can no longer break the docs page
+- Fail-first: proven RED→GREEN for BOTH findings. New test in `test/contracts.test.js` drops a
+  fixture command whose preview contains `const cfg = { a: 1 };` and `'</script><script>'`
+  into a throwaway sync fixture, syncs twice, and asserts (a) the two runs are byte-identical,
+  (b) the `<script>` block count matches the committed page, (c) every block compiles under
+  `vm.Script`. RED on HEAD at (a) — BH-2 (second sync mis-anchored on the in-preview `};`).
+  With only the `};` escape applied, RED at (b) — BH-15 independently. Green with both. Full
+  suite green (npm test exit 0).
+- Deviations: chose escaping over re-anchoring, so `MARKERS`, `assertMarkersUnique` and
+  `assertOnceInSection` are untouched (their `indexOf('};')` is now safe because content can
+  no longer contain `};`). New `neutralizeStructure()` (sync-docs.js, above
+  `escapeTemplateLiteral`) rewrites `};`→`};` and `</script`→`<\/script` (case-insensitive),
+  runs AFTER backslash doubling, and is applied in BOTH `escapeTemplateLiteral` and `jsEscape`
+  — descs/triggers are single-quoted strings in the same objects and had the same hole. No
+  current source contains either sequence, so the regenerated HTML is byte-identical to HEAD
+  (two runs, same sha1) — nothing to commit there, so no overlap with the TokenSaver rename
+  session's docs regen. Test refactor: the ratchet's copy logic was extracted into
+  `makeSyncFixture()` / `runSyncDocs()` so both tests share it.
+- Discoveries: 4.2 (BH-14) can reuse `makeSyncFixture()`; its fixture needs to edit a KEPT
+  entry (`claude-dir`/`claude-md`) in the fixture's copied HTML, not add a scanned file.
