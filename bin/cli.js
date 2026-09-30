@@ -365,22 +365,25 @@ function main() {
   }
 
   // The one recursive copier behind every tree copy in the installer (backup,
-  // commands, hooks, scripts, docs). The required filter(name) gates entries at
-  // EVERY depth; reserved Windows device names are always skipped. overwrite:false
-  // preserves files already present at the destination ("keep user edits" semantics).
-  function copyTree(src, dest, { filter, overwrite = true }) {
+  // commands, hooks, scripts, docs). The required filter(name, depth) gates entries at
+  // EVERY depth (0 = direct children of src); reserved Windows device names are always
+  // skipped. overwrite:false preserves files already present at the destination ("keep
+  // user edits" semantics).
+  // A Dirent reflects lstat, so a symlink TO a directory answers isDirectory() false
+  // and would fall through to copyFileSync — which is EPERM on Windows, killing the
+  // whole install. Nothing the installer copies is meant to be a link, so skip them.
+  function isCopyable(entry, filter, depth) {
+    return !isReservedName(entry.name) && filter(entry.name, depth) && !entry.isSymbolicLink();
+  }
+
+  function copyTree(src, dest, { filter, overwrite = true }, depth = 0) {
     fs.mkdirSync(dest, { recursive: true });
     for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
-      if (isReservedName(entry.name)) continue;
-      if (!filter(entry.name)) continue;
+      if (!isCopyable(entry, filter, depth)) continue;
       const srcPath = path.join(src, entry.name);
       const destPath = path.join(dest, entry.name);
-      // A Dirent reflects lstat, so a symlink TO a directory answers isDirectory() false
-      // and would fall through to copyFileSync — which is EPERM on Windows, killing the
-      // whole install. Nothing the installer copies is meant to be a link, so skip them.
-      if (entry.isSymbolicLink()) continue;
       if (entry.isDirectory()) {
-        copyTree(srcPath, destPath, { filter, overwrite });
+        copyTree(srcPath, destPath, { filter, overwrite }, depth + 1);
       } else if (overwrite || !fs.existsSync(destPath)) {
         copyFileTolerant(srcPath, destPath);
       }
@@ -411,10 +414,12 @@ function main() {
 
     const migrationDir = path.join(claudeDest, 'migration');
 
-    // The filter applies at every depth, and skipping 'migration' keeps the backup from
-    // nesting into itself (backupPath lives inside claudeDest).
+    // SKIP_BACKUP applies at every depth (skipping 'migration' keeps the backup from nesting
+    // into itself — backupPath lives inside claudeDest). AUTOCONFIG_FILES names only the
+    // installer's TOP-LEVEL entries: applied deeper, it dropped a user's own
+    // .claude/mynotes/scripts/ from the backup (BH-19).
     copyTree(claudeDest, backupPath, {
-      filter: (name) => !SKIP_BACKUP.includes(name) && !AUTOCONFIG_FILES.includes(name)
+      filter: (name, depth) => !SKIP_BACKUP.includes(name) && (depth > 0 || !AUTOCONFIG_FILES.includes(name))
     });
 
     // Collect backed up files for metadata
@@ -476,8 +481,17 @@ function main() {
     }
   }
 
+  // The stamp has minute resolution, so a second install in the same minute would copy
+  // over the first run's backup (BH-18) — suffix -2, -3, ... until the folder is free.
+  function uniqueBackupStamp(migrationDir) {
+    const base = formatTimestamp();
+    let stamp = base;
+    for (let n = 2; fs.existsSync(path.join(migrationDir, stamp)); n++) stamp = `${base}-${n}`;
+    return stamp;
+  }
+
   if (fs.existsSync(claudeDest) && hasUserContent(claudeDest)) {
-    const timestamp = formatTimestamp();
+    const timestamp = uniqueBackupStamp(path.join(claudeDest, 'migration'));
     // Return value deliberately dropped: since copyTree absorbed the per-entry backup loop
     // (3.2), the backup path is only ever used inside backupUserContent, which logs it.
     safeBackup(timestamp, path.join(claudeDest, 'migration', timestamp));
