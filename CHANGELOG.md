@@ -4,6 +4,12 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.243
+- fix(install): First launch no longer opens with a scary permissions warning — pre-approved commands are now an opt-in during setup
+- fix(cli): Backups during upgrade are now unique per run and capture nested files you added
+- fix(arcade-beeps): The awaiting/complete status beep now matches the tab indicator
+- fix(terminal-title): /continue and /recover-context more reliably find the previous session in a terminal
+
 ## v1.0.242
 - fix(installer): dev gate, retraction and plugin verify know both hook names; cca.config.json key migrates to tokenSaver
 
@@ -209,9 +215,4 @@
 
 ## v1.0.194
 - fix(terminal-title): guard the Stop question-grade against the transcript-flush race
-
-## v1.0.193
-- fix(installer): always refresh cca-managed title hooks on upgrade
-- fix(terminal-title): arm the {sid}.ask flag so awaiting ◐ is race-free
-- docs(publish): document web-auth/passkey publish flow in Discoveries
 
