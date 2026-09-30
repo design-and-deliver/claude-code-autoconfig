@@ -304,16 +304,16 @@ sibling's pid and paint/probe the wrong console.
 **Commit:** `fix(terminal-title): a flaked ancestry walk no longer corrupts session lineage` + body
 `Changelog: /continue and /recover-context more reliably find the previous session in a terminal`.
 
-### ☐ 5.2 · M · ~45m — Make the arcade beep agree with the tab glyph on awaiting (BH-13)
+### ☑ 5.2 · M · ~45m — Make the arcade beep agree with the tab glyph on awaiting (BH-13)
 
 `.claude/hooks/arcade-beeps.js:132` — a turn ending on a formulaic offer (no `?`, no `.ask` flag)
 paints ◐ awaiting in terminal-title but reads only `q.ends` in arcade-beeps, so it plays the
 "complete" tone. Reuse the `solicits` field terminal-title branches on so sound and glyph agree.
 
-- [ ] Read `inspectLastResponse`'s `solicits` (the lexical-awaiting path), not just `q.ends`; mirror
+- [x] Read `inspectLastResponse`'s `solicits` (the lexical-awaiting path), not just `q.ends`; mirror
       terminal-title's Stop decision. Watch the `.ask` one-shot race noted in BH-13 (don't depend on
       a flag terminal-title may have already consumed).
-- [ ] Fail-first test (extend `.claude/hooks/tests/` beep/arcade suite, if present, else add one and
+- [x] Fail-first test (extend `.claude/hooks/tests/` beep/arcade suite, if present, else add one and
       it's auto-discovered — trap 9): a formulaic-offer Stop payload → assert the awaiting tone, not
       complete. Red on HEAD, green after.
 
@@ -641,3 +641,21 @@ Append one entry after each substep, newest last. Format:
   `sync-hook-fleet.js --write`, check mode reports no drift, `live-twin-parity` passes. Fleet
   repos committed (job-agent-extension, wifi-app, worksource-oregon, image-editor,
   hedge-glasses — unpushed); movie-maker's copy is untracked there, left as is.
+
+### 2026-09-29 — substep 5.2 — done
+- Commit: b7cc044 fix(arcade-beeps): play the awaiting tone when the tab shows awaiting
+- Fail-first: proven RED→GREEN. Two new end-to-end tests in
+  `.claude/hooks/tests/silent-hooks-smoke.test.cjs` (a fake install with terminal-title.js beside
+  the hook, so the real `inspectLastResponse` grades a one-line transcript): (a) a '?'-less offer
+  ("Say the word and I will apply them.") → awaiting tone; (b) a fresh `{sid}.glyph` =
+  `awaiting|Stop` with a plain-statement close → awaiting tone. Both RED on HEAD's hook (played
+  GO), green after. Controls: plain statement → complete; stale (60s) glyph record → complete.
+- Deviations: beyond reading `solicits`, closed the `.ask` one-shot race the plan flagged — both
+  hooks fire on Stop in parallel and terminal-title consumes the flag, so a flag turn whose prose
+  has neither '?' nor an offer phrase still played GO. Backstop: read the glyph terminal-title
+  records for this Stop (`{sid}.glyph`, fresh < 5s, polled 3×100ms). Cost: up to ~300ms extra
+  on a complete-tone Stop before the (already blocking ~0.5s) beep. The no-terminal-title inline
+  fallback stays question-only — the lexicon lives in terminal-title.js.
+- Verify: `npm test` exit 0 (hook suites included). arcade-beeps is not in the fleet manifest and
+  has no `~/.claude` twin — nothing to sync. Landed on main (fast-forward); worktree removal hit
+  EBUSY (Windows lock) — leftover dir for /sync-worktrees.
