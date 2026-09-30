@@ -579,6 +579,28 @@ const MARKERS = {
   claudeMdFc: "'claude-md': {"
 };
 
+// Index of the `}` that closes the object literal opened at or after `start`. Braces inside
+// quoted strings and template literals are skipped (BH-14): the kept structural entries are
+// hand-authored, so a `{` in a desc or a `}` in a preview must not move the boundary.
+function skipQuoted(html, i) {
+  const quote = html[i];
+  for (i++; i < html.length && html[i] !== quote; i++) {
+    if (html[i] === '\\') i++;
+  }
+  return i;
+}
+
+function findEntryEnd(html, start) {
+  let depth = 0;
+  for (let i = start; i < html.length; i++) {
+    const c = html[i];
+    if (c === "'" || c === '"' || c === '`') i = skipQuoted(html, i);
+    else if (c === '{') depth++;
+    else if (c === '}' && --depth === 0) return i;
+  }
+  return html.length;
+}
+
 function countOccurrences(haystack, needle) {
   let count = 0, from = 0, idx;
   while ((idx = haystack.indexOf(needle, from)) !== -1) {
@@ -679,16 +701,7 @@ if (claudeDirInfoIdx === -1) {
   process.exit(1);
 }
 // Find the closing }, of the claude-dir entry
-let braceDepth = 0;
-let i = claudeDirInfoIdx;
-while (i < html.length) {
-  if (html[i] === '{') braceDepth++;
-  if (html[i] === '}') {
-    braceDepth--;
-    if (braceDepth === 0) break;
-  }
-  i++;
-}
+let i = findEntryEnd(html, claudeDirInfoIdx);
 // Start right after the closing `}`, then consume the trailing comma and any spaces/tabs
 // but STOP at the line break. generateTreeInfo() already indents every line 12 spaces, so
 // consuming the NEXT line's leading indentation here too would double it, growing the
@@ -725,16 +738,7 @@ if (claudeMdFcIdx === -1) {
   console.error('Could not find claude-md fileContents entry');
   process.exit(1);
 }
-braceDepth = 0;
-i = claudeMdFcIdx;
-while (i < html.length) {
-  if (html[i] === '{') braceDepth++;
-  if (html[i] === '}') {
-    braceDepth--;
-    if (braceDepth === 0) break;
-  }
-  i++;
-}
+i = findEntryEnd(html, claudeMdFcIdx);
 // Same idempotency fix as treeInfo above (substep 3.5): stop at the line break after the
 // claude-md entry's `}` + comma. generateFileContents() owns its 12-space indentation; the
 // splice below prepends a single `\n`.

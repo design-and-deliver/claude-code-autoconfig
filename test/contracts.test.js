@@ -166,6 +166,35 @@ test('sync-docs.js survives a preview containing }; and </script> (BH-2, BH-15)'
   }
 });
 
+// 6. Braces inside KEPT structural entries (bug-hunt BH-14): the splice finds the end of the
+//    hand-authored 'claude-dir' (treeInfo) and 'claude-md' (fileContents) entries by counting
+//    braces, so a lone `{` or `}` in one of their string values mis-locates the boundary. The
+//    result must be the committed page with only the edited values changed, stable across syncs.
+test('sync-docs.js ignores braces inside kept structural entries (BH-14)', () => {
+  const vm = require('vm');
+  const { tmp, claudeDst } = makeSyncFixture('cca-kept-braces-');
+  try {
+    const edits = [
+      ["desc: 'Commands, rules, settings, and these docs.", "desc: 'Commands, rules, settings, and these docs { unbalanced."],
+      ['> Run \\`/autoconfig\\` to populate', '> Run \\`/autoconfig\\` } to populate']
+    ];
+    const fixtureDocs = path.join(claudeDst, 'docs', 'autoconfig.docs.html');
+    let expected = fs.readFileSync(fixtureDocs, 'utf8');
+    for (const [from, to] of edits) {
+      assert(countOccurrences(expected, from) === 1, `fixture anchor not unique: ${from}`);
+      expected = expected.replace(from, () => to);
+    }
+    fs.writeFileSync(fixtureDocs, expected);
+    const first = runSyncDocs(tmp, claudeDst);
+    const second = runSyncDocs(tmp, claudeDst);
+    assert(first === expected, 'sync rewrote more than the generated sections — a brace in a kept entry mis-located its end (BH-14)');
+    assert(second === first, 'second sync differs from the first (BH-14)');
+    for (const m of first.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script/gi)) new vm.Script(m[1]);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 function countOccurrences(haystack, needle) {
   return haystack.split(needle).length - 1;
 }
