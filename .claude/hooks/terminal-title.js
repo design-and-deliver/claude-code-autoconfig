@@ -1162,6 +1162,51 @@ function ancestryChain(fromPid) {
   } catch (_) { return []; }
 }
 
+// The terminal id for this session: the cached anchor (same sid), else a fresh walk — retried
+// once, since the walk's spawn timeout is the usual miss and load is usually transient.
+function resolveTid(tdir, sid) {
+  const cacheFile = path.join(tdir, '.anchor-cache.json');
+  try {
+    const c = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+    if (c.key === sid && c.tid) return c.tid;
+  } catch (_) { /* no cache yet */ }
+  const anchor = findAnchor(ancestryChain(process.pid)) || findAnchor(ancestryChain(process.pid));
+  if (!anchor) return null;
+  const tid = `${anchor.pid}-${String(anchor.created).replace(/[^0-9]/g, '')}`;
+  try { fs.writeFileSync(cacheFile, JSON.stringify({ key: sid, tid })); } catch (_) { /* best-effort */ }
+  return tid;
+}
+
+function findAnchor(chain) {
+  for (let i = chain.length - 1; i >= 0; i--) {
+    if (/^(claude|node)/i.test(chain[i].name || '')) return chain[i + 1] || null;
+  }
+  return null;
+}
+
+// BH-5: a session whose walk missed can't say WHICH terminal it took over, so it can't
+// replace that terminal's occupant — the record keeps naming the session before it, and the
+// next rotation there would skip it. It leaves a timestamped note instead; a later rotation
+// whose occupant predates any such note can't tell whether the missed session ran in between,
+// so it records no predecessor (/recover-context then falls back to its heuristic) rather
+// than a wrong one. A miss in another tab costs each tab at most one lineage link.
+const UNANCHORED = '.unanchored.json';
+
+function readUnanchored(tdir) {
+  try { return JSON.parse(fs.readFileSync(path.join(tdir, UNANCHORED), 'utf8')) || []; } catch (_) { return []; }
+}
+
+function noteUnanchored(tdir, sid) {
+  const notes = readUnanchored(tdir).filter(n => n.sid !== sid).slice(-19);
+  notes.push({ sid, ts: Date.now() });
+  try { fs.writeFileSync(path.join(tdir, UNANCHORED), JSON.stringify(notes)); } catch (_) { /* best-effort */ }
+}
+
+function missedSince(tdir, occupant, sid) {
+  const since = Number(occupant.updatedAt) || 0;
+  return readUnanchored(tdir).some(n => n.ts > since && n.sid !== sid && n.sid !== occupant.sid);
+}
+
 function recordLineage(dir, sid, source) {
   try {
     if (!sid) return;
@@ -1177,26 +1222,12 @@ function recordLineage(dir, sid, source) {
     // (accepted): --resume in a DIFFERENT terminal hits the original terminal's tid; the
     // occupant check below makes that a no-op unless the terminal was since re-occupied,
     // and the worst case is a wrong "previous session" suggestion, never a cross-tab carry.
-    const cacheFile = path.join(tdir, '.anchor-cache.json');
-    let tid = null;
-    try {
-      const c = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
-      if (c.key === sid && c.tid) tid = c.tid;
-    } catch (_) { /* no cache yet */ }
-    if (!tid) {
-      const chain = ancestryChain(process.pid);
-      let anchor = null;
-      for (let i = chain.length - 1; i >= 0; i--) {
-        if (/^(claude|node)/i.test(chain[i].name || '')) { anchor = chain[i + 1] || null; break; }
-      }
-      if (!anchor) return;
-      tid = `${anchor.pid}-${String(anchor.created).replace(/[^0-9]/g, '')}`;
-      try { fs.writeFileSync(cacheFile, JSON.stringify({ key: sid, tid })); } catch (_) { /* best-effort */ }
-    }
+    const tid = resolveTid(tdir, sid);
+    if (!tid) { noteUnanchored(tdir, sid); return; }
     const tf = path.join(tdir, `${tid}.json`);
     let occupant = null;
     try { occupant = JSON.parse(fs.readFileSync(tf, 'utf8')); } catch (_) { /* fresh terminal */ }
-    if (occupant && occupant.sid && occupant.sid !== sid) {
+    if (occupant && occupant.sid && occupant.sid !== sid && !missedSince(tdir, occupant, sid)) {
       // Rotation observed (a /clear, or a relaunch in the same tab): the outgoing occupant
       // becomes the incoming session's "previous" — keyed by the NEW sid so /recover-context
       // finds it via its own CLAUDE_CODE_SESSION_ID, no process-walking on the read side.
@@ -1969,11 +2000,21 @@ function resolveSessionPid(dir, sid, file, cwd, diag) {
     d.needle = normalize(displayTitle(file, dir, sid, cwd));
     d.placeholder = isPlaceholderTitle(d.needle, cwd);
     d.matched = findConsoles(exe, dir, sid, d.needle, pids);
-    if (!d.matched.length) d.why = 'no-console-match';
-    return d.matched[0] || 0;
+    return pickConsole(d);
   } catch (err) {
     return noPid(d, `threw:${errCode(err)}`);
   }
+}
+
+// BH-16: bind only to a UNIQUE match — block, don't act. A newborn tab's needle is still the bare
+// folder placeholder, which every sibling tab titled "<folder> — …" also contains, so first-hit-wins
+// could latch a sibling's console and probe/repaint the wrong tab for the whole turn (seen in
+// _alarms.log 2026-08-15: placeholder=1 matched=[29728 23964]). Binding nothing just retries next
+// poll — by then the title is usually authored and the needle is unique.
+function pickConsole(d) {
+  const matched = d.matched || [];
+  if (matched.length === 1) return matched[0];
+  return noPid(d, matched.length ? 'ambiguous-match' : 'no-console-match');
 }
 
 // Every failure path routes through here, so `why` is never silently absent from the log line while
@@ -2456,4 +2497,4 @@ function extractBlock(tpl, name) {
 // Exported for tests (require()'d when require.main !== module). The hook itself never reads these.
 // Contract: terminal-title.test.js, golden-endings.test.js, and arcade-beeps.js (lazy-requires
 // inspectLastResponse) depend on these names — renaming one silently degrades the beeps hook.
-module.exports = { inspectLastResponse, endsOnQuestion, normalize, GLYPH, shouldDefer, solicitsReply, readContextTokens, readTailWrites, recordMark, readMarks, recordWrites, readWriteLedger, clearAdvice, ancestryChain, recordLineage, pruneTitleState, carriedTitle, displayTitle, titlesCollide, isPlaceholderTitle, activeTwins, dupeGuardResult, dupeGuardPaint, ALARM_RE, appendCapped };
+module.exports = { inspectLastResponse, endsOnQuestion, normalize, GLYPH, shouldDefer, solicitsReply, readContextTokens, readTailWrites, recordMark, readMarks, recordWrites, readWriteLedger, clearAdvice, ancestryChain, recordLineage, pruneTitleState, carriedTitle, displayTitle, titlesCollide, isPlaceholderTitle, activeTwins, dupeGuardResult, dupeGuardPaint, ALARM_RE, appendCapped, pickConsole };

@@ -98,3 +98,40 @@ test('stale terminal registrations are pruned after 30 days', () => {
   recordLineage(dir, 'sid-live', 'startup');
   assert.ok(!fs.existsSync(stale), 'stale registration removed');
 });
+
+// BH-5: a session whose ancestry walk misses (PowerShell/ps timeout under load) can't
+// resolve its tid, so it never replaces the terminal's occupant record. The occupant still
+// names the session BEFORE it, and the next session in that tab would stamp that one as its
+// predecessor — skipping the real one, so bare /recover-context recovers the wrong session.
+// The walk is stubbed at child_process so the miss is deterministic on every platform.
+function withWalkMiss(fn) {
+  const cp = require('child_process');
+  const real = cp.spawnSync;
+  cp.spawnSync = () => ({ stdout: '', status: null, error: new Error('ETIMEDOUT') });
+  try { return fn(); } finally { cp.spawnSync = real; }
+}
+
+test('a flaked walk does not let the next session skip it in the lineage (BH-5)', () => {
+  const dir = tmpTitles();
+  seedAnchor(dir, '555-55555', 'sid-A');
+  recordLineage(dir, 'sid-A', 'startup');
+  withWalkMiss(() => recordLineage(dir, 'sid-B', 'startup')); // B relaunches in A's tab; walk misses
+  seedAnchor(dir, '555-55555', 'sid-C');
+  recordLineage(dir, 'sid-C', 'clear');
+  const linFile = path.join(dir, 'sid-C.lineage.json');
+  const lin = fs.existsSync(linFile) ? JSON.parse(fs.readFileSync(linFile, 'utf8')) : {};
+  assert.notEqual(lin.prevSid, 'sid-A', 'C must not name A as its predecessor — B ran in between');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'terminals', '555-55555.json'), 'utf8')).sid,
+    'sid-C', 'the occupant record still moves on to C');
+});
+
+test('a walk miss older than the occupant does not suppress a real rotation (BH-5)', () => {
+  const dir = tmpTitles();
+  withWalkMiss(() => recordLineage(dir, 'sid-elsewhere', 'startup')); // missed before A took the tab
+  seedAnchor(dir, '666-66666', 'sid-A');
+  recordLineage(dir, 'sid-A', 'startup');
+  seedAnchor(dir, '666-66666', 'sid-B');
+  recordLineage(dir, 'sid-B', 'clear');
+  const lin = JSON.parse(fs.readFileSync(path.join(dir, 'sid-B.lineage.json'), 'utf8'));
+  assert.equal(lin.prevSid, 'sid-A');
+});
