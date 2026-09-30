@@ -388,18 +388,18 @@ that still prints "Backup triggered by user content."
 **Commit:** `fix(cli): backups are unique-per-run and include nested user files` + body
 `Changelog: Backups during upgrade are now unique per run and capture nested files you added`.
 
-### ☐ 7.2 · S · ~20m — Small guards: pin-gate null + pipe-to-shell deny (BH-21, BH-20)
+### ☑ 7.2 · S · ~20m — Small guards: pin-gate null + pipe-to-shell deny (BH-21, BH-20)
 
 `bin/cli.js:182` (BH-21, **low-confidence — TOCTOU**) — `delete cfg.pinVersion` on a `null`
 `readCcaConfig()` throws uncaught; the sibling gls migration (:518) guards with `|| {}`.
 `.claude/hooks/auto-guard.js:42` (BH-20, belt-only/fail-open) — the single-stage `download|shell`
 deny regex is evaded by `… | tee | bash`, `bash <(curl url)`, `sh -c "$(curl url)"`.
 
-- [ ] BH-21: guard the re-read (`readCcaConfig() || {}`) to match :518. ⚠ Trap 8.
-- [ ] BH-20: widen the deny to catch multi-pipe stages and command/process substitution (it's a
+- [x] BH-21: guard the re-read (`readCcaConfig() || {}`) to match :518. ⚠ Trap 8.
+- [x] BH-20: widen the deny to catch multi-pipe stages and command/process substitution (it's a
       belt over tool-level deny rules — keep it fail-open, just less porous). If widening risks
       false-denies, record the trade-off in the Ledger.
-- [ ] Small assertions: null-config path doesn't throw; the evasion strings are denied (or the
+- [x] Small assertions: null-config path doesn't throw; the evasion strings are denied (or the
       decision recorded).
 
 **Verify:** assertions fail against current code where applicable, pass after; `npm test` green.
@@ -714,3 +714,19 @@ Append one entry after each substep, newest last. Format:
   failed), so the skip checks moved to an `isCopyable()` helper. The plan's line refs were stale
   (`copyDirForBackup` is now `copyTree`).
 - Verify: `npm test` exit 0 (hook suites included). No `~/.claude` twin — nothing to sync.
+
+### 2026-09-29 — substep 7.2 — done
+- Commit: 08e7c6f fix: guard pin-gate against corrupt config; tighten pipe-to-shell deny
+- BH-20 fail-first: proven RED→GREEN in `test/auto-guard.test.js`. The new evasion test (7 strings:
+  multi-stage pipe, `sudo sh` after `| cat |`, `bash <(curl)`, `source <(curl)`, `sh -c "$(curl)"`,
+  backtick form, `eval "$(curl)"`) failed on HEAD at the first string. A companion benign test pins
+  no false-denies: `curl | jq`, `curl | tee | grep`, `echo "$(curl)"`, a download then an unrelated
+  `bash -n`, and `curl … || bash restart.sh` (`||` is excluded from the pipe match by lookarounds).
+- Shape: `PIPE_TO_SHELL` regex list + `.some()` — keeps the category test at CC 1. Still fail-open.
+  Accepted gap: download-to-file then run (`curl -o x.sh … && bash x.sh`) is not denied; that needs
+  data-flow, not a regex, and the belt sits over the tool-level deny rules anyway.
+- BH-21: `readCcaConfig() || {}` at the pin gate, matching the gls migration. No fail-first test —
+  it's a TOCTOU between two reads microseconds apart in one process, not reachable behaviorally
+  without an injection seam the plan didn't ask for; the plan tagged it low-confidence.
+- Verify: `npm test` exit 0 (hook suites included). auto-guard.js is not in the hook-fleet manifest
+  — nothing to sync. This was the last substep: all 14 checked.
