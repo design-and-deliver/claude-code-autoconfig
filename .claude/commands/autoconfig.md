@@ -1,5 +1,5 @@
 <!-- @description Configures Claude Code scaffolding for your project. Sets up settings, permissions, hooks, commands, and docs. -->
-<!-- @version 21 -->
+<!-- @version 22 -->
 <!-- @response success | Scaffolding configured, CLAUDE.md initialized, docs opened in browser. -->
 <!-- @response no-project | No project detected — asks user to confirm directory. -->
 <!-- @sideeffect Initializes CLAUDE.md, settings.json, hooks, commands, and MEMORY.md -->
@@ -161,8 +161,10 @@ The format hook script (`.claude/hooks/format.js`) runs `npm run format` after W
 
 The Step 0a bootstrap already merged the shipped settings template into `.claude/settings.json`, preserving any pre-existing user entries. That shipped template is the **single source of truth** for deny/allow permissions, env vars, and hook registrations — do NOT re-derive or restate those lists here.
 
+The template's **allow** list is opt-in: a fresh install leaves it out of `settings.json` and stages it in `.claude/recommended-permissions.json` instead. *Recommended Permissions Opt-in* (under After Completion) offers it — do not copy it in here.
+
 1. **Verify the merge landed:** read `.claude/settings.json` and confirm it has a `permissions.deny` list (security entries like `.env`, `secrets/`, credential files) and registered `hooks`. If the file is missing or has no permissions at all, the bootstrap didn't complete — re-run Step 0a rather than hand-writing settings from memory.
-2. **Optionally add project-specific allow patterns:** `Bash()` prefix patterns for scripts that actually exist in THIS project (e.g., `Bash(npm run test:*)` only if package.json defines such scripts).
+2. **Note project-specific allow patterns** for the opt-in: `Bash()` prefix patterns for scripts that actually exist in THIS project (e.g., `Bash(npm run test:*)` only if package.json defines such scripts). They are added only if the user accepts the recommended permissions.
 
 **Keep additions minimal** — only patterns that actually exist in this project. Never remove or reword entries the template installed: hook `command` strings are matched by exact text on upgrade, so rewording one causes duplicate hook entries later.
 
@@ -210,6 +212,23 @@ After populating CLAUDE.md, update the docs file previews to show actual project
 This ensures double-clicking these files in the docs shows real project content, not stale placeholders.
 
 ## After Completion
+
+### Recommended Permissions Opt-in
+
+Offer CCA's recommended allow list, which the bootstrap staged in `.claude/recommended-permissions.json` (`{ "allow": [...] }`). It stays out of `settings.json` until now because Claude Code's first-run trust dialog lists every pre-approved permission as a warning.
+
+1. **Skip silently** if any of these hold:
+   - `.claude/cca.config.json` already has a `recommendedPermissions` key (already answered), or
+   - `.claude/recommended-permissions.json` is missing, or
+   - `permissions.allow` in `.claude/settings.json` already holds every staged rule, or
+   - the run is headless / the question can't be answered.
+2. Otherwise ask with the AskUserQuestion tool:
+   - Question: "Pre-approve common safe commands for this project?"
+   - Options:
+     - "Yes, pre-approve them (recommended)" — description: "Claude reads and edits project files and runs tests, builds, lint, and everyday version-control commands without asking each time. Saved in .claude/settings.json — remove any rule there anytime."
+     - "No thanks"
+3. On **yes**: Read `.claude/settings.json`, append to `permissions.allow` (create it if missing) each staged rule not already there, plus the project-specific patterns noted in Step 4, preserving every other key, and Write it back.
+4. On **yes or no** (not on skip): merge `"recommendedPermissions": true` (yes) or `false` (no) into `.claude/cca.config.json` with the Write tool, preserving any existing keys — upgrades read it to decide whether new allow rules are added.
 
 ### Auto Permission Mode Opt-in
 

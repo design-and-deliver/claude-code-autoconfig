@@ -7,6 +7,7 @@ const { execSync, spawn } = require('child_process');
 const { formatUpdateSummary } = require('./update-summary.js');
 const { runPluginCommand, migrateTokenSaverConfigKey } = require('./lib/plugins.js');
 const { migrateLegacyHookCommands, migrateRenamedToolMatchers, migrateRetiredPermissionRules, mergeSettingsInto, unmergeSettingsFrom } = require('./lib/settings-merge.js');
+const { STAGED_FILE: STAGED_PERMISSIONS_FILE, prepareShippedSettings } = require('./lib/permission-optin.js');
 const { MIN_CLAUDE_CODE_VERSION, checkClaudeVersion } = require('./lib/claude-version.js');
 const { pullUpdates } = require('./lib/updates.js');
 const { cleanupNulFile } = require('./lib/nul-cleanup.js');
@@ -104,7 +105,7 @@ function main() {
     'LPT6', 'LPT7', 'LPT8', 'LPT9'];
 
   // Files/folders installed by autoconfig - don't backup these
-  const AUTOCONFIG_FILES = ['commands', 'docs', 'agents', 'migration', 'hooks', 'scripts', 'sounds', 'rules', 'feedback', 'settings.json', 'settings.local.json', '.mcp.json', '.autoconfig-version', '.autoconfig-plugins.json', 'cca.config.json', '.autoconfig-whats-new.json', '.autoconfig-timing.jsonl'];
+  const AUTOCONFIG_FILES = ['commands', 'docs', 'agents', 'migration', 'hooks', 'scripts', 'sounds', 'rules', 'feedback', 'settings.json', 'settings.local.json', '.mcp.json', '.autoconfig-version', '.autoconfig-plugins.json', 'cca.config.json', '.autoconfig-whats-new.json', '.autoconfig-timing.jsonl', STAGED_PERMISSIONS_FILE];
 
   function isReservedName(name) {
     const baseName = name.replace(/\.[^.]*$/, '').toUpperCase();
@@ -747,16 +748,18 @@ function main() {
     }
   }
 
-  // Copy settings.json — fresh install gets full copy, upgrades get hooks + permissions merged
+  // Copy settings.json — fresh install gets a full copy, upgrades get hooks + permissions merged
   const settingsSrc = path.join(packageDir, '.claude', 'settings.json');
   const settingsDest = path.join(claudeDest, 'settings.json');
   if (fs.existsSync(settingsSrc)) {
-    if (forceMode || !fs.existsSync(settingsDest)) {
-      fs.copyFileSync(settingsSrc, settingsDest);
+    // The allow list is opt-in (see permission-optin.js): it stays out of settings.json until
+    // the user accepts it in /autoconfig, so the first-run trust dialog doesn't list it.
+    const { pkgSettings, hasExisting } = prepareShippedSettings(claudeDest, settingsSrc, settingsDest);
+    if (forceMode || !hasExisting) {
+      fs.writeFileSync(settingsDest, JSON.stringify(pkgSettings, null, 2));
     } else {
       // Merge hooks and permissions from package into existing settings
       try {
-        const pkgSettings = JSON.parse(fs.readFileSync(settingsSrc, 'utf8'));
         const userSettings = JSON.parse(fs.readFileSync(settingsDest, 'utf8'));
 
         // Upgrade legacy relative hook commands FIRST so the anchored template entries below

@@ -177,11 +177,27 @@ test('dev-only scripts are NOT installed', () => {
   }
 });
 
-test('settings.json is created as a full copy of the shipped template', () => {
+test('settings.json is the shipped template minus the opt-in allow list', () => {
   const dest = path.join(fresh, '.claude', 'settings.json');
   assert(fs.existsSync(dest), 'settings.json should exist');
-  const shipped = fs.readFileSync(path.join(PKG_DIR, '.claude', 'settings.json'), 'utf8');
-  assert(fs.readFileSync(dest, 'utf8') === shipped, 'fresh settings.json should be byte-identical to the shipped template');
+  const shipped = readJson(path.join(PKG_DIR, '.claude', 'settings.json'));
+  const installed = readJson(dest);
+  // Claude Code's first-run trust dialog warns about every pre-approved allow rule, so a
+  // fresh install must not carry any until the user opts in via /autoconfig.
+  assert(!installed.permissions.allow, 'fresh settings.json must have no permissions.allow');
+  assert(JSON.stringify(installed.permissions.deny) === JSON.stringify(shipped.permissions.deny), 'deny rules ship as-is');
+  delete shipped.permissions.allow;
+  assert(JSON.stringify(installed) === JSON.stringify(shipped), 'everything else should match the shipped template');
+});
+
+test('the allow list is staged for the /autoconfig opt-in', () => {
+  const staged = readJson(path.join(fresh, '.claude', 'recommended-permissions.json'));
+  const shipped = readJson(path.join(PKG_DIR, '.claude', 'settings.json'));
+  assert(JSON.stringify(staged.allow) === JSON.stringify(shipped.permissions.allow), 'staged allow should equal the shipped allow list');
+});
+
+test('a fresh install makes no backup (the staged file counts as CCA-owned)', () => {
+  assert(!fs.existsSync(path.join(fresh, '.claude', 'migration')), 'no migration/ backup on a fresh install');
 });
 
 test('.claude/updates/ is absent (updates are tracked in the @applied block, not copied)', () => {
@@ -358,6 +374,30 @@ test('a PENDING update id is NOT marked applied by the upgrade (BH-3)', () => {
   assert(!ids.includes('004'), 'pending update 004 must NOT be pre-marked applied — it has not run, and --pull-updates must still deliver it');
   assert(ids.length === 2, `only the user's applied ids belong in the block, got: ${ids.join(', ')}`);
   assert(!md.includes('old body'), 'the command body itself should still be refreshed to the shipped version');
+});
+
+// ── Fixture 2a: a user who declined the recommended allow list ────────────────
+console.log();
+console.log('upgrade where the user declined the recommended permissions (--bootstrap):');
+
+const declined = makeProject('declined-permissions');
+writeFile(declined, 'CLAUDE.md', '# Test project\n\n## Discoveries\n');
+writeFile(declined, '.claude/cca.config.json', JSON.stringify({ recommendedPermissions: false }, null, 2));
+writeFile(declined, '.claude/settings.json', JSON.stringify({
+  permissions: { allow: ['Bash(git status)', 'Bash(make)'], deny: [] }
+}, null, 2));
+
+const declinedResult = runCli(declined, ['--bootstrap'], shimDir);
+
+test('exits 0', () => {
+  assert(declinedResult.code === 0, `expected exit 0, got ${declinedResult.code}\n${declinedResult.out}`);
+});
+
+test('a recorded "no" keeps the shipped allow list out, even with an overlapping rule', () => {
+  const s = readJson(path.join(declined, '.claude', 'settings.json'));
+  assert(JSON.stringify(s.permissions.allow) === JSON.stringify(['Bash(git status)', 'Bash(make)']),
+    `allow must be untouched, got ${JSON.stringify(s.permissions.allow)}`);
+  assert(s.permissions.deny.length > 0, 'shipped deny rules should still merge in');
 });
 
 // ── Fixture 2b: a paid activation survives the token-guard retraction ─────────
@@ -715,9 +755,11 @@ test('--force refreshes the otherwise-preserved classes (feedback + non-managed 
 });
 
 test('--force REPLACES settings.json with the shipped template (no merge)', () => {
-  const shipped = fs.readFileSync(path.join(PKG_DIR, '.claude', 'settings.json'), 'utf8');
+  const shipped = readJson(path.join(PKG_DIR, '.claude', 'settings.json'));
   const installed = fs.readFileSync(path.join(forced, '.claude', 'settings.json'), 'utf8');
-  assert(installed === shipped, 'forced settings.json must be byte-identical to the shipped template');
+  // No recorded opt-in and no shipped allow rule in the old file, so the allow list stays out.
+  delete shipped.permissions.allow;
+  assert(JSON.stringify(JSON.parse(installed)) === JSON.stringify(shipped), 'forced settings.json must equal the shipped template minus allow');
   assert(!installed.includes('MY_VAR'), 'the pre-force user env var must be gone (replaced, not merged)');
 });
 

@@ -210,7 +210,7 @@ Always use the v2 API for user endpoints.
 <details>
 <summary><b>Permissions &amp; security</b></summary>
 
-The included `settings.json` ships defaults that balance speed with safety: `allow` auto-approves routine operations (file edits, tests, git), `deny` always blocks secrets, destructive commands and network calls. Review them for your team — see the [Claude Code security docs](https://docs.anthropic.com/en/docs/claude-code/security).
+The included `settings.json` ships defaults that balance speed with safety: `deny` always blocks secrets, destructive commands and network calls. A recommended `allow` list (file edits, tests, git) is offered as an opt-in during `/autoconfig`, so nothing is pre-approved until you say yes. Review them for your team — see the [Claude Code security docs](https://docs.anthropic.com/en/docs/claude-code/security).
 
 </details>
 
