@@ -673,6 +673,6 @@ Append one entry after each substep, newest last. Format:
   was the weaker proxy, since an unchanged % on a fresh fetch still marks a real interval.
 - ⚠ Deviation / open: the fleet manifest sources token-saver.js OUT OF TREE (`[src]`); its
   authority is `C:CODEcca-cost-control.claudehooks	oken-saver.js`, which still has BOTH
-  bugs (verified by grep). This fix lands only in CCA's copy; porting it is a separate decision.
+  bugs (verified by grep). Ported (user go-ahead) as cca-cost-control b671a23, pushed: same fail-first file, 4/7 red on its HEAD, 396+10 tests green after. The fleet has no root recorded for that source, so no fleet copy was re-synced.
 - Verify: `npm test` exit 0 (hook suites included). Fleet check: no drift (token-saver skipped as
   out-of-tree). Landed on main (fast-forward), worktree removed cleanly.
