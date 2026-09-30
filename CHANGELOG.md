@@ -4,6 +4,9 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.242
+- fix(installer): dev gate, retraction and plugin verify know both hook names; cca.config.json key migrates to tokenSaver
+
 ## v1.0.241
 - feat(feedback): Feedback turned into rules is now logged in a separate EXTRACTED.md, keeping FEEDBACK.md lean for Claude
 
@@ -211,7 +214,4 @@
 - fix(installer): always refresh cca-managed title hooks on upgrade
 - fix(terminal-title): arm the {sid}.ask flag so awaiting ◐ is race-free
 - docs(publish): document web-auth/passkey publish flow in Discoveries
-
-## v1.0.192
-- fix(pkg): exclude runtime .titles/ from published tarball
 
