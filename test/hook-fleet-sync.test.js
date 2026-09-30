@@ -181,6 +181,29 @@ test('a target holding every canonical line but still differing reads as local e
   assert(!/lines behind/.test(line), `it lacks nothing, so it is not behind: ${line.trim()}`);
 });
 
+// BH-12: the fleet promise is BYTE-derived copies, but the comparison stripped \r, so a copy that
+// differed only in line endings read "in sync" in check mode and --write never touched it.
+// Flipping the endings (rather than assuming canonical is LF) keeps the case meaningful whichever
+// endings the canonical blob carries.
+const flipEol = s => (s.includes('\r\n') ? s.replace(/\r\n/g, '\n') : s.replace(/\n/g, '\r\n'));
+
+test('a copy differing only in line endings is drift (check exits 1), and --write fixes it', () => {
+  const canon = canonOf('terminal-title.js');
+  const t = target({ 'terminal-title.js': flipEol(canon) }, { label: 'eol-repo' });
+  const fleetFile = path.join(tmpRoot, 'eol-fleet.json');
+  fs.writeFileSync(fleetFile, fleetJson([t]));
+  const args = ['--only', t.dir, '--files', 'terminal-title.js'];
+
+  const check = runCli(args, fleetFile);
+  assert(check.status === 1, `a line-ending-only drift must exit 1, got ${check.status}`);
+  const line = check.out.split('\n').find(l => l.includes('[DRIFT]')) || '';
+  assert(/line endings/.test(line), `the label must say what differs, got: ${line.trim()}`);
+
+  assert(runCli(['--write', ...args], fleetFile).status === 0, 'write must exit 0');
+  assert(read(t, 'terminal-title.js') === canon, '--write must leave the copy byte-identical');
+  assert(runCli(args, fleetFile).status === 0, 're-check must exit 0');
+});
+
 // --- manifest entries that live outside .claude/hooks (`subdir`) ------------------------------
 // The fleet file records each target as its .claude/hooks dir, so a rules entry has to resolve
 // as that dir's SIBLING. Getting this wrong is silent: the sync reports success while the file

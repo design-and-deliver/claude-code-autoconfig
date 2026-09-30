@@ -34,23 +34,44 @@ const SAFE_RECOVER_CMD = /^\/[A-Za-z0-9][A-Za-z0-9 _=.:-]*$/;
 // a pre-rename hook still in the wild writes .token-guard/. First readable, valid pointer wins.
 const POINTER_DIRS = ['.token-saver', '.token-guard'];
 
-function readPointer(projectDir) {
-  for (const dir of POINTER_DIRS) {
-    const file = path.join(projectDir, '.claude', 'hooks', dir, 'recover.json');
-    try {
-      const rec = JSON.parse(fs.readFileSync(file, 'utf8'));
-      if (rec && typeof rec.recoverCmd === 'string' && SAFE_RECOVER_CMD.test(rec.recoverCmd)) return rec;
-    } catch (_) { /* try the next dir */ }
-  }
-  return null;
+// One pointer file: { rec } when usable, { corrupt: file } when it exists but is unparsable or not
+// the shape token-saver writes, {} when absent.
+function inspectPointer(file) {
+  let text;
+  try { text = fs.readFileSync(file, 'utf8'); } catch (_) { return {}; }
+  try {
+    const rec = JSON.parse(text);
+    if (rec && typeof rec.recoverCmd === 'string' && SAFE_RECOVER_CMD.test(rec.recoverCmd)) return { rec };
+  } catch (_) { /* unparsable: corrupt */ }
+  return { corrupt: file };
 }
+
+// Absent and corrupt are kept apart (BH-11): collapsing them told the user "no pointer here" about
+// a pointer that was right there, just unreadable. A valid pointer in any dir still wins.
+function findPointer(projectDir) {
+  let corrupt = null;
+  for (const dir of POINTER_DIRS) {
+    const r = inspectPointer(path.join(projectDir, '.claude', 'hooks', dir, 'recover.json'));
+    if (r.rec) return r;
+    corrupt = corrupt || r.corrupt || null;
+  }
+  return corrupt ? { corrupt } : {};
+}
+
+function readPointer(projectDir) { return findPointer(projectDir).rec || null; }
 
 // recoverCmd is validated against SAFE_RECOVER_CMD above, so plain wrapping is safe.
 // One string through the shell so the Windows .cmd shim resolves too.
 function buildLaunch(recoverCmd) { return `claude "${recoverCmd}"`; }
 
 function main() {
-  const rec = readPointer(process.cwd());
+  const { rec, corrupt } = findPointer(process.cwd());
+  if (corrupt) {
+    console.error(`ccr: the recovery pointer is corrupt (${corrupt}).`);
+    console.error('It exists but is not a valid pointer — delete it, or run /recover-context in a');
+    console.error('fresh Claude session instead.');
+    process.exit(1);
+  }
   if (!rec) {
     console.error('ccr: no recovery pointer here (.claude/hooks/.token-saver/recover.json).');
     console.error('Run ccr from the project whose session went stale — the token-saver writes');

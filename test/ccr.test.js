@@ -82,6 +82,25 @@ test('--dry-run prints the launch command without launching', () => {
     `dry-run must print the exact command, got: ${out.trim()}`);
 });
 
+// BH-11: absent and corrupt used to collapse into the same null, so a truncated or hand-mangled
+// recover.json was reported as "no pointer here" — sending the user off to find a session that
+// ccr had in fact found. The two need different messages.
+test('a corrupt pointer is reported as corrupt, not as missing', () => {
+  fs.writeFileSync(pointerPath, '{ "recoverCmd": "/recover-context pid=1"');   // truncated write
+  let threw = false;
+  try {
+    execFileSync('node', [CCR_PATH, '--dry-run'],
+      { cwd: tmp, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (e) {
+    threw = true;
+    const err = e.stderr || '';
+    assert(/corrupt/i.test(err), `stderr must say the pointer is corrupt, got: ${err.trim()}`);
+    assert(!/no recovery pointer/.test(err), 'a pointer that exists must not read as missing');
+    assert(err.includes('recover.json'), 'stderr must name the corrupt file');
+  }
+  assert(threw, 'a corrupt pointer must still exit non-zero');
+});
+
 test('--dry-run with no pointer exits non-zero with guidance', () => {
   fs.rmSync(pointerPath, { force: true });
   let threw = false;

@@ -220,7 +220,10 @@ function readLocalConfig() {
   return EMPTY_CONFIG;
 }
 
-const norm = s => s.replace(/\r/g, '');                       // CRLF-proof comparison
+// Line-ending-blind view, for COUNTING drift lines only. Verdicts compare bytes: the fleet promise
+// is byte-derived copies, and an \r-stripping verdict let a CRLF/LF-only divergence read "in sync"
+// forever — check mode passed it and --write never rewrote it (BH-12).
+const norm = s => s.replace(/\r/g, '');
 const readOr = f => { try { return fs.readFileSync(f, 'utf8'); } catch (_) { return null; } };
 // How far a target is BEHIND: the canonical lines it does not have yet — i.e. roughly what a
 // --write would bring in. Rough on purpose (a set membership test, so a line repeated elsewhere
@@ -265,7 +268,7 @@ function canonicalAtHead(entry) {
 function tolerateAtHead(entry, cur, mode) {
   if (mode.write || cur == null) return false;
   const head = canonicalAtHead(entry);
-  return head != null && norm(cur) === norm(head);
+  return head != null && cur === head;
 }
 
 // Resolve to a comparable absolute form — the --only filter compares a project dir against
@@ -340,7 +343,7 @@ function classify(target, entry, canonText) {
     const partnerPresent = entry.pairsWith != null && readOr(path.join(partnerDir, entry.pairsWith)) != null;
     return { verdict: partnerPresent ? 'create' : 'miss', cur: null, dir };
   }
-  return { verdict: norm(cur) === norm(canonText) ? 'ok' : 'update', cur, dir };
+  return { verdict: cur === canonText ? 'ok' : 'update', cur, dir };
 }
 
 // The three "nothing to do" outcomes, as a lookup rather than a branch chain. `head` says WHY it
@@ -472,6 +475,17 @@ function writeAtomic(dest, text) {
   }
 }
 
+// How an existing copy differs, for the two labels. behind === 0 means the target holds every
+// canonical line and still differs: it is not behind, it has local edits (which --write reverts)
+// — or, when even the \r-blind text matches, only its line endings differ. Saying "0 lines
+// behind" of a file that is about to change would read as a broken counter.
+function describeDrift(cur, canonText) {
+  const behind = linesBehind(cur, canonText);
+  if (behind) return { amount: `${behind} lines`, drift: `${behind} lines behind` };
+  if (norm(cur) === norm(canonText)) return { amount: 'line endings', drift: 'line endings only' };
+  return { amount: 'local edits', drift: 'local edits only' };
+}
+
 // Classify one pair, then act on it and narrate. Mutates `tally`.
 function applyOne(target, entry, canonText, mode, say, tally) {
   const label = `${target.label} ${entry.file}`.padEnd(PAD);
@@ -482,18 +496,15 @@ function applyOne(target, entry, canonText, mode, say, tally) {
     return;
   }
   const created = verdict === 'create';
-  const n = created ? norm(canonText).split('\n').length : linesBehind(cur, canonText);
-  // n === 0 on an updating pair means the target holds every canonical line and still differs:
-  // it is not behind, it has local edits (which --write reverts). Saying "0 lines behind" of a
-  // file that is about to change would read as a broken counter.
-  const amount = n ? `${n} lines` : 'local edits';
+  const d = created ? null : describeDrift(cur, canonText);
   if (mode.write) {
     writeAtomic(path.join(dir, entry.file), canonText);
-    say(`  [sync]  ${label} ${created ? `created (${n} lines)` : `updated (${amount})`}`);
+    const what = created ? `created (${norm(canonText).split('\n').length} lines)` : `updated (${d.amount})`;
+    say(`  [sync]  ${label} ${what}`);
     tally.wrote++;
     return;
   }
-  say(`  [DRIFT] ${label} ${created ? 'absent' : (n ? `${n} lines behind` : 'local edits only')}`);
+  say(`  [DRIFT] ${label} ${created ? 'absent' : d.drift}`);
   tally.drifted++;
 }
 
