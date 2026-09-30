@@ -3117,13 +3117,20 @@ async function officialUsagePrep(ctx) {
 // running on every prompt or the next delta is measured from a stale reading. The spike itself
 // is served (CACHED_VERDICT_RENDERERS.R12a), worded against ctx.priorWindowAtIso, which
 // onUserPromptSubmit captures before this advance for exactly that reason.
+// BH-7: stamp the baseline with when the % was READ, not now. A 180s cache hit re-serves an old
+// reading; stamping now made the next spike's runway divide by less time than the % accrued over.
+function readingIso(off) {
+  const at = off && Number.isFinite(off.at) ? off.at : Date.now();
+  return new Date(at).toISOString();
+}
+
 function r12aWindowBaselineGuard(ctx) {
   const { cfg, st } = ctx;
   if (!cfg.windowSpikeWarn) return { notes: [], block: null };
   const now5h = fiveHourWindow(ctx.official);
   if (now5h) {
     st.lastWindowPct = now5h.pct; st.lastWindowResetsAt = now5h.resetsAt;
-    st.lastWindowAtIso = new Date().toISOString();
+    st.lastWindowAtIso = readingIso(ctx.officialOff);
   }
   return { notes: [], block: null };
 }
@@ -3705,9 +3712,31 @@ function remoteVerdictGuard(ctx) {
 // remoteVerdictGuard stays LAST: the families it renders are decided from state the guards
 // ahead of it advance (see snapshotPriorGuardState), and its commits spend one-shots those
 // guards no longer own.
-const PROMPT_GUARDS = [claimAdvisoryGuard, r2ReceiptGuard, r3ContextBombGuard, r4IdleReturnGuard, fatContextGuard,
+const PROMPT_GUARDS = [heldNotesGuard, claimAdvisoryGuard, r2ReceiptGuard, r3ContextBombGuard, r4IdleReturnGuard, fatContextGuard,
   r6ScopeDriftGuard, officialUsagePrep, r12aWindowBaselineGuard, r12bWindowThresholdGate,
   r17PlanBoundaryGuard, r13aPlanSteerGuard, remoteVerdictGuard];
+
+// BH-6: a block pre-empts the turn, so notes already queued can't ride it — and the guards that
+// queued them consumed their one-shots doing so. Hold them in state; the next prompt's
+// heldNotesGuard speaks them. Exact repeats (a per-prompt note held AND re-issued) collapse.
+async function foldPromptGuards(ctx, guards) {
+  const notes = [];
+  for (const guard of guards) {
+    const r = await guard(ctx);
+    notes.push(...r.notes);
+    if (r.block) {
+      if (notes.length) ctx.st.heldNotes = notes;
+      return { notes, block: r.block };
+    }
+  }
+  return { notes: [...new Set(notes)], block: null };
+}
+
+function heldNotesGuard(ctx) {
+  const notes = ctx.st.heldNotes || [];
+  ctx.st.heldNotes = null;
+  return { notes, block: null };
+}
 
 async function onUserPromptSubmit(data, projectDir) {
   const cfg = loadConfig(projectDir);
@@ -3762,12 +3791,8 @@ async function onUserPromptSubmit(data, projectDir) {
   // advances (see snapshotPriorGuardState). Only paid when a service is configured.
   if (shimActive(cfg)) ctx.prior = snapshotPriorGuardState(ctx);
 
-  const notes = [];
-  for (const guard of PROMPT_GUARDS) {
-    const r = await guard(ctx);
-    notes.push(...r.notes);
-    if (r.block) return emitBlock(ctx, r.block);
-  }
+  const { notes, block } = await foldPromptGuards(ctx, PROMPT_GUARDS);
+  if (block) return emitBlock(ctx, block);
 
   saveState(projectDir, sid, st);
   if (notes.length) {
@@ -5404,7 +5429,7 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { main, meter, meterSession, priceFor, attributeJump, ledgerScopes, officialLines,
+module.exports = { main, foldPromptGuards, heldNotesGuard, r12aWindowBaselineGuard, meter, meterSession, priceFor, attributeJump, ledgerScopes, officialLines,
   QUIET_CARDS, AUTO_RECEIPTS, RELAY_CARDS,     // token-guard-quiet-card.test.cjs — card taxonomy + receipts copy contract
   claudeCodeUA, fetchOfficialUsage,
   analyzeSession, renderAnalysis, payloadVerdict, fanVerdict, workflowSource, skillSizes, recordObservedSkill,
