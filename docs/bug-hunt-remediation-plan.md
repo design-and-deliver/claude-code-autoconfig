@@ -347,18 +347,18 @@ runway and spurious confirm-card interrupts.
 **Commit:** `fix(token-guard): don't drop queued warnings on a blocked turn; fix spike-runway math` +
 body `Changelog: none`.
 
-### ☐ 6.2 · S · ~20m — Dev-tool loudness: ccr corrupt-pointer message + fleet CRLF drift (BH-11, BH-12)
+### ☑ 6.2 · S · ~20m — Dev-tool loudness: ccr corrupt-pointer message + fleet CRLF drift (BH-11, BH-12)
 
 `bin/ccr.js:26-32` (BH-11) — absent / unparsable / invalid all collapse to `null`, so a corrupt
 `recover.json` is reported as "no pointer here." `scripts/sync-terminal-title.js:39,66` (BH-12) —
 `norm()` strips `\r`, so a CRLF-vs-LF-only drift reads "in sync" and never gets rewritten (and
 `driftLines` is one-directional → "0 lines behind" for a strict-subset divergence).
 
-- [ ] BH-11: distinguish absent from corrupt in `readPointer`; print a "pointer is corrupt" message
+- [x] BH-11: distinguish absent from corrupt in `readPointer`; print a "pointer is corrupt" message
       for the parse-error case.
-- [ ] BH-12: make the drift comparison byte-exact (don't strip `\r`) so the "byte-derived artifact"
+- [x] BH-12: make the drift comparison byte-exact (don't strip `\r`) so the "byte-derived artifact"
       promise holds; count drift in both directions.
-- [ ] Small assertions: a corrupt `recover.json` fixture → ccr prints the corrupt message; a
+- [x] Small assertions: a corrupt `recover.json` fixture → ccr prints the corrupt message; a
       CRLF-only-divergent target → sync-terminal-title check-mode reports drift (exit 1).
 
 **Verify:** the assertions fail against current code, pass after; `npm test` green.
@@ -676,3 +676,22 @@ Append one entry after each substep, newest last. Format:
   bugs (verified by grep). Ported (user go-ahead) as cca-cost-control b671a23, pushed: same fail-first file, 4/7 red on its HEAD, 396+10 tests green after. The fleet has no root recorded for that source, so no fleet copy was re-synced.
 - Verify: `npm test` exit 0 (hook suites included). Fleet check: no drift (token-saver skipped as
   out-of-tree). Landed on main (fast-forward), worktree removed cleanly.
+
+### 2026-09-29 — substep 6.2 — done
+- Commit: 62dc3fe fix(devtools): ccr distinguishes a corrupt pointer; fleet drift check is byte-exact
+- Fail-first: proven RED→GREEN. `test/ccr.test.js` — a truncated `recover.json` must print
+  "corrupt" + the file, never "no recovery pointer" (RED: printed the missing message).
+  `test/hook-fleet-sync.test.js` — a terminal-title.js copy with flipped line endings must exit 1
+  in check mode, be labelled "line endings only", and be byte-identical after `--write` (RED:
+  exit 0, "in sync"). Green after.
+- Deviations: the plan's line refs were stale — the drift logic moved to
+  `scripts/sync-hook-fleet.js` (sync-terminal-title.js is now a front-end). The "one-directional"
+  half was already mitigated ("local edits only" when nothing is behind); added the third label,
+  "line endings only", via a `describeDrift` helper. The HEAD tolerance is byte-exact too — on an
+  autocrlf=true dev box it would stop tolerating (HEAD blobs are LF), so that machine would block
+  pushes during uncommitted canonical edits; this box is autocrlf=false.
+- ⚠ Open: byte-exact check surfaced REAL hidden drift — 9 files in job-agent-extension differ
+  only in line endings (that repo has core.autocrlf=true). The pre-push guard blocks until
+  `sync-hook-fleet.js --write` runs from main; and autocrlf there re-CRLFs on any fresh checkout,
+  so the drift will recur unless that repo sets `-text` for fleet files or autocrlf=false.
+- Verify: `npm test` exit 0 (hook suites included).
