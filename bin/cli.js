@@ -230,7 +230,9 @@ function main() {
       console.log(paint('gray', `⏸  Pinned to v${pinnedVersion} — skipped the v${installerVersion} refresh (remove "pinVersion" from .claude/cca.config.json to unpin).`));
       process.exit(0);
     }
-    const cfg = readCcaConfig();
+    // || {}: the file is re-read here, so it can have vanished or gone corrupt since the
+    // gate read it (BH-21) — same guard as the gls migration below.
+    const cfg = readCcaConfig() || {};
     delete cfg.pinVersion;
     try {
       fs.writeFileSync(path.join(cwd, '.claude', 'cca.config.json'), JSON.stringify(cfg, null, 2));

@@ -36,14 +36,26 @@ function installTarget(cmd) {
   return hasPackageArg ? 'package install with new package(s)' : null;
 }
 
+// Downloaded code reaching a shell. A belt over the tool-level deny rules, not a sandbox:
+// it catches the common shapes, and anything it misses still meets the permission system.
+const DL = String.raw`(?:curl|wget|iwr|invoke-webrequest)`;
+const SH = String.raw`(?:bash|sh|zsh|dash|ksh|pwsh|powershell)`;
+const PIPE_TO_SHELL = [
+  // download | … | shell — any number of intermediate stages (`| tee x | bash`). A `||`
+  // is not a pipe, so `curl x || bash fallback.sh` stays silent.
+  new RegExp(String.raw`\b${DL}\b[^;&]*(?<!\|)\|(?!\|)\s*(?:sudo\s+)?${SH}\b`, 'i'),
+  /\|\s*(?:iex|invoke-expression)\b/i,
+  // Process substitution: bash <(curl …), source <(curl …), . <(curl …)
+  new RegExp(String.raw`(?:\b${SH}|\bsource|(?:^|[\s;&|])\.)\s+<\(\s*${DL}\b`, 'i'),
+  // Command substitution handed to a shell: sh -c "$(curl …)", bash -c "`wget …`", eval "$(curl …)"
+  new RegExp(String.raw`(?:\b${SH}\s+(?:-\w+\s+)*-\w*c|\beval)\s+["']?(?:\$\(|\x60)\s*${DL}\b`, 'i'),
+];
+
 const CATEGORIES = [
   {
     name: 'pipeToShell',
     action: 'deny',
-    test: cmd =>
-      (/\b(?:curl|wget|iwr|invoke-webrequest)\b[^|]*\|\s*(?:sudo\s+)?(?:bash|sh|zsh|dash|ksh|pwsh|powershell)\b/i.test(cmd) ||
-       /\|\s*(?:iex|invoke-expression)\b/i.test(cmd))
-        ? 'download piped into a shell' : null,
+    test: cmd => PIPE_TO_SHELL.some(re => re.test(cmd)) ? 'download piped into a shell' : null,
   },
   {
     name: 'credentials',
