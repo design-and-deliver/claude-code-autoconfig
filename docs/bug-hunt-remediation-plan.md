@@ -695,3 +695,5 @@ Append one entry after each substep, newest last. Format:
   `sync-hook-fleet.js --write` runs from main; and autocrlf there re-CRLFs on any fresh checkout,
   so the drift will recur unless that repo sets `-text` for fleet files or autocrlf=false.
 - Verify: `npm test` exit 0 (hook suites included).
+- Resolved after landing: `-text` pin committed in job-agent-extension (5ca8250, unpushed; blobs were
+  already canonical bytes, only checkout conversion drifted), fleet `--write` run, check clean, pushed.
