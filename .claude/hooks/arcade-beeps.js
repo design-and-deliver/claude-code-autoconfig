@@ -114,6 +114,51 @@ function endsOnQuestionInline(transcriptPath) {
   return false;
 }
 
+function askFlagPresent(titleDirs, sid) {
+  return titleDirs.some(dir => {
+    try { return fs.existsSync(path.join(dir, `${sid}.ask`)); } catch (_) { return false; }
+  });
+}
+
+// terminal-title paints ◐ on a '?' close OR its LEXICAL rescue — a '?'-less formulaic offer
+// ("Say the word and I'll…"), flagged by inspectLastResponse's `solicits`. Reading only `q.ends`
+// played GO under a ◐ tab (BH-13), so mirror its Stop decision exactly: ends || solicits.
+async function transcriptAwaits(transcriptPath) {
+  let inspect = null;
+  try { ({ inspectLastResponse: inspect } = require('./terminal-title.js')); } catch (_) { /* fallback below */ }
+  if (!inspect) return endsOnQuestionInline(transcriptPath);
+  let q = inspect(transcriptPath);
+  let n = 0;
+  while (!q.ends && (q.suspectRace || !q.found) && n < 5) { await delay(120); q = inspect(transcriptPath); n++; }
+  return q.ends || q.solicits === true;
+}
+
+// The .ask flag is ONE-SHOT and terminal-title consumes it on this same Stop — both hooks run in
+// parallel, so the flag can be gone before we look. A flag turn whose prose neither ends on '?' nor
+// matches the offer lexicon then grades complete while the tab shows ◐. terminal-title records the
+// glyph it painted in {sid}.glyph ("awaiting|Stop") right after consuming the flag, so a fresh
+// Stop-awaiting record there is the glyph's own verdict. Polled briefly: consume → paint is a beat.
+const GLYPH_FRESH_MS = 5000;
+function readStopGlyph(titleDirs, sid) {
+  for (const dir of titleDirs) {
+    try {
+      const f = path.join(dir, `${sid}.glyph`);
+      if (Date.now() - fs.statSync(f).mtimeMs > GLYPH_FRESH_MS) continue;
+      const rec = fs.readFileSync(f, 'utf8').trim();
+      if (rec.endsWith('|Stop')) return rec;
+    } catch (_) { /* no record in this tier */ }
+  }
+  return '';
+}
+async function glyphPaintedAwaiting(titleDirs, sid) {
+  for (let n = 0; n < 3; n++) {
+    const rec = readStopGlyph(titleDirs, sid);
+    if (rec) return rec.startsWith('awaiting|');
+    await delay(100);
+  }
+  return false;
+}
+
 async function main(input) {
   let data = {};
   try { data = JSON.parse(input); } catch (_) { /* ignore */ }
@@ -127,27 +172,14 @@ async function main(input) {
 
   // awaiting (question) vs complete — same signals terminal-title.js uses, so the tone matches the glyph.
   const sid = data.session_id || '';
-  // The ask flag lives under the PROJECT root for a project-tier install and under ~/.claude for the
+  // The title dir lives under the PROJECT root for a project-tier install and under ~/.claude for the
   // user-level tier (terminal-title.js's runtime title-dir split). Check both roots — sid-keyed, so a
   // wrong-tier probe can't false-positive on another session.
-  const titleRoots = [process.env.CLAUDE_PROJECT_DIR || data.cwd || process.cwd(), os.homedir()];
-  let pending = titleRoots.some(root => {
-    try { return fs.existsSync(path.join(root, '.claude', 'hooks', '.titles', `${sid}.ask`)); }
-    catch (_) { return false; }
-  });
-
-  if (!pending) {
-    let inspect = null;
-    try { ({ inspectLastResponse: inspect } = require('./terminal-title.js')); } catch (_) { /* fallback below */ }
-    if (inspect) {
-      let q = inspect(data.transcript_path);
-      let n = 0;
-      while (!q.ends && (q.suspectRace || !q.found) && n < 5) { await delay(120); q = inspect(data.transcript_path); n++; }
-      pending = q.ends;
-    } else {
-      pending = endsOnQuestionInline(data.transcript_path);
-    }
-  }
+  const titleDirs = [process.env.CLAUDE_PROJECT_DIR || data.cwd || process.cwd(), os.homedir()]
+    .map(root => path.join(root, '.claude', 'hooks', '.titles'));
+  const pending = askFlagPresent(titleDirs, sid)
+    || await transcriptAwaits(data.transcript_path)
+    || await glyphPaintedAwaiting(titleDirs, sid);
 
   play(pending ? 'pp3-getready-G4.wav' : 'pp3-go-F#5.wav', pending ? 'awaiting' : 'complete');
 }
@@ -159,4 +191,4 @@ if (require.main === module) {
   process.stdin.on('end', async () => { try { await main(input); } catch (_) { /* ignore */ } process.exit(0); });
 }
 
-module.exports = { endsOnQuestionInline, spawnFailure };
+module.exports = { endsOnQuestionInline, spawnFailure, readStopGlyph };

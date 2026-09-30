@@ -174,3 +174,53 @@ test('arcade-beeps spawnFailure names both silent playback failures', () => {
   assert.strictEqual(spawnFailure({ error: null, status: 0 }), null,
     'a clean play must stay silent in the log');
 });
+
+// BH-13: sound and glyph must agree on a LEXICAL-awaiting close — a turn ending on a formulaic
+// offer with no '?' and no .ask flag. terminal-title paints ◐ there (its `lex` rescue, keyed on
+// inspectLastResponse's `solicits`); the beep used to read only `q.ends` and play GO. The install
+// carries terminal-title.js beside the hook so the real inspectLastResponse grades the transcript.
+function beepsStopOn(finalText, glyph) {
+  const dir = beepsInstall();
+  if (glyph) {
+    const titles = path.join(dir, '.claude', 'hooks', '.titles');
+    fs.mkdirSync(titles, { recursive: true });
+    const g = path.join(titles, 'lex.glyph');
+    fs.writeFileSync(g, glyph.record);
+    if (glyph.ageMs) { const t = (Date.now() - glyph.ageMs) / 1000; fs.utimesSync(g, t, t); }
+  }
+  fs.copyFileSync(path.join(HOOKS, 'terminal-title.js'), path.join(dir, '.claude', 'hooks', 'terminal-title.js'));
+  const transcript = path.join(dir, 't.jsonl');
+  fs.writeFileSync(transcript, `${JSON.stringify({
+    type: 'assistant', message: { content: [{ type: 'text', text: finalText }] },
+  })}\n`);
+  const r = spawnSync(process.execPath, [path.join(dir, '.claude', 'hooks', 'arcade-beeps.js')], {
+    input: JSON.stringify({ hook_event_name: 'Stop', session_id: 'lex', transcript_path: transcript, cwd: dir }),
+    env: { ...process.env, HOME: path.join(dir, 'home'), USERPROFILE: path.join(dir, 'home'), CLAUDE_PROJECT_DIR: dir },
+    encoding: 'utf8',
+  });
+  assert.strictEqual(r.status, 0);
+  return beepsLog(path.join(dir, 'home'));
+}
+
+test('arcade-beeps plays the awaiting tone on a formulaic offer with no question mark (BH-13)', () => {
+  const log = beepsStopOn('Both fixes are drafted. Say the word and I will apply them.');
+  assert.match(log, /play pp3-getready-G4\.wav \(awaiting\)/,
+    'terminal-title paints ◐ on this close (lex rescue) — the beep must match it, not play GO');
+});
+
+test('arcade-beeps still plays the complete tone on a plain statement close', () => {
+  const log = beepsStopOn('Both fixes are applied and the suite is green.');
+  assert.match(log, /play pp3-go-F#5\.wav \(complete\)/);
+});
+
+// The .ask flag is one-shot and terminal-title consumes it on the SAME Stop, in parallel — so the
+// beep can find it already gone. The glyph terminal-title recorded for this Stop is the backstop.
+test('arcade-beeps follows the glyph terminal-title painted when the .ask flag was already consumed', () => {
+  const log = beepsStopOn('Both fixes are drafted.', { record: 'awaiting|Stop' });
+  assert.match(log, /play pp3-getready-G4\.wav \(awaiting\)/);
+});
+
+test('arcade-beeps ignores a stale glyph record from an earlier Stop', () => {
+  const log = beepsStopOn('Both fixes are drafted.', { record: 'awaiting|Stop', ageMs: 60000 });
+  assert.match(log, /play pp3-go-F#5\.wav \(complete\)/);
+});
