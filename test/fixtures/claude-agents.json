@@ -1,0 +1,20 @@
+[
+  {
+    "pid": 11111,
+    "cwd": "{{WORKTREE}}",
+    "kind": "interactive",
+    "startedAt": 1790000000000,
+    "sessionId": "00000000-0000-4000-8000-000000000001",
+    "name": "repo-01",
+    "status": "busy"
+  },
+  {
+    "pid": 22222,
+    "cwd": "{{OTHER_REPO}}",
+    "kind": "interactive",
+    "startedAt": 1790000000000,
+    "sessionId": "00000000-0000-4000-8000-000000000002",
+    "name": "other-02",
+    "status": "idle"
+  }
+]

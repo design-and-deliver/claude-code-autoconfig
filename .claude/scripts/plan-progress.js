@@ -4,12 +4,12 @@
 /**
  * plan-progress.js — deterministic progress digest for phased plan docs.
  *
- * DEV-ONLY: gated out of user installs via DEV_ONLY_FILES in bin/cli.js (and its
- * mirror in .claude/commands/validate-cca-install.md). Companion to /plan-progress.
+ * DEV-ONLY: gated out of user installs via DEV_ONLY_FILES in bin/cli.js. Companion
+ * to /plan-progress.
  * Read-only twin of /continue: /continue *runs* the next unchecked substep; this
  * just shows where every in-flight plan stands.
  *
- * Parses the plan-authoring format (.claude/rules/plan-authoring.md):
+ * Parses the plan-authoring format (.claude/skills/plan-authoring/SKILL.md):
  *   - phases:   `## Phase N — title`
  *   - substeps: `### ☑|☐ N.k · S|M|L · ~<time> — title`  (effort tag optional)
  *   - a `## Ledger` section marks a doc as an executable plan (vs a design doc).

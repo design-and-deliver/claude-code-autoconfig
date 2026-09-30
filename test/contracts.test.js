@@ -94,30 +94,39 @@ test('README.md documents every shipped command', () => {
 //    output is byte-stable and this compares committed vs. regenerated with no tolerance —
 //    every content change (a new command, a reworded desc, a changed source preview, any
 //    stray indentation) fails the ratchet loudly.
+// Copy only what sync-docs.js reads into a throwaway dir: bin/cli.js (its DEV_ONLY_FILES
+// source) plus the scanned .claude subtree. Skip volatile/irrelevant hook subdirs — sync-docs
+// only scans top-level files in each folder, so tests/.titles/.token-guard are never read anyway.
+function makeSyncFixture(prefix) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  fs.mkdirSync(path.join(tmp, 'bin'));
+  fs.copyFileSync(cliPath, path.join(tmp, 'bin', 'cli.js'));
+  const claudeSrc = path.join(repoRoot, '.claude');
+  const claudeDst = path.join(tmp, '.claude');
+  const skip = new Set(['tests', '.titles', '.token-guard']);
+  const filter = src => !skip.has(path.basename(src));
+  for (const d of ['docs', 'commands', 'agents', 'hooks', 'feedback', 'scripts', 'rules']) {
+    const s = path.join(claudeSrc, d);
+    if (fs.existsSync(s)) fs.cpSync(s, path.join(claudeDst, d), { recursive: true, filter });
+  }
+  for (const f of ['settings.json', '.mcp.json']) {
+    const s = path.join(claudeSrc, f);
+    if (fs.existsSync(s)) fs.copyFileSync(s, path.join(claudeDst, f));
+  }
+  return { tmp, claudeDst };
+}
+
+function runSyncDocs(tmp, claudeDst) {
+  const r = spawnSync(process.execPath, [path.join(claudeDst, 'scripts', 'sync-docs.js')],
+    { cwd: tmp, encoding: 'utf8' });
+  assert(r.status === 0, `sync-docs.js exited ${r.status}: ${(r.stderr || r.stdout || '').trim()}`);
+  return fs.readFileSync(path.join(claudeDst, 'docs', 'autoconfig.docs.html'), 'utf8');
+}
+
 test('sync-docs.js reproduces autoconfig.docs.html byte-for-byte (docs ratchet)', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cca-ratchet-'));
+  const { tmp, claudeDst } = makeSyncFixture('cca-ratchet-');
   try {
-    // Copy only what sync-docs.js reads: bin/cli.js (its DEV_ONLY_FILES source) plus the
-    // scanned .claude subtree. Skip volatile/irrelevant hook subdirs — sync-docs only scans
-    // top-level files in each folder, so tests/.titles/.token-guard are never read anyway.
-    fs.mkdirSync(path.join(tmp, 'bin'));
-    fs.copyFileSync(cliPath, path.join(tmp, 'bin', 'cli.js'));
-    const claudeSrc = path.join(repoRoot, '.claude');
-    const claudeDst = path.join(tmp, '.claude');
-    const skip = new Set(['tests', '.titles', '.token-guard']);
-    const filter = src => !skip.has(path.basename(src));
-    for (const d of ['docs', 'commands', 'agents', 'hooks', 'feedback', 'scripts', 'rules']) {
-      const s = path.join(claudeSrc, d);
-      if (fs.existsSync(s)) fs.cpSync(s, path.join(claudeDst, d), { recursive: true, filter });
-    }
-    for (const f of ['settings.json', '.mcp.json']) {
-      const s = path.join(claudeSrc, f);
-      if (fs.existsSync(s)) fs.copyFileSync(s, path.join(claudeDst, f));
-    }
-    const r = spawnSync(process.execPath, [path.join(claudeDst, 'scripts', 'sync-docs.js')],
-      { cwd: tmp, encoding: 'utf8' });
-    assert(r.status === 0, `sync-docs.js exited ${r.status}: ${(r.stderr || r.stdout || '').trim()}`);
-    const regenerated = fs.readFileSync(path.join(claudeDst, 'docs', 'autoconfig.docs.html'), 'utf8');
+    const regenerated = runSyncDocs(tmp, claudeDst);
     const committed = fs.readFileSync(docsPath, 'utf8');
     assert(committed === regenerated,
       'autoconfig.docs.html is stale — a scanned command/agent/hook/feedback file changed without a docs regen. Run `node .claude/scripts/sync-docs.js` and commit the result (trap G4).');
@@ -125,5 +134,69 @@ test('sync-docs.js reproduces autoconfig.docs.html byte-for-byte (docs ratchet)'
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
+
+// 5. Adversarial previews (bug-hunt BH-2, BH-15): the splice anchors on `};` to find the end
+//    of treeInfo/fileContents, and the whole page lives in one <script>. A documented file
+//    whose preview contains `};` (routine JS) or `</script>` must not mis-anchor the NEXT sync
+//    or terminate the script tag early — either one blanks the docs page.
+test('sync-docs.js survives a preview containing }; and </script> (BH-2, BH-15)', () => {
+  const vm = require('vm');
+  const { tmp, claudeDst } = makeSyncFixture('cca-adversarial-');
+  try {
+    fs.writeFileSync(path.join(claudeDst, 'commands', 'zz-adversarial.md'), [
+      '<!-- @description Preview has }; and </script> in it -->',
+      '<!-- @version 1 -->',
+      '# Adversarial fixture',
+      '```js',
+      'const cfg = { a: 1 };',
+      "const tag = '</script><script>';",
+      '```'
+    ].join('\n'));
+    const first = runSyncDocs(tmp, claudeDst);
+    const second = runSyncDocs(tmp, claudeDst);
+    assert(first === second, 'second sync differs from the first — a `};` in a preview mis-anchored the splice (BH-2)');
+    // Split scripts the way an HTML parser does: the first `</script` ends the block.
+    const blocks = [...second.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script/gi)].map(m => m[1]);
+    assert(blocks.length === countOccurrences(fs.readFileSync(docsPath, 'utf8'), '<script'),
+      'a `</script>` in a preview split the docs <script> block (BH-15)');
+    for (const b of blocks) new vm.Script(b); // throws a SyntaxError if the object closed early
+    assert(second.includes("'zz-adversarial': {"), 'fixture command missing from generated docs');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+// 6. Braces inside KEPT structural entries (bug-hunt BH-14): the splice finds the end of the
+//    hand-authored 'claude-dir' (treeInfo) and 'claude-md' (fileContents) entries by counting
+//    braces, so a lone `{` or `}` in one of their string values mis-locates the boundary. The
+//    result must be the committed page with only the edited values changed, stable across syncs.
+test('sync-docs.js ignores braces inside kept structural entries (BH-14)', () => {
+  const vm = require('vm');
+  const { tmp, claudeDst } = makeSyncFixture('cca-kept-braces-');
+  try {
+    const edits = [
+      ["desc: 'Commands, rules, settings, and these docs.", "desc: 'Commands, rules, settings, and these docs { unbalanced."],
+      ['> Run \\`/autoconfig\\` to populate', '> Run \\`/autoconfig\\` } to populate']
+    ];
+    const fixtureDocs = path.join(claudeDst, 'docs', 'autoconfig.docs.html');
+    let expected = fs.readFileSync(fixtureDocs, 'utf8');
+    for (const [from, to] of edits) {
+      assert(countOccurrences(expected, from) === 1, `fixture anchor not unique: ${from}`);
+      expected = expected.replace(from, () => to);
+    }
+    fs.writeFileSync(fixtureDocs, expected);
+    const first = runSyncDocs(tmp, claudeDst);
+    const second = runSyncDocs(tmp, claudeDst);
+    assert(first === expected, 'sync rewrote more than the generated sections — a brace in a kept entry mis-located its end (BH-14)');
+    assert(second === first, 'second sync differs from the first (BH-14)');
+    for (const m of first.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script/gi)) new vm.Script(m[1]);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+function countOccurrences(haystack, needle) {
+  return haystack.split(needle).length - 1;
+}
 
 summary();

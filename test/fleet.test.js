@@ -61,7 +61,7 @@ git('add', STAGED);
 function board() {
   const out = execFileSync('node', [SCRIPT, '--json', '--project-dir', repo], {
     encoding: 'utf8',
-    env: { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_CODE_SESSION_ID: '' },
+    env: { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_CODE_SESSION_ID: '', CCA_FLEET_AGENTS_JSON: 'off' },
   });
   return JSON.parse(out);
 }
@@ -103,6 +103,100 @@ test('a clean tree reports no dirty files at all', () => {
   } finally {
     git('stash', 'pop');
   }
+});
+
+// ---- behind counts, STALE, pile-up ------------------------------------
+// A second repo, so the porcelain fixture above stays exactly two rows. One branch carries an
+// unlanded commit and then falls 60 commits behind main; twelve more empty worktrees make 13
+// registered — one over the pile-up threshold.
+const repo2 = path.join(tmp, 'repo2');
+fs.mkdirSync(repo2, { recursive: true });
+const git2 = (...args) =>
+  execFileSync('git', args, { cwd: repo2, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+git2('init', '--initial-branch=main');
+git2('config', 'user.email', 'test@example.com');
+git2('config', 'user.name', 'Fleet Test');
+git2('config', 'commit.gpgsign', 'false');
+git2('commit', '--allow-empty', '-m', 'seed');
+const staleDir = path.join(tmp, 'wt-stale');
+git2('worktree', 'add', '-b', 'old-work', staleDir);
+execFileSync('git', ['commit', '--allow-empty', '-m', 'unlanded'], { cwd: staleDir, stdio: 'ignore' });
+for (let i = 0; i < 60; i++) git2('commit', '--allow-empty', '-m', `main ${i}`);
+for (let i = 0; i < 12; i++) git2('worktree', 'add', '-b', `idle-${i}`, path.join(tmp, `wt-${i}`));
+
+const run2 = (...extra) => execFileSync('node', [SCRIPT, '--project-dir', repo2, ...extra], {
+  encoding: 'utf8',
+  env: { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_CODE_SESSION_ID: '', CCA_FLEET_AGENTS_JSON: 'off' },
+});
+
+test('--json carries behind and stale for a branch 60 commits behind', () => {
+  const t = JSON.parse(run2('--json')).trees.find((x) => x.branch === 'old-work');
+  assert(t && t.behind === 60, `expected behind 60, got ${t && t.behind}`);
+  assert(t.stale === true, 'a branch 60 behind must be stale');
+});
+
+test('the UNLANDED row prints the behind count and a STALE marker', () => {
+  const out = run2();
+  assert(/old-work\s+⚠ STALE \(60 behind main\)/.test(out), `no STALE marker:\n${out}`);
+  assert(out.includes('60 behind'), `no behind count in the flags:\n${out}`);
+});
+
+test('13 registered worktrees print the pile-up line', () => {
+  const out = run2();
+  assert(out.includes('13 worktrees registered — run /sync-worktrees'), `no pile-up line:\n${out}`);
+  assert(JSON.parse(run2('--json')).pileUp === true, '--json pileUp must be true');
+});
+
+test('12 or fewer worktrees print no pile-up line', () => {
+  git2('worktree', 'remove', path.join(tmp, 'wt-0'));
+  assert(!run2().includes('worktrees registered'), 'pile-up line must not show at 12');
+});
+
+// ---- placement by `claude agents --json` cwd ---------------------------
+// Both sessions' transcripts sit in repo2's MAIN-checkout folder (they were launched there). The
+// fixture says session 1 now works in the old-work worktree and session 2 in another repo. The
+// transcript folder alone would place both at the base checkout.
+const SID_WT = '00000000-0000-4000-8000-000000000001';
+const SID_AWAY = '00000000-0000-4000-8000-000000000002';
+const titles = path.join(home, '.claude', 'hooks', '.titles');
+const baseSlug = path.join(home, '.claude', 'projects', repo2.replace(/[^a-zA-Z0-9]/g, '-'));
+fs.mkdirSync(titles, { recursive: true });
+fs.mkdirSync(baseSlug, { recursive: true });
+for (const sid of [SID_WT, SID_AWAY]) {
+  fs.writeFileSync(path.join(titles, `${sid}.txt`), `Fleet test — session ${sid.slice(-1)}`);
+  fs.writeFileSync(path.join(baseSlug, `${sid}.jsonl`), '{}\n');
+}
+const agentsFile = path.join(tmp, 'claude-agents.json');
+fs.writeFileSync(agentsFile, fs.readFileSync(path.join(__dirname, 'fixtures', 'claude-agents.json'), 'utf8')
+  .replace('{{WORKTREE}}', JSON.stringify(staleDir).slice(1, -1))
+  .replace('{{OTHER_REPO}}', JSON.stringify(path.join(tmp, 'elsewhere')).slice(1, -1)));
+
+const sessionsWith = (agents) => JSON.parse(execFileSync('node', [SCRIPT, '--json', '--project-dir', repo2], {
+  encoding: 'utf8',
+  env: { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_CODE_SESSION_ID: '', CCA_FLEET_AGENTS_JSON: agents },
+})).sessions;
+const sameDir = (a, b) => path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
+
+test('agents off: both sessions fall back to the transcript folder (base checkout)', () => {
+  const s = sessionsWith('off');
+  for (const sid of [SID_WT, SID_AWAY]) {
+    const row = s.find((x) => x.sid === sid);
+    assert(row && sameDir(row.tree.dir, repo2), `${sid} must sit at the base; got ${row && row.tree.dir}`);
+  }
+});
+
+test('a session whose cwd is a worktree outside its transcript folder is placed in that worktree', () => {
+  const row = sessionsWith(agentsFile).find((x) => x.sid === SID_WT);
+  assert(row && sameDir(row.tree.dir, staleDir), `expected ${staleDir}, got ${row && row.tree && row.tree.dir}`);
+});
+
+test('a session whose cwd is another repo leaves this board', () => {
+  assert(!sessionsWith(agentsFile).some((x) => x.sid === SID_AWAY), 'session in another repo must not be listed');
+});
+
+test('an unreadable agents file falls back to the transcript folder', () => {
+  const row = sessionsWith(path.join(tmp, 'missing.json')).find((x) => x.sid === SID_WT);
+  assert(row && sameDir(row.tree.dir, repo2), `fallback must place it at the base; got ${row && row.tree.dir}`);
 });
 
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }

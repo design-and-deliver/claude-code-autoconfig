@@ -4,6 +4,33 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.241
+- feat(feedback): Feedback turned into rules is now logged in a separate EXTRACTED.md, keeping FEEDBACK.md lean for Claude
+
+## v1.0.240
+- fix(feedback): Team feedback in FEEDBACK.md is now reliably loaded into every session (previously Claude only read it when it chose to)
+
+## v1.0.239
+- feat(feedback): Team feedback you commit is now automatically turned into targeted rules, leaving a link to each new rule in FEEDBACK.md
+
+## v1.0.238
+- fix(install): Hooks and auto-guard safety checks now work in projects whose package.json uses "type": "module" (they previously stopped silently)
+
+## v1.0.234
+- feat(commands): /validate-cca-install is retired — re-running `npx claude-code-autoconfig@latest` already checks and repairs your install. Upgrades remove the old command.
+
+## v1.0.233
+- fix(gls): Scope refinement for text typed after /gls
+
+## v1.0.232
+- feat(plugins): plugin activate now installs create-vid keys too
+- docs(plan-authoring): mandatory Budget line, release-branch base, multi-repo plans, Decisions block, feature-plan phase order
+- docs(plan-authoring): peak-context split test + target-environment header line
+- fix(docs): The install walkthrough's file tree no longer gets cut off on short browser windows
+- docs(plan-authoring): size substeps by files touched and a trip estimate, not lines alone
+- docs(plan): token-saver rename — Ledger: 2.1 prerequisites cleared, worktree created
+- docs(plan): token-saver rename — Ledger 1.2 done (private 358a597)
+
 ## v1.0.231
 - feat(docs): The install walkthrough's subtitle now opens with a link to the key-features page
 - feat(docs): The install walkthrough now links to the key-features page
@@ -187,32 +214,4 @@
 
 ## v1.0.192
 - fix(pkg): exclude runtime .titles/ from published tarball
-
-## v1.0.191
-- docs(readme): list terminal-title.directive.md in the hooks tree
-- feat(terminal-title): add opt-in CLAUDE_TITLE_DEBUG forensic logging
-
-## v1.0.190
-- docs(readme): document the bundled terminal-title hook
-- feat(terminal-title): bundle the terminal-title hook into core
-
-## v1.0.189
-- fix: drop redundant nul cleanup that errored after the install finale
-
-## v1.0.188
-- feat(plugins): add drop-in plugin system (plugin add/remove/list)
-
-## v1.0.187
-- refactor(terminal-title): reframe directive to use-case vocabulary (scope + infinitive goal)
-- docs: add TODO for deterministic settings.json deny list
-- feat(terminal-title): add question-awaiting state + AskUserQuestion refresh
-
-## v1.0.186
-- fix: increase bottom padding in docs file tree
-
-## v1.0.183
-- fix: stop copying updates dir to user projects and clean up existing ones
-
-## v1.0.182
-- fix: tight column alignment in docs parameter tables
 

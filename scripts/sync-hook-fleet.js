@@ -109,8 +109,8 @@ const MANIFEST = [
   // with NEITHER a superset (the rule's own header says so); a doc drifts exactly like a hook
   // does, so it gets the same actuator rather than another "remember to port it" note. Not
   // global: ~/.claude has no rules dir, and ADOPT-ONLY means a repo without the file keeps not
-  // having it.
-  { file: 'plan-authoring.md', global: false, subdir: 'rules' },
+  // having it. Since 2026-09-28 it is an on-demand skill rather than an always-loaded rule.
+  { file: 'SKILL.md', global: false, subdir: 'skills/plan-authoring' },
   // Dev-only commands and their scripts. They were hand-copied between repos before this — the
   // same "remember to port it" arrangement that let token-guard.js drift 231 lines behind, just
   // one directory over. A command drifts exactly like a hook does, so it gets the same actuator.
@@ -146,6 +146,17 @@ const MANIFEST = [
   // an unmanifested hand-copy is exactly how continue.md reached v16 here while a CCA install
   // silently reverted that repo to v15.
   { file: 'abort-plan.md', global: false, subdir: 'commands' },
+  // /land and its script chain (land.js → land-core.js + worktree-safety.js). Dev-only, per-repo:
+  // landing is about one repo's main checkout. Each file is adopted on its own like fleet.md/.js;
+  // a repo that adopts land.js must hold the other two, or it fails at require() time.
+  { file: 'land.md', global: false, subdir: 'commands' },
+  { file: 'land.js', global: false, subdir: 'scripts' },
+  { file: 'land-core.js', global: false, subdir: 'scripts' },
+  { file: 'worktree-safety.js', global: false, subdir: 'scripts' },
+  // /sync-worktrees requires worktree-safety.js too (reclaimVerdict + safe removal). JAE's copy
+  // was a hand port that diverged; adopt-only means it is replaced here, never created.
+  { file: 'sync-worktrees.md', global: false, subdir: 'commands' },
+  { file: 'sync-worktrees.js', global: false, subdir: 'scripts' },
 ];
 
 const PAD = 46;                                               // report column for the target label

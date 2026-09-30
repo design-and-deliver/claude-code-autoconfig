@@ -32,7 +32,7 @@
  * verdict ({sid}.wtgate, beside the session's other title state). It never nags mid-task.
  *
  * THE SECOND CONCERN: PLAN WORK ON THE DEFAULT BRANCH
- * `plan-authoring.md` says a plan merges to the default branch ONCE, when the whole plan is
+ * the `plan-authoring` skill says a plan merges to the default branch ONCE, when the whole plan is
  * done — a plan is an all-or-nothing transaction, and half a plan on `main` is junk nobody can
  * later tell apart from live code. On 2026-08-19 three substeps of a live plan sat on `main`
  * for 17 hours before being pulled onto a branch by hand; v1.0.222 shipped off `main` inside
@@ -198,7 +198,7 @@ function isInside(child, parent) {
 }
 
 // ── plan-branch concern ─────────────────────────────────────────────────────────────────────
-// Landing plan substeps HERE is what plan-authoring.md forbids; any other branch is fine, which
+// Landing plan substeps HERE is what the plan-authoring skill forbids; any other branch is fine, which
 // is why the test is "is HEAD a default branch", not "is HEAD the plan's branch" — the latter
 // would need the plan doc's header parsed, for no extra protection.
 const DEFAULT_BRANCHES = new Set(['main', 'master']);
@@ -222,7 +222,7 @@ function headBranch(repoRoot) {
 }
 
 // Plan docs = docs/*.md or .claude/plans/*.md carrying a `## Ledger` section — the shape
-// plan-authoring.md requires, and the same one token-saver's plan-boundary advisory ranks.
+// the plan-authoring skill requires, and the same one token-saver's plan-boundary advisory ranks.
 // Returns basenames. Capped because a docs/ dir is unbounded input on a hook path, even one
 // that runs at most once per session.
 function planDocs(repoRoot) {

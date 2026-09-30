@@ -29,7 +29,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 
 // ---- args -------------------------------------------------------------
 const opts = {
@@ -152,6 +152,68 @@ function locate(sess, treeSlugs) {
   return sess;
 }
 
+// ---- 1b. live cwd from `claude agents --json` --------------------------
+// The transcript folder records where a session STARTED. A session that entered a worktree
+// afterwards still writes to its launch folder's transcript, so the slug join above places it in
+// the wrong tree. `claude agents --json` reports each running session's current cwd. Probed on
+// 2.1.280: prints and exits in ~0.5s, starts no daemon, opens no UI. Any failure (older Claude
+// Code, no binary, timeout, bad JSON) returns an empty map, and the slug join stands.
+const AGENTS_TIMEOUT_MS = 3000;
+
+function readAgentCwds() {
+  const src = process.env.CCA_FLEET_AGENTS_JSON;   // test seam: a JSON file to read instead, or 'off'
+  if (src === 'off') return new Map();
+  if (src) {
+    try { return parseAgentCwds(fs.readFileSync(src, 'utf8')); } catch { return new Map(); }
+  }
+  // shell on Windows: `claude` is an npm .cmd shim that execFile can't resolve without one.
+  const r = spawnSync('claude', ['agents', '--json'], {
+    encoding: 'utf8', timeout: AGENTS_TIMEOUT_MS, windowsHide: true,
+    shell: process.platform === 'win32', stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  return r.status === 0 ? parseAgentCwds(r.stdout) : new Map();
+}
+
+function parseAgentCwds(raw) {
+  const out = new Map();
+  let list;
+  try { list = JSON.parse(raw); } catch { return out; }
+  if (!Array.isArray(list)) return out;
+  for (const a of list) {
+    if (a?.sessionId && a.cwd) out.set(a.sessionId, a.cwd);
+  }
+  return out;
+}
+
+const normDir = (p) => {
+  const r = path.resolve(p);
+  return process.platform === 'win32' ? r.toLowerCase() : r;
+};
+
+// The DEEPEST tree containing cwd: worktrees live under the main checkout's .claude/worktrees/,
+// so the main checkout contains every one of them and a first-match would always pick it.
+function treeForCwd(cwd, trees) {
+  const c = normDir(cwd);
+  let best = null;
+  let bestLen = -1;
+  for (const t of trees) {
+    const d = normDir(t.dir);
+    const inside = c === d || c.startsWith(d + path.sep);
+    if (inside && d.length > bestLen) { best = t; bestLen = d.length; }
+  }
+  return best;
+}
+
+// A reported cwd overrides the slug join, including to null: a session now working in another
+// repo is not on this board, whatever folder its transcript sits in.
+function placeByCwd(sess, trees, agentCwds) {
+  const cwd = agentCwds.get(sess.sid);
+  if (!cwd) return sess;
+  sess.cwd = cwd;
+  sess.tree = treeForCwd(cwd, trees);
+  return sess;
+}
+
 const stateOf = (s) => {
   if (s.awaiting) return 'awaiting';
   const age = s.writeMs != null ? NOW - s.writeMs : null;
@@ -160,6 +222,11 @@ const stateOf = (s) => {
   if (age < RECENT_MS) return 'recent';
   return 'idle';
 };
+
+// A branch this far behind its base is flagged STALE on the board, and more registered worktrees
+// than PILEUP_TREES gets one nudge toward /sync-worktrees. Both are prompts, never actions.
+const STALE_BEHIND = 50;
+const PILEUP_TREES = 12;
 
 // ---- 2. worktrees + git state ----------------------------------------
 // The FIRST entry of `git worktree list --porcelain` is always the main checkout; its branch is
@@ -209,6 +276,11 @@ function enrich(trees, baseBranch, baseDir) {
     t.unlanded = log ? log.split(/\r?\n/).filter(Boolean) : [];
     const names = git(t.dir, ['diff', '--name-only', `${baseBranch}...HEAD`]);
     t.files = names ? names.split(/\r?\n/).filter(Boolean) : [];
+    // How far the base has moved on since this branch forked. The unlanded count says how much
+    // work is waiting; this says how stale it has grown — a branch hundreds of commits behind is a
+    // merge nobody wants to do, and the board is the only place that number surfaces unasked.
+    t.behind = Number(git(t.dir, ['rev-list', '--count', `HEAD..${baseBranch}`])) || 0;
+    t.stale = t.behind > STALE_BEHIND;
   }
   return trees;
 }
@@ -275,8 +347,9 @@ const baseBranch = trees[0].branch || 'HEAD';
 enrich(trees, baseBranch, baseDir);
 
 const treeSlugs = new Map(trees.map((t) => [t.slug, t]));
+const agentCwds = readAgentCwds();
 const sessions = readSessions()
-  .map((s) => locate(s, treeSlugs))
+  .map((s) => placeByCwd(locate(s, treeSlugs), trees, agentCwds))
   .filter((s) => opts.all || s.tree || s.writeMs != null)
   .sort((a, b) => (b.writeMs || b.titleMs || 0) - (a.writeMs || a.titleMs || 0));
 
@@ -292,6 +365,7 @@ if (opts.json) {
     sameTree: sameTreeCollisions(mine, trees),
     duplicates: duplicateTitles(mine),
     overlaps: fileOverlaps(trees),
+    pileUp: trees.length - 1 > PILEUP_TREES,
   }, null, 2));
   process.exit(0);
 }
@@ -346,8 +420,10 @@ function inFlightClaimOverlaps() {
   const claims = claimRegistryMod.readLiveClaims({ now: Date.now() });
   const byPath = new Map();
   for (const c of claims) {
-    if (!byPath.has(c.normPath)) byPath.set(c.normPath, []);
-    byPath.get(c.normPath).push(c);
+    // key is repo + relative path, so two worktrees of one repo editing the same file group.
+    const k = c.key || c.normPath;
+    if (!byPath.has(k)) byPath.set(k, []);
+    byPath.get(k).push(c);
   }
   const overlaps = [];
   for (const [, group] of byPath) {
@@ -416,16 +492,23 @@ if (landable.length) {
     const ov = overlapCount.get(t.branch) || 0;
     const flags = [
       `${t.unlanded.length} commit${t.unlanded.length === 1 ? '' : 's'}`,
+      `${t.behind} behind`,
       ov ? `${ov} overlapping file${ov === 1 ? '' : 's'}` : 'no overlap',
       t.dirty.length ? `${t.dirty.length} uncommitted` : 'clean',
       busy ? '⚠ session still active' : 'session idle',
     ];
-    L.push(`  ${t.branch}`);
+    L.push(`  ${t.branch}${t.stale ? `  ⚠ STALE (${t.behind} behind ${baseBranch})` : ''}`);
     L.push(`    ${flags.join(' · ')}`);
   }
   L.push('');
   L.push(`  merge from ${baseDir} (never from inside a worktree):`);
   L.push(`    git merge ${ordered[0].branch}`);
+}
+
+// Pile-up is a hygiene nudge, so it trails the board rather than competing with the hazards.
+if (wtN > PILEUP_TREES) {
+  L.push('');
+  L.push(`${wtN} worktrees registered — run /sync-worktrees`);
 }
 
 // LAND: the second verb lives here when it is built — it would consume this same ordering, refuse

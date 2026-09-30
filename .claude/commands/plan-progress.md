@@ -1,5 +1,5 @@
 <!-- @description Show progress of the in-flight plan doc(s) in this project — an effort-weighted dashboard of phases and substeps, completed steps struck through, the current step highlighted, with % done and time remaining. -->
-<!-- @version 1 -->
+<!-- @version 2 -->
 <!-- @response success | Renders one dashboard per detected plan: title, effort-weighted %, done/total substeps, ~time left, next step, then phases with struck-through done substeps and a highlighted current step. -->
 <!-- @response none | No plan docs found — reports that and how to make a plan trackable. -->
 <!-- @sideeffect Read-only. Runs a deterministic parser over .md files in docs/, .claude/plans/, and the repo root; writes nothing. -->
@@ -11,7 +11,7 @@ Show, at a glance, where the project's phased plan doc(s) stand — the read-onl
 `/continue`. `/continue` *runs* the next unchecked substep; this just *shows* the map, cheaply,
 without spending tokens on execution.
 
-It reads the plan-authoring format (`.claude/rules/plan-authoring.md`): phases
+It reads the plan-authoring format (`.claude/skills/plan-authoring/SKILL.md`): phases
 (`## Phase N — title`), substeps (`### ☑|☐ N.k · S|M|L · ~time — title`), and a `## Ledger`
 that marks a doc as an executable plan rather than a design doc. Because the effort tags carry
 time estimates, the percentage is **effort-weighted**, not a naive substep count.

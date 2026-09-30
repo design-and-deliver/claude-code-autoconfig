@@ -10,6 +10,9 @@ const { migrateLegacyHookCommands, migrateRenamedToolMatchers, migrateRetiredPer
 const { MIN_CLAUDE_CODE_VERSION, checkClaudeVersion } = require('./lib/claude-version.js');
 const { pullUpdates } = require('./lib/updates.js');
 const { cleanupNulFile } = require('./lib/nul-cleanup.js');
+const { ensureCommonJsScope } = require('./lib/commonjs-scope.js');
+const { ensureFeedbackImport } = require('./lib/feedback-import.js');
+const { migrateFeedbackPointers } = require('./lib/feedback-extracted.js');
 
 // ── main() ───────────────────────────────────────────────────────────────────
 // The entire install flow (and its helpers) lives inside main() — requiring this
@@ -18,8 +21,9 @@ const { cleanupNulFile } = require('./lib/nul-cleanup.js');
 // Commands that once shipped and were later retired. copyTree never writes them any more,
 // but an upgraded project still holds its old copy, so the installer deletes each one it
 // finds (the arcade-beeps pair were deprecated aliases of /enable-status-beeps and
-// /disable-status-beeps, retired 2026-09-03). Returns the files actually removed.
-const RETIRED_COMMANDS = ['enable-arcade-beeps.md', 'disable-arcade-beeps.md'];
+// /disable-status-beeps, retired 2026-09-03; /validate-cca-install retired 2026-09-27 — its
+// only remedy was re-running the installer). Returns the files actually removed.
+const RETIRED_COMMANDS = ['enable-arcade-beeps.md', 'disable-arcade-beeps.md', 'validate-cca-install.md'];
 function removeRetiredCommands(commandsDest, existingCommandContents) {
   const removed = [];
   for (const f of RETIRED_COMMANDS) {
@@ -28,6 +32,12 @@ function removeRetiredCommands(commandsDest, existingCommandContents) {
   }
   return removed;
 }
+
+// Hook wiring CCA once shipped and has since moved; the settings merge strips it by exact
+// command per event (feedback-rule-check.js became a PreToolUse(Bash) commit check, 2026-09-28).
+const RETIRED_FEEDBACK_EDIT_HOOK = { hooks: {
+  PostToolUse: [{ matcher: 'Edit|Write', hooks: [{ type: 'command', command: 'node "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/feedback-rule-check.js"' }] }]
+} };
 
 function main() {
   const cwd = process.cwd();
@@ -519,8 +529,8 @@ function main() {
   // must be added here. Keep the literal on one line: tests parse it by regex.
   // /enable-retro + its create-retro-item agent are experimental: kept in-repo, gated out of
   // new installs since 2026-09-03. Projects that already hold them keep them (never retracted).
-  const DEV_ONLY_FILES = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-session.md', 'migrate-new-session.md', 'token-guard.js', 'token-saver.js', 'plan-progress.md', 'plan-progress.js', 'whats-happening.md', 'whats-happening.js', 'refactor.md', 'parallel-session-worktrees.md',
-    'fleet.md', 'fleet.js', 'sync-worktrees.md', 'sync-worktrees.js', 'session-close.js', 'restore-after-reboot.md', 'restore-after-reboot.js', 'worktree-gate.js', 'claim-registry.js', 'token-guard-liveness.js', 'token-saver-liveness.js', 'statusline-cost.js', 'cost-compare.md', 'gimme-one-liner.md', 'create-wip-report.md', 'abort-plan.md', 'eod-report.md', 'token-saver-details.md', 'token-saver-rationale.md', 'enable-retro.md', 'create-retro-item.md'];
+  const DEV_ONLY_FILES = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-session.md', 'migrate-new-session.md', 'token-guard.js', 'token-saver.js', 'plan-progress.md', 'plan-progress.js', 'whats-happening.md', 'whats-happening.js', 'refactor.md', 'parallel-session-worktrees.md', 'SKILL.md',
+    'fleet.md', 'fleet.js', 'sync-worktrees.md', 'sync-worktrees.js', 'worktree-safety.js', 'land-core.js', 'land.js', 'land.md', 'session-close.js', 'restore-after-reboot.md', 'restore-after-reboot.js', 'worktree-gate.js', 'claim-registry.js', 'token-guard-liveness.js', 'token-saver-liveness.js', 'statusline-cost.js', 'cost-compare.md', 'gimme-one-liner.md', 'create-wip-report.md', 'abort-plan.md', 'eod-report.md', 'token-saver-details.md', 'token-saver-rationale.md', 'enable-retro.md', 'create-retro-item.md'];
 
   // Everything the installer ships to user projects passes this gate, at every depth.
   const shipsToUsers = (name) => !DEV_ONLY_FILES.includes(name);
@@ -669,6 +679,9 @@ function main() {
   if (fs.existsSync(soundsSrc)) {
     copyTree(soundsSrc, path.join(claudeDest, 'sounds'), { filter: shipsToUsers });
   }
+
+  // Keep .claude/ CommonJS inside an ESM host ("type": "module") — see bin/lib/commonjs-scope.js.
+  ensureCommonJsScope(claudeDest, (msg) => console.log(paint('yellow', msg)));
   mark('copy');
 
   // Note: updates directory is no longer copied to user projects.
@@ -750,6 +763,10 @@ function main() {
           unmergeSettingsFrom(userSettings, TOKEN_SAVER_SETTINGS_FRAGMENT);
           unmergeSettingsFrom(userSettings, TOKEN_GUARD_SETTINGS_FRAGMENT);
         }
+
+        // feedback-rule-check.js moved from PostToolUse(Edit|Write) to a PreToolUse(Bash) commit
+        // gate; the additive merge below would otherwise leave the old wiring spawning it per edit.
+        unmergeSettingsFrom(userSettings, RETIRED_FEEDBACK_EDIT_HOOK);
 
         // Additively fold package hooks/env/permissions into the user's settings
         // (shared with the plugin installer — see mergeSettingsInto).
@@ -848,6 +865,17 @@ function main() {
     fs.rmSync(userUpdatesDir, { recursive: true });
   }
 
+  // Turn an older run's prose pointer to FEEDBACK.md into an @ import, so it actually loads.
+  if (ensureFeedbackImport(cwd)) {
+    console.log(paint('cyan', '   📋 CLAUDE.md now loads .claude/feedback/FEEDBACK.md every session'));
+  }
+
+  // Move rule pointers an earlier /extract-rules left in FEEDBACK.md out to EXTRACTED.md.
+  const movedPointers = migrateFeedbackPointers(cwd);
+  if (movedPointers > 0) {
+    console.log(paint('cyan', `   📋 Moved ${movedPointers} rule pointer${movedPointers > 1 ? 's' : ''} from FEEDBACK.md → EXTRACTED.md`));
+  }
+
   // Migrate FEEDBACK.md content to CLAUDE.md Discoveries section (one-time, on upgrade)
   if (isUpgrade) {
     const claudeMdPath = path.join(cwd, 'CLAUDE.md');
@@ -879,7 +907,7 @@ function main() {
           fs.writeFileSync(claudeMdPath, claudeMdContent + discoveriesSection);
 
           // Reset FEEDBACK.md to clean template
-          const cleanTemplate = `<!-- @description Human-authored corrections and guidance for Claude. Reserved for team feedback only — Claude must not write here. This directory persists across /autoconfig runs. -->\n\n# Team Feedback\n\n**This file is for human-authored corrections and guidance only.**\nClaude reads this file but must never write to it. When Claude discovers project context, gotchas, or learnings, it should append to the \`## Discoveries\` section in CLAUDE.md instead.\n\n---\n\n`;
+          const cleanTemplate = `<!-- @description Human-authored corrections and guidance for Claude. Reserved for team feedback only — Claude must not write here. This directory persists across /autoconfig runs. -->\n\n# Team Feedback\n\n**This file is for human-authored corrections and guidance only.**\nClaude reads this file but must never write to it, except to remove an entry /extract-rules turned into a rule (EXTRACTED.md, next to this file, logs where each one went). When Claude discovers project context, gotchas, or learnings, it should append to the \`## Discoveries\` section in CLAUDE.md instead.\n\n---\n\n`;
           fs.writeFileSync(feedbackPath, cleanTemplate);
 
           // Count migrated sections

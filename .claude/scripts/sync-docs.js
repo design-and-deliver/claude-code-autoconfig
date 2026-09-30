@@ -234,13 +234,28 @@ function generatePreview(content, _ext) {
 }
 
 /**
+ * Neutralize text that is ordinary content but reads as STRUCTURE to the page, using escapes
+ * that evaluate back to the same characters inside any JS string or template literal:
+ *   `};`       → `};`   the splice finds the end of treeInfo/fileContents with
+ *                            indexOf('};'), so a `};` in content mis-anchors the next sync (BH-2)
+ *   `</script` → `<\/script` the whole page lives in one <script>; an HTML parser ends it at
+ *                            the first `</script`, wherever it sits (BH-15)
+ * Runs AFTER backslash doubling, so the backslashes it adds are never re-escaped.
+ */
+function neutralizeStructure(str) {
+  return str
+    .replace(/\};/g, '\\u007d;')
+    .replace(/<\/(script)/gi, '<\\/$1');
+}
+
+/**
  * Escape a string for use inside a JS template literal.
  */
 function escapeTemplateLiteral(str) {
-  return str
+  return neutralizeStructure(str
     .replace(/\\/g, '\\\\')
     .replace(/`/g, '\\`')
-    .replace(/\$\{/g, '\\${');
+    .replace(/\$\{/g, '\\${'));
 }
 
 /**
@@ -248,11 +263,11 @@ function escapeTemplateLiteral(str) {
  * Backslash goes first so the escapes added below aren't themselves re-escaped.
  */
 function jsEscape(str) {
-  return str
+  return neutralizeStructure(str
     .replace(/\\/g, '\\\\')
     .replace(/'/g, "\\'")
     .replace(/\r/g, '\\r')
-    .replace(/\n/g, '\\n');
+    .replace(/\n/g, '\\n'));
 }
 
 /**
@@ -564,6 +579,28 @@ const MARKERS = {
   claudeMdFc: "'claude-md': {"
 };
 
+// Index of the `}` that closes the object literal opened at or after `start`. Braces inside
+// quoted strings and template literals are skipped (BH-14): the kept structural entries are
+// hand-authored, so a `{` in a desc or a `}` in a preview must not move the boundary.
+function skipQuoted(html, i) {
+  const quote = html[i];
+  for (i++; i < html.length && html[i] !== quote; i++) {
+    if (html[i] === '\\') i++;
+  }
+  return i;
+}
+
+function findEntryEnd(html, start) {
+  let depth = 0;
+  for (let i = start; i < html.length; i++) {
+    const c = html[i];
+    if (c === "'" || c === '"' || c === '`') i = skipQuoted(html, i);
+    else if (c === '{') depth++;
+    else if (c === '}' && --depth === 0) return i;
+  }
+  return html.length;
+}
+
 function countOccurrences(haystack, needle) {
   let count = 0, from = 0, idx;
   while ((idx = haystack.indexOf(needle, from)) !== -1) {
@@ -664,16 +701,7 @@ if (claudeDirInfoIdx === -1) {
   process.exit(1);
 }
 // Find the closing }, of the claude-dir entry
-let braceDepth = 0;
-let i = claudeDirInfoIdx;
-while (i < html.length) {
-  if (html[i] === '{') braceDepth++;
-  if (html[i] === '}') {
-    braceDepth--;
-    if (braceDepth === 0) break;
-  }
-  i++;
-}
+let i = findEntryEnd(html, claudeDirInfoIdx);
 // Start right after the closing `}`, then consume the trailing comma and any spaces/tabs
 // but STOP at the line break. generateTreeInfo() already indents every line 12 spaces, so
 // consuming the NEXT line's leading indentation here too would double it, growing the
@@ -710,16 +738,7 @@ if (claudeMdFcIdx === -1) {
   console.error('Could not find claude-md fileContents entry');
   process.exit(1);
 }
-braceDepth = 0;
-i = claudeMdFcIdx;
-while (i < html.length) {
-  if (html[i] === '{') braceDepth++;
-  if (html[i] === '}') {
-    braceDepth--;
-    if (braceDepth === 0) break;
-  }
-  i++;
-}
+i = findEntryEnd(html, claudeMdFcIdx);
 // Same idempotency fix as treeInfo above (substep 3.5): stop at the line break after the
 // claude-md entry's `}` + comma. generateFileContents() owns its 12-space indentation; the
 // splice below prepends a single `\n`.

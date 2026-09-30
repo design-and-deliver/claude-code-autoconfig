@@ -80,7 +80,7 @@ const PKG_VERSION = require(path.join(PKG_DIR, 'package.json')).version;
 // Kept in sync with bin/cli.js by substep 2.2's dev-gate-consistency test — here we only need
 // a representative subset to assert absence.
 const DEV_ONLY_COMMANDS = ['deploy-to-npmjs.md', 'usage-report.md', 'analyze-session.md', 'migrate-new-session.md', 'enable-retro.md'];
-const RETIRED_COMMANDS = ['enable-arcade-beeps.md', 'disable-arcade-beeps.md'];
+const RETIRED_COMMANDS = ['enable-arcade-beeps.md', 'disable-arcade-beeps.md', 'validate-cca-install.md'];
 const SHIPPED_COMMANDS = ['autoconfig.md', 'autoconfig-update.md', 'continue.md', 'recover-context.md', 'gls.md'];
 
 const { test, assert, summary, makeClaudeShim, runCli } = require('./_harness');
@@ -240,7 +240,7 @@ writeFile(up, '.claude/settings.json', JSON.stringify({
 // upgrade must retract the files AND the settings entries above (see cli.js retraction).
 writeFile(up, '.claude/hooks/token-guard.js', '// un-gated 1.0.224 leftover — must be removed\n');
 writeFile(up, '.claude/commands/cost-control-details.md', '<!-- @description leftover -->\n');
-// Retired deprecated aliases left behind by an older install — the upgrade must delete them
+// Retired commands (deprecated aliases, /validate-cca-install) left behind by an older install — the upgrade must delete them
 // (copyTree no longer writes them, but a stale .md is still a live slash command).
 for (const a of RETIRED_COMMANDS) writeFile(up, `.claude/commands/${a}`, '<!-- @description deprecated alias leftover -->\n');
 // Dev-gated (not retired) files an older install picked up while they still shipped — the
@@ -1142,6 +1142,101 @@ test('an unparseable version banner passes the gate (fail open) and installs nor
 
 test('the version found is echoed on the detected line when readable', () => {
   assert(freshResult.out.includes('Claude Code v2.1.257 detected'), `expected the detected line to carry the probed version\n${freshResult.out}`);
+});
+
+// ── CLAUDE.md imports FEEDBACK.md instead of pointing at it ──────────────────
+// Claude Code never loads a file CLAUDE.md merely mentions; only an `@path` import is expanded
+// at launch. The installer rewrites the pointer lines older /autoconfig runs wrote.
+console.log();
+console.log('CLAUDE.md feedback pointer becomes an @ import:');
+
+const { ensureFeedbackImport, withFeedbackImport, FEEDBACK_IMPORT } = require('../bin/lib/feedback-import.js');
+
+const V2_POINTER = [
+  '## Team Feedback',
+  'The contents of `.claude/feedback/FEEDBACK.md` are an extension of this file.',
+  'Read it at the start of every session before taking any action.',
+  'FEEDBACK.md is reserved for human-authored corrections only — do not write to it.',
+].join('\n');
+
+test('the "extension of this file" pointer is rewritten to the import', () => {
+  const out = withFeedbackImport(V2_POINTER);
+  assert(out === `## Team Feedback\n${FEEDBACK_IMPORT}\nFEEDBACK.md is reserved for human-authored corrections only — do not write to it.`, `got:\n${out}`);
+});
+
+test('the pointer is rewritten in a CRLF file too', () => {
+  const out = withFeedbackImport(V2_POINTER.replace(/\n/g, '\r\n'));
+  assert(out && out.includes(`## Team Feedback\r\n${FEEDBACK_IMPORT}\r\nFEEDBACK.md`), `got:\n${JSON.stringify(out)}`);
+});
+
+test('the older "See .claude/feedback/" pointer is rewritten to the import', () => {
+  const out = withFeedbackImport('## Team Feedback\n\nSee `.claude/feedback/` for corrections and guidance from the team.\n');
+  assert(out === `## Team Feedback\n\n${FEEDBACK_IMPORT}\n`, `got:\n${out}`);
+});
+
+test('a CLAUDE.md that already imports it, or never pointed at it, is left alone', () => {
+  assert(withFeedbackImport(`## Team Feedback\n${FEEDBACK_IMPORT}\n`) === null, 'already imported → no change');
+  assert(withFeedbackImport('# My project\nSee the feedback folder for notes.\n') === null, 'user prose → no change');
+});
+
+test('ensureFeedbackImport rewrites CLAUDE.md only when FEEDBACK.md exists', () => {
+  const dir = makeProject('feedback-import');
+  cleanups.push(dir);
+  const claudeMd = path.join(dir, 'CLAUDE.md');
+  fs.writeFileSync(claudeMd, V2_POINTER);
+  const feedback = path.join(dir, '.claude', 'feedback', 'FEEDBACK.md');
+  if (fs.existsSync(feedback)) fs.unlinkSync(feedback);
+  assert(ensureFeedbackImport(dir) === false, 'no FEEDBACK.md → nothing to import');
+  fs.mkdirSync(path.dirname(feedback), { recursive: true });
+  fs.writeFileSync(feedback, '# Team Feedback\n\n---\n');
+  assert(ensureFeedbackImport(dir) === true, 'expected a rewrite');
+  assert(fs.readFileSync(claudeMd, 'utf8').includes(FEEDBACK_IMPORT), 'CLAUDE.md should now carry the import');
+  assert(ensureFeedbackImport(dir) === false, 'second run is a no-op');
+});
+
+// ── Rule pointers leave FEEDBACK.md for EXTRACTED.md ─────────────────────────
+// CLAUDE.md imports FEEDBACK.md, so pointers /extract-rules used to leave there cost context every
+// session. Upgrades move them to EXTRACTED.md (never imported) and rewrite the header sentence.
+console.log();
+console.log('FEEDBACK.md rule pointers move to EXTRACTED.md:');
+
+const { migrateFeedbackPointers, splitPointers, OLD_HEADER, NEW_HEADER } = require('../bin/lib/feedback-extracted.js');
+
+const OLD_FEEDBACK = [
+  '# Team Feedback',
+  '',
+  `Claude reads this file but must never write to it, ${OLD_HEADER}`,
+  '',
+  '---',
+  '',
+  '- → Moved to rule [api.md](../rules/api.md) (2026-09-28)',
+  '- Be terse in PR titles.',
+  '',
+].join('\n');
+
+test('splitPointers pulls pointers below the separator and rewrites the header', () => {
+  const out = splitPointers(OLD_FEEDBACK);
+  assert(out.pointers.length === 1 && out.pointers[0].startsWith('- → Moved to rule [api.md]'), `got ${JSON.stringify(out.pointers)}`);
+  assert(!out.feedback.includes('Moved to rule'), 'pointer should be gone from FEEDBACK.md');
+  assert(out.feedback.includes(NEW_HEADER) && !out.feedback.includes(OLD_HEADER), 'header should be rewritten');
+  assert(out.feedback.includes('- Be terse in PR titles.'), 'real feedback must stay');
+});
+
+test('splitPointers leaves a current FEEDBACK.md alone', () => {
+  assert(splitPointers(`# Team Feedback\n\n${NEW_HEADER}\n\n---\n\n- Be terse.\n`) === null, 'expected no change');
+});
+
+test('migrateFeedbackPointers appends to EXTRACTED.md and is idempotent', () => {
+  const dir = makeProject('feedback-extracted');
+  cleanups.push(dir);
+  const feedbackDir = path.join(dir, '.claude', 'feedback');
+  fs.mkdirSync(feedbackDir, { recursive: true });
+  fs.writeFileSync(path.join(feedbackDir, 'FEEDBACK.md'), OLD_FEEDBACK);
+  assert(migrateFeedbackPointers(dir) === 1, 'expected one pointer moved');
+  const extracted = fs.readFileSync(path.join(feedbackDir, 'EXTRACTED.md'), 'utf8');
+  assert(extracted.startsWith('<!-- @description') && extracted.includes('- → Moved to rule [api.md]'), `got:\n${extracted}`);
+  assert(migrateFeedbackPointers(dir) === 0, 'second run is a no-op');
+  assert(fs.readFileSync(path.join(feedbackDir, 'EXTRACTED.md'), 'utf8') === extracted, 'EXTRACTED.md unchanged on rerun');
 });
 
 // ── Cleanup ──────────────────────────────────────────────────────────────────

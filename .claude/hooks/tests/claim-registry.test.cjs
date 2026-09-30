@@ -14,6 +14,8 @@ const {
   getClaimsDir,
   listClaimFiles,
   parseClaimLines,
+  repoKeyOf,
+  isStaleSid,
   DUPE_WINDOW_MS
 } = require('../claim-registry.js');
 
@@ -197,6 +199,9 @@ test('parseClaimLines skips blanks and malformed lines, and defaults the optiona
     sid: 'sid-x',
     path: 'C:/CODE/a.js',
     normPath: 'c:/code/a.js',
+    repo: null,
+    rel: null,
+    key: 'c:/code/a.js',
     region: null,
     intent: null,
     timestamp: 0
@@ -216,4 +221,80 @@ test('claimantsOf finds matching normalized paths', () => {
   assert.equal(claimants.length, 2);
   assert.equal(claimants[0].sid, 's1');
   assert.equal(claimants[1].sid, 's2');
+});
+
+// Repo-keyed matching (worktree-hardening 5.1). A fake main checkout (.git dir) and a fake linked
+// worktree (.git FILE → gitdir → commondir), built by hand so no git binary is needed.
+function makeRepoPair() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cca-claims-repo-'));
+  const main = path.join(root, 'main');
+  const wt = path.join(main, '.claude', 'worktrees', 'wt');
+  const wtGitdir = path.join(main, '.git', 'worktrees', 'wt');
+  fs.mkdirSync(wtGitdir, { recursive: true });
+  fs.mkdirSync(wt, { recursive: true });
+  fs.writeFileSync(path.join(wt, '.git'), `gitdir: ${wtGitdir}\n`);
+  fs.writeFileSync(path.join(wtGitdir, 'commondir'), '../..\n');
+  const other = path.join(root, 'other');
+  fs.mkdirSync(path.join(other, '.git'), { recursive: true });
+  return { root, main, wt, other };
+}
+
+function claimFor(sid, absPath) {
+  const k = repoKeyOf(absPath);
+  return parseClaimLines(JSON.stringify({ path: absPath, repo: k && k.repo, rel: k && k.rel }), sid)[0];
+}
+
+test('repoKeyOf gives a main checkout and its linked worktree the same key', () => {
+  const { root, main, wt } = makeRepoPair();
+  try {
+    const a = repoKeyOf(path.join(main, 'src', 'app.js'));
+    const b = repoKeyOf(path.join(wt, 'src', 'app.js'));
+    assert.deepEqual(a, b);
+    assert.equal(a.rel, 'src/app.js');
+    assert.ok(!a.repo.includes('\\'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('claimantsOf matches the same rel across worktrees, never across repos', () => {
+  const { root, main, wt, other } = makeRepoPair();
+  try {
+    const claims = [
+      claimFor('in-wt', path.join(wt, 'src', 'app.js')),
+      claimFor('other-repo', path.join(other, 'src', 'app.js'))
+    ];
+    const hits = claimantsOf(path.join(main, 'src', 'app.js'), claims).map(c => c.sid);
+    assert.deepEqual(hits, ['in-wt']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('claimantsOf still matches an old record with no repo field by path', () => {
+  const { root, main } = makeRepoPair();
+  try {
+    const file = path.join(main, 'src', 'app.js');
+    const old = parseClaimLines(JSON.stringify({ path: file }), 'old-sid');
+    assert.equal(old[0].repo, null);
+    assert.deepEqual(claimantsOf(file, old).map(c => c.sid), ['old-sid']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a glyphless claim goes stale once its file is 31 minutes old', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cca-claims-age-'));
+  const sid = 'test-glyphless-sid-5f1';
+  const file = path.join(dir, `${sid}.jsonl`);
+  fs.writeFileSync(file, '');
+  try {
+    const now = Date.now();
+    assert.equal(isStaleSid(sid, now, file), false);   // fresh file, no glyph → live
+    const old = (now - 31 * 60 * 1000) / 1000;
+    fs.utimesSync(file, old, old);
+    assert.equal(isStaleSid(sid, now, file), true);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

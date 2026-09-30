@@ -6,7 +6,7 @@
  * plan's next unchecked substep — a fresh session per substep is exactly what manual
  * /clear + /continue achieves, so context never accumulates across substeps.
  *
- * The plan doc must follow .claude/rules/plan-authoring.md:
+ * The plan doc must follow .claude/skills/plan-authoring/SKILL.md:
  *   - substep headings:  ### ☐ N.N · <S|M|L> · ~<time> — <title>
  *   - a ## Ledger section the child appends to after each substep
  *

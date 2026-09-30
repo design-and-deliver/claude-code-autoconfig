@@ -231,7 +231,7 @@ All in `.claude/scripts/sync-docs.js`. Generated file (trap 3): fix the generato
 keep the byte-for-byte ratchet green. The shared test surface is `test/contracts.test.js`'s docs
 ratchet — extend it with adversarial-preview fixtures.
 
-### ☐ 4.1 · L · ~1.5h — Escape preview content so a `};` or `</script>` can't break the docs page (BH-2, BH-15)
+### ☑ 4.1 · L · ~1.5h — Escape preview content so a `};` or `</script>` can't break the docs page (BH-2, BH-15)
 
 `sync-docs.js:721/678` — the object-end anchor `indexOf('};', …)` mis-anchors on a `};` inside a
 discarded entry's template literal (`escapeTemplateLiteral` at :237-242 doesn't escape `}`), so any
@@ -239,14 +239,14 @@ documented JS preview containing `};` silently blanks the docs page on the next 
 the same escaping never neutralizes an HTML `</script>` inside a preview, which would terminate the
 docs `<script>` block.
 
-- [ ] Fix the anchoring/escaping so preview content can't be mistaken for structure: escape `}` (or
+- [x] Fix the anchoring/escaping so preview content can't be mistaken for structure: escape `}` (or
       anchor the object end on a marker that cannot appear in content), and neutralize `</script>`
       (e.g. `<\/script>`) in `escapeTemplateLiteral` since output is injected into HTML.
-- [ ] Keep `MARKERS` + `assertMarkersUnique` intact (trap 3); if the end-anchor changes, update
+- [x] Keep `MARKERS` + `assertMarkersUnique` intact (trap 3); if the end-anchor changes, update
       `assertOnceInSection`/`assertMarkersUnique` to match in the same substep.
-- [ ] Regenerate: `node .claude/scripts/sync-docs.js` twice — output must stay **byte-identical**
+- [x] Regenerate: `node .claude/scripts/sync-docs.js` twice — output must stay **byte-identical**
       (idempotency from maintainability-plan 3.5 must hold), commit the regenerated HTML if changed.
-- [ ] Fail-first test (extend `test/contracts.test.js`): a temp fixture command/hook whose preview
+- [x] Fail-first test (extend `test/contracts.test.js`): a temp fixture command/hook whose preview
       contains `};` and `</script>` → run sync-docs → assert the produced HTML still parses/round-
       trips (object closes at the real terminator; no early break). Red on HEAD, green after.
 
@@ -256,17 +256,17 @@ docs `<script>` block.
 **Commit:** `fix(docs): preview content containing }; or </script> can no longer break the docs page` +
 body `Changelog: none` (internal docs generator; no user-visible docs change).
 
-### ☐ 4.2 · M · ~45m — Make the brace-walker ignore braces inside kept structural entries (BH-14)
+### ☑ 4.2 · M · ~45m — Make the brace-walker ignore braces inside kept structural entries (BH-14)
 
 `sync-docs.js:657-666` (treeInfo) and `:703-712` (fileContents) — the brace-depth walker that finds
 the end of the kept `claude-md`/`claude-dir` entry counts every literal `{`/`}` including those in
 string/template values, so a brace in those hand-authored entries mis-locates the boundary. LATENT
 (kept entries are brace-free today; the `rules` static desc already ships inline `<div style=…>`).
 
-- [ ] Make the boundary detection value-aware (skip braces inside strings/template literals) or
+- [x] Make the boundary detection value-aware (skip braces inside strings/template literals) or
       anchor the kept-entry end on a marker rather than raw brace-counting. ⚠ Trap 3.
-- [ ] Regenerate twice → byte-identical; commit HTML if changed.
-- [ ] Fail-first test (extend `test/contracts.test.js`): temporarily give a kept-entry desc a `{` in
+- [x] Regenerate twice → byte-identical; commit HTML if changed.
+- [x] Fail-first test (extend `test/contracts.test.js`): temporarily give a kept-entry desc a `{` in
       a fixture → assert the splice still finds the right boundary. Red on HEAD, green after.
 
 **Verify:** fail-first proven; idempotent; `npm test` green.
@@ -580,3 +580,41 @@ Append one entry after each substep, newest last. Format:
   copy — it reads the file copyDir overwrites); no existing top-level statement moved. One
   full-suite run timed out at 10min (exit 143, output lost to a pipe); the identical rerun was
   green in ~3min — transient, no repro, nothing committed between the two.
+
+### 2026-09-29 — substep 4.1 — done
+- Commit: b2c13e6 fix(docs): preview content containing }; or </script> can no longer break the docs page
+- Fail-first: proven RED→GREEN for BOTH findings. New test in `test/contracts.test.js` drops a
+  fixture command whose preview contains `const cfg = { a: 1 };` and `'</script><script>'`
+  into a throwaway sync fixture, syncs twice, and asserts (a) the two runs are byte-identical,
+  (b) the `<script>` block count matches the committed page, (c) every block compiles under
+  `vm.Script`. RED on HEAD at (a) — BH-2 (second sync mis-anchored on the in-preview `};`).
+  With only the `};` escape applied, RED at (b) — BH-15 independently. Green with both. Full
+  suite green (npm test exit 0).
+- Deviations: chose escaping over re-anchoring, so `MARKERS`, `assertMarkersUnique` and
+  `assertOnceInSection` are untouched (their `indexOf('};')` is now safe because content can
+  no longer contain `};`). New `neutralizeStructure()` (sync-docs.js, above
+  `escapeTemplateLiteral`) rewrites `};`→`};` and `</script`→`<\/script` (case-insensitive),
+  runs AFTER backslash doubling, and is applied in BOTH `escapeTemplateLiteral` and `jsEscape`
+  — descs/triggers are single-quoted strings in the same objects and had the same hole. No
+  current source contains either sequence, so the regenerated HTML is byte-identical to HEAD
+  (two runs, same sha1) — nothing to commit there, so no overlap with the TokenSaver rename
+  session's docs regen. Test refactor: the ratchet's copy logic was extracted into
+  `makeSyncFixture()` / `runSyncDocs()` so both tests share it.
+- Discoveries: 4.2 (BH-14) can reuse `makeSyncFixture()`; its fixture needs to edit a KEPT
+  entry (`claude-dir`/`claude-md`) in the fixture's copied HTML, not add a scanned file.
+
+### 2026-09-29 — substep 4.2 — done
+- Commit: 8e920fc fix(docs): sync-docs boundary detection ignores braces inside entry values
+- Fail-first: proven RED→GREEN. New test in `test/contracts.test.js` (reuses
+  `makeSyncFixture()`) edits the fixture's copied HTML so the kept `claude-dir` treeInfo desc
+  gains a lone `{` and the kept `claude-md` fileContents preview a lone `}`, syncs twice, and
+  asserts the output equals the edited input exactly (only the generated sections may be
+  rewritten), both runs match, and every `<script>` block compiles. RED on HEAD: sync-docs
+  exited 1 "Could not find fileContents" — the unbalanced `{` let the treeInfo splice overrun
+  and delete the fileContents section. Green after. Full suite green (npm test exit 0).
+- Deviations: none — took the value-aware option. Both inline walkers replaced by
+  `findEntryEnd()` + `skipQuoted()` (sync-docs.js, beside `countOccurrences`), which skip `'`,
+  `"` and backtick literals with backslash escapes. `MARKERS`/`assertMarkersUnique` untouched.
+  Regenerated HTML byte-identical to HEAD (two runs, same sha1) — nothing to commit there.
+- Discoveries: `${…}` inside a template literal is treated as opaque text; fine for the kept
+  entries (hand-authored, no interpolation), would need nesting support if that ever changes.

@@ -1,5 +1,5 @@
 <!-- @description Read-only board of every Claude session on this repo: who's live, who's waiting on you, what will collide. -->
-<!-- @version 1 -->
+<!-- @version 2 -->
 <!-- @param all | flag | optional | Include idle sessions (default: active only). -->
 <!-- @response board | Prints hazards first (same-tree, duplicate title, file overlap), then the session roster and unlanded branches. -->
 <!-- @example /fleet | Show active sessions, collisions, and what's unlanded -->
@@ -44,7 +44,8 @@ If there are no hazards, say nothing beyond the block. A clean board speaks for 
 ## Step 3 — do NOT act on it
 
 Do not merge, do not `EnterWorktree` on the user's behalf, do not stop another session. The board
-tells the **user**; they are the scheduler. Landing is a separate explicit step they ask for.
+tells the **user**; they are the scheduler. Landing is a separate explicit step they ask for:
+`/land <branch>`, from the main checkout.
 
 ## What it reads
 

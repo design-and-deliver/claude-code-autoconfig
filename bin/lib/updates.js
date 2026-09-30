@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { ensureCommonJsScope } = require('./commonjs-scope.js');
 
 // ============================================================================
 // Update parsing + --pull-updates (Phase 3 seam 3)
@@ -56,6 +57,9 @@ function pullUpdates({ cwd, packageDir, pinnedVersion, installerVersion, ccaConf
   }
   console.log('\x1b[36m%s\x1b[0m', '🔄 Checking for updates...');
   console.log();
+
+  // /autoconfig-update runs only this path, so it carries the ESM-host shield too.
+  ensureCommonJsScope(path.join(cwd, '.claude'), (msg) => console.log('\x1b[33m%s\x1b[0m', msg));
 
   const userCmdPath = path.join(cwd, '.claude', 'commands', 'autoconfig-update.md');
   const packageCmdPath = path.join(packageDir, '.claude', 'commands', 'autoconfig-update.md');

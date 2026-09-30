@@ -23,7 +23,9 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 // Gitignored files copied from the main checkout. Each is optional — a box that never made
-// one just skips it. Order is cosmetic (it is the report order).
+// one just skips it. Order is cosmetic (it is the report order). Mirrored in the tracked
+// `.worktreeinclude`, which makes Claude Code copy them itself; this copy is the fallback
+// for worktrees made by plain `git worktree add`. Keep the two lists in step.
 const COPY_FILES = [
   '.claude/settings.local.json',              // permissions — without it every Bash call re-prompts
   '.claude/cca.config.json',                  // this repo's own CCA config (e.g. /gls screenshot dir)
@@ -52,9 +54,12 @@ function mainCheckout(cwd) {
 }
 
 function copyOne(relPath, from, to, report) {
+  const dest = path.join(to, relPath);
+  // Claude Code copies `.worktreeinclude` entries on EnterWorktree (verified on 2.1.280), so
+  // usually these are already here — never overwrite; a worktree may have edited its copy.
+  if (fs.existsSync(dest)) return report.push(`  – skipped  ${relPath} (already present — .worktreeinclude)`);
   const src = path.join(from, relPath);
   if (!fs.existsSync(src)) return report.push(`  – skipped  ${relPath} (not on the main checkout)`);
-  const dest = path.join(to, relPath);
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   fs.copyFileSync(src, dest);
   report.push(`  ✓ copied   ${relPath}`);
@@ -116,7 +121,7 @@ function installDeps(cwd, main_, report) {
   const reason = !fs.existsSync(mainNodeModules)
     ? 'no node_modules in main checkout'
     : process.env.CCA_UNSAFE_NODE_MODULES_JUNCTION !== '1'
-      ? 'junction is opt-in — see ⛔9 in parallel-session-worktrees.md'
+      ? 'junction is opt-in — see the junction section in parallel-session-worktrees.md'
       : 'package-lock.json differs from main checkout';
   report.push(`  – fallback npm install (${reason})`);
   // Node >= 18.20 / 20.12 refuses to spawn a .cmd without a shell (EINVAL, CVE-2024-27980),

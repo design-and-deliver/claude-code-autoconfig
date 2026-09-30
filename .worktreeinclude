@@ -1,0 +1,9 @@
+# Gitignored dev-box files Claude Code copies into a new worktree (EnterWorktree, claude -w,
+# subagent worktrees). Mirrors COPY_FILES / COPY_MATCHING in scripts/bootstrap-worktree.js —
+# keep the two lists in step. Dev-only: not in package.json `files`, never shipped.
+.claude/settings.local.json
+.claude/cca.config.json
+.claude/commands/deploy-to-npmjs.md
+scripts/hook-fleet.local.json
+scripts/terminal-title-fleet.local.json
+.claude/sounds/*.enabled

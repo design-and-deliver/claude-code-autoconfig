@@ -81,6 +81,7 @@
             top: 0;
             left: 0;
             width: 100%;
+            height: 100%; /* bound the slide so .slide-content can shrink instead of being clipped */
             opacity: 0;
             visibility: hidden;
             transform: translateX(100px);
@@ -139,6 +140,7 @@
 
         .slide-content {
             flex: 1;
+            min-height: 0;
             overflow-y: auto;
         }
 
@@ -390,7 +392,10 @@
             background: var(--bg-secondary);
             border-radius: 8px;
             overflow: hidden;
-            height: 480px;
+            /* Fill the slide, cap at 480px — a fixed 480px overflowed .slides-container (overflow: hidden)
+               on short viewports, clipping the bottom of both panes behind an unscrollable edge. */
+            height: 100%;
+            max-height: 480px;
             position: relative;
         }
 
@@ -955,11 +960,6 @@
                                 <span class="tree-file-icon">📄</span>
                                 <span class="file">test.md</span>
                             </div>
-                            <div class="tree-item indent-3 hidden" data-info="validate-cca-install" data-parent="commands">
-                                <span class="tree-spacer"></span>
-                                <span class="tree-file-icon">📄</span>
-                                <span class="file">validate-cca-install.md</span>
-                            </div>
                             <div class="tree-item indent-2 folder-row hidden collapsed" data-info="agents" data-folder="agents" data-parent="claude-dir">
                                 <span class="tree-chevron">›</span>
                                 <span class="tree-folder-icon">📁</span>
@@ -1402,12 +1402,12 @@
             },
             'extract-rules': {
                 title: 'extract-rules.md',
-                desc: 'Scan Claude artifacts and extract structured rules into .claude/rules/<div style="margin-top: 12px;"><strong>Parameters</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Name</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Type</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>select</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>string</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Write only specific rules by number: "1,3,5". Default: all.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>keep-sources</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>boolean</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Write rules but skip source cleanup (Step 8)</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Rules extracted, written, and sources cleaned up.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-rules</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">No extractable rules found in scanned sources.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Creates .claude/rules/ files and removes extracted content from source files</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/extract-rules</code> <span style="opacity: 0.6;">— Scan, propose, prompt for approval, write, and clean up</span></div><div><code>/extract-rules --keep-sources</code> <span style="opacity: 0.6;">— Write rules without modifying source files</span></div><div><code>/extract-rules --select 1,3</code> <span style="opacity: 0.6;">— Write only rules #1 and #3</span></div></div></div>',
+                desc: 'Scan Claude artifacts and extract structured rules into .claude/rules/<div style="margin-top: 12px;"><strong>Parameters</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Name</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Type</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>select</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>string</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Write only specific rules by number: "1,3,5". Default: all.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>keep-sources</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>boolean</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Write rules but skip source cleanup (Step 8)</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>source</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>string</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Scan only this file instead of every source: ".claude/feedback/FEEDBACK.md"</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>staged</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>boolean</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">With --source: consider only the lines the pending commit adds to it</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Rules extracted, written, and sources cleaned up.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-rules</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">No extractable rules found in scanned sources.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Creates .claude/rules/ files and removes extracted content from source files</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/extract-rules</code> <span style="opacity: 0.6;">— Scan, propose, prompt for approval, write, and clean up</span></div><div><code>/extract-rules --keep-sources</code> <span style="opacity: 0.6;">— Write rules without modifying source files</span></div><div><code>/extract-rules --select 1,3</code> <span style="opacity: 0.6;">— Write only rules #1 and #3</span></div><div><code>/extract-rules --source .claude/feedback/FEEDBACK.md --staged</code> <span style="opacity: 0.6;">— Convert just the feedback a commit is adding (run by the commit check)</span></div></div></div>',
                 trigger: '/extract-rules'
             },
             'gls': {
                 title: 'gls.md',
-                desc: 'Get the latest screenshot(s) and display them.<div style="margin-top: 12px;"><strong>Parameters</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Name</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Type</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>count</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>integer</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Number of screenshots to display. Use /gls-N syntax. Default: 1. Min: 1.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>path</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>string</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Screenshot directory path. Saved for future use. Auto-detected if omitted.</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Displays requested screenshot(s) from newest to oldest.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-screenshots</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Directory exists but contains no image files.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-directory</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Unable to detect screenshot directory — prompts for path.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Saves detected screenshot path to .claude/cca.config.json on first run</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/gls</code> <span style="opacity: 0.6;">— Display the most recent screenshot</span></div><div><code>/gls-3</code> <span style="opacity: 0.6;">— Display the 3 most recent screenshots</span></div><div><code>/gls /path/to/dir</code> <span style="opacity: 0.6;">— Use a specific screenshot directory</span></div></div></div>',
+                desc: 'Get the latest screenshot(s) and display them.<div style="margin-top: 12px;"><strong>Parameters</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Name</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Type</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>count</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>integer</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Number of screenshots to display. Use /gls-N syntax. Default: 1. Min: 1.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>path</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>string</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Screenshot directory path. Saved for future use. Auto-detected if omitted.</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Displays requested screenshot(s) from newest to oldest.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-screenshots</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Directory exists but contains no image files.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>no-directory</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Unable to detect screenshot directory — prompts for path.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Saves detected screenshot path to .claude/cca.config.json on first run</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/gls</code> <span style="opacity: 0.6;">— Display the most recent screenshot</span></div><div><code>/gls-3</code> <span style="opacity: 0.6;">— Display the 3 most recent screenshots</span></div><div><code>/gls /path/to/dir</code> <span style="opacity: 0.6;">— Use a specific screenshot directory</span></div><div><code>/gls why is this button misaligned?</code> <span style="opacity: 0.6;">— Display the screenshot, then act on the question</span></div></div></div>',
                 trigger: '/gls'
             },
             'recover-context': {
@@ -1435,11 +1435,6 @@
                 desc: 'Runs your test suite. Auto-detects Jest, Vitest, Pytest, Go, RSpec, or falls back to npm test.<div style="margin-top: 12px;"><strong>Parameters</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Name</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Type</th><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Required</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>scope</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>string</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">optional</td><td style="padding: 4px 8px 4px 0; vertical-align: top;">File, directory, or pattern to limit test run. Runs full suite if omitted.</td></tr></table></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>success</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Test suite passes.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>failure</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Test suite fails with non-zero exit code.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Executes detected test runner command</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/test</code> <span style="opacity: 0.6;">— Run full test suite</span></div><div><code>/test src/auth</code> <span style="opacity: 0.6;">— Run tests in src/auth directory</span></div><div><code>/test --coverage</code> <span style="opacity: 0.6;">— Run tests with coverage report</span></div></div></div>',
                 trigger: '/test'
             },
-            'validate-cca-install': {
-                title: 'validate-cca-install.md',
-                desc: 'Validates your claude-code-autoconfig installation against the latest published version.<div style="margin-top: 12px;"><strong>Parameters</strong><div style="margin-top: 4px; opacity: 0.6;">None</div></div><div style="margin-top: 12px;"><strong>Responses</strong><table style="margin-top: 6px; border-collapse: collapse; font-size: 0.9em; text-align: left;"><tr style="text-align: left; border-bottom: 1px solid var(--border);"><th style="padding: 4px 8px 4px 0; white-space: nowrap;">Status</th><th style="padding: 4px 8px 4px 0;">Description</th></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>valid</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Install validated — all checks passed.</td></tr><tr style="border-bottom: 1px solid var(--border);"><td style="padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap;"><code>issues</code></td><td style="padding: 4px 8px 4px 0; vertical-align: top;">Validation found {N} issue(s) with fix suggestions.</td></tr></table></div><div style="margin-top: 12px;"><strong>Side Effects</strong><div style="margin-top: 4px; font-size: 0.9em;">Read-only. Downloads latest package to temp dir for comparison, then cleans up.</div></div><div style="margin-top: 12px;"><strong>Examples</strong><div style="margin-top: 6px; background: var(--bg-elevated); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 0.85em;"><div><code>/validate-cca-install</code> <span style="opacity: 0.6;">— Run full installation validation</span></div></div></div>',
-                trigger: '/validate-cca-install'
-            },
             'README-agent': {
                 title: 'README.md',
                 desc: 'Subagent definitions — one ships with autoconfig; add your project\'s own here too.',
@@ -1462,8 +1457,8 @@
             },
             'feedback-rule-check-hook': {
                 title: 'feedback-rule-check.js',
-                desc: 'After FEEDBACK.md is edited, notifies Claude to evaluate',
-                trigger: 'PostToolUse on Write|Edit'
+                desc: 'On commit, holds new FEEDBACK.md entries once so /extract-rules can turn them into rules.',
+                trigger: 'PreToolUse on Bash (git commit)'
             },
             'format-hook': {
                 title: 'format.js',
@@ -1943,15 +1938,16 @@ If there are uncommitted changes, show this warning and wait for confirmation:
 
 If the working tree is clean, proceed silently.
 
+**Skip this step when \`--staged\` is passed** — you are mid-commit, and the staged changes are the input.
+
 ## Step 1: Discover sources
 
 Scan these locations for \`.md\` files containing potential rules. **Skip any that don't exist** — not all projects have all of these:
 
 1. \`CLAUDE.md\` (project root)
 2. \`CLAUDE.local.md\` (project root, if present)
-3. All \`.md\` files in \`.claude/\` recursively (feedback, commands, etc.) — **excluding** \`.claude/rules/\` and \`.claude/commands/extract-rules.md\`
-4. Any nested \`CLAUDE.md\` files in subdirectories (e.g., \`src/CLAUDE.md\`)
-5. Auto memory files — memory often contains misplaced imperatives that should be promoted to rules. To find the memory directory, list \`~/.claude/projects/\` and fuzzy-match against the current project path. The directory name encodes the path with dashes replacing separators, but encoding varies by platform and may not be consistent for paths with spaces, special characters, or deep nesting. **Discovery strategy**: list all directories under \`~/.claude/projects/\`, then find the one whose name best matches the current working directory (check if the directory name contains key path segments like the project folder name). Read \`MEMORY.md\` in that directory, then each \`.md\` file it links to. If no match is found or the memory directory can't be read, skip this source silently.`
+3. All \`.md\` files in \`.claude/\` recursively (feedback, commands, etc.) — **excluding** \`.claude/rules/\`, \`.claude/commands/extract-rules.md\`, and \`.claude/feedback/EXTRACTED.md\`
+4. Any nested \`CLAUDE.md\` files in subdirectories (e.g., \`src/CLAUDE.md\`)`
             },
             'gls': {
                 filename: 'gls.md',
@@ -1963,6 +1959,11 @@ Usage:
 - \`/gls-3\` - Get and display the 3 most recent screenshots
 - \`/gls-N\` - Get and display the N most recent screenshots
 - \`/gls /path/to/dir\` - Use a specific directory and save it
+- \`/gls <anything else>\` - Display the screenshot, then act on what you wrote
+
+## Step 0: Classify the argument
+
+An argument (after any \`-N\` count) is a **directory path** only if it names a directory that exists — check with \`[ -d "<arg>" ] && echo DIR\`. Anything else — a question, a description, an instruction — is the user's **message about the screenshot**: never use it as a path and never save it to config. Carry it to Step 6.
 
 ## Step 1: Check for saved path
 
@@ -1974,17 +1975,12 @@ If the file doesn't exist or the key is missing, continue to Step 2.
 
 ## Step 2: Detect screenshot directory
 
-If the user provides a path as an argument (e.g., \`/gls /path/to/dir\`), use that path and skip to Step 2b.
+If Step 0 classified the argument as a directory path (e.g., \`/gls /path/to/dir\`), use that path and skip to Step 2b.
 
 Otherwise, detect the OS and find the screenshot directory. Run this **single Bash command** which finds all candidate directories and reports the newest screenshot in each:
 
 \`\`\`bash
-OS=$(uname -s); echo "OS=$OS"; for d in \\
-  "$HOME/OneDrive/Pictures/Screenshots"* \\
-  "$HOME/Pictures/Screenshots" \\
-  "$HOME/Desktop" \\
-  "$HOME/Pictures" \\
-  "$HOME/Videos/Captures"; do \\`
+OS=$(uname -s); echo "OS=$OS"; for d in \\`
             },
             'recover-context': {
                 filename: 'recover-context.md',
@@ -2103,14 +2099,14 @@ Check that CLAUDE.md exists and has the required elements:
 2. **Team Feedback pointer** — between the markers:
    \`\`\`markdown
    ## Team Feedback
-   The contents of \`.claude/feedback/FEEDBACK.md\` are an extension of this file.
-   Read it at the start of every session before taking any action.
+   @.claude/feedback/FEEDBACK.md
    FEEDBACK.md is reserved for human-authored corrections only — do not write to it.
    \`\`\`
 
 3. **Discoveries section** — below the end marker:
    \`\`\`markdown
-   ## Discoveries`
+   ## Discoveries
+   <!-- Claude: append project-specific learnings, gotchas, and context below. This section persists across /autoconfig runs. -->`
             },
             'test': {
                 filename: 'test.md',
@@ -2123,39 +2119,6 @@ Run tests for this project.
 If no scope provided, run the full test suite. Otherwise run tests matching the scope (file, directory, or pattern).
 
 Detect the test command from project config (package.json scripts, pytest, go test, etc.) and execute it.`
-            },
-            'validate-cca-install': {
-                filename: 'validate-cca-install.md',
-                content: `Validate the current claude-code-autoconfig installation. Reports what's correct, what's outdated, and what's missing. **Does not modify anything.**
-
-Usage:
-- \`/validate-cca-install\` — run a full validation check
-
-## Step 1: Fetch the latest package metadata
-
-Query the npm registry for the latest published version and its file manifest:
-
-\`\`\`bash
-python3 -c "
-import json, urllib.request
-url = 'https://registry.npmjs.org/claude-code-autoconfig/latest'
-data = json.loads(urllib.request.urlopen(url, timeout=10).read())
-print(json.dumps({'version': data.get('version', 'unknown')}))
-"
-\`\`\`
-
-Store the latest version as \`$LATEST_VERSION\`.
-
-## Step 2: Download and extract the latest package to a temp directory
-
-\`\`\`bash
-TMPDIR=$(mktemp -d)
-npm pack claude-code-autoconfig@latest --pack-destination "$TMPDIR" 2>/dev/null
-tar -xzf "$TMPDIR"/*.tgz -C "$TMPDIR"
-echo "$TMPDIR/package"
-\`\`\`
-
-Store the extracted path as \`$PKG_DIR\`. This gives us the ground truth for what files and versions should be installed.`
             },
             'README-agent': {
                 filename: 'README.md',
@@ -2261,33 +2224,33 @@ function installTarget(cmd) {`
                 content: `#!/usr/bin/env node
 
 /**
- * @name Feedback Rule Migration Check
- * @description After FEEDBACK.md is edited, notifies Claude to evaluate
- *              whether any entries would be more reliably delivered as
- *              .claude/rules/ files with glob patterns.
- * @trigger PostToolUse on Write|Edit
+ * @name Feedback Rule Check
+ * @description On commit, holds new FEEDBACK.md entries once so /extract-rules can turn them into rules.
+ *              The new lines go through /extract-rules --source <FEEDBACK.md> --staged. Entries
+ *              that convert become .claude/rules/ files (logged in EXTRACTED.md, not FEEDBACK.md); the
+ *              rest stay as feedback, and the retried commit goes through.
+ * @trigger PreToolUse on Bash (git commit)
  */
 
-// Read hook input from stdin
-let input = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', chunk => input += chunk);
-process.stdin.on('end', () => {
-  try {
-    const data = JSON.parse(input);
-    const filePath = data?.tool_input?.file_path || '';
+// Why a commit gate and not PostToolUse(Edit|Write): FEEDBACK.md is human-authored, so
+// Claude's own edits almost never touch it. A commit is where a teammate's new feedback
+// actually passes through Claude — and converting it there lands the rules in that same commit.
+//
+// "Once" is tracked in <git-dir>/cca-feedback-evaluated.json: every added line the gate has
+// already sent through /extract-rules. A retry whose remaining new lines are all in that set is
+// let through — otherwise feedback that is not rule material would block the commit forever.
 
-    // Only fire for FEEDBACK.md edits
-    if (!filePath.endsWith('FEEDBACK.md')) {
-      process.exit(0);
-    }
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
 
-    console.log([
-      'FEEDBACK.md was just modified.',
-      'Review the changes and evaluate whether any entries are tied to specific file types,',
-      'frameworks, or patterns that could be scoped with a glob (e.g., *.py, *.tsx, src/api/**).',
-      '',
-      'If any entries qualify, ask the user:',`
+const FEEDBACK_REL = '.claude/feedback/FEEDBACK.md';
+const LEDGER_NAME = 'cca-feedback-evaluated.json';
+// git, optionally with leading global flags (-C dir, --no-pager, …), then \`commit\`.
+const COMMIT_RE = /\\bgit\\b(?:\\s+-[^\\s]+(?:\\s+[^\\s]+)?)*\\s+commit\\b/;
+// The same command also stages files (\`git add … && git commit\`, \`git commit -a/-am/--all\`),
+// so the diff to judge is against HEAD, not just the index.
+const STAGES_TOO_RE = /\\bgit\\b(?:\\s+-[^\\s]+(?:\\s+[^\\s]+)?)*\\s+add\\b|\\bcommit\\b[^;&|]*\\s(?:-[a-zA-Z]*a[a-zA-Z]*|--all)\\b/;`
             },
             'format-hook': {
                 filename: 'format.js',
@@ -2459,7 +2422,7 @@ Maintain it across the session:
                 content: `# Team Feedback
 
 **This file is for human-authored corrections and guidance only.**
-Claude reads this file but must never write to it. When Claude discovers project context, gotchas, or learnings, it should append to the \`## Discoveries\` section in CLAUDE.md instead.
+Claude reads this file but must never write to it, except to remove an entry /extract-rules turned into a rule (EXTRACTED.md, next to this file, logs where each one went). When Claude discovers project context, gotchas, or learnings, it should append to the \`## Discoveries\` section in CLAUDE.md instead.
 
 ---`
             },
@@ -2585,18 +2548,18 @@ Claude reads this file but must never write to it. When Claude discovers project
             "command": "node \\"\${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/auto-guard.js\\""
           }
         ]
-      }
-    ],
-    "PostToolUse": [
+      },
       {
-        "matcher": "Edit|Write",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
             "command": "node \\"\${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/feedback-rule-check.js\\""
           }
         ]
-      },
+      }
+    ],
+    "PostToolUse": [
       {
         "matcher": "Bash",
         "hooks": [

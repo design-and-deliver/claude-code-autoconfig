@@ -1,4 +1,5 @@
-// Smoke tests for the three "silent" hooks — arcade-beeps.js, format.js, feedback-rule-check.js.
+// Smoke tests for the "silent" hooks — arcade-beeps.js and format.js (feedback-rule-check.js
+// has its own suite: feedback-rule-check.test.cjs).
 // Each swallows all errors and exits 0 no matter what (by design, so a regression can never
 // crash a turn). That also means a regression is INVISIBLE. These tests convert "swallowed
 // forever" into an assertable observable: exit code + a log line / stdout / a filesystem effect.
@@ -65,37 +66,6 @@ test('format.js skips node_modules paths', () => {
 
 test('format.js exits 0 on malformed stdin', () => {
   const r = spawnSync(process.execPath, [FORMAT_HOOK], { input: 'not json{', encoding: 'utf8' });
-  assert.strictEqual(r.status, 0);
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// feedback-rule-check.js — PostToolUse(Write|Edit): prints migration guidance, but ONLY when
-// the edited file is FEEDBACK.md. Observable: stdout.
-// ─────────────────────────────────────────────────────────────────────────────
-const FRC_HOOK = path.join(HOOKS, 'feedback-rule-check.js');
-
-function runFrc(filePath) {
-  return spawnSync(process.execPath, [FRC_HOOK], {
-    input: JSON.stringify({ tool_input: { file_path: filePath } }),
-    encoding: 'utf8',
-  });
-}
-
-test('feedback-rule-check emits migration guidance when FEEDBACK.md is edited', () => {
-  const r = runFrc('/proj/.claude/feedback/FEEDBACK.md');
-  assert.strictEqual(r.status, 0);
-  assert.match(r.stdout, /FEEDBACK\.md was just modified\./);
-  assert.match(r.stdout, /\.claude\/rules\//, 'guidance should point at .claude/rules/');
-});
-
-test('feedback-rule-check is silent for non-FEEDBACK files', () => {
-  const r = runFrc('/proj/src/app.js');
-  assert.strictEqual(r.status, 0);
-  assert.strictEqual(r.stdout.trim(), '', 'must produce no output for a non-FEEDBACK.md edit');
-});
-
-test('feedback-rule-check exits 0 on malformed stdin', () => {
-  const r = spawnSync(process.execPath, [FRC_HOOK], { input: 'not json{', encoding: 'utf8' });
   assert.strictEqual(r.status, 0);
 });
 
