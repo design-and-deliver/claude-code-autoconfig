@@ -327,7 +327,7 @@ paints ◐ awaiting in terminal-title but reads only `q.ends` in arcade-beeps, s
 
 Never shipped to users (trap 7). Fixes here improve the maintainer's own experience only.
 
-### ☐ 6.1 · M · ~45m — token-guard: stop dropping queued warnings + fix the spike runway (BH-6, BH-7)
+### ☑ 6.1 · M · ~45m — token-guard: stop dropping queued warnings + fix the spike runway (BH-6, BH-7)
 
 `.claude/hooks/token-guard.js:1731/1874` (BH-6) — a `decision:'block'` early-return discards the
 already-populated `notes[]` after its one-shots were consumed, losing fleet-receipt/bomb/drift/idle/
@@ -335,11 +335,11 @@ spike warnings for good. `:1859` (BH-7) — the spike baseline timestamp advance
 so the rate denominator can span less time than the numerator accrued over → wrong (too-short)
 runway and spurious confirm-card interrupts.
 
-- [ ] BH-6: emit the accumulated `notes` even on a block (or don't burn the one-shots before the
+- [x] BH-6: emit the accumulated `notes` even on a block (or don't burn the one-shots before the
       emit). ⚠ Trap 5: don't touch the digest header strings/ledger fields.
-- [ ] BH-7: only advance `lastWindowAtIso` when the pct baseline actually changes (a fresh fetch),
+- [x] BH-7: only advance `lastWindowAtIso` when the pct baseline actually changes (a fresh fetch),
       not on cache hits — keep numerator and denominator on the same interval.
-- [ ] Fail-first tests in `.claude/hooks/tests/` (auto-discovered — trap 9): (a) a blocked prompt
+- [x] Fail-first tests in `.claude/hooks/tests/` (auto-discovered — trap 9): (a) a blocked prompt
       with a queued note → assert the note still emits; (b) a cache-hit sequence → assert the runway
       denominator spans the true interval. Red on HEAD, green after.
 
@@ -659,3 +659,20 @@ Append one entry after each substep, newest last. Format:
 - Verify: `npm test` exit 0 (hook suites included). arcade-beeps is not in the fleet manifest and
   has no `~/.claude` twin — nothing to sync. Landed on main (fast-forward); worktree removal hit
   EBUSY (Windows lock) — leftover dir for /sync-worktrees.
+
+### 2026-09-29 — substep 6.1 — done
+- Commit: cc975f8 fix(token-guard): don't drop queued warnings on a blocked turn; fix spike-runway math
+- Fail-first: proven RED→GREEN in `.claude/hooks/tests/token-saver-bh6-bh7.test.cjs`. The fold was
+  first extracted as `foldPromptGuards` with HEAD behavior (exported with `r12aWindowBaselineGuard`),
+  then 4 of 7 tests failed on it: block drops notes, next prompt doesn't speak them, baseline stamped
+  now on a cache hit (x2). Green after the fix.
+- BH-6 shape: rather than emitting notes on a block (a blocked prompt never reaches the model), the
+  fold HOLDS them in `st.heldNotes`; `heldNotesGuard` (first in PROMPT_GUARDS) speaks them on the
+  next prompt, and exact repeats collapse. BH-7: the baseline stamps the reading's own `at`
+  (`readingIso(ctx.officialOff)`), falling back to now. The plan's "advance only on a pct change"
+  was the weaker proxy, since an unchanged % on a fresh fetch still marks a real interval.
+- ⚠ Deviation / open: the fleet manifest sources token-saver.js OUT OF TREE (`[src]`); its
+  authority is `C:CODEcca-cost-control.claudehooks	oken-saver.js`, which still has BOTH
+  bugs (verified by grep). This fix lands only in CCA's copy; porting it is a separate decision.
+- Verify: `npm test` exit 0 (hook suites included). Fleet check: no drift (token-saver skipped as
+  out-of-tree). Landed on main (fast-forward), worktree removed cleanly.
