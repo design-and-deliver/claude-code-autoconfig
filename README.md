@@ -150,6 +150,7 @@ your-project/
     ├── docs/autoconfig.docs.html      # Interactive docs (/show-docs)
     ├── scripts/
     │   ├── auto-guard-set.js          # Backend for /enable-auto-mode + /disable-auto-mode
+    │   ├── docs-previews.js           # Shows your project's files in the docs
     │   ├── gls-downscale.js           # Shrinks /gls screenshots
     │   └── sync-docs.js               # Regenerates the interactive docs
     ├── sounds/                        # Status-beep audio
