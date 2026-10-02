@@ -1095,6 +1095,10 @@
         </div>
     </div>
 
+    <!-- Project previews, written by /autoconfig (.claude/scripts/docs-previews.js). A separate
+         file on purpose: if it is missing or broken, only that script fails and the page below
+         still runs with its placeholder previews. -->
+    <script src="autoconfig.previews.js"></script>
     <script>
         const slides = document.querySelectorAll('.slide');
         const progressContainer = document.getElementById('progress');
@@ -2647,6 +2651,17 @@ Claude reads this file but must never write to it, except to remove an entry /ex
 }`
             }
         };
+        // Swap in this project's real files when autoconfig.previews.js loaded (see its script tag above).
+        (function applyProjectPreviews(previews) {
+            if (!previews || typeof previews !== 'object') return;
+            Object.keys(previews).forEach(function (key) {
+                const entry = fileContents[key];
+                if (!entry || typeof entry.content !== 'string' || typeof previews[key] !== 'string') return;
+                entry.content = key === 'memory-md'
+                    ? '# Native Claude Code File — Debugging instructions appended by autoconfig\n\nLocation: ' + memoryPath + '\n\n---\n\n' + previews[key]
+                    : previews[key];
+            });
+        })(window.CCA_PROJECT_PREVIEWS);
 
         const modal = document.getElementById('fileModal');
         const modalTitle = document.getElementById('modalTitle');

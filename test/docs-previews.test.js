@@ -2,13 +2,15 @@
 'use strict';
 
 /**
- * Tests for .claude/scripts/docs-previews.js (/autoconfig Step 6).
+ * Tests for .claude/scripts/docs-previews.js (/autoconfig Step 6) and the docs page's
+ * autoconfig.previews.js hook.
  *
- * Regression pinned: Step 6 used to be a hand splice by the model. On the CRLF docs file a
- * search for '---\n\n' returned -1, the splice started at offset 4, and ~1,500 lines including
- * the opening <script> were deleted (2026-10-01, a Windows user project). These tests run the
- * real shipped docs file — which IS CRLF — through the script and read the previews back by
- * evaluating the spliced literals, so "it didn't throw" is never the only evidence.
+ * Regression pinned: Step 6 used to be a hand splice into the page's one big <script>. On the
+ * CRLF docs file a search for '---\n\n' returned -1, the splice ran from offset 4, and ~1,500
+ * lines including the opening <script> were deleted (2026-10-01, a Windows user project). The
+ * fix moves project previews into a separate file the page loads with its own <script src>, so
+ * these tests pin: the HTML is never written, the page's own code applies the previews, and a
+ * missing or garbage previews value leaves the placeholders in place.
  */
 
 const fs = require('fs');
@@ -20,69 +22,70 @@ const { test, assert, summary } = require('./_harness');
 const REPO = path.join(__dirname, '..');
 const SCRIPT = path.join(REPO, '.claude', 'scripts', 'docs-previews.js');
 const DOCS = path.join(REPO, '.claude', 'docs', 'autoconfig.docs.html');
-const { updatePreviews, defaultMemoryPath, valueEnd } = require(SCRIPT);
-const { escapeTemplateLiteral } = require(SCRIPT);
+const { renderPreviewsFile, verifyPreviewsFile, defaultMemoryPath, GLOBAL } = require(SCRIPT);
 
-// Content that is hostile to every layer: template syntax, structure markers, CRLF-sensitive
-// separators and a trailing backslash.
+// Hostile to every layer: template syntax, the page's structure markers, a closing script tag,
+// CRLF-sensitive separators and backslashes.
 const NASTY = 'Use `npx x` and ${HOME}\n---\n\n## H\n};\n</script><b>\nC:\\path\\';
 
-const raw = fs.readFileSync(DOCS, 'utf8');
+const html = fs.readFileSync(DOCS, 'utf8').replace(/\r\n/g, '\n');
+const MAIN_OPEN = '<script>\n        const slides';
 
-// Evaluate fileContents[key].content from the HTML, with memoryPath bound to 'MEM'.
-function previewOf(html, key) {
-  const lf = html.replace(/\r\n/g, '\n');
-  const fc = lf.indexOf('const fileContents = {');
-  const keyAt = lf.indexOf(`'${key}': {`, fc);
-  const start = lf.indexOf('content: `', keyAt) + 'content: '.length;
-  const expr = lf.slice(start, valueEnd(lf, start));
-  return new Function('memoryPath', 'return ' + expr)('MEM');
+function mainScript() {
+  const open = html.indexOf(MAIN_OPEN) + '<script>'.length;
+  return html.slice(open, html.indexOf('</script>', open));
 }
 
-function updates(text) {
-  return [
-    ['claude-md', escapeTemplateLiteral(text), 'CLAUDE.md'],
-    ['memory-md', '# Native Claude Code File — Debugging instructions appended by autoconfig\n\n' +
-      'Location: ` + memoryPath + `\n\n---\n\n' + escapeTemplateLiteral(text), 'MEMORY.md'],
-    ['settings', escapeTemplateLiteral('{ "a": 1 }'), 'settings.json'],
-  ];
+// Run the page's own fileContents literal + applyProjectPreviews hook, the same code the
+// browser runs, and return the resulting fileContents.
+function pageFileContents(win) {
+  const body = mainScript();
+  const from = body.indexOf('const fileContents = {');
+  const endMark = '})(window.' + GLOBAL + ');';
+  const to = body.indexOf(endMark) + endMark.length;
+  assert(from !== -1 && to > from, 'page is missing fileContents or the previews hook');
+  return new Function('window', 'memoryPath', body.slice(from, to) + '\nreturn fileContents;')(win, 'MEM');
 }
 
-test('shipped docs file is CRLF (the condition that broke the hand splice)', () => {
-  assert(raw.includes('\r\n'), 'fixture assumption: autoconfig.docs.html should be CRLF');
+// What the browser does: evaluate the previews file into window, then run the page.
+function pageWith(previews) {
+  const win = {};
+  new Function('window', renderPreviewsFile(previews))(win);
+  return pageFileContents(win);
+}
+
+test('page loads autoconfig.previews.js in its OWN script, before the main script', () => {
+  const loader = html.indexOf('<script src="autoconfig.previews.js"></script>');
+  assert(loader !== -1, 'loader tag missing');
+  assert(loader < html.indexOf(MAIN_OPEN), 'loader must run before the main script');
 });
 
-test('CRLF docs: previews round-trip exactly and the page survives', () => {
-  const out = updatePreviews(raw, updates(NASTY));
-  assert(out.startsWith('<!DOCTYPE html>'), 'document shell lost');
-  assert(!/[^\r]\n/.test(out), 'a bare LF leaked into a CRLF file');
-  assert(previewOf(out, 'claude-md') === NASTY, 'claude-md preview differs from source');
-  assert(previewOf(out, 'memory-md').endsWith('Location: MEM\n\n---\n\n' + NASTY),
-    'memory-md lost its header or content');
-  assert(previewOf(out, 'settings') === '{ "a": 1 }', 'settings preview differs');
-  const grew = out.split('\n').length - raw.split('\n').length;
-  assert(Math.abs(grew) < 200, `line count moved by ${grew} — splice hit the wrong range`);
+test('page main script still parses', () => {
+  new Function(mainScript());
 });
 
-test('LF docs stay LF', () => {
-  const lf = raw.replace(/\r\n/g, '\n');
-  const out = updatePreviews(lf, updates('hello'));
-  assert(!out.includes('\r'), 'CR introduced into an LF file');
-  assert(previewOf(out, 'claude-md') === 'hello', 'claude-md preview wrong');
+test('previews round-trip exactly into the page, hostile content included', () => {
+  const fc = pageWith({ 'claude-md': NASTY, 'memory-md': NASTY, settings: '{ "a": 1 }' });
+  assert(fc['claude-md'].content === NASTY, 'claude-md preview differs from source');
+  assert(fc['memory-md'].content.endsWith('Location: MEM\n\n---\n\n' + NASTY), 'memory-md lost header or content');
+  assert(fc.settings.content === '{ "a": 1 }', 'settings preview differs');
 });
 
-test('idempotent: a second run changes nothing', () => {
-  const once = updatePreviews(raw, updates(NASTY));
-  assert(updatePreviews(once, updates(NASTY)) === once, 'second run changed the file');
+test('no previews file: placeholders stay', () => {
+  const fc = pageFileContents({});
+  assert(fc['claude-md'].content.includes('/autoconfig'), 'claude-md placeholder changed');
 });
 
-test('missing anchor throws instead of splicing at a bogus offset', () => {
-  const broken = raw.replace("'memory-md': {\r\n                filename: 'MEMORY.md',\r\n                content",
-    "'memory-md': {\r\n                filename: 'MEMORY.md',\r\n                body");
-  assert(broken !== raw, 'fixture edit did not apply');
+test('garbage previews value is ignored, not applied', () => {
+  const fc = pageFileContents({ [GLOBAL]: { 'claude-md': 42, 'no-such-key': 'x' } });
+  assert(fc['claude-md'].content.includes('/autoconfig'), 'non-string preview was applied');
+  assert(!('no-such-key' in fc), 'unknown key was added');
+});
+
+test('verifyPreviewsFile rejects a file that does not round-trip', () => {
   let threw = false;
-  try { updatePreviews(broken, updates('x')); } catch { threw = true; }
-  assert(threw, 'expected a refusal when the content anchor is gone');
+  try { verifyPreviewsFile('window.' + GLOBAL + ' = {};', { 'claude-md': 'x' }); } catch { threw = true; }
+  assert(threw, 'expected a mismatch to throw');
 });
 
 test('defaultMemoryPath uses Claude Code project encoding', () => {
@@ -90,11 +93,11 @@ test('defaultMemoryPath uses Claude Code project encoding', () => {
   assert(/[\\/]projects[\\/][A-Za-z-]*-CODE-my-project[\\/]memory[\\/]MEMORY\.md$/.test(p), p);
 });
 
-function tmpProject(docsText) {
+function tmpProject(withDocs) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cca-previews-'));
   fs.mkdirSync(path.join(dir, '.claude', 'docs'), { recursive: true });
-  fs.writeFileSync(path.join(dir, '.claude', 'docs', 'autoconfig.docs.html'), docsText);
-  fs.writeFileSync(path.join(dir, 'CLAUDE.md'), 'real `project` notes\n');
+  if (withDocs) fs.copyFileSync(DOCS, path.join(dir, '.claude', 'docs', 'autoconfig.docs.html'));
+  fs.writeFileSync(path.join(dir, 'CLAUDE.md'), 'real `project` notes\r\n');
   fs.writeFileSync(path.join(dir, '.claude', 'settings.json'), '{ "env": {} }\n');
   fs.writeFileSync(path.join(dir, 'MEMORY.md'), '## Debugging\nmem\n');
   return dir;
@@ -103,24 +106,27 @@ function tmpProject(docsText) {
 const run = dir => spawnSync(process.execPath, [SCRIPT, '--memory', path.join(dir, 'MEMORY.md')],
   { cwd: dir, encoding: 'utf8' });
 
-test('CLI: updates a real project', () => {
-  const dir = tmpProject(raw);
+test('CLI: writes the previews file and never touches the HTML', () => {
+  const dir = tmpProject(true);
+  const docsFile = path.join(dir, '.claude', 'docs', 'autoconfig.docs.html');
+  const before = fs.readFileSync(docsFile);
   const r = run(dir);
   assert(r.status === 0, 'exit ' + r.status + ': ' + r.stderr);
-  const out = fs.readFileSync(path.join(dir, '.claude', 'docs', 'autoconfig.docs.html'), 'utf8');
-  assert(previewOf(out, 'claude-md') === 'real `project` notes', 'CLAUDE.md not applied');
-  assert(previewOf(out, 'memory-md').endsWith('## Debugging\nmem'), 'MEMORY.md not applied');
-  assert(previewOf(out, 'settings') === '{ "env": {} }', 'settings.json not applied');
+  assert(fs.readFileSync(docsFile).equals(before), 'autoconfig.docs.html was modified');
+  const win = {};
+  new Function('window', fs.readFileSync(path.join(dir, '.claude', 'docs', 'autoconfig.previews.js'), 'utf8'))(win);
+  const fc = pageFileContents(win);
+  assert(fc['claude-md'].content === 'real `project` notes', 'CLAUDE.md not applied (or CRLF kept)');
+  assert(fc['memory-md'].content.endsWith('## Debugging\nmem'), 'MEMORY.md not applied');
+  assert(fc.settings.content === '{ "env": {} }', 'settings.json not applied');
+  assert(fs.readdirSync(path.join(dir, '.claude', 'docs')).length === 2, 'temp file left behind');
 });
 
-test('CLI: refusal exits 1 and leaves the docs byte-identical', () => {
-  const broken = raw.replace('const fileContents = {', 'const fileContentz = {');
-  const dir = tmpProject(broken);
+test('CLI: no docs installed → exit 0, nothing written', () => {
+  const dir = tmpProject(false);
   const r = run(dir);
-  assert(r.status === 1, 'expected exit 1, got ' + r.status);
-  const after = fs.readFileSync(path.join(dir, '.claude', 'docs', 'autoconfig.docs.html'), 'utf8');
-  assert(after === broken, 'docs file was modified on refusal');
-  assert(fs.readdirSync(path.join(dir, '.claude', 'docs')).length === 1, 'temp file left behind');
+  assert(r.status === 0, 'exit ' + r.status);
+  assert(fs.readdirSync(path.join(dir, '.claude', 'docs')).length === 0, 'wrote into a docs-less project');
 });
 
 summary();

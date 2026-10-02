@@ -205,10 +205,10 @@ After populating CLAUDE.md, put the real CLAUDE.md, MEMORY.md and settings.json 
 node .claude/scripts/docs-previews.js
 ```
 
-It finds the MEMORY.md path itself, and handles escaping and Windows line endings. It also checks the page before saving it.
+It finds the MEMORY.md path itself and writes `.claude/docs/autoconfig.previews.js`, which the page loads. It never changes `autoconfig.docs.html`.
 
-- **Exit 1** means it refused and left the docs file unchanged. Mention the one-line reason to the user and continue. The previews just keep their placeholders.
-- **Never edit `autoconfig.docs.html` by hand or with your own script**, even when the script fails. The file is one large `<script>`, and a wrong splice can delete most of the page.
+- **Exit 1** means nothing was written. Mention the one-line reason to the user and continue. The previews just keep their placeholders.
+- **Never edit `autoconfig.docs.html` by hand or with your own script**, even when the script fails. The whole page is one `<script>`, and a wrong splice can delete most of it.
 
 This ensures double-clicking these files in the docs shows real project content, not stale placeholders.
 

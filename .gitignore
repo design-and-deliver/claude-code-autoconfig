@@ -67,3 +67,6 @@ scripts/terminal-title-fleet.local.json
 
 # Python bytecode (recover-session.py imported by tests)
 __pycache__/
+
+# Per-project docs previews written by /autoconfig (docs-previews.js) — never ship or commit
+.claude/docs/autoconfig.previews.js

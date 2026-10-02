@@ -72,6 +72,7 @@
     "!.claude/hooks/worktree-gate.js",
     "!.claude/hooks/claim-registry.js",
     "!.claude/cca.config.json",
+    "!.claude/docs/autoconfig.previews.js",
     "!.claude/.autoconfig-version",
     "!.claude/.autoconfig-plugins.json",
     "!.claude/.autoconfig-timing.jsonl",
