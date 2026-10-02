@@ -4,6 +4,10 @@
      from git history on every `npm version`. Reword a published bullet via its
      OVERRIDES map; shape future bullets with a `Changelog:` commit-body trailer. -->
 
+## v1.0.244
+- fix(docs): The docs page can no longer be broken by filling in your project's files
+- fix(autoconfig): Setup no longer risks breaking the docs page when it fills in your project's files
+
 ## v1.0.243
 - fix(install): First launch no longer opens with a scary permissions warning — pre-approved commands are now an opt-in during setup
 - fix(cli): Backups during upgrade are now unique per run and capture nested files you added
@@ -212,7 +216,4 @@
 
 ## v1.0.195
 - fix(terminal-title): flip awaiting ◐ for a closing question with a trailing parenthetical aside
-
-## v1.0.194
-- fix(terminal-title): guard the Stop question-grade against the transcript-flush race
 
