@@ -61,7 +61,7 @@ npx claude-code-autoconfig
       <br><br><a href="https://www.linkedin.com/pulse/skip-init-let-claude-code-organically-grow-your-andrew-ciccarelli-doure">Read the article →</a>
     </td>
     <td width="50%" valign="top">
-      <a href="https://www.linkedin.com/pulse/make-claude-code-more-deterministic-one-simple-slash-ciccarelli-sqhre"><img src="https://proswitch.ai/claude-code-autoconfig/covers/extract-rules-v4.jpg" alt="Rules that load exactly when they apply"></a>
+      <a href="https://www.linkedin.com/pulse/make-claude-code-more-deterministic-one-simple-slash-ciccarelli-sqhre"><img src="https://proswitch.ai/claude-code-autoconfig/covers/extract-rules-v6.jpg" alt="Rules that load exactly when they apply"></a>
       <h3>Rules that load exactly when they apply</h3>
       <code>/extract-rules</code> moves instructions out of CLAUDE.md into path-scoped rules, so Claude behaves the same way every time.
       <br><br><a href="https://www.linkedin.com/pulse/make-claude-code-more-deterministic-one-simple-slash-ciccarelli-sqhre">Read the article →</a>
