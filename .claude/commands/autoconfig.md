@@ -1,5 +1,5 @@
 <!-- @description Configures Claude Code scaffolding for your project. Sets up settings, permissions, hooks, commands, and docs. -->
-<!-- @version 22 -->
+<!-- @version 23 -->
 <!-- @response success | Scaffolding configured, CLAUDE.md initialized, docs opened in browser. -->
 <!-- @response no-project | No project detected — asks user to confirm directory. -->
 <!-- @sideeffect Initializes CLAUDE.md, settings.json, hooks, commands, and MEMORY.md -->
@@ -199,15 +199,16 @@ NEVER guess the root cause and jump to coding a fix. Ask yourself: is the cause 
 
 ## Step 6: Update the Docs
 
-After populating CLAUDE.md, update the docs file previews to show actual project content:
+After populating CLAUDE.md, put the real CLAUDE.md, MEMORY.md and settings.json into the docs previews by running this one command from the project root:
 
-1. Open `.claude/docs/autoconfig.docs.html`
-2. Find the `fileContents` JavaScript object
-3. Update these entries with the real content just generated:
-   - `'claude-md'` → the CLAUDE.md content from Step 1
-   - `'memory-md'` → the MEMORY.md content from Step 5
-   - `'settings'` → the settings.json content from Step 4
-4. Use template literal syntax and escape any backticks in the content
+```bash
+node .claude/scripts/docs-previews.js
+```
+
+It finds the MEMORY.md path itself, and handles escaping and Windows line endings. It also checks the page before saving it.
+
+- **Exit 1** means it refused and left the docs file unchanged. Mention the one-line reason to the user and continue. The previews just keep their placeholders.
+- **Never edit `autoconfig.docs.html` by hand or with your own script**, even when the script fails. The file is one large `<script>`, and a wrong splice can delete most of the page.
 
 This ensures double-clicking these files in the docs shows real project content, not stale placeholders.
 
