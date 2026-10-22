@@ -1,5 +1,5 @@
 <!-- @description Get the latest screenshot(s) and display them. -->
-<!-- @version 6 -->
+<!-- @version 7 -->
 <!-- @param count | integer | optional | Number of screenshots to display. Use /gls-N syntax. Default: 1. Min: 1. -->
 <!-- @param path | string | optional | Screenshot directory path. Saved for future use. Auto-detected if omitted. -->
 <!-- @response success | Displays requested screenshot(s) from newest to oldest. -->
@@ -106,6 +106,14 @@ ls -t "$DIR/" 2>/dev/null | grep -iE '\.(png|jpg|jpeg|bmp|webp|gif)$' | head -20
 Note: This lists filenames only (not full paths). Prepend `$DIR/` when constructing full paths for the Read tool.
 
 IMPORTANT: Always use `ls -t` for listing screenshots — never use `find`. The `ls` command is pre-approved in permissions; `find` on external directories will prompt the user every time.
+
+**Clipboard fallback (Windows).** The screenshot tool sometimes copies a capture to the clipboard without saving it to the folder. If the folder has no images, or the user's message implies a new capture (e.g. "check again", or a question about a screen you haven't seen) and the newest file is one you already showed this session, check the clipboard before saying it's missing:
+
+```bash
+powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; \$i=[System.Windows.Forms.Clipboard]::GetImage(); if(\$i){\$p=Join-Path \$env:TEMP 'gls-clipboard.png'; \$i.Save(\$p); \$p} else {'NOIMG'}"
+```
+
+If it prints a path, use that image (run it through Step 4b like any other) and mention in one clause that it came from the clipboard. If it prints `NOIMG`, fall through to the message below.
 
 If no images are found, tell the user the directory exists but contains no screenshots. Suggest taking a screenshot first or specifying a different directory with `/gls /path/to/dir`.
 
